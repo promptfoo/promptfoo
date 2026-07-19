@@ -226,20 +226,39 @@ describe('processCsvPrompts', () => {
   });
 
   it('should disambiguate base prompt label in the malformed-CSV fallback branch', async () => {
+    // Must contain the delimiter (so the parsed-CSV branch is attempted) *and* fail
+    // csv-parse, otherwise this never reaches the catch block.
     const csvContent = dedent`
-      prompt
-      "Malformed CSV with a quote problem
-      Another prompt line
+      "prompt","label"
+      "Tell me about {{topic}},"Basic Query"
+      "Malformed line with unbalanced quotes
+      "Another line
     `;
 
     vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
-    const result = await processCsvPrompts('prompts.csv', { label: 'My Labeled Prompts' });
+    const result = await processCsvPrompts('prompts.csv', {
+      label: 'My Labeled Prompts',
+      id: 'base-id',
+    });
 
-    expect(result.map((r) => r.label)).toEqual([
-      'My Labeled Prompts: "Malformed CSV with a quote problem',
-      'My Labeled Prompts: Another prompt line',
+    const labels = result.map((prompt) => prompt.label);
+    // Distinct rows must not collapse onto the same label (and therefore the
+    // same generateIdFromPrompt-derived prompt id).
+    expect(new Set(labels).size).toBe(4);
+    expect(labels).toEqual([
+      'My Labeled Prompts: "prompt","label"',
+      'My Labeled Prompts: "Tell me about {{topic}},"Basic Query"',
+      'My Labeled Prompts: "Malformed line with unbalanced quotes',
+      'My Labeled Prompts: "Another line',
     ]);
+    expect(result.map((prompt) => prompt.id)).toEqual([
+      'base-id:1',
+      'base-id:2',
+      'base-id:3',
+      'base-id:4',
+    ]);
+    expect(result.every((prompt) => doesPromptRefMatch('base-id', prompt))).toBe(true);
   });
 
   it('should skip rows with missing prompt values', async () => {
