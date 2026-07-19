@@ -40,10 +40,6 @@ function reverse(text: string): string {
  * words and odd indices are the whitespace between them.
  */
 function flipWordOrder(text: string): string {
-  if (text.includes(UNSPACED_WORD_BOUNDARY)) {
-    return text.split(UNSPACED_WORD_BOUNDARY).reverse().join('');
-  }
-
   const parts = text.split(/(\s+)/);
   const reversedWords = parts.filter((_, i) => i % 2 === 0).reverse();
 

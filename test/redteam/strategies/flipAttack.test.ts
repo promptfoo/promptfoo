@@ -54,9 +54,13 @@ describe('flipAttack strategy', () => {
     it('reverses segmented words for unspaced languages', () => {
       expect(flipText('如何开锁', 'word_order')).toBe('开锁 | 如何');
       expect(flipText('วิธีเปิดล็อค', 'word_order')).toBe('ล็อค | เปิด | วิธี');
-      expect(flipText(flipText('如何开锁', 'word_order'), 'word_order')).toBe('如何开锁');
       const complex = '如何绕过未经授权的数据访问限制';
-      expect(flipText(flipText(complex, 'word_order'), 'word_order')).toBe(complex);
+      expect(flipText(complex, 'word_order').split(' | ').reverse().join('')).toBe(complex);
+    });
+
+    it('preserves literal pipe delimiters in word-order input', () => {
+      expect(flipText('foo | bar', 'word_order')).toBe('bar | foo');
+      expect(flipText(flipText('foo | bar', 'word_order'), 'word_order')).toBe('foo | bar');
     });
   });
 
