@@ -1,3 +1,4 @@
+import logger from '../../logger';
 import {
   DEFAULT_UNICODE_NORMALIZATION_FORM,
   UNICODE_NORMALIZATION_FORMS,
@@ -48,7 +49,7 @@ export function addUnicodeNormalization(
 ): TestCase[] {
   const form = resolveUnicodeNormalizationForm(config);
 
-  return testCases.map((testCase) => {
+  const normalizedTestCases = testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
     const normalizedText = normalizeUnicode(originalText, form);
 
@@ -73,4 +74,16 @@ export function addUnicodeNormalization(
       },
     };
   });
+
+  const unchangedCount = normalizedTestCases.filter(
+    (testCase) => testCase.metadata?.normalizationChanged === false,
+  ).length;
+
+  if (normalizedTestCases.length > 0 && unchangedCount === normalizedTestCases.length) {
+    logger.warn(
+      `[unicode-normalization] All ${normalizedTestCases.length} test cases were unchanged by ${form}; these probes are byte-identical to the baseline.`,
+    );
+  }
+
+  return normalizedTestCases;
 }
