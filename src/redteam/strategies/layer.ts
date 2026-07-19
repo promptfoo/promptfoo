@@ -82,7 +82,6 @@ export async function addLayerTestCases(
       const providerId = getAttackProviderFullId(stepObj.id);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
-      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
 
       logger.debug(`layer strategy: configuring attack provider`, {
@@ -95,6 +94,18 @@ export async function addLayerTestCases(
       // with per-turn layers configured
       return current.map((testCase) => {
         const originalText = String(testCase.vars?.[injectVar] ?? '');
+        const applicablePerTurnLayers = perTurnLayers.filter((layer) => {
+          const layerObj = typeof layer === 'string' ? { id: layer } : layer;
+          const layerTargets =
+            (layerObj.config as Record<string, unknown> | undefined)?.plugins ?? config?.plugins;
+          return pluginMatchesStrategyTargets(
+            testCase,
+            layerObj.id,
+            layerTargets as string[] | undefined,
+          );
+        });
+        const strategyId = getStrategyId(stepObj.id, applicablePerTurnLayers, label);
+
         return {
           ...testCase,
           provider: {
@@ -107,7 +118,9 @@ export async function addLayerTestCases(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
               // Pass per-turn layers for runtime application
-              ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
+              ...(applicablePerTurnLayers.length > 0 && {
+                _perTurnLayers: applicablePerTurnLayers,
+              }),
             },
           },
           assert: testCase.assert?.map((assertion) => ({
