@@ -101,6 +101,9 @@ export async function matchesConversationRelevance(
     }
 
     const result = jsonObjects[0] as VerdictResult;
+    if (result.verdict !== 'yes' && result.verdict !== 'no') {
+      throw new Error('Conversation relevance grader returned an invalid verdict');
+    }
     const pass = result.verdict === 'yes';
     const score = pass ? 1 : 0;
 

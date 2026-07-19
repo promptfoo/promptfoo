@@ -358,6 +358,23 @@ describe('handleConversationRelevance', () => {
     expect(result.metadata).toEqual({ graderError: true });
   });
 
+  it('should not pass a negated assertion when the conversation grader returns an invalid verdict', async () => {
+    const provider = createMockProvider('maybe');
+    const result = await handleConversationRelevance({
+      ...defaultParams,
+      assertion: { type: 'not-conversation-relevance' },
+      inverse: true,
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: { vars: {}, options: { provider } },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('invalid verdict');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
   it('should preserve prior conversation-grader usage when a later window fails', async () => {
     const provider = createFactoryProvider({
       callApi: vi
