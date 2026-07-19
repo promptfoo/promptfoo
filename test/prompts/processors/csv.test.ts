@@ -169,6 +169,7 @@ describe('processCsvPrompts', () => {
       'My Labeled Prompts: Tell me about {{topic}}',
       'My Labeled Prompts: Explain {{topic}} in simple terms',
     ]);
+    expect(result.every((prompt) => prompt.id === undefined)).toBe(true);
   });
 
   it('should disambiguate base prompt label in the parsed-CSV branch while row labels win', async () => {
@@ -187,6 +188,37 @@ describe('processCsvPrompts', () => {
       'Basic Query',
       'My Labeled Prompts: Explain {{topic}} in simple terms',
       'My Labeled Prompts: Write a poem about {{topic}}',
+    ]);
+  });
+
+  it('should keep synthesized labels distinct from explicit row labels', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      prompt,label
+      First prompt,
+      Second prompt,Group: First prompt
+    `);
+
+    const result = await processCsvPrompts('prompts.csv', { label: 'Group', id: 'shared-id' });
+
+    expect(result.map((prompt) => prompt.label)).toEqual([
+      'Group: First prompt (row 1)',
+      'Group: First prompt',
+    ]);
+    expect(result.every((prompt) => prompt.id === undefined)).toBe(true);
+  });
+
+  it('should keep duplicate synthesized labels distinct', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(dedent`
+      prompt
+      Same prompt
+      Same prompt
+    `);
+
+    const result = await processCsvPrompts('prompts.csv', { label: 'Group' });
+
+    expect(result.map((prompt) => prompt.label)).toEqual([
+      'Group: Same prompt',
+      'Group: Same prompt (row 2)',
     ]);
   });
 
