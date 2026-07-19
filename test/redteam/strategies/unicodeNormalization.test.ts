@@ -17,11 +17,12 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
     level: 'info',
   },
-  getLogLevel: vi.fn().mockReturnValue('info'),
+  getLogLevel: vi.fn(),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(logger.warn).mockReset();
 });
 
 describe('unicode normalization strategy', () => {
