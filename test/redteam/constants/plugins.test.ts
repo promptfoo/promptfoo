@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENTIC_EXEMPT_PLUGINS,
   ALL_PLUGINS,
+  CANARY_BREAKING_STRATEGY_IDS,
   DATASET_EXEMPT_PLUGINS,
   STRATEGY_EXEMPT_PLUGINS,
 } from '../../../src/redteam/constants/plugins';
@@ -47,6 +48,12 @@ describe('plugins constants', () => {
     it('should have unique values', () => {
       const uniquePlugins = new Set(AGENTIC_EXEMPT_PLUGINS);
       expect(uniquePlugins.size).toBe(AGENTIC_EXEMPT_PLUGINS.length);
+    });
+  });
+
+  describe('CANARY_BREAKING_STRATEGY_IDS', () => {
+    it('should exclude Unicode normalization from coding-agent plugins', () => {
+      expect(CANARY_BREAKING_STRATEGY_IDS).toContain('unicode-normalization');
     });
   });
 

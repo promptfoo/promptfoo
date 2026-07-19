@@ -147,6 +147,11 @@ export const CONFIGURABLE_STRATEGIES_SET: ReadonlySet<string> = new Set(CONFIGUR
 export const UNICODE_NORMALIZATION_FORMS = ['NFC', 'NFD', 'NFKC', 'NFKD'] as const;
 export type UnicodeNormalizationForm = (typeof UNICODE_NORMALIZATION_FORMS)[number];
 export const DEFAULT_UNICODE_NORMALIZATION_FORM: UnicodeNormalizationForm = 'NFKD';
+const UNICODE_NORMALIZATION_FORM_SET: ReadonlySet<string> = new Set(UNICODE_NORMALIZATION_FORMS);
+
+export function isUnicodeNormalizationForm(form: unknown): form is UnicodeNormalizationForm {
+  return typeof form === 'string' && UNICODE_NORMALIZATION_FORM_SET.has(form);
+}
 
 /**
  * Set of strategy IDs that represent encoding transformations where originalText should be shown

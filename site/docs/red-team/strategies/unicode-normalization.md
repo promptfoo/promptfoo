@@ -40,7 +40,7 @@ Normalization does not translate or remove Unicode characters. It changes their 
 | fullwidth `ＡＢＣ`              | NFKC | `ABC`                           |
 | circled digit `①`               | NFKD | `1`                             |
 
-ASCII-only prompts usually remain unchanged. The strategy records `normalizationChanged` in test-case metadata so unchanged cases can be identified during analysis.
+ASCII-only prompts usually remain unchanged. Promptfoo skips those no-op results so the strategy does not duplicate a baseline probe or issue an unnecessary provider call.
 
 ## Normalization vs. Homoglyphs
 

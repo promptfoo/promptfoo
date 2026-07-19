@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
+import { addUnicodeNormalization } from '../../../src/redteam/strategies/unicodeNormalization';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
 import type { TestCaseWithPlugin } from '../../../src/types/index';
@@ -307,6 +308,31 @@ describe('addLayerTestCases', () => {
     expect(emptyStrategy.action).toHaveBeenCalledTimes(1);
     // base64 is still called but with empty array
     expect(mockStrategies[0].action).toHaveBeenCalledWith([], 'input', expect.any(Object));
+  });
+
+  it('should stop cleanly when Unicode normalization filters an unchanged layer input', async () => {
+    const unicodeNormalizationStrategy: Strategy = {
+      id: 'unicode-normalization',
+      action: async (testCases, injectVar, config) =>
+        addUnicodeNormalization(testCases, injectVar, config),
+    };
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'plain ASCII' },
+        metadata: { pluginId: 'test-plugin' },
+      },
+    ];
+
+    const result = await addLayerTestCases(
+      testCases,
+      'input',
+      { steps: ['unicode-normalization', 'rot13'] },
+      [...mockStrategies, unicodeNormalizationStrategy],
+      mockLoadStrategy,
+    );
+
+    expect(result).toEqual([]);
+    expect(mockStrategies[1].action).toHaveBeenCalledWith([], 'input', expect.any(Object));
   });
 
   it('should handle colon-separated strategy IDs', async () => {

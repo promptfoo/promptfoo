@@ -340,7 +340,6 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'hex',
       'base64',
       'homoglyph',
-      'unicode-normalization',
       'leetspeak',
       'morse',
       'piglatin',

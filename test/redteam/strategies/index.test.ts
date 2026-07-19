@@ -190,11 +190,22 @@ describe('loadStrategy', () => {
         strategyId: 'unicode-normalization',
         originalText: '\uff21dmin',
         normalizationForm: 'NFKC',
-        normalizationChanged: true,
       },
     });
     expect(logger.debug).toHaveBeenCalledWith('Adding Unicode normalization to 1 test cases');
     expect(logger.debug).toHaveBeenCalledWith('Added 1 Unicode-normalized test cases');
+  });
+
+  it('should skip unchanged Unicode normalization probes through the registered strategy', async () => {
+    const strategy = await loadStrategy('unicode-normalization');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { prompt: 'plain ASCII' }, metadata: { pluginId: 'test' } },
+    ];
+
+    const results = await strategy.action(testCases, 'prompt', { form: 'NFKD' });
+
+    expect(results).toEqual([]);
+    expect(logger.debug).toHaveBeenCalledWith('Added 0 Unicode-normalized test cases');
   });
 
   it('should throw error for non-existent strategy', async () => {

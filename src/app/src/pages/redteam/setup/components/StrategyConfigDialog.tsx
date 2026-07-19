@@ -28,6 +28,7 @@ import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
   DEFAULT_UNICODE_NORMALIZATION_FORM,
+  isUnicodeNormalizationForm,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
@@ -54,9 +55,7 @@ const UNICODE_NORMALIZATION_FORM_LABELS: Record<UnicodeNormalizationForm, string
 };
 
 const getUnicodeNormalizationForm = (form: unknown): UnicodeNormalizationForm =>
-  typeof form === 'string' && UNICODE_NORMALIZATION_FORMS.includes(form as UnicodeNormalizationForm)
-    ? (form as UnicodeNormalizationForm)
-    : DEFAULT_UNICODE_NORMALIZATION_FORM;
+  isUnicodeNormalizationForm(form) ? form : DEFAULT_UNICODE_NORMALIZATION_FORM;
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -532,7 +531,7 @@ export default function StrategyConfigDialog({
             onValueChange={(value) =>
               setLocalConfig({
                 ...localConfig,
-                form: value as UnicodeNormalizationForm,
+                form: getUnicodeNormalizationForm(value),
               })
             }
           >

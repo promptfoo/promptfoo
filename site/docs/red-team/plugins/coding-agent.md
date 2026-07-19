@@ -155,7 +155,7 @@ redteam:
     - jailbreak:composite
 ```
 
-Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homoglyph, multilingual, math-prompt, jailbreak:composite) are automatically excluded because they mangle the canary and receipt values used by deterministic verifiers.
+Encoding and prompt-rewriting strategies (`base64`, `hex`, `homoglyph`, `unicode-normalization`, `leetspeak`, `rot13`, `multilingual`, `math-prompt`, and `jailbreak:composite`) are automatically excluded because they can alter the canary and receipt values used by deterministic verifiers.
 
 ## How Promptfoo Grades These Plugins
 
