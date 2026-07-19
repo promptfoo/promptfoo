@@ -402,7 +402,7 @@ Place a `ui-providers.yaml` file in your `.promptfoo` directory (same location a
 ```yaml title="ui-providers.yaml"
 providers:
   # Simple provider IDs
-  - openai:gpt-5.1-mini
+  - openai:gpt-5.4-mini
   - anthropic:messages:claude-sonnet-4-5-20250929
 
   # With labels and defaults
@@ -518,7 +518,7 @@ providers:
 
 **Provider ID formats:**
 
-- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`
+- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.4-mini`
 - **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
 - **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
 - **Azure OpenAI:** `azureopenai:chat:deployment-name`
