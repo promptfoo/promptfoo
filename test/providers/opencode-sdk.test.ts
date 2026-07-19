@@ -747,6 +747,64 @@ describe('OpenCodeSDKProvider', () => {
         expect(result.metadata?.skillCalls).toBeUndefined();
       });
 
+      it('should not attribute later skill calls when the assistant end anchor is missing from history', async () => {
+        mockSessionPrompt.mockResolvedValue({
+          data: {
+            ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data,
+            info: {
+              ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data.info,
+              id: 'assistant-msg-1',
+              parentID: 'user-msg-1',
+            },
+          },
+        });
+        mockSessionMessages.mockResolvedValue([
+          {
+            info: { id: 'user-msg-1', role: 'user' },
+            parts: [{ type: 'text', text: 'Current prompt' }],
+          },
+          {
+            info: { id: 'concurrent-assistant', role: 'assistant' },
+            parts: [
+              {
+                type: 'tool',
+                tool: 'skill',
+                state: {
+                  status: 'completed',
+                  input: { name: 'other-skill' },
+                  metadata: { name: 'other-skill', dir: '/repo/.agents/skills/other-skill' },
+                },
+              },
+            ],
+          },
+        ]);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
+      it('should skip the history fetch when the response has no assistant end anchor', async () => {
+        const promptResponse = createMockPromptResponse([{ type: 'text', text: 'Done.' }]);
+        (promptResponse.data.info as Record<string, unknown>).parentID = 'user-msg-1';
+        delete (promptResponse.data.info as Record<string, unknown>).id;
+        mockSessionPrompt.mockResolvedValue(promptResponse);
+
+        const provider = new OpenCodeSDKProvider({
+          config: { tools: { skill: true } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Current prompt');
+
+        expect(mockSessionMessages).not.toHaveBeenCalled();
+        expect(result.metadata?.skillCalls).toBeUndefined();
+      });
+
       it('should skip the history fetch when the response has no parentID anchor', async () => {
         const promptResponse = createMockPromptResponse([{ type: 'text', text: 'Done.' }]);
         delete (promptResponse.data.info as Record<string, unknown>).parentID;

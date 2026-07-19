@@ -1370,8 +1370,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
    *
    * Returns an empty array — which makes the caller fall back to the
    * final-message parts — whenever the current prompt cannot be located in the
-   * history (no parentID on the response, or the parent message is absent from
-   * the fetched page). Over-attributing skill calls from earlier prompts in a
+   * history (a start/end anchor is absent from the response or fetched page).
+   * Over-attributing skill calls from earlier or concurrent prompts in a
    * shared session would be worse than missing intermediate-turn calls.
    */
   private async fetchCurrentPromptParts(
@@ -1382,9 +1382,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<OpenCodePromptPart[]> {
     const assistantMessage = unwrapOpenCodeResult(response)?.info;
     const parentId = assistantMessage?.parentID;
-    if (!parentId) {
+    const assistantId = assistantMessage?.id;
+    if (!parentId || !assistantId) {
       logger.debug(
-        '[OpenCode SDK] Assistant message has no parentID; skipping session history fetch for skill tracking',
+        '[OpenCode SDK] Assistant message is missing a history anchor; skipping session history fetch for skill tracking',
       );
       return [];
     }
@@ -1412,13 +1413,14 @@ export class OpenCodeSDKProvider implements ApiProvider {
       );
       return [];
     }
-    const endIndex = assistantMessage?.id
-      ? messages.findIndex((m) => m.info?.id === assistantMessage.id)
-      : -1;
-    const relevantMessages = messages.slice(
-      startIndex,
-      endIndex >= startIndex ? endIndex + 1 : undefined,
-    );
+    const endIndex = messages.findIndex((m) => m.info?.id === assistantId);
+    if (endIndex < startIndex) {
+      logger.debug(
+        `[OpenCode SDK] Assistant message ${assistantId} not found after its parent in ${messages.length} fetched messages; falling back to final-message parts for skill tracking`,
+      );
+      return [];
+    }
+    const relevantMessages = messages.slice(startIndex, endIndex + 1);
     logger.debug(
       `[OpenCode SDK] Fetched ${messages.length} messages, using ${relevantMessages.length} (start=${startIndex} end=${endIndex}) for skill tracking`,
     );
