@@ -13,17 +13,17 @@ export type FlipMode = 'word_order' | 'char_in_word' | 'char_in_sentence';
 
 const DEFAULT_MODE: FlipMode = 'char_in_sentence';
 
+const Segmenter = (
+  Intl as typeof Intl & {
+    Segmenter: new (
+      locales?: string | string[],
+      options?: { granularity: 'grapheme' | 'word' },
+    ) => { segment(input: string): Iterable<{ segment: string; isWordLike?: boolean }> };
+  }
+).Segmenter;
+
 /** Reverse user-visible characters without splitting combining marks or emoji sequences. */
 function reverse(text: string): string {
-  const Segmenter = (
-    Intl as typeof Intl & {
-      Segmenter: new (
-        locales?: string | string[],
-        options?: { granularity: 'grapheme' },
-      ) => { segment(input: string): Iterable<{ segment: string }> };
-    }
-  ).Segmenter;
-
   return Array.from(
     new Segmenter(undefined, { granularity: 'grapheme' }).segment(text),
     (part) => part.segment,
@@ -41,6 +41,16 @@ function reverse(text: string): string {
 function flipWordOrder(text: string): string {
   const parts = text.split(/(\s+)/);
   const reversedWords = parts.filter((_, i) => i % 2 === 0).reverse();
+
+  if (reversedWords.length === 1) {
+    const segments = Array.from(new Segmenter(undefined, { granularity: 'word' }).segment(text));
+    const words = segments.filter((part) => part.isWordLike).reverse();
+    let wordIndex = 0;
+    return segments
+      .map((part) => (part.isWordLike ? words[wordIndex++]?.segment : part.segment))
+      .join('');
+  }
+
   let wordIndex = 0;
   return parts.map((part, i) => (i % 2 === 0 ? reversedWords[wordIndex++] : part)).join('');
 }
