@@ -340,4 +340,21 @@ describe('handleConversationRelevance', () => {
     expect(result.score).toBe(1);
     expect(result.pass).toBe(true);
   });
+
+  it('should not pass a negated assertion when the conversation grader fails', async () => {
+    const provider = createFactoryProvider({ response: { error: 'grader unavailable' } });
+    const result = await handleConversationRelevance({
+      ...defaultParams,
+      assertion: { type: 'not-conversation-relevance' },
+      inverse: true,
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: { vars: {}, options: { provider } },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('grader unavailable');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
 });
