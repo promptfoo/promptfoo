@@ -15,6 +15,7 @@ import {
 } from '../../../src/redteam/constants';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { pluginMatchesStrategyTargets } from '../../../src/redteam/strategies/util';
 import { getShortPluginId } from '../../../src/redteam/util';
 import {
   createMockProvider,
@@ -23,7 +24,7 @@ import {
 } from '../../factories/provider';
 
 import type { FetchWithCacheResult } from '../../../src/cache';
-import type { TestCase } from '../../../src/types/index';
+import type { TestCase, TestCaseWithPlugin } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/cliState', () => ({
@@ -583,6 +584,38 @@ describe('Plugins', () => {
       for (const strategy of STRATEGY_COLLECTION_MAPPINGS['other-encodings']) {
         expect(CANARY_BREAKING_STRATEGY_IDS).toContain(strategy);
       }
+    });
+
+    it('filters out every other-encodings strategy for generated coding-agent test cases', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'coding-agent:core');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+      const testCase = result?.[0] as TestCaseWithPlugin;
+
+      // `other-encodings` is expanded into its members before strategy targeting runs,
+      // so each member must be filtered out individually.
+      for (const strategy of STRATEGY_COLLECTION_MAPPINGS['other-encodings']) {
+        expect(pluginMatchesStrategyTargets(testCase, strategy, undefined)).toBe(false);
+      }
+
+      // Multi-turn strategies stay enabled for coding-agent plugins.
+      expect(pluginMatchesStrategyTargets(testCase, 'jailbreak:meta', undefined)).toBe(true);
     });
 
     it('should handle remote generation errors', async () => {
