@@ -5,6 +5,9 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import * as createHash from '../../../../src/util/createHash';
+import { HttpRateLimitError } from '../../../../src/util/fetch/errors';
+import { fetchWithRetries } from '../../../../src/util/fetch/index';
 import { setOpenAiEnv } from './setup';
 
 describe('OpenAiResponsesProvider request building', () => {
@@ -70,6 +73,3102 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.error).toBeUndefined();
     expect(result.output).toBe('This is a test response');
     expect(result.tokenUsage?.total).toBe(30);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]).not.toHaveProperty('cacheScope');
+  });
+
+  it('should let lowercase Authorization replace the default Responses credential', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { status: 'completed', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'default-key', headers: { authorization: 'Bearer gateway-key' } },
+    });
+
+    await provider.callApi('Use the gateway credential');
+
+    const headers = new Headers(vi.mocked(cache.fetchWithCache).mock.calls[0]![1]!.headers as any);
+    expect(headers.get('authorization')).toBe('Bearer gateway-key');
+  });
+
+  it('should let a lowercase content-type header replace the default Responses content type', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { status: 'completed', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+      },
+    });
+
+    await provider.callApi('Use the custom content type');
+
+    const rawHeaders = vi.mocked(cache.fetchWithCache).mock.calls[0]![1]!.headers as Record<
+      string,
+      string
+    >;
+    expect(
+      Object.keys(rawHeaders).filter((header) => header.toLowerCase() === 'content-type'),
+    ).toEqual(['content-type']);
+    expect(rawHeaders['content-type']).toBe('application/json; charset=utf-8');
+  });
+
+  it('should append Responses lifecycle paths before custom gateway query credentials', async () => {
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_gateway', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_gateway', status: 'completed', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKeyRequired: false,
+        apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret',
+        background: true,
+      },
+    });
+
+    await provider.callApi('Use the query-authenticated gateway');
+
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      1,
+      'https://gateway.example/v1/responses?api_key=tenant-secret',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      'https://gateway.example/v1/responses/resp_gateway?api_key=tenant-secret',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it('should poll a queued background response until it is ready to grade', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Background result');
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      'https://api.openai.com/v1/responses/resp_background',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it('should honor the eval timeout for a background response on a standard model', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '600000' });
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { id: 'resp_background', status: 'completed', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await provider.callApi('A long task');
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST' }),
+      600000,
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it('should persist a usable incomplete background response in the cache', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              status: 'incomplete',
+              content: [{ type: 'output_text', text: 'Partial but usable output' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Partial but usable output');
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'incomplete' }),
+      200,
+      'OK',
+      undefined,
+    );
+  });
+
+  it('should bill a completed background job resumed from a queued cache entry', async () => {
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered and billable result' }],
+            },
+          ],
+          usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Recover this task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Recovered and billable result');
+    expect(result.cached).toBe(false);
+    expect(result.cost).toBeGreaterThan(0);
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_background', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
+  });
+
+  it('should coalesce and bill concurrent consumers of the same background response once', async () => {
+    let creates = 0;
+    let polls = 0;
+    let creation: Promise<any> | undefined;
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        if (!creation) {
+          creation = new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  data: { id: 'resp_shared', status: 'queued', output: [], usage: null },
+                  cached: false,
+                  status: 200,
+                  statusText: 'OK',
+                  updateCache,
+                }),
+              5,
+            );
+          });
+        }
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_shared') && options?.method === 'GET') {
+        polls++;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: {
+            id: 'resp_shared',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Shared background result' }],
+              },
+            ],
+            usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const results = await Promise.all([
+      provider.callApi('Share this task', undefined, { abortSignal: new AbortController().signal }),
+      provider.callApi('Share this task', undefined, { abortSignal: new AbortController().signal }),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(polls).toBe(1);
+    expect(results.map((result) => result.output)).toEqual([
+      'Shared background result',
+      'Shared background result',
+    ]);
+    expect(results.filter((result) => result.cached === false)).toHaveLength(1);
+    expect(results.filter((result) => result.cached === true)).toHaveLength(1);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
+  it('should bill only one subscriber when a coalesced background creation completes immediately', async () => {
+    let creates = 0;
+    let creation: Promise<any> | undefined;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        if (!creation) {
+          creation = new Promise((resolve) => {
+            setTimeout(
+              () =>
+                resolve({
+                  data: {
+                    id: 'resp_terminal_shared',
+                    status: 'completed',
+                    output: [
+                      {
+                        type: 'message',
+                        role: 'assistant',
+                        content: [{ type: 'output_text', text: 'Immediate background result' }],
+                      },
+                    ],
+                    usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+                  },
+                  cached: false,
+                  status: 200,
+                  statusText: 'OK',
+                }),
+              5,
+            );
+          });
+        }
+        return creation;
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const results = await Promise.all([
+      provider.callApi('Immediate shared task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+      provider.callApi('Immediate shared task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(results.map((result) => result.output)).toEqual([
+      'Immediate background result',
+      'Immediate background result',
+    ]);
+    expect(results.filter((result) => result.cached === false)).toHaveLength(1);
+    expect(results.filter((result) => result.cached === true)).toHaveLength(1);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
+  it('should coalesce background polling for case-equivalent routing headers', async () => {
+    let creates = 0;
+    let polls = 0;
+    let creation: Promise<any> | undefined;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        if (!creation) {
+          // Resolve on a macrotask so the in-flight creation stays coalescable
+          // until both concurrent subscribers have registered.
+          creation = new Promise((resolve) =>
+            setImmediate(() =>
+              resolve({
+                data: { id: 'resp_header_case', status: 'queued', output: [], usage: null },
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+              }),
+            ),
+          );
+        }
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_header_case') && options?.method === 'GET') {
+        polls++;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: {
+            id: 'resp_header_case',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Case-normalized result' }],
+              },
+            ],
+            usage: { input_tokens: 1000, output_tokens: 1000, total_tokens: 2000 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const upper = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Route': 'alpha', 'X-Tenant-Id': 'tenant-a' },
+      },
+    });
+    const lower = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'x-route': 'alpha', 'x-tenant-id': 'tenant-a' },
+      },
+    });
+
+    const results = await Promise.all([
+      upper.callApi('Case-normalized task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+      lower.callApi('Case-normalized task', undefined, {
+        abortSignal: new AbortController().signal,
+      }),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(polls).toBe(1);
+    expect(results.filter((result) => (result.cost ?? 0) > 0)).toHaveLength(1);
+    expect(results.filter((result) => result.cost === 0)).toHaveLength(1);
+  });
+
+  it('should coalesce semantically identical background request bodies with reordered keys', async () => {
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_canonical_${++creates}`;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_canonical_') && options?.method === 'GET') {
+        return {
+          data: {
+            id: String(url).split('/').at(-1),
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Canonical background result' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const first = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        passthrough: { metadata: { alpha: '1', beta: '2' } },
+      },
+    });
+    const second = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        passthrough: { metadata: { beta: '2', alpha: '1' } },
+      },
+    });
+
+    const results = await Promise.all([
+      first.callApi('Canonical task'),
+      second.callApi('Canonical task'),
+    ]);
+
+    expect(creates).toBe(1);
+    expect(results.map((result) => result.output)).toEqual([
+      'Canonical background result',
+      'Canonical background result',
+    ]);
+  });
+
+  it('should not coalesce background Structured Outputs with different property orders', async () => {
+    let creates = 0;
+    const orders = new Map<string, string[]>();
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_schema_${++creates}`;
+        const body = JSON.parse(String(options.body));
+        orders.set(id, Object.keys(body.text.format.schema.properties));
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_schema_') && options?.method === 'GET') {
+        const id = String(url).split('/').at(-1)!;
+        const order = orders.get(id)!;
+        return {
+          data: {
+            id,
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: JSON.stringify(Object.fromEntries(order.map((key) => [key, key]))),
+                  },
+                ],
+              },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const schema = (properties: Record<string, unknown>) => ({
+      type: 'json_schema' as const,
+      json_schema: {
+        name: 'Ordered',
+        strict: true,
+        schema: {
+          type: 'object' as const,
+          properties,
+          required: ['first', 'second'],
+          additionalProperties: false as const,
+        },
+      },
+    });
+    const first = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        response_format: schema({ first: { type: 'string' }, second: { type: 'string' } }),
+      },
+    });
+    const second = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'X-Tenant-Id': 'tenant-a' },
+        response_format: schema({ second: { type: 'string' }, first: { type: 'string' } }),
+      },
+    });
+
+    const results = await Promise.all([
+      first.callApi('Ordered task'),
+      second.callApi('Ordered task'),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(results.map((result) => Object.keys(result.output as object))).toEqual([
+      ['first', 'second'],
+      ['second', 'first'],
+    ]);
+  });
+
+  it('should bypass background persistence for credential-valued routing headers', async () => {
+    const credential = 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        return {
+          data: { id: `resp_secret_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': credential } },
+    });
+
+    await provider.callApi('Credential-dependent task');
+    await provider.callApi('Credential-dependent task');
+
+    expect(creates).toBe(2);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
+    expect(hashSpy).toHaveBeenCalled();
+    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+  });
+
+  it.each([
+    'Bearer short-lived-token',
+    'Basic dXNlcjpwdw==',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+  ])('should bypass background persistence for the credential-valued routing header %s', async (credential) => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        return {
+          data: {
+            id: `resp_route_secret_${creates}`,
+            status: 'completed',
+            output: [],
+            usage: null,
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
+      },
+    });
+
+    await provider.callApi('Credential-dependent task');
+    await provider.callApi('Credential-dependent task');
+
+    expect(creates).toBe(2);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
+    expect(hashSpy).toHaveBeenCalled();
+    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+  });
+
+  it.each([
+    '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+    'token_2e163f4d28e24f84b6d205e13058d6aa',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
+  ])('should bypass background persistence for the opaque gateway path credential %s', async (credential) => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        return {
+          data: { id: `resp_path_secret_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKeyRequired: false,
+        apiBaseUrl: `https://gateway.example/v1/${credential}`,
+        background: true,
+      },
+      env: { OPENAI_API_KEY: undefined },
+    });
+
+    await provider.callApi('Credential-dependent task');
+    await provider.callApi('Credential-dependent task');
+
+    expect(creates).toBe(2);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
+    expect(hashSpy).toHaveBeenCalled();
+    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+  });
+
+  it('should not coalesce background requests from different OpenAI projects sharing an organization', async () => {
+    let creates = 0;
+    const authorizations: string[] = [];
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        authorizations.push(new Headers(options.headers).get('authorization')!);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id: `resp_project_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const first = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        organization: 'org-shared',
+        background: true,
+      },
+    });
+    const second = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        organization: 'org-shared',
+        background: true,
+      },
+    });
+
+    await Promise.all([
+      first.callApi('Project-dependent task'),
+      second.callApi('Project-dependent task'),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(authorizations).toEqual(
+      expect.arrayContaining([
+        'Bearer sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'Bearer sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      ]),
+    );
+  });
+
+  it('should reuse project-scoped background persistence after an OpenAI credential rotation', async () => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    const createdByKey = new Map<string, any>();
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(
+      async (_url, options, _timeout, _format, cacheOptions) => {
+        if (options?.method !== 'POST') {
+          throw new Error(`Unexpected request: ${options?.method}`);
+        }
+        const key =
+          typeof cacheOptions === 'object' && cacheOptions !== null
+            ? cacheOptions.cacheKey
+            : undefined;
+        if (key && createdByKey.has(key)) {
+          return { ...createdByKey.get(key), cached: true };
+        }
+        const created = {
+          data: {
+            id: 'resp_project_cache',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Cached for the project' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        creates++;
+        if (key) {
+          createdByKey.set(key, created);
+        }
+        return created;
+      },
+    );
+    const provider = (apiKey: string) =>
+      new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey, background: true, headers: { 'OpenAI-Project': 'project-a' } },
+      });
+
+    const first = await provider('sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa').callApi('Project task');
+    const second = await provider('sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb').callApi('Project task');
+
+    expect(first.output).toBe('Cached for the project');
+    expect(second.output).toBe('Cached for the project');
+    expect(creates).toBe(1);
+    const creationOptions = vi
+      .mocked(cache.fetchWithCache)
+      .mock.calls.filter(([, options]) => options?.method === 'POST')
+      .map((call) => call[4]);
+    expect(creationOptions).toEqual([
+      expect.objectContaining({ bust: undefined, cacheKey: expect.any(String) }),
+      expect.objectContaining({ bust: undefined, cacheKey: expect.any(String) }),
+    ]);
+    expect((creationOptions[0] as { cacheKey: string }).cacheKey).toBe(
+      (creationOptions[1] as { cacheKey: string }).cacheKey,
+    );
+    expect(hashSpy).toHaveBeenCalled();
+    const hashedInputs = hashSpy.mock.calls.map(([value]) => String(value)).join('\n');
+    expect(hashedInputs).not.toContain('sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    expect(hashedInputs).not.toContain('sk-proj-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+  });
+
+  it('should isolate concurrent per-prompt OpenAI credentials without a project discriminator', async () => {
+    let creates = 0;
+    const seenAuthorization: string[] = [];
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        seenAuthorization.push(new Headers(options.headers).get('authorization') ?? '');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id: `resp_auth_${creates}`, status: 'completed', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'default-key', background: true },
+    });
+    const context = (authorization: string) =>
+      ({ prompt: { config: { headers: { authorization } } } }) as any;
+
+    await Promise.all([
+      provider.callApi('Same private task', context('Bearer project-a')),
+      provider.callApi('Same private task', context('Bearer project-b')),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(seenAuthorization.sort()).toEqual(['Bearer project-a', 'Bearer project-b']);
+  });
+
+  it('should keep credentials out of background coalescing keys and isolate credential-dependent requests', async () => {
+    const hashSpy = vi.spyOn(createHash, 'sha256');
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_private_${++creates}`;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_private_') && options?.method === 'GET') {
+        return {
+          data: {
+            id: String(url).split('/').at(-1),
+            status: 'completed',
+            output: [],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = (authorization: string, mcpToken: string) =>
+      new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          apiKeyRequired: false,
+          background: true,
+          headers: { authorization, 'X-Tenant-Id': 'tenant-a' },
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'private',
+              server_url: `https://mcp.example?token=url-${mcpToken}`,
+              headers: { Authorization: `Bearer ${mcpToken}` },
+              require_approval: 'never',
+            },
+          ],
+        },
+      });
+
+    await Promise.all([
+      provider('Bearer gateway-secret-a', 'mcp-secret-a').callApi('Private task'),
+      provider('Bearer gateway-secret-b', 'mcp-secret-b').callApi('Private task'),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(hashSpy).toHaveBeenCalled();
+    const hashedInputs = hashSpy.mock.calls.map(([value]) => String(value)).join('\n');
+    expect(hashedInputs).not.toContain('gateway-secret-a');
+    expect(hashedInputs).not.toContain('gateway-secret-b');
+    expect(hashedInputs).not.toContain('mcp-secret-a');
+    expect(hashedInputs).not.toContain('mcp-secret-b');
+  });
+
+  it('should isolate concurrent background requests with different gateway credentials in one tenant', async () => {
+    let creates = 0;
+    const seenAuthorization: string[] = [];
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creates++;
+        seenAuthorization.push(new Headers(options.headers).get('authorization') ?? '');
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id: `resp_auth_${creates}`, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_auth_') && options?.method === 'GET') {
+        return {
+          data: {
+            id: String(url).split('/').at(-1),
+            status: 'completed',
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = (authorization: string) =>
+      new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          apiKeyRequired: false,
+          background: true,
+          headers: { authorization, 'X-Tenant-Id': 'tenant-a' },
+        },
+      });
+
+    await Promise.all([
+      provider('Bearer user-a-secret').callApi('private task'),
+      provider('Bearer user-b-secret').callApi('private task'),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(seenAuthorization.sort()).toEqual(['Bearer user-a-secret', 'Bearer user-b-secret']);
+  });
+
+  it('should bypass the shared fetch cache for a credential-dependent background request', async () => {
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_private_cache', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_private_cache', status: 'completed', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKeyRequired: false,
+        background: true,
+        tools: [
+          {
+            type: 'mcp',
+            server_label: 'private',
+            server_url: 'https://mcp.example?token=short-secret',
+            require_approval: 'never',
+          },
+        ],
+      },
+    });
+
+    await provider.callApi('Private task');
+
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      1,
+      'https://gateway.example/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it('should keep a shared background job alive when only one subscriber aborts', async () => {
+    let polls = 0;
+    let creation: Promise<any> | undefined;
+    let notifyPoll: (() => void) | undefined;
+    const pollStarted = new Promise<void>((resolve) => {
+      notifyPoll = resolve;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        creation ??= Promise.resolve({
+          data: { id: 'resp_shared_abort', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_shared_abort') && options?.method === 'GET') {
+        polls++;
+        notifyPoll?.();
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: {
+            id: 'resp_shared_abort',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed for remaining subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const pending = Promise.allSettled([
+      provider.callApi('Shared cancellable task', undefined, { abortSignal: first.signal }),
+      provider.callApi('Shared cancellable task', undefined, { abortSignal: second.signal }),
+    ]);
+    await pollStarted;
+    first.abort(new Error('first subscriber cancelled'));
+    const results = await pending;
+
+    expect(polls).toBe(1);
+    expect(results[0]).toMatchObject({
+      status: 'rejected',
+      reason: { name: 'AbortError', message: 'first subscriber cancelled' },
+    });
+    expect(results[1]).toMatchObject({
+      status: 'fulfilled',
+      value: { output: 'Completed for remaining subscriber' },
+    });
+    if (results[1]?.status !== 'fulfilled') {
+      throw new Error('Expected the remaining subscriber to complete.');
+    }
+    expect(results[1].value.cached).toBe(false);
+    expect(results[1].value.cost).toBeGreaterThan(0);
+    expect(results[1].value.tokenUsage?.cached ?? 0).toBe(0);
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_shared_abort/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should keep a shared background creation alive when one subscriber aborts before acceptance', async () => {
+    let resolveCreation: ((value: any) => void) | undefined;
+    const creation = new Promise<any>((resolve) => {
+      resolveCreation = resolve;
+    });
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_shared_creation') && options?.method === 'GET') {
+        polls++;
+        return {
+          data: {
+            id: 'resp_shared_creation',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Accepted for remaining subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_shared_creation/cancel')) {
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const pending = Promise.allSettled([
+      provider.callApi('Shared pending creation', undefined, { abortSignal: first.signal }),
+      provider.callApi('Shared pending creation', undefined, { abortSignal: second.signal }),
+    ]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    first.abort(new Error('first subscriber cancelled during creation'));
+    resolveCreation?.({
+      data: { id: 'resp_shared_creation', status: 'queued', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const results = await pending;
+
+    expect(polls).toBe(1);
+    expect(results[0]).toMatchObject({
+      status: 'rejected',
+      reason: { name: 'AbortError', message: 'first subscriber cancelled during creation' },
+    });
+    expect(results[1]).toMatchObject({
+      status: 'fulfilled',
+      value: { output: 'Accepted for remaining subscriber' },
+    });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_shared_creation/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should keep the queued cache entry when one of several polling subscribers aborts', async () => {
+    let creates = 0;
+    let persisted = false;
+    let releasePoll: (() => void) | undefined;
+    let notifyPoll: (() => void) | undefined;
+    const pollStarted = new Promise<void>((resolve) => {
+      notifyPoll = resolve;
+    });
+    const pollGate = new Promise<void>((resolve) => {
+      releasePoll = resolve;
+    });
+    const deleteFromCache = vi.fn(async () => {
+      persisted = false;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const cached = persisted;
+        if (!cached) {
+          creates++;
+          persisted = true;
+        }
+        return {
+          data: { id: 'resp_persisted', status: 'queued', output: [], usage: null },
+          cached,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
+      }
+      if (String(url).endsWith('/responses/resp_persisted') && options?.method === 'GET') {
+        notifyPoll?.();
+        await pollGate;
+        return {
+          data: {
+            id: 'resp_persisted',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed once' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const second = new AbortController();
+    const firstResult = provider
+      .callApi('Persist the shared task', undefined, { abortSignal: first.signal })
+      .catch((error: Error) => error);
+    const secondResult = provider.callApi('Persist the shared task', undefined, {
+      abortSignal: second.signal,
+    });
+    await pollStarted;
+    first.abort(new Error('first subscriber stopped'));
+    await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
+    const thirdResult = provider.callApi('Persist the shared task');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(creates).toBe(1);
+    expect(deleteFromCache).not.toHaveBeenCalled();
+    releasePoll?.();
+    await expect(Promise.all([secondResult, thirdResult])).resolves.toEqual([
+      expect.objectContaining({ output: 'Completed once' }),
+      expect.objectContaining({ output: 'Completed once' }),
+    ]);
+  });
+
+  it('should not cancel an accepted background creation after a late subscriber joins', async () => {
+    let resolveCreation: ((value: any) => void) | undefined;
+    const creation = new Promise<any>((resolve) => {
+      resolveCreation = resolve;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return creation;
+      }
+      if (String(url).endsWith('/responses/resp_late') && options?.method === 'GET') {
+        return {
+          data: {
+            id: 'resp_late',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Completed for late subscriber' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_late/cancel')) {
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+    const first = new AbortController();
+    const firstResult = provider
+      .callApi('Late subscriber task', undefined, { abortSignal: first.signal })
+      .catch((error: Error) => error);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    first.abort(new Error('first subscriber stopped'));
+    await expect(firstResult).resolves.toMatchObject({ name: 'AbortError' });
+    const lateResult = provider.callApi('Late subscriber task');
+    resolveCreation?.({
+      data: { id: 'resp_late', status: 'queued', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await expect(lateResult).resolves.toMatchObject({ output: 'Completed for late subscriber' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_late/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should isolate identical background creations across repeat cache namespaces', async () => {
+    let creates = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        const id = `resp_repeat_${++creates}`;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: { id, status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).includes('/responses/resp_repeat_') && options?.method === 'GET') {
+        const id = String(url).split('/').at(-1);
+        return {
+          data: {
+            id,
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: `Completed ${id}` }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const results = await Promise.all([
+      cache.withCacheNamespace('repeat:0', () =>
+        provider.callApi('Repeated background task', undefined, {
+          abortSignal: new AbortController().signal,
+        }),
+      ),
+      cache.withCacheNamespace('repeat:1', () =>
+        provider.callApi('Repeated background task', undefined, {
+          abortSignal: new AbortController().signal,
+        }),
+      ),
+    ]);
+
+    expect(creates).toBe(2);
+    expect(results.map((result) => result.output)).toEqual([
+      'Completed resp_repeat_1',
+      'Completed resp_repeat_2',
+    ]);
+  });
+
+  it('should isolate background polling across repeat cache namespaces when upstream reuses an ID', async () => {
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return {
+          data: { id: 'resp_same_id', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_same_id') && options?.method === 'GET') {
+        polls++;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return {
+          data: {
+            id: 'resp_same_id',
+            status: 'completed',
+            output: [],
+            usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'Idempotency-Key': 'fixed' } },
+    });
+
+    await Promise.all([
+      cache.withCacheNamespace('repeat:0', () => provider.callApi('Repeated background task')),
+      cache.withCacheNamespace('repeat:1', () => provider.callApi('Repeated background task')),
+    ]);
+
+    expect(polls).toBe(2);
+  });
+
+  it('should return a clear error and evict a cancelled background response', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancelled', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancelled', status: 'cancelled', error: null, output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Cancel this task');
+
+    expect(result.error).toBe('Background response resp_cancelled was cancelled.');
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).not.toHaveBeenCalled();
+  });
+
+  it('should evict a background response cancelled during creation', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_cancelled', status: 'cancelled', error: null, output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+      updateCache,
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Cancel this task immediately');
+
+    expect(result.error).toBe('Background response resp_cancelled was cancelled.');
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).not.toHaveBeenCalled();
+  });
+
+  it('should surface the upstream error and evict a failed background response', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_failed', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_failed',
+          status: 'failed',
+          error: { code: 'server_error', message: 'The model provider had an internal error' },
+          output: [],
+          usage: null,
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Fail this task');
+
+    expect(result.error).toBe(
+      'Background response resp_failed failed: The model provider had an internal error',
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).not.toHaveBeenCalled();
+  });
+
+  it('should return a clear error when a background response fails without an upstream message', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_failed', status: 'failed', error: null, output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+      updateCache,
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Fail this task immediately');
+
+    expect(result.error).toBe('Background response resp_failed was failed.');
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).not.toHaveBeenCalled();
+  });
+
+  it('should reject a background response accepted without a response ID', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { status: 'queued', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Accept a task without an ID');
+
+    expect(result.error).toBe('Background response is missing its response ID.');
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should not create a background response for an already-aborted eval', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await expect(
+      provider.callApi('Cancelled task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should normalize a pre-aborted custom Responses reason to AbortError', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('caller cancelled before dispatch'));
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await expect(
+      provider.callApi('Cancelled task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled before dispatch' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should keep background creation alive and forward the eval abort signal to polling', async () => {
+    const controller = new AbortController();
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancellable', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_cancellable',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Completed before cancellation' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Cancellable task', undefined, {
+      abortSignal: controller.signal,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/responses/resp_cancellable'),
+      expect.objectContaining({ method: 'GET', signal: expect.any(AbortSignal) }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+    expect(vi.mocked(cache.fetchWithCache).mock.calls[0]![1]).not.toHaveProperty('signal');
+  });
+
+  it('should cancel and evict an upstream background response when the eval is aborted', async () => {
+    const controller = new AbortController();
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancellable', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw new DOMException('The operation was aborted.', 'AbortError');
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_cancellable', status: 'cancelled', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    await expect(
+      provider.callApi('Cancel the upstream task', { bustCache: true } as any, {
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('/responses/resp_cancellable/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should cancel an accepted background job when creation is aborted before the response arrives', async () => {
+    const controller = new AbortController();
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return await new Promise<any>((resolve, reject) => {
+          setTimeout(
+            () =>
+              resolve({
+                data: { id: 'resp_accepted', status: 'queued', output: [], usage: null },
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+                deleteFromCache,
+              }),
+            20,
+          );
+          options.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+      if (String(url).endsWith('/responses/resp_accepted/cancel')) {
+        return { data: {}, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+    });
+
+    const pending = provider.callApi('Accept and then cancel', { bustCache: true } as any, {
+      abortSignal: controller.signal,
+    });
+    setTimeout(() => controller.abort(new Error('caller cancelled creation')), 5);
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(deleteFromCache).toHaveBeenCalledOnce());
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_accepted/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should bound polling retries by the overall background deadline', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return {
+          data: { id: 'resp_deadline', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
+      }
+      if (String(url).endsWith('/responses/resp_deadline/cancel')) {
+        return { data: {}, cached: false, status: 200, statusText: 'OK' };
+      }
+      return await new Promise<any>((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), {
+          once: true,
+        });
+      });
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 3 },
+    });
+
+    const result = await Promise.race([
+      provider.callApi('Bound the polling deadline'),
+      new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 150)),
+    ]);
+
+    expect(result).not.toBe('unbounded');
+    expect((result as any).error).toContain(
+      'Background response resp_deadline timed out after 20ms.',
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should include background creation time in the overall polling deadline', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '100' });
+    const originalNow = Date.now;
+    let now = originalNow();
+    const timeouts: number[] = [];
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options, timeout) => {
+        if (String(url).endsWith('/cancel')) {
+          return { data: {}, cached: false, status: 200, statusText: 'OK' };
+        }
+        timeouts.push(timeout ?? 0);
+        if (String(url).endsWith('/responses') && options?.method === 'POST') {
+          now += 80;
+          return {
+            data: { id: 'resp_slow_create', status: 'queued', output: [], usage: null },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          };
+        }
+        now += 20;
+        return {
+          data: { id: 'resp_slow_create', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+      });
+
+      const result = await provider.callApi('Include creation in the deadline');
+
+      expect(result.error).toContain('Background response resp_slow_create timed out after 100ms.');
+      expect(timeouts).toEqual([100, 20]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should preserve a shareable queued background response after a local polling timeout', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_shared_timeout', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockImplementationOnce(async () => {
+        now += 10;
+        return {
+          data: { id: 'resp_shared_timeout', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_shared_timeout', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_shared_timeout',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Ready' }],
+            },
+          ],
+          usage: null,
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'OpenAI-Project': 'project-a' },
+      },
+    });
+
+    try {
+      const first = await provider.callApi('Resume this background task');
+      const second = await provider.callApi('Resume this background task');
+
+      expect(first.error).toContain(
+        'Background response resp_shared_timeout timed out after 10ms.',
+      );
+      expect(second.error).toBeUndefined();
+      expect(second.output).toBe('Ready');
+      expect(deleteFromCache).not.toHaveBeenCalled();
+      expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+        expect.stringContaining('/cancel'),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should preserve the polling deadline of a late background subscriber', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '140' });
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    let notifyFirstPoll: (() => void) | undefined;
+    let releaseFirstPoll: (() => void) | undefined;
+    const firstPollStarted = new Promise<void>((resolve) => {
+      notifyFirstPoll = resolve;
+    });
+    const firstPollGate = new Promise<void>((resolve) => {
+      releaseFirstPoll = resolve;
+    });
+    let polls = 0;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      if (options?.method === 'POST') {
+        return {
+          data: { id: 'resp_late_deadline', status: 'queued', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      polls++;
+      if (polls === 1) {
+        notifyFirstPoll?.();
+        await firstPollGate;
+        now += 90;
+        return {
+          data: { id: 'resp_late_deadline', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      }
+      return {
+        data: {
+          id: 'resp_late_deadline',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Completed for late subscriber' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: {
+        apiKey: 'test-key',
+        background: true,
+        headers: { 'OpenAI-Project': 'project-a' },
+      },
+    });
+
+    try {
+      const first = provider.callApi('Shared deadline task');
+      await firstPollStarted;
+      now += 55;
+      const second = provider.callApi('Shared deadline task');
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      releaseFirstPoll?.();
+      const [firstResult, secondResult] = await Promise.all([first, second]);
+
+      expect(firstResult.error).toContain(
+        'Background response resp_late_deadline timed out after 140ms.',
+      );
+      expect(secondResult.error).toBeUndefined();
+      expect(secondResult.output).toBe('Completed for late subscriber');
+      expect(polls).toBe(2);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should cancel and evict an upstream background response when polling times out', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '10' });
+    let now = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_timeout', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockImplementationOnce(async () => {
+        now += 10;
+        return {
+          data: { id: 'resp_timeout', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_timeout', status: 'cancelled', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    try {
+      const result = await provider.callApi('Time out the upstream task', {
+        bustCache: true,
+      } as any);
+
+      expect(result.error).toContain('Background response resp_timeout timed out after 10ms.');
+      expect(cache.fetchWithCache).toHaveBeenLastCalledWith(
+        expect.stringContaining('/responses/resp_timeout/cancel'),
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+        'json',
+        true,
+        0,
+      );
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('should cancel and evict an upstream background response after a permanent polling failure', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_forbidden', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response retrieval is forbidden' } },
+        cached: false,
+        status: 403,
+        statusText: 'Forbidden',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_forbidden', status: 'cancelled', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Stop the inaccessible task');
+
+    expect(result.error).toContain('403 Forbidden');
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('/responses/resp_forbidden/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
+  it('should transparently replace a cached queued background response when its upstream ID has expired', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_expired', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response not found' } },
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_retried', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_retried',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Recovered background result');
+    expect(result.cached).toBe(false);
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_retried', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
+      undefined,
+    );
+  });
+
+  it('should transparently replace a cached queued background response when its upstream ID is gone', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const updateCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_gone', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+        updateCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response is gone' } },
+        cached: false,
+        status: 410,
+        statusText: 'Gone',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_retried_after_gone', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_retried_after_gone',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+
+    const result = await provider.callApi('A long since-gone task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Recovered background result');
+    expect(result.cached).toBe(false);
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(updateCache).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'resp_retried_after_gone', status: 'completed' }),
+      200,
+      'OK',
+      undefined,
+    );
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
+      undefined,
+    );
+  });
+
+  it('should surface a failed replacement creation after a cached background job expires', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_expired_replacement', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response not found' } },
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Replacement creation rejected' } },
+        cached: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+
+    const result = await provider.callApi('Fail the replacement creation');
+
+    expect(result.error).toContain('API error: 500 Internal Server Error');
+    expect(result.error).toContain('Replacement creation rejected');
+    expect(result.metadata).toEqual({
+      http: { status: 500, statusText: 'Internal Server Error', headers: {} },
+    });
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+    expect(cache.fetchWithCache).toHaveBeenCalledTimes(3);
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      3,
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      expect.objectContaining({ bust: false, cacheKey: expect.any(String) }),
+      undefined,
+    );
+  });
+
+  it('should not claim replacement background usage until a transient polling failure recovers', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    const claimCacheKeyOnce = vi.spyOn(cache, 'claimCacheKeyOnce');
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_expired_before_outage', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Response not found' } },
+        cached: false,
+        status: 404,
+        statusText: 'Not Found',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_replacement_after_outage', status: 'queued', output: [], usage: null },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Temporary retrieval outage' } },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_replacement_after_outage', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_replacement_after_outage',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered replacement result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.5', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+
+    const failed = await provider.callApi('Recover a replacement task');
+    expect(failed.error).toContain('503 Service Unavailable');
+    expect(claimCacheKeyOnce).not.toHaveBeenCalled();
+
+    const recovered = await provider.callApi('Recover a replacement task');
+    expect(recovered.error).toBeUndefined();
+    expect(recovered.output).toBe('Recovered replacement result');
+    expect(recovered.cached).toBe(false);
+    expect(claimCacheKeyOnce).toHaveBeenCalledOnce();
+  });
+
+  it('should preserve the overall deadline while replacing a stale cached background job', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '100' });
+    const originalNow = Date.now;
+    let now = originalNow();
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const timeouts: number[] = [];
+    try {
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options, timeout) => {
+        if (String(url).endsWith('/responses') && options?.method === 'POST') {
+          if (timeouts.length === 0) {
+            return {
+              data: { id: 'resp_stale_deadline', status: 'queued', output: [], usage: null },
+              cached: true,
+              status: 200,
+              statusText: 'OK',
+              deleteFromCache: vi.fn(),
+            };
+          }
+          timeouts.push(timeout ?? 0);
+          now += 40;
+          return {
+            data: { id: 'resp_replacement_deadline', status: 'queued', output: [], usage: null },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          };
+        }
+        if (String(url).endsWith('/cancel')) {
+          return { data: {}, cached: false, status: 200, statusText: 'OK' };
+        }
+        timeouts.push(timeout ?? 0);
+        now += 40;
+        if (String(url).endsWith('/resp_stale_deadline')) {
+          return {
+            data: { error: { message: 'Not found' } },
+            cached: false,
+            status: 404,
+            statusText: 'Not Found',
+          };
+        }
+        return {
+          data: { id: 'resp_replacement_deadline', status: 'in_progress', output: [], usage: null },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+      });
+
+      const result = await provider.callApi('Keep the replacement within the deadline');
+
+      expect(result.error).toContain(
+        'Background response resp_replacement_deadline timed out after 100ms.',
+      );
+      expect(timeouts).toEqual([100, 60, 20]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it.each([
+    true,
+    false,
+  ])('should not cancel a shareable background job when its local polling subscriber aborts (cache hit: %s)', async (cached) => {
+    const controller = new AbortController();
+    let notifyPoll: (() => void) | undefined;
+    const polling = new Promise<void>((resolve) => {
+      notifyPoll = resolve;
+    });
+    const deleteFromCache = vi.fn();
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return {
+          data: { id: 'resp_shared_process', status: 'queued', output: [], usage: null },
+          cached,
+          status: 200,
+          statusText: 'OK',
+          deleteFromCache,
+        };
+      }
+      if (String(url).endsWith('/cancel')) {
+        return { data: {}, cached: false, status: 200, statusText: 'OK' };
+      }
+      notifyPoll?.();
+      return await new Promise<any>((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+      });
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+    });
+    const pending = provider.callApi('Resume the shared job', undefined, {
+      abortSignal: controller.signal,
+    });
+    await polling;
+    controller.abort(new Error('caller cancelled'));
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(deleteFromCache).not.toHaveBeenCalled();
+  });
+
+  it('should cancel an accepted replacement background job when recovery is aborted', async () => {
+    const controller = new AbortController();
+    let notifyReplacement: (() => void) | undefined;
+    const replacementStarted = new Promise<void>((resolve) => {
+      notifyReplacement = resolve;
+    });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        if (!notifyReplacement) {
+          throw new Error('Expected replacement notifier.');
+        }
+        if (
+          vi
+            .mocked(cache.fetchWithCache)
+            .mock.calls.filter(
+              ([callUrl, callOptions]) =>
+                String(callUrl).endsWith('/responses') && callOptions?.method === 'POST',
+            ).length === 1
+        ) {
+          return {
+            data: { id: 'resp_stale', status: 'queued', output: [], usage: null },
+            cached: true,
+            status: 200,
+            statusText: 'OK',
+            deleteFromCache: vi.fn(),
+          };
+        }
+        notifyReplacement();
+        return await new Promise<any>((resolve, reject) => {
+          const timer = setTimeout(
+            () =>
+              resolve({
+                data: { id: 'resp_replacement', status: 'queued', output: [], usage: null },
+                cached: false,
+                status: 200,
+                statusText: 'OK',
+                deleteFromCache: vi.fn(),
+              }),
+            25,
+          );
+          options.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(options.signal?.reason);
+          });
+        });
+      }
+      if (String(url).endsWith('/responses/resp_stale') && options?.method === 'GET') {
+        return {
+          data: { error: { message: 'Not found' } },
+          cached: false,
+          status: 404,
+          statusText: 'Not Found',
+        };
+      }
+      if (String(url).endsWith('/responses/resp_replacement/cancel')) {
+        return { data: { status: 'cancelled' }, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 0 },
+    });
+    const pending = provider.callApi('Recover then cancel', { bustCache: true } as any, {
+      abortSignal: controller.signal,
+    });
+    await replacementStarted;
+    controller.abort(new Error('cancel replacement'));
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() =>
+      expect(
+        vi
+          .mocked(cache.fetchWithCache)
+          .mock.calls.some(([url]) => String(url).endsWith('/responses/resp_replacement/cancel')),
+      ).toBe(true),
+    );
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_replacement/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should preserve a cached background job when polling fails transiently', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: { error: { message: 'Temporary retrieval outage' } },
+        cached: false,
+        status: 503,
+        statusText: 'Service Unavailable',
+      })
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'resp_background',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Recovered background result' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const first = await provider.callApi('A long task');
+    const second = await provider.callApi('A long task');
+
+    expect(first.error).toContain('503 Service Unavailable');
+    expect(second.error).toBeUndefined();
+    expect(second.output).toBe('Recovered background result');
+    expect(second.cached).toBe(false);
+    expect(deleteFromCache).not.toHaveBeenCalled();
+    expect(cache.fetchWithCache).toHaveBeenNthCalledWith(
+      4,
+      'https://api.openai.com/v1/responses/resp_background',
+      expect.objectContaining({ method: 'GET' }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it('should preserve a cached background job when the polling request throws', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_background', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockRejectedValueOnce(new Error('Temporary network failure'));
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('A long task');
+
+    expect(result.error).toContain('Temporary network failure');
+    expect(deleteFromCache).not.toHaveBeenCalled();
+  });
+
+  it('should preserve Retry-After metadata when background polling exhausts retries', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(cache.fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { id: 'resp_rate_limited', status: 'queued', output: [], usage: null },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      })
+      .mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          statusText: 'Too Many Requests',
+          code: 'rate_limit_exceeded',
+          retryAfterMs: 120000,
+          headers: { 'retry-after': '120' },
+        }),
+      );
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true },
+    });
+
+    const result = await provider.callApi('Poll later');
+
+    expect(result.error).toContain('Rate limit exceeded');
+    expect(result.metadata).toEqual({
+      rateLimitKind: 'rate_limit',
+      http: {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '120' },
+      },
+    });
+    expect(deleteFromCache).not.toHaveBeenCalled();
+  });
+
+  it('should honor a prompt-level retry limit when creating a background response', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: {
+        id: 'resp_no_retry',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Completed once' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, maxRetries: 2 },
+    });
+
+    await provider.callApi('Create this once', {
+      prompt: { raw: 'Create this once', label: 'no-retry', config: { maxRetries: 0 } },
+      vars: {},
+    } as any);
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should consume a completed streamed background response', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        `data: ${JSON.stringify({
+          type: 'response.completed',
+          response: {
+            id: 'resp_stream_background',
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'Streamed background result' }],
+              },
+            ],
+            usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+          },
+        })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    });
+
+    const result = await provider.callApi('Stream the background task');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('Streamed background result');
+    expect(result.cached).toBe(false);
+    expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect.stringContaining('/responses'),
+      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"stream":true') }),
+      expect.any(Number),
+      0,
+    );
+  });
+
+  it('should cancel a streamed background request when the eval is aborted', async () => {
+    const controller = new AbortController();
+    let streamStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      streamStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      const stream = new ReadableStream({
+        start(streamController) {
+          streamController.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({
+                type: 'response.created',
+                response: { id: 'resp_stream_background', status: 'in_progress' },
+              })}\n\n`,
+            ),
+          );
+          signal?.addEventListener('abort', () => {
+            streamController.error(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+          streamStarted?.();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_stream_background', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    });
+
+    const result = provider.callApi('Cancel this streamed background task', undefined, {
+      abortSignal: controller.signal,
+    });
+    await started;
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]?.body as string)).toMatchObject({
+      background: true,
+      stream: true,
+    });
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_stream_background/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should not create a background stream when the eval is aborted while preparing the request', async () => {
+    const controller = new AbortController();
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    });
+    const getOpenAiBody = provider.getOpenAiBody.bind(provider);
+    vi.spyOn(provider, 'getOpenAiBody').mockImplementationOnce(async (prompt, context, options) => {
+      controller.abort(new Error('cancelled while preparing'));
+      return getOpenAiBody(prompt, context, options);
+    });
+
+    await expect(
+      provider.callApi('Do not create this task', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'cancelled while preparing' });
+
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should normalize a custom abort reason while cancelling an active background stream', async () => {
+    const controller = new AbortController();
+    let streamStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      streamStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            streamController.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({
+                  type: 'response.created',
+                  response: { id: 'resp_custom_abort', status: 'in_progress' },
+                })}\n\n`,
+              ),
+            );
+            signal?.addEventListener('abort', () => streamController.error(signal.reason));
+            streamStarted?.();
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_custom_abort', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    }).callApi('Cancel this task', undefined, { abortSignal: controller.signal });
+    await started;
+    controller.abort(new Error('user stopped the eval'));
+
+    await expect(result).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'user stopped the eval',
+    });
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_custom_abort/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should cancel a streamed background job when its response ID arrives after the previous grace period', async () => {
+    vi.useFakeTimers();
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '3000' });
+    const controller = new AbortController();
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            const timer = setTimeout(() => {
+              streamController.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({
+                    type: 'response.created',
+                    response: { id: 'resp_delayed_stream', status: 'in_progress' },
+                  })}\n\n`,
+                ),
+              );
+            }, 1050);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              streamController.error(signal.reason);
+            });
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_delayed_stream', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    try {
+      const pending = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true, stream: true },
+      }).callApi('Delayed stream creation', undefined, { abortSignal: controller.signal });
+      // Let the stream be accepted before the caller aborts, so the abort lands
+      // in the "accepted but no response ID yet" grace-period path.
+      await vi.advanceTimersByTimeAsync(5);
+      controller.abort(new Error('caller cancelled before stream ID'));
+
+      await expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'caller cancelled before stream ID',
+      });
+      // The response ID arrives after the previous 1000ms grace period would
+      // have expired, but within the current one.
+      await vi.advanceTimersByTimeAsync(1050);
+      await vi.waitFor(() =>
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.stringContaining('/responses/resp_delayed_stream/cancel'),
+          expect.objectContaining({ method: 'POST' }),
+          expect.any(Number),
+          'json',
+          true,
+          0,
+        ),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should cancel an accepted background response when its stream disconnects', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                `data: ${JSON.stringify({
+                  type: 'response.created',
+                  response: { id: 'resp_stream_disconnect', status: 'in_progress' },
+                })}\n\n`,
+              ),
+            );
+            setTimeout(() => controller.error(new TypeError('socket terminated')), 0);
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      ),
+    );
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { status: 'cancelled' },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    });
+
+    const result = await provider.callApi('Disconnect the stream');
+
+    expect(result.error).toContain('socket terminated');
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_stream_disconnect/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should cancel a streamed background request when it times out after response creation', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      const stream = new ReadableStream({
+        start(streamController) {
+          streamController.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({
+                type: 'response.created',
+                response: { id: 'resp_stream_timeout', status: 'in_progress' },
+              })}\n\n`,
+            ),
+          );
+          signal?.addEventListener('abort', () => {
+            streamController.error(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_stream_timeout', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    });
+
+    const result = await provider.callApi('Time out this streamed background task');
+
+    expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/responses/resp_stream_timeout/cancel'),
+      expect.objectContaining({ method: 'POST' }),
+      expect.any(Number),
+      'json',
+      true,
+      0,
+    );
+  });
+
+  it('should cancel a streamed background job whose response ID arrives after the eval timeout', async () => {
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      const signal = options?.signal;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            const timer = setTimeout(() => {
+              streamController.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({
+                    type: 'response.created',
+                    response: { id: 'resp_stream_late_timeout', status: 'in_progress' },
+                  })}\n\n`,
+                ),
+              );
+            }, 50);
+            signal?.addEventListener('abort', () => {
+              clearTimeout(timer);
+              streamController.error(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+    vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+      data: { id: 'resp_stream_late_timeout', status: 'cancelled', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true, maxRetries: 0 },
+    }).callApi('Time out before the stream ID arrives');
+
+    expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+    await vi.waitFor(() =>
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/responses/resp_stream_late_timeout/cancel'),
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+        'json',
+        true,
+        0,
+      ),
+    );
+  });
+
+  it('should abort an unaccepted background stream immediately when the eval stops', async () => {
+    const controller = new AbortController();
+    let upstreamSignal: AbortSignal | undefined;
+    let notifyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      upstreamSignal = options?.signal ?? undefined;
+      notifyStarted?.();
+      return new Promise<Response>((_resolve, reject) => {
+        upstreamSignal?.addEventListener('abort', () => reject(upstreamSignal?.reason), {
+          once: true,
+        });
+      });
+    });
+
+    const pending = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'test-key', background: true, stream: true },
+    }).callApi('Cancel before stream headers', undefined, { abortSignal: controller.signal });
+    await started;
+    controller.abort(new Error('eval stopped before headers'));
+
+    await expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'eval stopped before headers',
+    });
+    expect(upstreamSignal?.aborted).toBe(true);
+  });
+
+  it('should bound cleanup of an accepted background stream that never emits a response ID', async () => {
+    vi.useFakeTimers();
+    setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '600000' });
+    const controller = new AbortController();
+    let upstreamSignal: AbortSignal | undefined;
+    let notifyStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
+    vi.mocked(fetchWithRetries).mockImplementationOnce(async (_url, options) => {
+      upstreamSignal = options?.signal ?? undefined;
+      return new Response(
+        new ReadableStream({
+          start(streamController) {
+            upstreamSignal?.addEventListener(
+              'abort',
+              () => streamController.error(upstreamSignal?.reason),
+              {
+                once: true,
+              },
+            );
+            notifyStarted?.();
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+      );
+    });
+
+    try {
+      const pending = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true, stream: true },
+      }).callApi('Cancel an accepted stream', undefined, { abortSignal: controller.signal });
+      await started;
+      controller.abort(new Error('eval stopped before stream ID'));
+
+      await expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'eval stopped before stream ID',
+      });
+      expect(upstreamSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(upstreamSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should handle system prompts correctly', async () => {
@@ -453,9 +3552,10 @@ describe('OpenAiResponsesProvider request building', () => {
           schema: {
             type: 'object' as const,
             properties: {
-              result: { type: 'string' },
+              z_last: { type: 'string' },
+              a_first: { type: 'string' },
             },
-            required: ['result'],
+            required: ['z_last', 'a_first'],
             additionalProperties: false,
           },
         },
@@ -477,6 +3577,18 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(body.text.format.name).toBe('TestSchema');
     expect(body.text.format.schema).toBeDefined();
     expect(body.text.format.strict).toBe(true);
+    expect(Object.keys(body.text.format.schema.properties)).toEqual(['z_last', 'a_first']);
+  });
+
+  it('should reject a per-prompt Codex-only Responses model override before dispatch', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4.1', { config: { apiKey: 'test-key' } });
+
+    await expect(
+      provider.getOpenAiBody('Test prompt', {
+        prompt: { config: { passthrough: { model: 'openai/gpt-5.3-codex-spark' } } },
+      } as any),
+    ).rejects.toThrow('only available through openai:codex-sdk');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
   });
 
   it('should handle JSON object prompt correctly', async () => {
