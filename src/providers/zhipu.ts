@@ -236,7 +236,13 @@ class ZhipuProvider extends OpenAiChatCompletionProvider {
     }
 
     // GLM uses max_tokens; map max_completion_tokens across and drop the base's 1024 default.
-    const maxTokens = config.max_tokens ?? config.max_completion_tokens;
+    // Prompt-level config beats provider-level regardless of which alias each layer used.
+    const promptConfig = (context?.prompt?.config ?? {}) as ZhipuConfig;
+    const maxTokens =
+      promptConfig.max_tokens ??
+      promptConfig.max_completion_tokens ??
+      this.config.max_tokens ??
+      this.config.max_completion_tokens;
     if (maxTokens === undefined) {
       delete body.max_tokens;
     } else {
