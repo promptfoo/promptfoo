@@ -223,7 +223,7 @@ describe('TrueFoundry', () => {
             numRequests: 1,
           },
           cached: false,
-          cost: undefined,
+          cost: expect.closeTo(0.00045, 10),
           latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
@@ -361,7 +361,7 @@ describe('TrueFoundry', () => {
         expect(cachedResult).toEqual({
           output: 'Cached output',
           cached: true,
-          cost: undefined,
+          cost: 0,
           latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
