@@ -59,6 +59,23 @@ promptfoo eval --output report.html
 
 **Use when:** Presenting results to stakeholders or reviewing outputs visually.
 
+### PDF Report
+
+Generate a portable, print-ready version of the HTML report:
+
+```bash
+promptfoo eval --output report.pdf
+```
+
+Requires the optional `playwright` dependency with the Chromium browser installed:
+
+```bash
+npm install playwright
+npx playwright install chromium
+```
+
+**Use when:** Sharing results with other teams via email or chat as a single fixed-layout document.
+
 ### JSON Output
 
 Export complete evaluation data:

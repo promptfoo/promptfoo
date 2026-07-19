@@ -69,6 +69,17 @@ vi.mock('../../src/googleSheets', () => ({
   writeCsvToGoogleSheet: vi.fn(),
 }));
 
+const playwrightMocks = vi.hoisted(() => {
+  const page = { setContent: vi.fn(), pdf: vi.fn() };
+  const browser = { newPage: vi.fn(), close: vi.fn() };
+  const chromium = { launch: vi.fn() };
+  return { page, browser, chromium };
+});
+
+vi.mock('playwright', () => ({
+  chromium: playwrightMocks.chromium,
+}));
+
 describe('writeOutput', () => {
   let consoleLogSpy: ReturnType<typeof mockConsole>;
 
@@ -1584,6 +1595,94 @@ describe('writeOutput', () => {
     expect(html).toContain('Variables');
     expect(html).toContain('data-report-search');
     expect(html).toContain('No rows match the current search and status filters.');
+  });
+
+  it('writeOutput with PDF renders the HTML report through playwright', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    playwrightMocks.chromium.launch.mockResolvedValue(playwrightMocks.browser);
+    playwrightMocks.browser.newPage.mockResolvedValue(playwrightMocks.page);
+    playwrightMocks.browser.close.mockResolvedValue(undefined);
+    playwrightMocks.page.setContent.mockResolvedValue(undefined);
+    playwrightMocks.page.pdf.mockResolvedValue(undefined);
+
+    const eval_ = new Eval({ description: 'PDF report' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Passing output' },
+      vars: { input: 'one' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'one' } },
+      promptId: 'prompt',
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'Passing reason',
+      },
+    });
+
+    await writeOutput('output.pdf', eval_, null);
+
+    expect(playwrightMocks.chromium.launch).toHaveBeenCalledWith({ headless: true });
+    const html = playwrightMocks.page.setContent.mock.calls[0][0] as string;
+    expect(html).toContain('PDF report');
+    expect(html).toContain('Passing output');
+    expect(playwrightMocks.page.pdf).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'output.pdf', format: 'A4', printBackground: true }),
+    );
+    expect(playwrightMocks.browser.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('writeOutput with PDF closes the browser when PDF generation fails', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    playwrightMocks.chromium.launch.mockResolvedValue(playwrightMocks.browser);
+    playwrightMocks.browser.newPage.mockResolvedValue(playwrightMocks.page);
+    playwrightMocks.browser.close.mockResolvedValue(undefined);
+    playwrightMocks.page.setContent.mockResolvedValue(undefined);
+    playwrightMocks.page.pdf.mockRejectedValue(new Error('render failed'));
+
+    const eval_ = new Eval({ description: 'PDF report' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: 'Passing output' },
+      vars: { input: 'one' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'one' } },
+      promptId: 'prompt',
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'Passing reason',
+      },
+    });
+
+    await expect(writeOutput('output.pdf', eval_, null)).rejects.toThrow('render failed');
+    expect(playwrightMocks.browser.close).toHaveBeenCalledTimes(1);
   });
 
   it('writeOutput with HTML classifies non-error failures as failures', async () => {
