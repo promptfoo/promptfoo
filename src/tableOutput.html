@@ -216,27 +216,6 @@
         background: var(--surface);
       }
 
-      @media print {
-        .table-shell {
-          max-height: none;
-          overflow: visible;
-        }
-
-        table {
-          min-width: 0;
-        }
-
-        thead {
-          position: static;
-        }
-
-        th,
-        td {
-          min-width: 0;
-          overflow-wrap: anywhere;
-        }
-      }
-
       table,
       th,
       td {
@@ -278,6 +257,29 @@
       th:last-child,
       td:last-child {
         border-right: 0;
+      }
+
+      /* Must come after the base .table-shell/table/th,td rules: the print overrides rely
+         on source order to win at equal specificity. */
+      @media print {
+        .table-shell {
+          max-height: none;
+          overflow: visible;
+        }
+
+        table {
+          min-width: 0;
+        }
+
+        thead {
+          position: static;
+        }
+
+        th,
+        td {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
       }
 
       tbody tr:nth-child(even) {
