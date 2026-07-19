@@ -13,9 +13,14 @@ export type FlipMode = 'word_order' | 'char_in_word' | 'char_in_sentence';
 
 const DEFAULT_MODE: FlipMode = 'char_in_sentence';
 
-/** Reverse a string by Unicode code point (keeps surrogate pairs intact). */
+/** Reverse user-visible characters without splitting combining marks or emoji sequences. */
 function reverse(text: string): string {
-  return Array.from(text).reverse().join('');
+  return Array.from(
+    new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text),
+    (part) => part.segment,
+  )
+    .reverse()
+    .join('');
 }
 
 /**
