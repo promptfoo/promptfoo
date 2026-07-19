@@ -7,6 +7,8 @@ description: Integrate Portkey AI gateway with promptfoo for LLM testing, includ
 
 Portkey is an AI observability suite that includes prompt management capabilities.
 
+The examples below use OpenAI's current `gpt-5.6` model identifier.
+
 To reference prompts in Portkey:
 
 1. Set the `PORTKEY_API_KEY` environment variable.
@@ -18,7 +20,7 @@ To reference prompts in Portkey:
      - 'portkey://pp-test-promp-669f48'
 
    providers:
-     - openai:gpt-5-mini
+     - openai:gpt-5.6
 
    tests:
      - vars:
@@ -39,7 +41,7 @@ Example:
 
 ```yaml
 providers:
-  id: portkey:gpt-5-mini
+  id: portkey:gpt-5.6
   config:
     portkeyProvider: openai
 ```
@@ -48,7 +50,7 @@ More complex portkey configurations are also supported.
 
 ```yaml
 providers:
-  id: portkey:gpt-5-mini
+  id: portkey:gpt-5.6
   config:
     # Can alternatively set environment variable, e.g. PORTKEY_API_KEY
     portkeyApiKey: xxx

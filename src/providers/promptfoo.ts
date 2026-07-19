@@ -160,6 +160,7 @@ interface PromptfooChatCompletionOptions {
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
     | 'hydra-decision'
+    | 'goblin-decision'
     | 'voice-crescendo'
     | 'voice-crescendo-eval';
   /**

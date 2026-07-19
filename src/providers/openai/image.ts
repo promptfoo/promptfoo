@@ -1,10 +1,17 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -22,6 +29,7 @@ type OpenAiImageModel =
   | 'gpt-image-2'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
+  | 'chatgpt-image-latest'
   | 'gpt-image-1.5';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
@@ -169,7 +177,11 @@ function isGptImage1Mini(model: string): boolean {
 }
 
 function isGptImage15(model: string): boolean {
-  return model === 'gpt-image-1.5' || model.startsWith('gpt-image-1.5-2025');
+  return (
+    model === 'gpt-image-1.5' ||
+    model === 'chatgpt-image-latest' ||
+    model.startsWith('gpt-image-1.5-2025')
+  );
 }
 
 function isGptImageModel(model: string): boolean {
@@ -726,15 +738,39 @@ export async function callOpenAiImageApi(
   headers: Record<string, string>,
   timeout: number,
 ): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
-  return await fetchWithCache(
-    url,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    },
-    timeout,
+  let sendsToOpenAiApi = false;
+  let hasSensitiveUrl = false;
+  try {
+    const parsedUrl = new URL(url);
+    sendsToOpenAiApi = parsedUrl.hostname.toLowerCase() === 'api.openai.com';
+    hasSensitiveUrl =
+      sanitizeUrl(parsedUrl.toString()) !== parsedUrl.toString() ||
+      hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname));
+  } catch {
+    hasSensitiveUrl = true;
+  }
+
+  const isSensitiveHeader = (key: string) =>
+    isSecretField(key) ||
+    /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(key);
+  const hasSensitiveHeader = Object.entries(headers).some(
+    ([key, value]) => value.trim().length > 0 && isSensitiveHeader(key),
   );
+  const hasSensitiveHeaderValue = Object.entries(headers).some(
+    ([key, value]) => !isSensitiveHeader(key) && hasSensitiveOpenAiCacheString(value),
+  );
+  const serializedBody = JSON.stringify(body);
+  const hasSensitiveBody = hasSensitiveOpenAiCacheString(serializedBody);
+  const bustCache =
+    hasSensitiveUrl ||
+    hasSensitiveHeaderValue ||
+    hasSensitiveBody ||
+    (!sendsToOpenAiApi && hasSensitiveHeader);
+  const request = { method: 'POST', headers, body: serializedBody };
+
+  return bustCache
+    ? await fetchWithCache(url, request, timeout, 'json', true)
+    : await fetchWithCache(url, request, timeout);
 }
 
 export async function processApiResponse(
@@ -814,6 +850,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     };
 
     const model = config.model || this.modelName;
+    assertOpenAiApiModel(model, this.getApiUrl());
     const operation = ('operation' in config && config.operation) || 'generation';
     // GPT Image models always return b64_json, so we treat them as such regardless of config
     const responseFormat = isGptImageModel(model) ? 'b64_json' : config.response_format || 'url';
@@ -845,7 +882,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     let latencyMs: number | undefined;
     try {
       ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
-        `${this.getApiUrl()}${endpoint}`,
+        appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),

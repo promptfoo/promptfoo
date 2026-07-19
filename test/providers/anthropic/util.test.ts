@@ -124,6 +124,14 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
+    it('should return undefined for a dated Claude Opus 4.7 snapshot (Anthropic publishes none)', () => {
+      // The Models API 404s on dated 4.6+/4.7 snapshots like `claude-opus-4-7-20260416`
+      // (verified live 2026-07-17). If Anthropic starts publishing dated snapshots again,
+      // verify against the API before registering them in ANTHROPIC_MODELS.
+      const cost = calculateAnthropicCost('claude-opus-4-7-20260416', {}, 100, 200);
+      expect(cost).toBeUndefined();
+    });
+
     it('should apply cache pricing for Claude Opus 4.7 with cache tokens', () => {
       // Opus 4.7: $5/MTok input, $25/MTok output
       // 100 uncached input, 50 cache_read, 30 cache_write, 200 output
@@ -144,6 +152,13 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Opus 4.6 model', () => {
       const cost = calculateAnthropicCost('claude-opus-4-6', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should return undefined for a dated Claude Opus 4.6 snapshot (Anthropic publishes none)', () => {
+      // `claude-opus-4-6-20260205` is Azure AI Foundry's deployment name for Opus 4.6,
+      // not a first-party Anthropic model ID — the Models API 404s on it.
+      const cost = calculateAnthropicCost('claude-opus-4-6-20260205', {}, 100, 200);
+      expect(cost).toBeUndefined();
     });
 
     it('should calculate default cost for Claude Opus 4.6 latest model', () => {
@@ -1507,6 +1522,39 @@ describe('Anthropic utilities', () => {
       expect(requiredBetaFeatures).toEqual([]);
     });
 
+    it('should pass through web_fetch_20260318 with the latest SDK options', () => {
+      const webFetchTool: Anthropic.Messages.WebFetchTool20260318 = {
+        type: 'web_fetch_20260318',
+        name: 'web_fetch',
+        allowed_callers: ['code_execution_20260521'],
+        allowed_domains: ['docs.example.com'],
+        max_uses: 2,
+        response_inclusion: 'excluded',
+        use_cache: false,
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
+
+      expect(processedTools).toEqual([webFetchTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should pass through web_search_20260318 with the latest SDK options', () => {
+      const webSearchTool: Anthropic.Messages.WebSearchTool20260318 = {
+        type: 'web_search_20260318',
+        name: 'web_search',
+        allowed_callers: ['code_execution_20260521'],
+        blocked_domains: ['ads.example.com'],
+        max_uses: 3,
+        response_inclusion: 'excluded',
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([webSearchTool]);
+
+      expect(processedTools).toEqual([webSearchTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
     it('should add structured-outputs beta for strict server tools', () => {
       const webSearchTool: WebSearchToolConfig = {
         type: 'web_search_20250305',
@@ -1895,6 +1943,7 @@ describe('Anthropic utilities', () => {
 
     it('treats both Opus 4.7 and 4.8 as temperature-deprecated', () => {
       expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7-20260416')).toBe(true);
       expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8')).toBe(true);
       expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
       // The 4.7-only predicate stays scoped to 4.7.
@@ -1921,7 +1970,12 @@ describe('Anthropic utilities', () => {
     });
 
     it('does not treat temperature-supporting models as deprecated', () => {
-      for (const id of ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-opus-4-5-20251101']) {
+      for (const id of [
+        'claude-opus-4-6',
+        'claude-opus-4-6-20260205',
+        'claude-sonnet-4-6',
+        'claude-opus-4-5-20251101',
+      ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
     });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ProviderOptionsSchema } from '../../validators/providers';
+import { BaseTokenUsageSchema } from '../shared';
 import { ErrorResponseSchema, JsonObjectSchema } from './common';
 
 // Refined ProviderOptionsSchema that requires id as a non-empty string at runtime.
@@ -106,6 +107,7 @@ export const DiscoverResponseSchema = z.object({
       })
       .nullable(),
   ),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const HttpGeneratorResponseSchema = JsonObjectSchema;

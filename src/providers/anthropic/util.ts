@@ -53,9 +53,11 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude 4.7 models
-  // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
-  // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
-  // canonical ID here.
+  // NOTE: Anthropic publishes a single dateless ID for Opus 4.7 — the Models API
+  // returns 404 for `claude-opus-4-7-latest` and for dated snapshots such as
+  // `claude-opus-4-7-20260416` (verified live 2026-07-17), so we intentionally only
+  // register the canonical ID here. (Azure AI Foundry's dated Claude deployment
+  // names are a separate namespace, priced in azure/defaults.ts.)
   ...['claude-opus-4-7'].map((model) => ({
     id: model,
     cost: {
@@ -648,27 +650,13 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 /**
  * Processes tools configuration to handle web fetch and web search tools
  */
-export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConfig)[] = []): {
-  processedTools: (
-    | Anthropic.Tool
-    | Anthropic.Messages.WebFetchTool20250910
-    | Anthropic.Messages.WebFetchTool20260209
-    | Anthropic.Messages.WebFetchTool20260309
-    | Anthropic.Messages.MemoryTool20250818
-    | Anthropic.Messages.WebSearchTool20250305
-    | Anthropic.Messages.WebSearchTool20260209
-  )[];
+export function processAnthropicTools(
+  tools: (Anthropic.Messages.ToolUnion | AnthropicToolConfig)[] = [],
+): {
+  processedTools: Anthropic.Messages.ToolUnion[];
   requiredBetaFeatures: string[];
 } {
-  const processedTools: (
-    | Anthropic.Tool
-    | Anthropic.Messages.WebFetchTool20250910
-    | Anthropic.Messages.WebFetchTool20260209
-    | Anthropic.Messages.WebFetchTool20260309
-    | Anthropic.Messages.MemoryTool20250818
-    | Anthropic.Messages.WebSearchTool20250305
-    | Anthropic.Messages.WebSearchTool20260209
-  )[] = [];
+  const processedTools: Anthropic.Messages.ToolUnion[] = [];
   const requiredBetaFeatures: string[] = [];
 
   const addRequiredBetaFeature = (feature: string) => {
@@ -697,11 +685,11 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
         processedTools.push(tool as Anthropic.Messages.MemoryTool20250818);
       } else {
         // Pass through other tool types (standard Anthropic tools)
-        processedTools.push(tool as Anthropic.Tool);
+        processedTools.push(tool as Anthropic.Messages.ToolUnion);
       }
     } else {
       // Standard Anthropic tool
-      processedTools.push(tool as Anthropic.Tool);
+      processedTools.push(tool as Anthropic.Messages.ToolUnion);
     }
 
     // Check if tool uses strict mode (structured outputs for tools)
