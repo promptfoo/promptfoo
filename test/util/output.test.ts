@@ -1544,6 +1544,17 @@ describe('writeOutput', () => {
 
     // The print-only error copy must exist in the cell markup and be escaped.
     expect(templateContent).toContain('output-error-print');
+
+    // `indexOf` above only ever finds the base rules, so assert on the print block
+    // itself: the overrides that make errors and wide tables survive PDF export must
+    // actually live inside @media print.
+    const printBlock = templateContent.slice(printBlockIndex);
+    expect(printBlock).toMatch(/\.output-error-print\s*\{\s*display:\s*block;/);
+    expect(printBlock).toMatch(/table\s*\{[^}]*table-layout:\s*fixed;/);
+
+    // ...and the markup the print rule reveals must exist, guarded on cell.error.
+    expect(templateContent).toContain('{% if cell.error %}');
+    expect(templateContent).toContain('<div class="output-section output-error-print">');
   });
 
   it('writeOutput with HTML includes report summary values', async () => {
@@ -1670,6 +1681,48 @@ describe('writeOutput', () => {
     expect(playwrightMocks.browser.close).toHaveBeenCalledTimes(1);
   });
 
+  it('writeOutput with PDF includes error rows in the rendered HTML', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+
+    playwrightMocks.chromium.launch.mockResolvedValue(playwrightMocks.browser);
+    playwrightMocks.browser.newPage.mockResolvedValue(playwrightMocks.page);
+    playwrightMocks.browser.close.mockResolvedValue(undefined);
+    playwrightMocks.page.setContent.mockResolvedValue(undefined);
+    playwrightMocks.page.pdf.mockResolvedValue(undefined);
+
+    const eval_ = new Eval({ description: 'PDF error report' });
+    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
+    eval_.setVars(['input']);
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: '' },
+      error: 'provider exploded <img src=x>',
+      vars: { input: 'one' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { input: 'one' } },
+      promptId: 'prompt',
+    });
+
+    await writeOutput('output.pdf', eval_, null);
+
+    const html = playwrightMocks.page.setContent.mock.calls[0][0] as string;
+    // The error copy is print-only, so it must be in the markup handed to Chromium.
+    expect(html).toContain('output-section output-error-print');
+    expect(html).toContain('provider exploded &lt;img src=x&gt;');
+    expect(html).not.toContain('provider exploded <img src=x>');
+    expect(playwrightMocks.page.pdf).toHaveBeenCalledTimes(1);
+  });
+
   it('writeOutput with PDF explains how to install Chromium when launch fails', async () => {
     const realFs = await vi.importActual<typeof import('fs')>('fs');
     const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
@@ -1745,7 +1798,12 @@ describe('writeOutput', () => {
       },
     });
 
-    await expect(writeOutput('output.pdf', eval_, null)).rejects.toThrow('render failed');
+    const writePromise = writeOutput('output.pdf', eval_, null);
+    // The raw Chromium message ("Protocol error (Page.printToPDF): Printing failed") is
+    // opaque, so the failure is rewrapped with the report size and the HTML fallback.
+    await expect(writePromise).rejects.toThrow('render failed');
+    await expect(writePromise).rejects.toThrow('bytes of HTML');
+    await expect(writePromise).rejects.toThrow('--output report.html');
     expect(playwrightMocks.browser.close).toHaveBeenCalledTimes(1);
   });
 

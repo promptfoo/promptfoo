@@ -639,6 +639,10 @@ async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<voi
       printBackground: true,
       margin: { top: '12mm', bottom: '12mm', left: '10mm', right: '10mm' },
     });
+  } catch (error) {
+    throw new Error(
+      `Failed to render PDF output from ${htmlOutput.length} bytes of HTML: ${error instanceof Error ? error.message : String(error)}\nVery large reports can exceed Chromium's rendering limits. Try exporting HTML instead: --output report.html`,
+    );
   } finally {
     await browser.close();
   }

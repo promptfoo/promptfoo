@@ -666,6 +666,10 @@
 
         table {
           min-width: 0;
+          /* Auto layout still honours min-content width, so wide tables overflow the
+             page box and Chromium clips the trailing columns out of the PDF. Fixed
+             layout distributes columns evenly so every prompt fits on the page. */
+          table-layout: fixed;
         }
 
         thead {
