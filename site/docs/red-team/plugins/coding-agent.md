@@ -141,7 +141,7 @@ For best results, keep trace and raw-provider evidence redacted but structurally
 
 ## Strategy Compatibility
 
-Use the standard jailbreak strategy trio when you want to probe beyond basic generation:
+Use the multi-turn jailbreak strategies when you want to probe beyond basic generation:
 
 ```yaml
 redteam:
@@ -152,10 +152,9 @@ redteam:
   strategies:
     - jailbreak:meta
     - jailbreak:hydra
-    - jailbreak:composite
 ```
 
-Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homoglyph, multilingual, math-prompt, jailbreak:composite) are automatically excluded because they mangle the canary and receipt values used by deterministic verifiers.
+Encoding and prompt-rewriting strategies (base64, rot13, leetspeak, hex, homoglyph, the `other-encodings` collection, multilingual, math-prompt, jailbreak:composite) are automatically excluded because they mangle the canary and receipt values used by deterministic verifiers. Excluded strategies appear as `Skipped` with 0 generated tests in the Test Generation Report.
 
 ## How Promptfoo Grades These Plugins
 
