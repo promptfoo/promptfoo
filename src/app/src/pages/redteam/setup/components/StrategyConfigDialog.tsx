@@ -325,24 +325,16 @@ export default function StrategyConfigDialog({
         const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
         if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
+          const strategyConfig = allStrategies.find((s) => {
+            const id = typeof s === 'string' ? s : s.id;
+            return id === trimmedValue;
+          });
+          const step =
+            strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config
+              ? { id: trimmedValue, config: strategyConfig.config }
+              : trimmedValue;
 
-            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
-              // Add step with its config
-              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
-            } else {
-              // Shouldn't reach here due to filtering, but add as string fallback
-              setSteps((prev) => [...prev, trimmedValue]);
-            }
-          } else {
-            // Regular strategy without config requirements
-            setSteps((prev) => [...prev, trimmedValue]);
-          }
+          setSteps((prev) => [...prev, step]);
           setNewStep('');
         }
       }
