@@ -6,7 +6,7 @@ description: Configure Zhipu AI's (Z.ai) OpenAI-compatible API to evaluate GLM-5
 
 # Zhipu (GLM)
 
-[Zhipu AI](https://z.ai/) (**Z.ai**) provides an OpenAI-compatible API for its GLM family of language models. The Zhipu provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
+[Zhipu AI](https://z.ai/) (**Z.ai**) provides an OpenAI-compatible API for its GLM family of language models. The Zhipu provider extends the [OpenAI chat provider](/docs/providers/openai/), so all of its chat completion options are supported.
 
 ## Setup
 
@@ -18,6 +18,10 @@ export ZHIPU_API_KEY=your_api_key_here
 # or, matching Z.ai's OpenAI-SDK docs:
 export ZAI_API_KEY=your_api_key_here
 ```
+
+Both `zhipu:<model>` and `zhipu:chat:<model>` resolve to the chat completions endpoint. If you omit the model, the provider defaults to `glm-5.2`.
+
+This provider is chat-only. Z.ai also ships embedding (`embedding-3`), image (CogView), and other non-chat models, but those endpoints are not implemented here — a non-chat sub-type such as `zhipu:embedding:embedding-3` fails fast with an `Unsupported Zhipu sub-type` error rather than silently calling the chat API.
 
 ## Configuration
 
