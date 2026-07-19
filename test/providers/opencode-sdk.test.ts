@@ -886,6 +886,7 @@ describe('OpenCodeSDKProvider', () => {
         // produce (or cache) a successful response.
         expect(result.error).toBe('OpenCode SDK call aborted');
         expect(result.output).toBeUndefined();
+        expect(mockSessionAbort).not.toHaveBeenCalled();
       });
 
       it('should use the v1 nested request shape for the history fetch when v2 is unavailable', async () => {

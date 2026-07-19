@@ -1613,6 +1613,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       const response = await client.session.prompt(promptOptions);
       logger.debug(`OpenCode SDK response received`);
 
+      if (abortListener && abortSignal) {
+        abortSignal.removeEventListener('abort', abortListener);
+        abortListener = undefined;
+      }
+
       if (abortSignal?.aborted) {
         return { error: 'OpenCode SDK call aborted' };
       }
