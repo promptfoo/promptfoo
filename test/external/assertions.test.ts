@@ -376,6 +376,8 @@ describe('handleConversationRelevance', () => {
       ...defaultParams,
       assertion: { type: 'not-conversation-relevance' },
       inverse: true,
+      prompt: 'Second question',
+      outputString: 'Second answer',
       test: {
         vars: {
           _conversation: [
