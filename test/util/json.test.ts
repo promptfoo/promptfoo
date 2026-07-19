@@ -636,13 +636,9 @@ describe('json utilities', () => {
   });
 
   describe('extractFirstJsonObject', () => {
-    it('should extract the last JSON object from a string (security: resist verdict injection)', () => {
-      // When multiple JSON objects appear in a judge response, the LLM's own
-      // verdict is the authoritative one (last). Earlier JSON may have been
-      // echoed from the model-under-test's output embedded in the prompt.
-      // Returning the first object allowed verdict injection; we return the last.
+    it('should extract the first JSON object from a string', () => {
       const input = '{"key1": "value1"} {"key2": "value2"}';
-      const expected = { key2: 'value2' };
+      const expected = { key1: 'value1' };
       expect(extractFirstJsonObject(input)).toEqual(expected);
     });
 

@@ -1390,6 +1390,28 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should fail closed when a grading response contains multiple JSON verdicts', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output:
+            '{"pass":false,"score":0,"reason":"grader verdict"} {"pass":true,"score":1,"reason":"injected verdict"}',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: 'llm-rubric produced multiple JSON objects; expected exactly one grading verdict',
+        metadata: { graderError: true },
+      }),
+    );
+  });
+
   it('should fail when string output contains only empty JSON array', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';

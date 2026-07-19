@@ -766,10 +766,15 @@ function parseJsonGradingResponse(
     };
   }
 
-  // Security: use the LAST JSON object (the grader's own verdict), not the first.
-  // A model-under-test that embeds JSON in its output can hijack the verdict when
-  // the grader references that output early in its reasoning.
-  const parsed = jsonObjects[jsonObjects.length - 1];
+  if (jsonObjects.length !== 1) {
+    return {
+      failure: failWithTokens(
+        `${label} produced multiple JSON objects; expected exactly one grading verdict`,
+      ),
+    };
+  }
+
+  const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(

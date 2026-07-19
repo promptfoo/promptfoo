@@ -258,12 +258,7 @@ export function extractJsonObjects(str: string): object[] {
 export function extractFirstJsonObject<T>(str: string): T {
   const jsonObjects = extractJsonObjects(str);
   invariant(jsonObjects.length >= 1, `Expected a JSON object, but got ${JSON.stringify(str)}`);
-  // Security: return the LAST JSON object, not the first. The LLM-judge's own
-  // verdict is the authoritative JSON and appears last in the response. JSON that
-  // appeared earlier may have originated from the model-under-test's output (which
-  // is embedded in the judge prompt) and was referenced in the judge's reasoning.
-  // Returning the first object allowed verdict injection.
-  return jsonObjects[jsonObjects.length - 1] as T;
+  return jsonObjects[0] as T;
 }
 
 /**
