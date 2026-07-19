@@ -43,6 +43,7 @@ export async function readResponsesStream(
   response: Response,
   providerName: string,
   logger: ResponsesStreamLogger,
+  onResponse?: (response: any) => void,
 ): Promise<any> {
   if (!response.body) {
     throw new Error(`${providerName} streaming response has no body`);
@@ -70,6 +71,7 @@ export async function readResponsesStream(
 
     if (event.response && typeof event.response === 'object') {
       latestResponse = event.response;
+      onResponse?.(latestResponse);
     } else if (Array.isArray(event.output)) {
       latestResponse = event;
     }
