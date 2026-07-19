@@ -274,4 +274,48 @@ describe('handleConversationRelevance', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
   });
+
+  // https://github.com/promptfoo/promptfoo/issues/10141
+  it('should use the DeepEval default threshold when threshold is omitted for Issue #10141', async () => {
+    const provider = createMockProvider('no');
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: {
+        vars: {},
+        options: { provider },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result.score).toBe(0);
+    expect(result.pass).toBe(false);
+  });
+
+  it('should preserve an explicit zero threshold', async () => {
+    const provider = createMockProvider('no');
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'conversation-relevance',
+        threshold: 0,
+      },
+      prompt: 'What is the weather like?',
+      outputString: 'The capital of France is Paris.',
+      test: {
+        vars: {},
+        options: { provider },
+      },
+    };
+
+    const result = await handleConversationRelevance(params);
+
+    expect(result.score).toBe(0);
+    expect(result.pass).toBe(true);
+  });
 });

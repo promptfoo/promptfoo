@@ -38,7 +38,7 @@ export const handleConversationRelevance = async ({
     ];
   }
   const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
-  const threshold = assertion.threshold || 0;
+  const threshold = assertion.threshold ?? 0.5;
   let relevantCount = 0;
   let totalWindows = 0;
   const irrelevancies: string[] = [];
