@@ -3186,7 +3186,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.00875, 6);
       });
 
-      it('should calculate cost for gpt-5.3-codex-spark model', async () => {
+      it('should leave cost unset for the Codex-only gpt-5.3-codex-spark model', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
@@ -3202,11 +3202,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.3-codex-spark: $0.5/1M input, $0.05/1M cache_read, $4/1M output
-        // uncached input = 2000 - 500 = 1500, cached = 500
-        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 4/1000000)
-        //      = 0.00075 + 0.000025 + 0.004 = 0.004775
-        expect(result.cost).toBeCloseTo(0.004775, 6);
+        expect(result.cost).toBeUndefined();
       });
     });
 

@@ -1,9 +1,14 @@
 import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { sanitizeUrlForLogging } from '../../util/sanitizer';
 import { hasHeaderOverride, OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { NON_CONVERSATIONAL_REALTIME_MODELS, OPENAI_REALTIME_MODELS } from './util';
+import {
+  appendOpenAiApiPath,
+  NON_CONVERSATIONAL_REALTIME_MODELS,
+  OPENAI_REALTIME_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -666,7 +671,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Build WebSocket URL for realtime model endpoint
   private getWebSocketUrl(modelName: string): string {
     const wsBase = this.getWebSocketBase();
-    return `${wsBase}/realtime?model=${encodeURIComponent(modelName)}`;
+    return appendOpenAiApiPath(wsBase, 'realtime', `model=${encodeURIComponent(modelName)}`);
   }
 
   private shouldOmitBearerAuth(wsUrl: string): boolean {
@@ -703,7 +708,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Build WebSocket URL for client-secret based socket initialization
   private getClientSecretSocketUrl(clientSecret: string): string {
     const wsBase = this.getWebSocketBase();
-    return `${wsBase}/realtime/socket?client_secret=${encodeURIComponent(clientSecret)}`;
+    return appendOpenAiApiPath(
+      wsBase,
+      'realtime/socket',
+      `client_secret=${encodeURIComponent(clientSecret)}`,
+    );
   }
 
   // Compute Origin header from apiBaseUrl (match scheme and host)
@@ -746,7 +755,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // The WebSocket URL needs to include the client secret
       const wsUrl = this.getClientSecretSocketUrl(clientSecret);
-      logger.debug(`Connecting to WebSocket URL: ${wsUrl.slice(0, 60)}...`);
+      logger.debug(`Connecting to WebSocket URL: ${sanitizeUrlForLogging(wsUrl)}`);
 
       // Add WebSocket options to bypass potential network issues
       const wsOptions = {
@@ -1469,7 +1478,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       // Construct URL with model parameter
       const wsUrl = this.getWebSocketUrl(this.modelName);
-      logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
+      logger.debug(`Connecting to WebSocket URL: ${sanitizeUrlForLogging(wsUrl)}`);
 
       // Add WebSocket options with required headers
       const wsOptions = {
@@ -2064,7 +2073,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     const wsUrl = this.getWebSocketUrl(this.modelName);
-    logger.debug(`Opening persistent WebSocket: ${wsUrl}`);
+    logger.debug(`Opening persistent WebSocket: ${sanitizeUrlForLogging(wsUrl)}`);
 
     const wsOptions = {
       headers: this.buildRealtimeWsHeaders(wsUrl),

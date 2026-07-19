@@ -1,6 +1,7 @@
 import path from 'path';
 
 import dedent from 'dedent';
+import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -80,7 +81,8 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
-import { NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
+import { OpenAiTtsProvider } from './openai/tts';
+import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -965,6 +967,25 @@ export const providerMap: ProviderFactory[] = [
           env: context.env,
         });
       }
+      const requestedApiModel = modelName || configuredModel || modelType;
+      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
+        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+        const apiHost =
+          providerOptions.config?.apiHost ||
+          providerOptions.env?.OPENAI_API_HOST ||
+          getEnvString('OPENAI_API_HOST');
+        const apiUrl = apiHost
+          ? `https://${apiHost}/v1`
+          : providerOptions.config?.apiBaseUrl ||
+            providerOptions.env?.OPENAI_API_BASE_URL ||
+            providerOptions.env?.OPENAI_BASE_URL ||
+            getEnvString('OPENAI_API_BASE_URL') ||
+            getEnvString('OPENAI_BASE_URL') ||
+            'https://api.openai.com/v1';
+        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
+          assertOpenAiApiModel(candidate, apiUrl);
+        }
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
           modelName || configuredModel || 'gpt-4.1-2025-04-14',
@@ -1008,6 +1029,12 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      if (modelType === 'tts' || modelType === 'speech') {
+        return new OpenAiTtsProvider(
+          modelName || configuredModel || 'gpt-4o-mini-tts',
+          providerOptions,
+        );
+      }
       if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
@@ -1016,6 +1043,9 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
         return new OpenAiCompletionProvider(modelType, providerOptions);
+      }
+      if (OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiTtsProvider(modelType, providerOptions);
       }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
@@ -1051,7 +1081,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
