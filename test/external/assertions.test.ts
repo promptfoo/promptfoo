@@ -357,4 +357,38 @@ describe('handleConversationRelevance', () => {
     expect(result.reason).toContain('grader unavailable');
     expect(result.metadata).toEqual({ graderError: true });
   });
+
+  it('should preserve prior conversation-grader usage when a later window fails', async () => {
+    const provider = createFactoryProvider({
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          output: JSON.stringify({ verdict: 'yes' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        })
+        .mockResolvedValueOnce({
+          error: 'grader unavailable',
+          tokenUsage: { total: 12, prompt: 7, completion: 5 },
+        }),
+    });
+
+    const result = await handleConversationRelevance({
+      ...defaultParams,
+      assertion: { type: 'not-conversation-relevance' },
+      inverse: true,
+      test: {
+        vars: {
+          _conversation: [
+            { input: 'First question', output: 'First answer' },
+            { input: 'Second question', output: 'Second answer' },
+          ],
+        },
+        options: { provider },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.tokensUsed).toMatchObject({ total: 22, prompt: 12, completion: 10 });
+  });
 });

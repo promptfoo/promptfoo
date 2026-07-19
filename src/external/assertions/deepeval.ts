@@ -1,7 +1,6 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 
-import { isGraderFailure } from '../../matchers/llmGrading';
 import { callProviderWithContext, getAndCheckProvider } from '../../matchers/providers';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
@@ -58,8 +57,16 @@ export const handleConversationRelevance = async ({
       providerCallContext,
     );
 
-    if (isGraderFailure(result)) {
-      return { ...result, assertion };
+    if (result.tokensUsed) {
+      accumulateTokenUsage(tokensUsed, result.tokensUsed);
+    }
+
+    if (result.metadata?.graderError === true) {
+      return {
+        ...result,
+        assertion,
+        tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
+      };
     }
 
     if (result.pass) {
@@ -69,11 +76,6 @@ export const handleConversationRelevance = async ({
       result.reason !== 'Response is not relevant to the conversation context'
     ) {
       irrelevancies.push(result.reason);
-    }
-
-    // Accumulate token usage
-    if (result.tokensUsed) {
-      accumulateTokenUsage(tokensUsed, result.tokensUsed);
     }
 
     totalWindows++;
