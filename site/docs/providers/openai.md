@@ -1656,6 +1656,8 @@ If `OPENAI_API_HOST` is set in your environment, it wins over `apiBaseUrl`. Unse
 
 Key resolution still falls through to `OPENAI_API_KEY` when `apiKey` / `apiKeyEnvar` is missing or empty. Set `apiKeyEnvar` (and that env var) when you need the gateway key kept separate from a real OpenAI key — otherwise a leftover `OPENAI_API_KEY` can be sent to the gateway host.
 
+For a local endpoint that does not require authentication, such as a default llamafile server, set `apiKeyRequired: false`. Without that option, the OpenAI provider stops before making the request if no API key resolves.
+
 Use a model ID your endpoint actually serves (`GET /v1/models`) — gateways often scope model availability per account.
 
 See [vLLM](/docs/providers/vllm/), [Llamafile](/docs/providers/llamafile/), and [LiteLLM](/docs/providers/litellm/) for worked setups, or the runnable [`examples/openai-compatible-gateway`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-compatible-gateway) example.
