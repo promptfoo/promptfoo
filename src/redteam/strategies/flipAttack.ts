@@ -15,8 +15,17 @@ const DEFAULT_MODE: FlipMode = 'char_in_sentence';
 
 /** Reverse user-visible characters without splitting combining marks or emoji sequences. */
 function reverse(text: string): string {
+  const Segmenter = (
+    Intl as typeof Intl & {
+      Segmenter: new (
+        locales?: string | string[],
+        options?: { granularity: 'grapheme' },
+      ) => { segment(input: string): Iterable<{ segment: string }> };
+    }
+  ).Segmenter;
+
   return Array.from(
-    new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text),
+    new Segmenter(undefined, { granularity: 'grapheme' }).segment(text),
     (part) => part.segment,
   )
     .reverse()
