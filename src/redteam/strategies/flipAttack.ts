@@ -12,6 +12,7 @@ import type { TestCase } from '../../types/index';
 export type FlipMode = 'word_order' | 'char_in_word' | 'char_in_sentence';
 
 const DEFAULT_MODE: FlipMode = 'char_in_sentence';
+const UNSPACED_WORD_BOUNDARY = ' | ';
 
 const Segmenter = (
   Intl as typeof Intl & {
@@ -39,16 +40,21 @@ function reverse(text: string): string {
  * words and odd indices are the whitespace between them.
  */
 function flipWordOrder(text: string): string {
+  if (text.includes(UNSPACED_WORD_BOUNDARY)) {
+    return text.split(UNSPACED_WORD_BOUNDARY).reverse().join('');
+  }
+
   const parts = text.split(/(\s+)/);
   const reversedWords = parts.filter((_, i) => i % 2 === 0).reverse();
 
   if (reversedWords.length === 1) {
     const segments = Array.from(new Segmenter(undefined, { granularity: 'word' }).segment(text));
-    const words = segments.filter((part) => part.isWordLike).reverse();
-    let wordIndex = 0;
-    return segments
-      .map((part) => (part.isWordLike ? words[wordIndex++]?.segment : part.segment))
-      .join('');
+    if (segments.filter((part) => part.isWordLike).length > 1) {
+      return segments
+        .reverse()
+        .map((part) => part.segment)
+        .join(UNSPACED_WORD_BOUNDARY);
+    }
   }
 
   let wordIndex = 0;
@@ -88,7 +94,7 @@ export function flipText(text: string, mode: FlipMode): string {
 function recoveryInstruction(mode: FlipMode): string {
   switch (mode) {
     case 'word_order':
-      return 'reversing the order of the words';
+      return 'reversing the order of the words and removing any " | " word-boundary markers';
     case 'char_in_word':
       return 'reversing all characters within each whitespace-separated word';
     default:
