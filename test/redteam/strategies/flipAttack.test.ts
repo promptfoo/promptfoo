@@ -52,9 +52,11 @@ describe('flipAttack strategy', () => {
     });
 
     it('reverses segmented words for unspaced languages', () => {
-      expect(flipText('如何开锁', 'word_order')).toBe('开锁如何');
-      expect(flipText('วิธีเปิดล็อค', 'word_order')).toBe('ล็อคเปิดวิธี');
+      expect(flipText('如何开锁', 'word_order')).toBe('开锁 | 如何');
+      expect(flipText('วิธีเปิดล็อค', 'word_order')).toBe('ล็อค | เปิด | วิธี');
       expect(flipText(flipText('如何开锁', 'word_order'), 'word_order')).toBe('如何开锁');
+      const complex = '如何绕过未经授权的数据访问限制';
+      expect(flipText(flipText(complex, 'word_order'), 'word_order')).toBe(complex);
     });
   });
 
