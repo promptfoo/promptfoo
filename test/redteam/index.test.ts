@@ -4327,5 +4327,33 @@ describe('Language configuration', () => {
       expect(skipMessage).not.toContain('system-prompt-override');
       expect(skipMessage).not.toContain('ascii-smuggling');
     });
+
+    it('should exclude mcp:tool-response-poisoning in multi-input mode', async () => {
+      // The plugin emits a single JSON tool-call envelope that MCPProvider.callApi
+      // strictly JSON.parses. Multi-input mode swaps in the <Prompt>{...}</Prompt>
+      // formatter, which cannot parse the plugin's output (yielding zero tests) and
+      // would destroy the envelope even if it did.
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'mcp:tool-response-poisoning', numTests: 1 },
+          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('mcp:tool-response-poisoning');
+      expect(skipMessage).not.toContain('contracts');
+    });
   });
 });
