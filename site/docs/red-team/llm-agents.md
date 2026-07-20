@@ -251,7 +251,7 @@ A multi-layered testing approach is necessary for all but the simplest agents. Y
 
 Our goal is to identify and mitigate agent-specific risks like goal hijacking, tool chain attacks, and privilege escalation.
 
-![Layered Testing for LLM Agents](/img/docs/layered-testing-agents.svg)
+![Black-box, component, and trace-based testing layers for LLM agents](/img/docs/layered-testing-agents.svg)
 
 Imagine your agent is a car:
 
@@ -312,7 +312,7 @@ This creates an evidence loop:
 4. The summary is available to grading, investigation, and optionally the next attack iteration.
 5. You use the final output plus trajectory evidence to classify and reproduce the finding.
 
-![Red Team Tracing Feedback Loop](/img/docs/redteam-tracing-feedback-loop.svg)
+![Trace feedback connecting an attack strategy, agent behavior, and the next red team attempt](/img/docs/redteam-tracing-feedback-loop.svg)
 
 #### What Adversaries Can Observe
 

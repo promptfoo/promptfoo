@@ -11,7 +11,7 @@ Model drift occurs when an LLM's behavior changes over time. This can happen due
 
 Red teaming provides a systematic way to detect these changes by running consistent adversarial tests over time and comparing results.
 
-![Model Drift Detection](/img/docs/model-drift-detection.svg)
+![Model-drift flow showing a baseline, repeated tests, attack-success comparison, and CI response](/img/docs/model-drift-detection.svg)
 
 ## Why Red Team for Drift Detection
 

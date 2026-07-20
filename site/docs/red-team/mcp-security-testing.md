@@ -30,7 +30,7 @@ For detailed information about red team configuration options, see the [Red Team
 
 This scenario tests natural language attacks through a trusted application or model that connects to your MCP server. It simulates how an end user might attempt to exploit the MCP server through normal interaction with an AI assistant.
 
-![MCP testing scenario 1](/img/docs/mcp/mcp-testing-1.png)
+![Promptfoo discovering tools, generating attacks, calling an MCP server through a trusted client, and grading the result](/img/docs/mcp/mcp-testing-1.svg)
 
 **Threat Model:**
 
@@ -80,9 +80,9 @@ See the full list of [plugins](/docs/red-team/plugins/) to get a sense of what c
 
 This scenario simulates environments where multiple MCP servers coexist, including potentially malicious ones performing Tool Poisoning Attacks.
 
-It specifically tests the disconnect between what users see and what AI models process, exploiting AI tendency to follow instructions in tool descriptions.
+It specifically tests the disconnect between what users see and what AI models process, exploiting models' tendency to follow instructions in tool descriptions.
 
-![MCP testing scenario 2](/img/docs/mcp/mcp-testing-2.png)
+![Promptfoo testing first-party and third-party MCP tool-call paths through the same application or model](/img/docs/mcp/mcp-testing-2.svg)
 
 **Threat Model:**
 
@@ -165,7 +165,7 @@ redteam:
 
 This scenario tests the MCP server directly using the MCP protocol, without any intermediate application or model. This is essentially API security testing but using MCP's tool invocation format. Note that this approach uses standard evaluation rather than red teaming since we're testing specific tool calls directly.
 
-![MCP direct testing](/img/docs/mcp/mcp-direct-testing.png)
+![Promptfoo calling an MCP server directly and checking assertions without an intermediate application or model](/img/docs/mcp/mcp-direct-testing.svg)
 
 **Threat Model:**
 

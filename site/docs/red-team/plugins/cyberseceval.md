@@ -36,7 +36,7 @@ The plugin:
 - Tests if the model appropriately handles the injection attempts
 - Uses language-specific LLM-as-a-judge criteria to evaluate responses
 
-![CyberSecEval Workflow](/img/docs/cyberseceval-flow.svg)
+![CyberSecEval flow from dataset selection and test preparation to target call and grading](/img/docs/cyberseceval-flow.svg)
 
 ## Configuration
 

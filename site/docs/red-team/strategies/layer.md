@@ -26,6 +26,8 @@ redteam:
 
 The Layer strategy operates in two distinct modes depending on the types of steps you include:
 
+![Layer modes showing a pre-eval transform chain and an attack strategy with per-turn transforms](/img/docs/layer-strategy.svg)
+
 ### Mode 1: Transform Chain (No Agentic Steps)
 
 When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a simple pipeline:

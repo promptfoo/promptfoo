@@ -11,7 +11,7 @@ For each attack type, we explain how to detect the vulnerability by testing your
 
 The end result is a report that looks like this:
 
-![llm red team report for RAG](/img/riskreport-1@2x.png)
+![Example RAG red team report showing severity counts and security-risk results](/img/riskreport-1@2x.png)
 
 ## Prompt Injection
 

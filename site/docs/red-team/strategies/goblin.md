@@ -36,6 +36,8 @@ Goblin relies on Promptfoo Cloud for its attacker agent and scan-wide learnings.
 
 ## When to Use Goblin
 
+![Goblin flow showing complementary attack approaches, adaptive turns, and replay-mode backtracking](/img/docs/goblin-strategy.svg)
+
 Use Goblin to test abstract pattern-completion and encoding paths without relying on one fixed template. Start with Hydra for general-purpose multi-turn coverage, then add Goblin for complementary attack paths.
 
 ## Related Concepts

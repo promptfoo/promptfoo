@@ -16,11 +16,11 @@ Evaluate [ChatKit](https://platform.openai.com/docs/guides/chatkit) workflows fr
 
 2. Click **+ Create** or choose a template
 
-![Agent Builder home page](/img/docs/chatkit/agent-builder-home.png)
+![OpenAI Agent Builder home page with the Create workflow action](/img/docs/chatkit/agent-builder-home.png)
 
 3. Build your workflow on the visual canvas. You can add agents, tools (File search, MCP, Guardrails), logic nodes, and user approval steps.
 
-![Workflow canvas in Agent Builder](/img/docs/chatkit/workflow-canvas.png)
+![Agent Builder workflow canvas showing a customer-support agent flow](/img/docs/chatkit/workflow-canvas.png)
 
 4. Test your workflow in the preview panel
 
@@ -30,9 +30,9 @@ Evaluate [ChatKit](https://platform.openai.com/docs/guides/chatkit) workflows fr
 
 2. In the "Get code" dialog, select the **ChatKit** tab
 
-3. Copy the **Workflow ID** (e.g., `wf_692a5c1d925c819088c2dbb31abf43350fb1b072990ae648`)
+3. Copy the **Workflow ID** (for example, `wf_example_customer_support`).
 
-![Get workflow ID dialog](/img/docs/chatkit/get-workflow-id.png)
+![ChatKit Get code dialog showing where to copy a workflow ID](/img/docs/chatkit/get-workflow-id.png)
 
 :::tip
 Use `version="draft"` for testing, or omit version to use the latest published version.

@@ -10,7 +10,7 @@ import StrategyTable from '@site/docs/\_shared/StrategyTable';
 
 Strategies change how adversarial inputs reach an LLM application. [Plugins](/docs/red-team/plugins/) generate the inputs; strategies transform, adapt, or sequence them to probe for vulnerabilities.
 
-![Strategy Flow](/img/docs/strategy-flow.svg)
+![Red team flow from a plugin objective through generated payloads and strategy variants to a target](/img/docs/strategy-flow.svg)
 
 ## Recommended Strategies
 

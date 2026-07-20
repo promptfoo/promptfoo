@@ -34,13 +34,13 @@ Promptfoo Cloud provides an easy way to run red team scans against live foundati
 Within the Promptfoo application, navigate to the Targets page and click on the "New Target" button. Within the "General Settings" section, you have the option of setting up a new target as a foundation model.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-setup.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-setup.png" alt="Promptfoo Cloud target configuration with a foundation model selected" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 In the "Context" section, you can provide a description of the model you're targeting and the intended user you want to impersonate.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-context.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-context.png" alt="Application Context settings for a foundation-model target" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Once complete, click on the "Save Changes" button to save your target. You should receive a confirmation message that the provider was saved successfully.
@@ -50,7 +50,7 @@ Once complete, click on the "Save Changes" button to save your target. You shoul
 Once your foundation model target is saved, you can proceed to create a scan by clicking on the "Test Setup" within the Redteam dropdown.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-testsetup.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-testsetup.png" alt="Promptfoo Redteam menu showing the test setup entry point" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Click the "New Config" button to create a new scan. You will be prompted to either create a new config or use an existing YAML file. Click "New Config" and then choose the target that you created in the previous step.
@@ -60,7 +60,7 @@ Choose the "Foundation Model" presets and then select the strategies that you wa
 Once complete, click the "Review" section to finalize your configuration. When you save your configuration, Promptfoo will create a CLI command that you can use to run the scan locally.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/redteamrun-cli.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/redteamrun-cli.png" alt="Generated command for running a saved red team configuration from the CLI" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 #### Viewing results
@@ -68,31 +68,31 @@ Once complete, click the "Review" section to finalize your configuration. When y
 When you run the scan, you will receive a report within the Promptfoo application in the Reports section.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/redteam-reports.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/redteam-reports.png" alt="Promptfoo Cloud reports list showing completed foundation-model scans" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Clicking on an individual report will show you a high-level overview of the scan results.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-highlevelreport.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-highlevelreport.png" alt="Foundation-model risk report with severity counts and attack-method results" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 You can evaluate the results by clicking the "Vulnerabilities" tab. This will show you the list of vulnerabilities that were detected during the scan, as well as remediation recommendations.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-vulnerabilities.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-vulnerabilities.png" alt="Vulnerability detail showing the strategies that exposed an unsafe response" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Alternatively, you can view each probe and response in the "Evals" view. Click on the "Evals" tab and you will see a list of all the evaluations you have run. Select the scan that you want to view the results for.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/evalresults-search.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/evalresults-search.png" alt="Promptfoo eval search listing completed foundation-model scans" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Clicking on an individual eval will show you all the prompts, responses, and the reason why each probe was marked as a pass or fail.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-evalresult.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-evalresult.png" alt="Example harmful prompt, unsafe model response, and the assertion used to grade it" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 ### Running scans locally through open-source
@@ -106,19 +106,19 @@ promptfoo redteam init
 The red team UI will be displayed in your browser. You can then select the Foundation Model option to begin configuring your scan.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/redteammodel-local.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/redteammodel-local.png" alt="Local red team setup with the foundation-model option selected" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Once you complete your configuration, you can either run your scan directly in the browser or save your configuration to a YAML file and run it through the CLI.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel--localrun.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel--localrun.png" alt="Local red team run options for the CLI and browser" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Results will be displayed in the "Evals" tab, where you will see a list of all the evaluations you have run locally. Select the scan that you want to view the results for.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/localeval-results.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/localeval-results.png" alt="Local eval results comparing two foundation models across red team plugins" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 ### Comparing foundation models
@@ -163,7 +163,7 @@ Promptfoo can also scan static foundation or fine-tuned models through its Model
 By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities. The end result will look something like this:
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/docs/modelaudit/modelaudit-result.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/docs/modelaudit/modelaudit-result.png" alt="ModelAudit terminal output showing a detected unsafe pickle opcode" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 Promptfoo's ModelAudit tool will scan for the following vulnerabilities:
@@ -207,13 +207,13 @@ You can learn more about the ModelAudit tool in the [ModelAudit documentation](/
 Promptfoo also [provides a collection of reports](https://www.promptfoo.dev/models/) that you can use to assess the security of foundation models.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodel-reports.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodel-reports.png" alt="Foundation-model security report comparing results across risk categories" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 These reports are curated by the Promptfoo team and are a great starting point for your own research. You can even compare the results of the reports against each other to see how they stack up.
 
 <div style={{ textAlign: 'center' }}>
-    <img src="/img/foundationmodelreport-comparison.png" style={{ width: '90%', height: 'auto' }} />
+    <img src="/img/foundationmodelreport-comparison.png" alt="Side-by-side comparison of two foundation models across security categories" style={{ width: '90%', height: 'auto' }} />
 </div>
 
 ### Contributing foundation model results

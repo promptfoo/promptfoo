@@ -70,6 +70,8 @@ strategies:
 
 ## How It Works
 
+![Composite jailbreak flow showing intent, evasions, techniques, generated variants, and the target](/img/docs/composite-strategy-flow.svg)
+
 The strategy:
 
 1. Takes the original prompt

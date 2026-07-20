@@ -67,7 +67,13 @@ Run with:
 promptfoo redteam run
 ```
 
-Once the run completes, open the results view and select a test case to inspect its full input and output. The test metadata includes the tagged risk area, type of harm, and specific harm description.
+Once the run completes, open the results view to inspect the evaluation results:
+
+![DoNotAnswer eval results showing harmful queries and safe target responses](/img/docs/donotanswer-eval.png)
+
+Select a test case to inspect its full input and output. The test metadata includes the tagged risk area, type of harm, and specific harm description.
+
+![DoNotAnswer result details showing the graded response and harm metadata](/img/docs/donotanswer-details.png)
 
 ## Grading
 

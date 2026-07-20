@@ -68,7 +68,7 @@ redteam:
 
 ## Architecture
 
-![Indirect Web Pwn Architecture](/img/docs/indirect-web-pwn-architecture.png)
+![Indirect Web Pwn flow from the CLI and hosted injected page to target fetch and detection](/img/docs/indirect-web-pwn-architecture.svg)
 
 The strategy works as follows:
 
@@ -168,6 +168,8 @@ On each turn, the page content is updated and the embedding location is rotated 
 
 The strategy dynamically generates realistic-looking websites tailored to your target's purpose. The prompt injection payload can be embedded as hidden text, such as an HTML comment that is invisible in the rendered page but readable by an agent fetching the content:
 
+![Example generated web page with prompt injection embedded in realistic page content](/img/docs/indirect-web-pwn-example.png)
+
 ```html
 <article>
   <h1>Product update</h1>
@@ -176,7 +178,7 @@ The strategy dynamically generates realistic-looking websites tailored to your t
 </article>
 ```
 
-This makes the attack surface explicit without relying on a low-contrast screenshot.
+The page looks like a normal SaaS company blog post, while the HTML comment makes the hidden attack surface explicit.
 
 ## How Grading Works
 

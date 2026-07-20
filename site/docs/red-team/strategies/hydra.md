@@ -58,6 +58,8 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 ## How It Works
 
+![Hydra flow showing goal selection, adaptive turns, target probing, grading, and scan-wide learning](/img/docs/hydra-strategy.svg)
+
 1. **Goal selection** – Hydra reads the red team goal from the plugin metadata or injected variable.
 2. **Next-message selection** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
 3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.

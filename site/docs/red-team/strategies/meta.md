@@ -43,6 +43,8 @@ This strategy requires Promptfoo Cloud to maintain persistent memory and strateg
 
 ## How It Works
 
+![Meta-Agent flow showing independent single-turn attempts, target calls, grading, and approach changes](/img/docs/meta-strategy.svg)
+
 The meta-agent remembers earlier attempts. When one approach fails, it can switch to a different technique instead of repeating the same pattern. The broader search requires additional API calls.
 
 ## Deprecated Jailbreak Alias

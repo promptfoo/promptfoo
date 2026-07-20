@@ -31,6 +31,8 @@ strategies:
 
 ## What is a Custom Strategy?
 
+![Custom strategy flow from natural-language instructions to adaptive conversation turns](/img/docs/custom-strategy-flow.svg)
+
 A custom strategy lets you automate conversation patterns that security researchers discover through manual testing. Instead of writing code, you describe how the AI should behave across multiple conversation turns.
 
 Think of it as teaching the AI to follow a script you've found effective.
