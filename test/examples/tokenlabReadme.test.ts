@@ -28,7 +28,9 @@ const VENDOR_KEY_ENV_VARS = [
 /** Extract the body of every ```yaml fenced block in a markdown document. */
 function getYamlBlocks(content: string): string[] {
   const blocks: string[] = [];
-  const pattern = /```ya?ml\n([\s\S]*?)```/g;
+  // \r?\n so the fence still matches on Windows checkouts, where git hands back
+  // CRLF line endings and a bare \n never matches.
+  const pattern = /```ya?ml\r?\n([\s\S]*?)```/g;
   let match;
   while ((match = pattern.exec(content)) !== null) {
     blocks.push(match[1]);
