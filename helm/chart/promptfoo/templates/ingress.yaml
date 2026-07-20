@@ -31,13 +31,7 @@ spec:
   {{- end }}
   {{- with $tls }}
   tls:
-    {{- range . }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   rules:
     {{- range $hosts }}

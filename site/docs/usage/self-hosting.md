@@ -207,7 +207,7 @@ Customize the installation using a `values.yaml` file or `--set` flags.
 image:
   tag: v0.54.0 # Pin to a specific version
 
-persistentVolumeClaims:
+persistentVolumesClaims:
   - name: promptfoo
     size: 10Gi # Increase storage size
     # Optional: Specify a StorageClass if the default is not suitable
@@ -218,12 +218,18 @@ service:
 
 
 # The chart renders an Ingress by default. When ingress.hosts is unset, it falls
-# back to a legacy config derived from the deprecated domainName value
-# (ingressClassName traefik plus a cert-manager letsencrypt-cloudflare annotation).
+# back to a legacy config derived from the deprecated domainName value (which
+# defaults to promptfoo.example.com): ingressClassName traefik, a cert-manager
+# letsencrypt-cloudflare cluster-issuer annotation, and a TLS entry for the
+# secret <release-name>-certificate-tls. A default install therefore also
+# requests a cert-manager Certificate. Keys you set in ingress.annotations take
+# precedence over the legacy cluster-issuer annotation.
 # Set ingress.hosts to take full control, or ingress.enabled: false for no Ingress.
 # ingress:
 #   enabled: true
 #   className: "nginx" # Or your ingress controller class
+#   annotations:
+#     cert-manager.io/cluster-issuer: letsencrypt-prod
 #   hosts:
 #     - host: promptfoo.example.com
 #       paths:
