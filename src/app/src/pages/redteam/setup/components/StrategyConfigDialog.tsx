@@ -44,7 +44,7 @@ import type { StrategyCardData } from './strategies/types';
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
   (s) => s !== 'layer' && s !== 'jailbreak',
 ).sort();
-const NON_ORCHESTRATING_AGENTIC_STRATEGIES = new Set(['indirect-web-pwn', 'mischievous-user']);
+const NON_ORCHESTRATING_AGENTIC_STRATEGIES = new Set(['indirect-web-pwn']);
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };

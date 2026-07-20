@@ -1327,6 +1327,7 @@ describe('StrategyConfigDialog', () => {
       await user.click(screen.getByRole('combobox'));
 
       expect(screen.getByRole('option', { name: 'indirect-web-pwn' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'mischievous-user' })).not.toBeInTheDocument();
       expect(screen.queryByRole('option', { name: 'jailbreak' })).not.toBeInTheDocument();
     });
   });
