@@ -40,7 +40,7 @@ Normalization does not translate or remove Unicode characters. It changes their 
 | fullwidth `ＡＢＣ`              | NFKC | `ABC`                           |
 | circled digit `①`               | NFKD | `1`                             |
 
-ASCII-only prompts usually remain unchanged. Promptfoo skips those no-op results so the strategy does not duplicate a baseline probe or issue an unnecessary provider call.
+ASCII-only prompts are never changed: all four forms are the identity transform on ASCII input. Promptfoo skips those no-op results so the strategy does not duplicate a baseline probe or issue an unnecessary provider call. A test set whose payloads are entirely ASCII therefore yields no probes at all, and Promptfoo logs a warning saying so.
 
 ## Normalization vs. Homoglyphs
 
@@ -70,6 +70,8 @@ Inside a Layer pipeline, an unchanged normalization step passes its input to lat
 ## When to Use It
 
 Use this strategy when the target or a control in front of it performs character-level matching, tokenization, script detection, or Unicode canonicalization. It is particularly relevant for multilingual input and text containing combining marks, fullwidth characters, ligatures, or other compatibility characters.
+
+Because generated attack payloads are English ASCII unless you direct otherwise, pair this strategy with a source of non-ASCII text so it has something to normalize — compose it with the `multilingual` strategy or [Homoglyph](homoglyph.md) via [Layer](layer.md), or point it at plugins and custom policies whose payloads already carry such characters.
 
 ## Related Strategies
 
