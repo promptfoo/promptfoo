@@ -140,6 +140,15 @@ Use `inputCost` and `outputCost` when a model has different prompt and completio
 The legacy `cost` option remains a shared fallback. For audio-capable models,
 `audioInputCost` and `audioOutputCost` take precedence over `audioCost`.
 
+These overrides also apply to models that are absent from promptfoo's built-in pricing
+table, such as a custom or third-party model served through an OpenAI-compatible
+`apiBaseUrl`. The cost is then derived entirely from the rates you supply, so every token
+side that was actually used needs one: a request that reports both prompt and completion
+tokens needs `inputCost` and `outputCost` (or a shared `cost`), while a side that reports
+zero tokens does not. To avoid billing a number it cannot stand behind, promptfoo reports
+no cost for an unpriced model when the response omits the completion token count or reports
+any non-zero audio or image token counts.
+
 Here are the type declarations of `config` parameters:
 
 ```typescript

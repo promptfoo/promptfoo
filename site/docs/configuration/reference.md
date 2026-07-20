@@ -771,10 +771,11 @@ interface CallApiContextParams {
 
 ProviderOptions is an object that includes the `id` of the provider and an optional `config` object that can be used to pass provider-specific configurations.
 
-For providers with built-in cost estimation, `config` can also include pricing overrides such
-as `cost`, `inputCost`, and `outputCost`. When supported, `inputCost` and `outputCost` take
-precedence over the legacy shared `cost` value. OpenAI audio-capable models also support
-`audioCost`, `audioInputCost`, and `audioOutputCost`.
+`config` can also include pricing overrides such as `cost`, `inputCost`, and `outputCost`.
+These are honored for providers with built-in cost estimation and, on OpenAI-compatible
+endpoints, for models that have no built-in rate. When supported, `inputCost` and
+`outputCost` take precedence over the legacy shared `cost` value. OpenAI audio-capable
+models also support `audioCost`, `audioInputCost`, and `audioOutputCost`.
 
 ```typescript
 interface ProviderOptions {

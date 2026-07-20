@@ -191,8 +191,8 @@ providers:
 
 ### Overriding Pricing
 
-For providers with built-in token pricing, you can override promptfoo's cost estimates in
-`config`:
+You can override promptfoo's cost estimates in `config`, including for models that have no
+built-in pricing entry:
 
 ```yaml
 providers:

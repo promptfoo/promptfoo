@@ -13,7 +13,6 @@ type FireworksCredentialConfig =
   | {
       apiKey?: string;
       apiKeyEnvar?: string;
-      apiHost?: string;
       apiBaseUrl?: string;
     }
   | undefined;

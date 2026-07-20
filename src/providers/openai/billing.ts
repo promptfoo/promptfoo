@@ -749,16 +749,14 @@ function getNumericValue(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function getExplicitTokenCount(...values: unknown[]): number | undefined {
-  const value = values.find((candidate) => candidate !== undefined);
+function getExplicitTokenCount(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function getUnknownModelTextUsage(
-  rawUsage: any,
+  { usage, inputDetails, outputDetails }: OpenAIUsageParts,
   allowMissingOutputTokens = false,
 ): { inputTokens: number; outputTokens: number } | undefined {
-  const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
   const rawInputTokens = usage.prompt_tokens ?? usage.input_tokens;
   const rawOutputTokens =
     usage.completion_tokens ?? usage.output_tokens ?? (allowMissingOutputTokens ? 0 : undefined);
@@ -964,7 +962,7 @@ export function calculateOpenAIUsageCost(
   const tier = normalizeServiceTier(options.serviceTier);
   const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!modelRates) {
-    const textUsage = getUnknownModelTextUsage(rawUsage, options.allowMissingOutputTokens);
+    const textUsage = getUnknownModelTextUsage(usageParts, options.allowMissingOutputTokens);
     if (!textUsage) {
       return undefined;
     }
