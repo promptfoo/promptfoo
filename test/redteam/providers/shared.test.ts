@@ -328,6 +328,37 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
     });
 
+    it('prefers cached providers over request-scoped fallback providers', async () => {
+      const cachedProvider = createMockProvider({ id: 'cached-provider' });
+      mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
+
+      await redteamProviderManager.setProvider('cached-provider');
+
+      const result = await redteamProviderManager.getProvider({
+        fallbackProvider: 'fallback-provider',
+      });
+
+      expect(result).toBe(cachedProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses a request-scoped fallback before stale cliState config', async () => {
+      const fallbackProvider = createMockProvider({ id: 'fallback-provider' });
+      mockedLoadApiProviders.mockResolvedValue([fallbackProvider]);
+      setCliStateConfig({
+        redteam: {
+          provider: 'stale-provider',
+        },
+      });
+
+      const result = await redteamProviderManager.getProvider({
+        fallbackProvider: 'fallback-provider',
+      });
+
+      expect(result).toBe(fallbackProvider);
+      expect(mockedLoadApiProviders).toHaveBeenCalledWith(['fallback-provider']);
+    });
+
     describe('getGradingProvider', () => {
       it('returns cached grading provider set via setGradingProvider', async () => {
         redteamProviderManager.clearProvider();

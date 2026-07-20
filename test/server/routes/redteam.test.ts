@@ -115,7 +115,7 @@ describe('Redteam Routes', () => {
         expect(response.body.prompt).toBe('generated test prompt');
       });
 
-      it('does not override configured provider selection with a hard-coded default', async () => {
+      it('uses request-scoped provider selection without reading process-global config', async () => {
         const mockPluginFactory = {
           key: 'aegis',
           action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
@@ -141,7 +141,43 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({});
+        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+          provider: undefined,
+          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+        });
+      });
+
+      it('passes the current preview provider through validated request data', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'aegis',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+            provider: 'openai:chat:gpt-4.1',
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+          provider: 'openai:chat:gpt-4.1',
+          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+        });
       });
 
       it('should exclude dataset-exempt plugins with multi-input config', async () => {

@@ -169,10 +169,13 @@ class RedteamProviderManager {
 
   async getProvider({
     provider,
+    fallbackProvider,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
     provider?: RedteamFileConfig['provider'];
+    /** Optional request-scoped fallback used after the cache but before process-global CLI config. */
+    fallbackProvider?: RedteamFileConfig['provider'];
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   }): Promise<ApiProvider> {
@@ -189,10 +192,21 @@ class RedteamProviderManager {
       return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
     }
 
+    // 3) Request-scoped fallback provider. This keeps long-lived server routes from
+    // accidentally inheriting stale cliState.config left behind by a previous run.
+    if (fallbackProvider) {
+      const loaded = await loadRedteamProvider({
+        provider: fallbackProvider,
+        jsonOnly,
+        preferSmallModel,
+      });
+      return this.wrapProvider(loaded);
+    }
+
     // Check if we have a redteam.provider configured
     const configuredProvider = cliState.config?.redteam?.provider;
 
-    // 3) If no configured redteam provider, try defaultTest config chain as fallback
+    // 4) If no configured redteam provider, try defaultTest config chain as fallback
     // This ensures users who configure defaultTest.options.provider get consistent behavior
     if (!configuredProvider) {
       const defaultTestProvider =
@@ -229,7 +243,7 @@ class RedteamProviderManager {
       }
     }
 
-    // 4) Configured redteam provider (cliState.config.redteam.provider) or the default attacker model.
+    // 5) Configured redteam provider (cliState.config.redteam.provider) or the default attacker model.
     logger.debug('[RedteamProviderManager] Loading redteam provider', {
       providedConfig:
         typeof configuredProvider === 'string'

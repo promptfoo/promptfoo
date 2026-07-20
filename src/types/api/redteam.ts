@@ -5,12 +5,20 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { ProviderOptionsSchema } from '../../validators/providers';
 import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 
 import type { Plugin, Strategy } from '../../redteam/constants';
 
 // POST /api/redteam/generate-test
+
+const PreviewGenerationProviderSchema = z.union([
+  z.string().min(1),
+  ProviderOptionsSchema.extend({
+    id: z.string().min(1, 'Provider ID is required'),
+  }),
+]);
 
 export const TestCaseGenerationSchema = z.object({
   plugin: z.object({
@@ -30,6 +38,7 @@ export const TestCaseGenerationSchema = z.object({
       purpose: z.string().nullable().optional(),
     }),
   }),
+  provider: PreviewGenerationProviderSchema.optional(),
   turn: z.int().min(0).optional().prefault(0),
   maxTurns: z.int().min(1).optional(),
   history: z.array(ConversationMessageSchema).optional().prefault([]),
