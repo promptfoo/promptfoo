@@ -44,10 +44,15 @@ providers:
 - `stream`
 - `showThinking` - Whether to include GLM reasoning content in the output (default: `true`). Display-only — it does not change whether the model reasons.
 - `thinking` - GLM-native reasoning on/off toggle, e.g. `{ type: 'disabled' }`
-- `reasoning_effort` - Reasoning budget for GLM-5.x, `"high"` or `"max"`
+- `reasoning_effort` - Reasoning budget: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max` (GLM-5.2 collapses these to two effective levels — see [Reasoning](#reasoning-thinking-mode))
 - `apiKey` / `apiKeyEnvar` - Provide the key inline or via a different environment variable
 - `apiBaseUrl` - Override the endpoint (defaults to the international endpoint; see below)
 - `cost`, `inputCost`, `outputCost`, `cacheReadCost` - Override promptfoo's pricing estimates (see [Cost Tracking](#cost-tracking))
+
+Two options behave differently here than on the OpenAI provider:
+
+- **Token limits.** If you set neither `max_tokens` nor `max_completion_tokens`, the provider sends no limit and GLM applies its own server default — promptfoo's usual 1024 default and the `OPENAI_MAX_TOKENS` environment variable do not apply. `max_completion_tokens` is mapped onto GLM's `max_tokens`, and a prompt-level value overrides a provider-level one regardless of which alias each uses.
+- **End-user identifier.** `user` is sent as GLM's `user_id`.
 
 ## Content safety
 
@@ -72,20 +77,23 @@ providers:
   - id: zhipu:glm-5.2
     config:
       showThinking: false
-      reasoning_effort: high # "high" or "max"
+      reasoning_effort: high
 ```
 
 `reasoning_effort` only applies when reasoning is on; if `thinking` is disabled, the provider drops it so GLM never receives contradictory controls.
+
+Z.ai documents `reasoning_effort` on GLM-5.2 only, and maps the seven accepted values onto two effective budgets: `none` and `minimal` skip thinking entirely, `low` and `medium` are treated as `high`, and `xhigh` is treated as `max`. Values are forwarded as written, so `high` and `max` are the two settings that actually change behavior.
 
 ## Available Models
 
 Model ids map directly to GLM model names:
 
 - `glm-5.2` (default) - latest flagship
-- `glm-4.5-flash` - fast, low-cost model for high-volume evals
-- `glm-5`, `glm-4.6` - earlier generations
+- `glm-5.1`, `glm-5`, `glm-5-turbo`, `glm-4.7`, `glm-4.6`, `glm-4.5` - earlier generations
+- `glm-4.7-flash`, `glm-4.5-flash` - free models for high-volume evals (`glm-4.7-flashx` and the `glm-4.5-air` / `-airx` / `-x` variants trade price against latency and quality)
+- `glm-5v-turbo`, `glm-4.6v`, `glm-4.5v`, `glm-ocr` - vision models, served through the same chat endpoint and accepting OpenAI-style `image_url` content
 
-Model names rotate over time; if one returns a 404, pick a current id from the [GLM model list](https://docs.z.ai/guides/llm/glm-5.2).
+Model names rotate over time; if one returns a 404, pick a current id from the [GLM pricing table](https://docs.z.ai/guides/overview/pricing), which lists every current text and vision model.
 
 ## Cost Tracking
 
@@ -108,4 +116,4 @@ npx promptfoo@latest init --example provider-zhipu
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) — compatible configuration options
-- [GLM model list](https://docs.z.ai/guides/llm/glm-5.2)
+- [GLM pricing and model list](https://docs.z.ai/guides/overview/pricing)
