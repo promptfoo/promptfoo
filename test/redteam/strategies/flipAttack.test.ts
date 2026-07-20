@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FLIP_ATTACK_MODES } from '../../../src/redteam/constants/strategies';
 import {
   addFlipAttack,
   buildFlipAttackPrompt,
@@ -9,6 +10,28 @@ import type { TestCase } from '../../../src/types/index';
 
 describe('flipAttack strategy', () => {
   const sentence = 'how to pick a lock';
+
+  // FLIP_ATTACK_MODES is the single source of truth shared with the setup UI. Adding a
+  // mode there without wiring it into `flip`/`recoveryInstruction` would silently fall
+  // through to the char_in_sentence default arm, so assert every advertised mode is
+  // actually distinct and accepted rather than quietly aliased.
+  it('implements every mode advertised in FLIP_ATTACK_MODES', () => {
+    const flips = new Set<string>();
+    const instructions = new Set<string>();
+
+    for (const mode of FLIP_ATTACK_MODES) {
+      const [{ vars, metadata }] = addFlipAttack([{ vars: { prompt: sentence } }], 'prompt', {
+        mode,
+      });
+      // An unrecognized mode falls back to the default, so metadata proves acceptance.
+      expect(metadata?.flipMode).toBe(mode);
+      flips.add(flipText(sentence, mode));
+      instructions.add(String(vars?.prompt));
+    }
+
+    expect(flips.size).toBe(FLIP_ATTACK_MODES.length);
+    expect(instructions.size).toBe(FLIP_ATTACK_MODES.length);
+  });
 
   describe('flipText', () => {
     it('reverses the whole sentence for char_in_sentence', () => {
