@@ -47,14 +47,14 @@ export interface ClampedLines {
  * const diff = `diff --git a/src/foo.ts b/src/foo.ts
  * --- a/src/foo.ts
  * +++ b/src/foo.ts
- * @@ -10,7 +10,8 @@
+ * @@ -10,3 +10,3 @@
  *    context
  * -  removed
  * +  added
  *    context`;
  *
  * const ranges = extractValidLineRanges(diff);
- * // Map { 'src/foo.ts' => [{ start: 10, end: 17 }] }
+ * // Map { 'src/foo.ts' => [{ start: 10, end: 12 }] }
  * ```
  */
 export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
