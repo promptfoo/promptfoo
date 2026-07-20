@@ -137,6 +137,7 @@ export default function StrategyConfigDialog({
     }
 
     const stepIds = new Set(steps.map(getStepId));
+    const hasIndirectWebPwn = stepIds.has('indirect-web-pwn');
 
     // Create a Map for O(1) lookup instead of O(n) find
     const strategyConfigMap = new Map(
@@ -152,8 +153,8 @@ export default function StrategyConfigDialog({
         return false;
       }
 
-      // Cannot add multiple agentic strategies
-      if (hasAgenticStrategy && isAgenticStrategy(strategy)) {
+      // Keep one orchestrator and prevent adding it after the Indirect Web Pwn transform.
+      if ((hasAgenticStrategy || hasIndirectWebPwn) && isAgenticStrategy(strategy)) {
         return false;
       }
 
@@ -376,6 +377,11 @@ export default function StrategyConfigDialog({
           return prev;
         }
 
+        // Keep Indirect Web Pwn after the strategy that orchestrates its turns.
+        if (getStepId(stepToMove) === 'indirect-web-pwn' && isAgenticStrategy(prev[index - 1])) {
+          return prev;
+        }
+
         [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
         return newSteps;
       });
@@ -387,6 +393,11 @@ export default function StrategyConfigDialog({
       if (index < prev.length - 1) {
         // Prevent moving down if the next step is multi-modal (multi-modal must stay last)
         if (isMultiModalStrategy(prev[index + 1])) {
+          return prev;
+        }
+
+        // Keep the orchestrator before Indirect Web Pwn.
+        if (isAgenticStrategy(prev[index]) && getStepId(prev[index + 1]) === 'indirect-web-pwn') {
           return prev;
         }
 
@@ -1150,10 +1161,12 @@ export default function StrategyConfigDialog({
     const canMoveUp =
       index > 0 &&
       !(isMultiModal && index === steps.length - 1) &&
-      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1])) &&
+      !(stepId === 'indirect-web-pwn' && isAgenticStrategy(steps[index - 1]));
     const canMoveDown =
       index < steps.length - 1 &&
-      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1])) &&
+      !(isAgentic && getStepId(steps[index + 1]) === 'indirect-web-pwn');
 
     return (
       <div
