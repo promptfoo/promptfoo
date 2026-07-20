@@ -415,7 +415,12 @@ describe('ResponsesProcessor', () => {
       const result = await azureProcessor.processResponseOutput(mockData, {}, false);
 
       expect(result.output).toBe('Azure response');
-      expect(mockCostCalculator).toHaveBeenCalledWith('gpt-4.1-deployment', mockData.usage, {});
+      expect(mockCostCalculator).toHaveBeenCalledWith(
+        'gpt-4.1-deployment',
+        mockData.usage,
+        {},
+        mockData,
+      );
       expect(result.metadata).toEqual({
         responseId: 'resp_azure001',
         model: 'gpt-4.1-deployment',

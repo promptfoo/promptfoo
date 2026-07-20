@@ -38,19 +38,21 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       modelName: this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
-      // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
-      // expects (modelName, config, promptTokens, completionTokens) — extract the token counts from
-      // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero. The
-      // request config is the effective body after passthrough fields are applied, so map its
-      // service tier into the passthrough-based cost contract to keep pricing aligned with the wire.
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateAzureCost(
+      // calculateAzureCost expects (modelName, config, promptTokens, completionTokens). Extract
+      // token counts from Responses usage and map the tier Azure actually served into its
+      // passthrough-based cost contract, falling back to the effective requested tier.
+      costCalculator: (modelName: string, usage: any, config?: any, responseData?: any) => {
+        const { service_tier: requestedServiceTier, ...costConfig } = config ?? {};
+        const serviceTier = responseData?.service_tier ?? requestedServiceTier;
+        return calculateAzureCost(
           modelName,
           {
-            ...config,
+            ...costConfig,
             passthrough: {
-              ...config?.passthrough,
-              ...(config?.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+              ...costConfig.passthrough,
+              ...(serviceTier === undefined || serviceTier === null
+                ? {}
+                : { service_tier: serviceTier }),
             },
           },
           usage?.prompt_tokens ?? usage?.input_tokens,
@@ -66,7 +68,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
             usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
           usage?.completion_tokens_details?.image_tokens ??
             usage?.output_tokens_details?.image_tokens,
-        ),
+        );
+      },
     });
 
     if (this.config.mcp?.enabled) {
@@ -229,7 +232,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : {}),
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
-      ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+      ...(config.service_tier === undefined || config.service_tier === null
+        ? {}
+        : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
     };
 
