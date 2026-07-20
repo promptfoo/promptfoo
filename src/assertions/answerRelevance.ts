@@ -22,9 +22,6 @@ export const handleAnswerRelevance = async ({
     ...(await matchesAnswerRelevance(
       input,
       output,
-      // Default to 0.7 (the value shown in the docs' primary example) rather than 0.
-      // A 0 default made answer-relevance a no-op that always passed, since the
-      // relevance score is >= 0 for any answer.
       assertion.threshold ?? 0.7,
       test.options,
       providerCallContext,
