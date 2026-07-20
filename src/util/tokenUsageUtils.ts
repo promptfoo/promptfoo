@@ -158,7 +158,7 @@ export function accumulateTokenUsage(
 }
 
 /**
- * Accumulate usage while treating missing token counts on a counted request as unknown.
+ * Accumulate usage while treating a counted request with no reported token counts as unknown.
  *
  * Unlike {@link accumulateTokenUsage}, this helper does not turn an omitted count into zero.
  * Once any counted request has an unknown count, that aggregate count remains unknown.
@@ -181,32 +181,23 @@ export function accumulateTokenUsagePreservingUnknown(
     cached: target.cached,
     total: target.total,
   };
+  const hasReportedTokenCounts =
+    update.prompt !== undefined ||
+    update.completion !== undefined ||
+    update.cached !== undefined ||
+    update.total !== undefined;
 
   accumulateTokenUsage(target, update, incrementRequests);
 
   if (updateRequests > 0) {
     for (const field of ['prompt', 'completion', 'cached', 'total'] as const) {
       const priorCount = priorCounts[field];
-      const updateCount = update[field];
-      if (priorRequests === 0) {
-        if (updateCount === undefined) {
-          delete target[field];
-        } else {
-          target[field] = updateCount;
-        }
-      } else if (priorCount === undefined || updateCount === undefined) {
+      if (!hasReportedTokenCounts || (priorRequests > 0 && priorCount === undefined)) {
         delete target[field];
-      } else {
-        target[field] = priorCount + updateCount;
       }
     }
 
-    if (
-      update.prompt === undefined &&
-      update.completion === undefined &&
-      update.cached === undefined &&
-      update.total === undefined
-    ) {
+    if (!hasReportedTokenCounts) {
       delete target.completionDetails;
     } else if (priorRequests > 0 && priorCompletionDetails === undefined) {
       delete target.completionDetails;

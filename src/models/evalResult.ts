@@ -31,8 +31,6 @@ import {
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
-import type { TokenUsage } from '../types/shared';
-
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
     context: 'provider config',
@@ -985,7 +983,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
     });
-    const tokenUsage: TokenUsage = createEmptyTokenUsage();
+    const tokenUsage: NonNullable<ProviderResponse['tokenUsage']> = createEmptyTokenUsage();
     if (this.response) {
       accumulateResponseTokenUsagePreservingUnknown(tokenUsage, this.response);
     }
