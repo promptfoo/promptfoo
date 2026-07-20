@@ -1,10 +1,9 @@
 import { getEnvString } from '../envars';
 import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { clampCachedTokens } from './shared';
+import { clampCachedTokens, getProviderEnvString } from './shared';
 
 import type { EnvVarKey } from '../envars';
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -88,14 +87,6 @@ export const ZHIPU_CHAT_MODELS: {
   { id: 'glm-ocr', cost: { input: 0.03 / 1e6, output: 0.03 / 1e6 } },
 ];
 
-function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
-
 // User rates take precedence over the built-in table; unknown model + no rates => undefined.
 export function calculateZhipuCost(
   modelName: string,
@@ -131,8 +122,11 @@ export function calculateZhipuCost(
 
 // The OpenAI base serializes the 400 error body into the returned error string.
 // `(?!\d)` guards against matching a longer code that happens to start with 1301.
+// No `g` flag, so the shared instance carries no `lastIndex` state between calls.
+const ZHIPU_SAFETY_ERROR_RE = new RegExp(`"code":\\s*"?${ZHIPU_SAFETY_ERROR_CODE}"?(?!\\d)`);
+
 function isZhipuSafetyError(error: string): boolean {
-  return new RegExp(`"code":\\s*"?${ZHIPU_SAFETY_ERROR_CODE}"?(?!\\d)`).test(error);
+  return ZHIPU_SAFETY_ERROR_RE.test(error);
 }
 
 // Zhipu AI (GLM) exposes an OpenAI-compatible API. https://docs.z.ai/
