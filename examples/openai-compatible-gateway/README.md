@@ -15,8 +15,9 @@ Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Complet
 
    ```bash
    export GATEWAY_API_KEY=your_gateway_api_key
-   # Optional: clear ambient OpenAI host/key overrides for this shell
-   unset OPENAI_API_HOST
+   # Recommended: clear any ambient OpenAI key so a real key cannot reach the
+   # gateway if GATEWAY_API_KEY is unset or misspelled.
+   unset OPENAI_API_KEY
    ```
 
 3. In `promptfooconfig.yaml`, set `apiBaseUrl` to your endpoint's base URL, set `apiKeyEnvar: GATEWAY_API_KEY`, and replace `your-model-id` with an exact model ID your endpoint serves (`GET <apiBaseUrl>/models`).
