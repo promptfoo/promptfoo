@@ -95,6 +95,8 @@ const EvaluateTestSuiteCreator = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState<boolean | null>(null);
   const [availableProviders, setAvailableProviders] = useState<ProviderOptions[] | null>(null);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [resetKey, setResetKey] = useState(0);
@@ -126,11 +128,13 @@ const EvaluateTestSuiteCreator = () => {
         if (isMounted) {
           setHasCustomConfig(result.data.hasCustomConfig);
           setAvailableProviders(result.data.hasCustomConfig ? result.data.providers : null);
+          setCatalogError(false);
         }
       } catch (err) {
         console.error('Failed to fetch provider catalog:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
         if (isMounted) {
+          setCatalogError(true);
           showToast(`Failed to load provider configuration: ${errorMessage}`, 'error');
         }
       }
@@ -141,6 +145,13 @@ const EvaluateTestSuiteCreator = () => {
     return () => {
       isMounted = false;
     };
+  }, [catalogReloadKey]);
+
+  // The catalog gate stays closed on failure (an unrestricted selector could bypass an
+  // administrator's ui-providers.yaml), so a transient error needs an explicit retry.
+  const handleRetryProviderCatalog = React.useCallback(() => {
+    setCatalogError(false);
+    setCatalogReloadKey((key) => key + 1);
   }, []);
 
   const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
@@ -496,6 +507,9 @@ const EvaluateTestSuiteCreator = () => {
                         onChange={(p) => updateConfig({ providers: p })}
                         availableProviders={availableProviders}
                         isProviderCatalogReady={hasCustomConfig !== null}
+                        onRetryProviderCatalog={
+                          catalogError ? handleRetryProviderCatalog : undefined
+                        }
                       />
                     </ErrorBoundary>
                   </StepSection>

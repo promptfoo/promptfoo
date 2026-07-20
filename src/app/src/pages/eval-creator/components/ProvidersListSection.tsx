@@ -20,6 +20,8 @@ interface ProvidersListSectionProps {
   onChange: (providers: ProviderOptions[]) => void;
   availableProviders?: ProviderOptions[] | null;
   isProviderCatalogReady?: boolean;
+  /** Provided only when the catalog request failed, so the user can recover without a reload. */
+  onRetryProviderCatalog?: () => void;
 }
 
 function getProviderLabel(provider: ProviderOptions): string {
@@ -77,6 +79,7 @@ export function ProvidersListSection({
   onChange,
   availableProviders = null,
   isProviderCatalogReady = true,
+  onRetryProviderCatalog,
 }: ProvidersListSectionProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -104,6 +107,30 @@ export function ProvidersListSection({
   const cancelDeleteProvider = () => {
     setProviderToDelete(null);
   };
+
+  // Rendered in both the empty state and below an existing list; defined once so the
+  // catalog gating cannot drift between the two call sites.
+  const addProviderControls = (
+    <div className="space-y-2">
+      <Button
+        onClick={() => setIsAddDialogOpen(true)}
+        className="w-full"
+        variant="outline"
+        disabled={!isProviderCatalogReady}
+      >
+        <Plus className="size-4 mr-2" />
+        Add Provider
+      </Button>
+      {!isProviderCatalogReady && onRetryProviderCatalog && (
+        <div className="flex flex-wrap items-center justify-center gap-1 text-sm text-muted-foreground">
+          <span>Could not load the provider catalog.</span>
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={onRetryProviderCatalog}>
+            Retry
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -159,15 +186,7 @@ export function ProvidersListSection({
         </div>
       ) : (
         <div className="space-y-4">
-          <Button
-            onClick={() => setIsAddDialogOpen(true)}
-            className="w-full"
-            variant="outline"
-            disabled={!isProviderCatalogReady}
-          >
-            <Plus className="size-4 mr-2" />
-            Add Provider
-          </Button>
+          {addProviderControls}
           <Card className="p-8 text-center bg-muted/30 border-dashed">
             <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
             <p className="text-xs text-muted-foreground">
@@ -178,17 +197,7 @@ export function ProvidersListSection({
       )}
 
       {/* Add provider button */}
-      {providers.length > 0 && (
-        <Button
-          onClick={() => setIsAddDialogOpen(true)}
-          className="w-full"
-          variant="outline"
-          disabled={!isProviderCatalogReady}
-        >
-          <Plus className="size-4 mr-2" />
-          Add Provider
-        </Button>
-      )}
+      {providers.length > 0 && addProviderControls}
 
       {/* Add provider dialog */}
       <AddProviderDialog

@@ -34,7 +34,13 @@ vi.mock('./PromptsSection', () => ({
 }));
 vi.mock('./ProvidersListSection', () => ({
   ProvidersListSection: vi.fn(
-    ({ providers, onChange, availableProviders, isProviderCatalogReady }) => (
+    ({
+      providers,
+      onChange,
+      availableProviders,
+      isProviderCatalogReady,
+      onRetryProviderCatalog,
+    }) => (
       <div data-testid="mock-provider-selector">
         <button onClick={() => onChange([])}>Mock Clear Providers</button>
         {/* Render something based on providers if needed for other tests, or keep simple */}
@@ -44,6 +50,11 @@ vi.mock('./ProvidersListSection', () => ({
             'default'}
         </span>
         <span data-testid="mock-provider-catalog-ready">{String(isProviderCatalogReady)}</span>
+        {onRetryProviderCatalog && (
+          <button data-testid="mock-retry-provider-catalog" onClick={onRetryProviderCatalog}>
+            Mock Retry Catalog
+          </button>
+        )}
       </div>
     ),
   ),
@@ -78,14 +89,10 @@ vi.mock('./InfoBox', () => ({
   InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
 }));
 
+// The default response lives in beforeEach below: vi.clearAllMocks() leaves
+// implementations intact, so a factory default would always be overridden by it.
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(() =>
-    Promise.resolve({
-      ok: true,
-      json: () =>
-        Promise.resolve({ success: true, data: { providers: [], hasCustomConfig: false } }),
-    }),
-  ),
+  callApi: vi.fn(),
 }));
 
 describe('EvaluateTestSuiteCreator', () => {
@@ -544,6 +551,27 @@ describe('EvaluateTestSuiteCreator', () => {
     });
     expect(screen.getByTestId('mock-provider-catalog-ready')).toHaveTextContent('false');
     expect(screen.queryByTestId('mock-configure-env-button')).not.toBeInTheDocument();
+  });
+
+  it('recovers from a transient catalog failure when the user retries', async () => {
+    const user = userEvent.setup();
+    vi.mocked(callApi).mockResolvedValueOnce({ ok: false } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+
+    // The failed fetch leaves provider creation gated, but offers a way out.
+    const retryButton = await screen.findByTestId('mock-retry-provider-catalog');
+    expect(screen.getByTestId('mock-provider-catalog-ready')).toHaveTextContent('false');
+
+    // The beforeEach default resolves successfully, standing in for the network recovering.
+    await user.click(retryButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-provider-catalog-ready')).toHaveTextContent('true');
+    });
+    expect(callApi).toHaveBeenCalledTimes(2);
+    // Recovery clears the error affordance rather than leaving it stuck on screen.
+    expect(screen.queryByTestId('mock-retry-provider-catalog')).not.toBeInTheDocument();
   });
 
   it('does not show the catalog failure toast after the component unmounts', async () => {

@@ -474,7 +474,10 @@ When `ui-providers.yaml` exists:
 
 - The Add Provider dialog shows only configured providers instead of the built-in provider type catalog
 - The "API keys" button is hidden in the eval creator
+- Provider settings become read-only in the UI: "Edit" reopens the catalog and swaps in the entry you pick, rather than opening the configuration editor. Set per-provider `config` (temperature, headers, and so on) in `ui-providers.yaml`
 - Configuration is cached - restart required after changes: `docker restart promptfoo_container`
+
+"Add Provider" is disabled until the catalog loads. If the request fails, the button stays disabled and a **Retry** link appears next to it - the UI does not fall back to the built-in provider list while the catalog is unreachable.
 
 :::
 
@@ -543,6 +546,14 @@ docker logs promptfoo_container | grep "Invalid provider"
 ```
 
 Common issues: missing `id` field, invalid provider ID format, YAML syntax errors.
+
+Entries whose `id` is not a non-empty string are skipped, so quote values that look numeric (`- id: '123'`) to keep them from being parsed as numbers.
+
+:::warning
+
+The restriction fails open. If **every** entry fails validation the catalog is empty, which is indistinguishable from having no `ui-providers.yaml` at all - the UI falls back to the full built-in provider list and the restriction is not enforced. After any change to the file, confirm the loaded provider count in the logs or check that `GET /api/providers` returns `hasCustomConfig: true`.
+
+:::
 
 **Config not detected:** Verify file location and permissions:
 
