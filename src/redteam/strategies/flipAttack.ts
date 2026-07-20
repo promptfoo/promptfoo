@@ -1,7 +1,9 @@
 import dedent from 'dedent';
 import logger from '../../logger';
+import { isFlipAttackMode } from '../constants/strategies';
 
 import type { TestCase } from '../../types/index';
+import type { FlipAttackMode } from '../constants/strategies';
 
 /**
  * Flipping modes from "FlipAttack: Jailbreak LLMs via Flipping"
@@ -9,7 +11,7 @@ import type { TestCase } from '../../types/index';
  * with a simple, deterministic character/word permutation; a guidance prompt
  * then instructs the target to recover the original request before answering.
  */
-export type FlipMode = 'word_order' | 'char_in_word' | 'char_in_sentence';
+export type FlipMode = FlipAttackMode;
 
 const DEFAULT_MODE: FlipMode = 'char_in_sentence';
 const UNSPACED_WORD_BOUNDARY = ' | ';
@@ -138,11 +140,7 @@ export function addFlipAttack(
   injectVar: string,
   config: Record<string, any> = {},
 ): TestCase[] {
-  const mode: FlipMode = (['word_order', 'char_in_word', 'char_in_sentence'] as const).includes(
-    config.mode,
-  )
-    ? config.mode
-    : DEFAULT_MODE;
+  const mode: FlipMode = isFlipAttackMode(config.mode) ? config.mode : DEFAULT_MODE;
 
   if (config.mode && config.mode !== mode) {
     logger.warn(`[FlipAttack] Unknown mode "${config.mode}", falling back to "${DEFAULT_MODE}"`);
