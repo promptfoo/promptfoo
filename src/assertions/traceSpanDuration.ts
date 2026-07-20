@@ -36,10 +36,7 @@ export const handleTraceSpanDuration = ({
 
   if (
     percentile !== undefined &&
-    (typeof percentile !== 'number' ||
-      !Number.isFinite(percentile) ||
-      percentile < 0 ||
-      percentile > 100)
+    (!Number.isFinite(percentile) || percentile < 0 || percentile > 100)
   ) {
     throw new Error('trace-span-duration assertion percentile must be a number between 0 and 100');
   }

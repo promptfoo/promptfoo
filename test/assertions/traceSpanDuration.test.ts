@@ -431,6 +431,26 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
+  it('should throw error for a non-numeric percentile', () => {
+    // YAML configs are cast to the value type without runtime type checking, so a
+    // string percentile can reach the guard. `Number.isFinite` does not coerce, so
+    // it rejects non-numbers without a separate `typeof` check.
+    const value = { max: 1000, percentile: '95' as unknown as number };
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value },
+      renderedValue: value,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be a number between 0 and 100',
+    );
+  });
+
   it('should handle edge case with single span for percentile', () => {
     const params: AssertionParams = {
       ...defaultParams,
