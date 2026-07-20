@@ -399,7 +399,7 @@ describe('Provider Registry', () => {
       );
 
       expect(chatProvider.id()).toBe('moonshot:kimi-k2.6');
-      expect(defaultProvider.id()).toBe('moonshot:kimi-k2.6');
+      expect(defaultProvider.id()).toBe('moonshot:kimi-k3');
       const { body } = await (chatProvider as any).getOpenAiBody('Hello');
       expect(body.temperature).toBeUndefined();
       expect(body.max_tokens).toBeUndefined();
@@ -511,6 +511,7 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(completionProvider).toBeDefined();
+
       expect(completionProvider.id()).toBe('anthropic:claude-2');
 
       const shorthandProvider = await factory!.create(
@@ -522,12 +523,12 @@ describe('Provider Registry', () => {
       expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
       for (const model of ['claude-fable-5', 'claude-mythos-5', 'claude-sonnet-5']) {
-        const claude5Provider = await factory!.create(
+        const shorthandModelProvider = await factory!.create(
           `anthropic:${model}`,
           anthropicOptions,
           mockContext,
         );
-        expect(claude5Provider.id()).toBe(`anthropic:${model}`);
+        expect(shorthandModelProvider.id()).toBe(`anthropic:${model}`);
       }
 
       // Test error case with invalid model type
@@ -573,6 +574,19 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
+      const realtimeProvider = await factory!.create(
+        'azure:realtime:gpt-realtime-1.5-2026-02-23',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(realtimeProvider).toBeDefined();
+      await expect(
+        factory!.create('azure:realtime:gpt-realtime-whisper', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/transcription-only/);
+      await expect(
+        factory!.create('azure:realtime:gpt-realtime-translate', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/translation-only/);
+
       const imageProvider = await factory!.create(
         'azure:image:mai-image-2-5',
         mockProviderOptions,
@@ -590,7 +604,7 @@ describe('Provider Registry', () => {
 
       // Model types without a default deployment must name one in the path. Cover both
       // the missing (`azure:chat`) and empty (`azure:chat:`) third-segment variants.
-      for (const prefix of ['azure:chat', 'azure:completion']) {
+      for (const prefix of ['azure:chat', 'azure:completion', 'azure:realtime']) {
         await expect(factory!.create(prefix, mockProviderOptions, mockContext)).rejects.toThrow(
           /requires a deployment name/,
         );
@@ -1334,6 +1348,11 @@ describe('Provider Registry', () => {
       ],
       // Bare google:<model> default chat route (no service-type segment).
       [
+        'google:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
         'google:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -1345,11 +1364,21 @@ describe('Provider Registry', () => {
         'vertex:chat:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
+      [
+        'vertex:chat:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
       // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
       // (distinct from the vertex:chat: branch, which slices from index 2).
       [
         'vertex:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
         'vertex:embedding:gemini-embedding-001',
@@ -1374,6 +1403,17 @@ describe('Provider Registry', () => {
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config?.vertexai).toBe(true);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it.each([
+      'vertex:gemini-omni-flash-preview',
+      'vertex:chat:gemini-omni-flash-preview',
+    ])('applies vertexai config and provider id for %s', async (providerPath) => {
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);

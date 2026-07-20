@@ -9,8 +9,11 @@ import {
   getTokenUsage,
   getTokenUsageWithRequestCount,
   OPENAI_CHAT_MODELS,
+  OPENAI_CODEX_ONLY_MODELS,
+  OPENAI_COMPLETION_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
+  OPENAI_TTS_MODELS,
   validateChatCompletionMessage,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
@@ -216,6 +219,43 @@ describe('getTokenUsage', () => {
     expect(
       getTokenUsage({ usage: { prompt_tokens_details: { cached_tokens: cachedTokens } } }, false),
     ).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
+  });
+
+  it('should read cached tokens from top-level usage.cached_tokens (e.g. Moonshot)', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        cached_tokens: 32,
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+      completionDetails: {
+        cacheReadInputTokens: 32,
+      },
+    });
+  });
+
+  it('should prefer prompt_tokens_details.cached_tokens over the top-level field', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        cached_tokens: 7,
+        prompt_tokens_details: { cached_tokens: 32 },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result.completionDetails).toEqual({ cacheReadInputTokens: 32 });
   });
 
   it.each([
@@ -429,14 +469,41 @@ describe('validateChatCompletionMessage', () => {
 });
 
 describe('calculateOpenAICost', () => {
-  it('should calculate cost correctly for TTS model gpt-4o-mini-tts', () => {
-    const cost = calculateOpenAICost('gpt-4o-mini-tts', {}, 1000, 0, 0, 500);
-    expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 12) / 1e6, 6);
+  it.each([
+    'gpt-4o-mini-tts',
+    'gpt-4o-mini-tts-2025-12-15',
+    'gpt-4o-mini-tts-2025-03-20',
+  ])('should recognize and price TTS model %s without treating it as a chat model', (model) => {
+    expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1000, 0, 0, 500)).toBeCloseTo(
+      (1000 * 0.6 + 500 * 12) / 1e6,
+      6,
+    );
   });
 
-  it('should calculate cost correctly for TTS model gpt-4o-mini-tts-2025-12-15', () => {
-    const cost = calculateOpenAICost('gpt-4o-mini-tts-2025-12-15', {}, 1000, 0, 0, 500);
-    expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 12) / 1e6, 6);
+  it('classifies the documented gpt-5-codex-mini API replacement as Responses-only', () => {
+    const model = 'gpt-5-codex-mini';
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+  });
+
+  it('does not classify the Codex-surface-only Spark model as an API model', () => {
+    const model = 'gpt-5.3-codex-spark';
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+  });
+
+  it.each([
+    'tts-1',
+    'tts-1-1106',
+    'tts-1-hd',
+    'tts-1-hd-1106',
+  ])('should recognize legacy speech model %s without treating it as a chat model', (model) => {
+    expect(OPENAI_TTS_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
   });
 
   it('should calculate cost correctly for search preview model gpt-4o-search-preview', () => {
@@ -452,6 +519,17 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for mini search preview model gpt-4o-mini-search-preview', () => {
     const cost = calculateOpenAICost('gpt-4o-mini-search-preview', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 0.15 + 500 * 0.6) / 1e6, 6);
+  });
+
+  it.each([
+    'gpt-5-search-api',
+    'gpt-5-search-api-2025-10-14',
+  ])('should calculate token cost correctly for Chat Completions search model %s', (model) => {
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo(
+      (1000 * 1.25 + 500 * 10) / 1e6,
+      6,
+    );
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
 
   it('should calculate cost correctly for computer use model computer-use-preview', () => {
@@ -730,6 +808,28 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
   });
 
+  it.each([
+    'gpt-5-codex',
+    'gpt-5-pro',
+    'gpt-5-pro-2025-10-06',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-codex-mini',
+    'gpt-5.2-codex',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    'gpt-5.3-codex',
+    'o1-pro',
+    'o1-pro-2025-03-19',
+    'o3-pro',
+    'o3-pro-2025-06-10',
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+  ])('should keep active Responses-only model %s out of Chat Completions routing', (model) => {
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+  });
+
   it('should exclude retired preview audio and realtime models from current routing registries', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
@@ -852,9 +952,18 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo(expected, 6);
   });
 
-  it('should handle a model with no cost property', () => {
-    const cost = calculateOpenAICost('text-davinci-002', {}, 1000, 500);
-    expect(cost).toBeUndefined();
+  it.each([
+    ['babbage-002', 0.4, 0.4],
+    ['davinci-002', 2, 2],
+    ['gpt-3.5-turbo-instruct', 1.5, 2],
+    ['gpt-3.5-turbo-instruct-0914', 1.5, 2],
+  ])('should recognize and price legacy Completions model %s', (model, inputRate, outputRate) => {
+    expect(OPENAI_COMPLETION_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo(
+      (1000 * inputRate + 500 * outputRate) / 1e6,
+      6,
+    );
   });
 
   it('should calculate cost correctly for o1-pro', () => {
@@ -916,6 +1025,17 @@ describe('calculateOpenAICost', () => {
     const cost = calculateOpenAICost('gpt-realtime-2', {}, 1000, 500, 200, 100);
     const expectedCost = (1000 * 4 + 500 * 24 + 200 * 32 + 100 * 64) / 1e6;
     expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it.each([
+    ['gpt-realtime-2.1', 4, 24, 32, 64],
+    ['gpt-realtime-2.1-mini', 0.6, 2.4, 10, 20],
+  ])('should recognize and price Realtime model %s', (model, inputRate, outputRate, audioInputRate, audioOutputRate) => {
+    expect(OPENAI_REALTIME_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+    expect(calculateOpenAICost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(
+      (1000 * inputRate + 500 * outputRate + 200 * audioInputRate + 100 * audioOutputRate) / 1e6,
+      6,
+    );
   });
 
   it('should calculate audio token costs for gpt-realtime-mini-2025-12-15', () => {
