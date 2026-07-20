@@ -13,6 +13,8 @@ import type { AssertionParams, GradingResult } from '../../types/index';
 import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
+// DeepEval's default pass threshold for the conversation relevancy metric.
+const DEFAULT_THRESHOLD = 0.5;
 
 export const handleConversationRelevance = async ({
   assertion,
@@ -39,7 +41,7 @@ export const handleConversationRelevance = async ({
     ];
   }
   const windowSize = assertion.config?.windowSize || DEFAULT_WINDOW_SIZE;
-  const threshold = assertion.threshold ?? 0.5;
+  const threshold = assertion.threshold ?? DEFAULT_THRESHOLD;
   let relevantCount = 0;
   let totalWindows = 0;
   const irrelevancies: string[] = [];
