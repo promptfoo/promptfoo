@@ -19,21 +19,18 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
-import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
+import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
-  declare config: AzureChatResponsesOptions;
+  declare config: AzureResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(
-    deploymentName: string,
-    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
-  ) {
+  constructor(deploymentName: string, options: AzureProviderOptions<AzureResponsesOptions> = {}) {
     super(deploymentName, options);
 
     // Initialize the shared response processor
@@ -43,7 +40,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       functionCallbackHandler: this.functionCallbackHandler,
       // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
       // expects (modelName, config, promptTokens, completionTokens) — extract the token counts from
-      // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
+      // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero. The
+      // request config is the effective body after passthrough fields are applied, so map its
+      // service tier into the passthrough-based cost contract to keep pricing aligned with the wire.
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
           modelName,
@@ -230,6 +229,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         : {}),
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
+      ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
     };
 
