@@ -139,7 +139,6 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       const tokenUsage: Partial<TokenUsage> = {};
       let combinedCost = 0;
       let hasCost = false;
-      let costOverflow = false;
       for (const response of [...retryResults, result]) {
         accumulateRetryTokenUsage(tokenUsage, response);
         if (
@@ -149,7 +148,6 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
         ) {
           combinedCost += response.cost;
           hasCost = true;
-          costOverflow ||= !Number.isFinite(combinedCost);
         }
       }
       const resultWithoutCost = { ...result };
@@ -157,7 +155,7 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       return {
         ...resultWithoutCost,
         tokenUsage,
-        ...(hasCost && !costOverflow && { cost: combinedCost }),
+        ...(hasCost && Number.isFinite(combinedCost) && { cost: combinedCost }),
       };
     },
   };

@@ -63,18 +63,6 @@ function getOpenRouterOutput(
   return message.reasoning && showThinking ? message.reasoning : '';
 }
 
-function parseJsonSchemaOutput(
-  message: ValidatedChatCompletionMessage,
-  output: string | object,
-): string | object {
-  try {
-    return parseChatCompletionJsonOutput(message, output);
-  } catch (error) {
-    logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
-    return output;
-  }
-}
-
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
  * for models like Gemini that include thinking/reasoning tokens.
@@ -290,7 +278,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     let output = getOpenRouterOutput(message, this.config.showThinking ?? true);
     if (config.response_format?.type === 'json_schema') {
-      output = parseJsonSchemaOutput(message, output);
+      output = parseChatCompletionJsonOutput(
+        message,
+        output,
+        'Failed to parse JSON output for json_schema',
+      );
     }
 
     return {

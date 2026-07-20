@@ -39,18 +39,6 @@ function getSnowflakeOutput(message: ValidatedChatCompletionMessage): string | o
   return typeof message.content === 'string' && message.content.trim() ? message.content : '';
 }
 
-function parseSnowflakeJsonOutput(
-  message: ValidatedChatCompletionMessage,
-  output: string | object,
-): string | object {
-  try {
-    return parseChatCompletionJsonOutput(message, output);
-  } catch (error) {
-    logger.warn(`[Snowflake Cortex] Failed to parse JSON output: ${String(error)}`);
-    return output;
-  }
-}
-
 /**
  * Snowflake Cortex provider extends OpenAI chat completion provider
  * with Snowflake-specific endpoint handling.
@@ -263,7 +251,11 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
 
     let output = getSnowflakeOutput(message);
     if (config.response_format?.type === 'json_schema') {
-      output = parseSnowflakeJsonOutput(message, output);
+      output = parseChatCompletionJsonOutput(
+        message,
+        output,
+        '[Snowflake Cortex] Failed to parse JSON output',
+      );
     }
 
     return {

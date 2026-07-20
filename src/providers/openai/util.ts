@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import logger from '../../logger';
 import { maybeLoadFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
@@ -880,7 +881,9 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       : undefined;
   const completionDetails = isRecord(usage.completion_tokens_details)
     ? usage.completion_tokens_details
-    : undefined;
+    : isRecord(usage.output_tokens_details)
+      ? usage.output_tokens_details
+      : undefined;
   const details: NonNullable<TokenUsage['completionDetails']> = {};
   const detailMappings = [
     ['reasoning', completionDetails?.reasoning_tokens],
@@ -1043,9 +1046,15 @@ export function getChatCompletionRefusal(
   return undefined;
 }
 
+/**
+ * Parse the raw completion content as JSON, falling back to `output` when the
+ * payload is absent or unparseable. `logLabel` prefixes the warning emitted on
+ * a parse failure.
+ */
 export function parseChatCompletionJsonOutput(
   message: ValidatedChatCompletionMessage,
   output: string | object,
+  logLabel: string,
 ): string | object {
   const jsonCandidate =
     typeof message.content === 'string'
@@ -1053,7 +1062,15 @@ export function parseChatCompletionJsonOutput(
       : typeof output === 'string'
         ? output
         : undefined;
-  return jsonCandidate ? JSON.parse(jsonCandidate) : output;
+  if (!jsonCandidate) {
+    return output;
+  }
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch (error) {
+    logger.warn(`${logLabel}: ${String(error)}`);
+    return output;
+  }
 }
 
 export interface OpenAiFunction {

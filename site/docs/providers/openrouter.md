@@ -71,6 +71,29 @@ providers:
 - Compatible with OpenAI API format
 - Pay-as-you-go pricing
 
+## Structured content parts
+
+Some models return OpenAI-style structured content instead of a plain string — that is,
+`message.content` is an array of `{ type: 'text', ... }` and `{ type: 'image_url', ... }` parts.
+When there is no plain-string content to use, promptfoo preserves that array as the output value
+rather than stringifying it.
+
+Because the output is an array rather than a string, string assertions such as `contains` will not
+match it directly. Use a `transform` to pull out the parts you want to assert on:
+
+```yaml title="promptfooconfig.yaml"
+tests:
+  - vars:
+      question: Describe this chart
+    assert:
+      - type: contains
+        value: revenue
+        transform: |
+          Array.isArray(output)
+            ? output.filter((part) => part.type === 'text').map((part) => part.text).join('\n')
+            : output
+```
+
 ## Thinking/Reasoning Models
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:

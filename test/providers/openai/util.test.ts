@@ -119,6 +119,44 @@ describe('getTokenUsage', () => {
     });
   });
 
+  it('should read completion details from output_tokens_details for Responses-style usage', () => {
+    const data = {
+      usage: {
+        total_tokens: 45,
+        prompt_tokens: 15,
+        completion_tokens: 30,
+        output_tokens_details: {
+          reasoning_tokens: 100,
+        },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 45,
+      prompt: 15,
+      completion: 30,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 100,
+      },
+    });
+  });
+
+  it('should prefer completion_tokens_details over output_tokens_details', () => {
+    const data = {
+      usage: {
+        total_tokens: 45,
+        prompt_tokens: 15,
+        completion_tokens: 30,
+        completion_tokens_details: { reasoning_tokens: 7 },
+        output_tokens_details: { reasoning_tokens: 100 },
+      },
+    };
+
+    expect(getTokenUsage(data, false).completionDetails).toEqual({ reasoning: 7 });
+  });
+
   it('should preserve provider-side cache read and write tokens', () => {
     const data = {
       usage: {
