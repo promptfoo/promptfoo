@@ -252,12 +252,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const passthroughModel =
       typeof config.passthrough?.model === 'string' ? config.passthrough.model : undefined;
-    const capabilityModelName = (passthroughModel ?? this.getCapabilityModelName()).replace(
+    const capabilityModelName = this.getCapabilityModelName(passthroughModel).replace(
       /(^|\/)ft:/,
       '$1',
     );
-    const capabilityModelIsGPT5 =
-      capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
     const isOSeriesModel =
       capabilityModelName.startsWith('o1') ||
       capabilityModelName.startsWith('o3') ||
@@ -265,13 +263,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o1') ||
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
-    const isGPT5Model = passthroughModel === undefined ? this.isGPT5Model() : capabilityModelIsGPT5;
-    const isReasoningModel =
-      passthroughModel === undefined
-        ? this.isReasoningModel()
-        : capabilityModelIsGPT5 || isOSeriesModel;
-    const supportsTemperature =
-      passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel;
+    const isGPT5Model = this.isGPT5Model(passthroughModel);
+    const isReasoningModel = this.isReasoningModel(passthroughModel);
+    const supportsTemperature = this.supportsTemperature(passthroughModel);
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;

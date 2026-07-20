@@ -213,9 +213,9 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
    * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
    * despite TrueFoundry's provider-account/model-name format
    */
-  protected isReasoningModel(): boolean {
+  protected isReasoningModel(modelName = this.modelName): boolean {
     // Extract the actual model name after the provider prefix (e.g., "openai/gpt-5-nano" -> "gpt-5-nano")
-    const actualModelName = this.modelName.split('/').pop() || this.modelName;
+    const actualModelName = modelName.split('/').pop() || modelName;
     return (
       actualModelName.startsWith('o1') ||
       actualModelName.startsWith('o3') ||

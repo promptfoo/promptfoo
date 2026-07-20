@@ -22,16 +22,16 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
-  protected isReasoningModel(): boolean {
-    return isGroqReasoningModel(this.modelName) || super.isReasoningModel();
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return isGroqReasoningModel(modelName) || super.isReasoningModel(modelName);
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(modelName = this.modelName): boolean {
     // Groq's reasoning models support temperature, unlike OpenAI's o1 models
-    if (groqSupportsTemperature(this.modelName)) {
+    if (groqSupportsTemperature(modelName)) {
       return true;
     }
-    return super.supportsTemperature();
+    return super.supportsTemperature(modelName);
   }
 
   constructor(modelName: string, providerOptions: GroqProviderOptions) {
