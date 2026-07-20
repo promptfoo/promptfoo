@@ -48,9 +48,11 @@ jobs:
       - name: Check last-release-sha drift
         env:
           # Fail before the GraphQL scan gets near the size that timed out (~468
-          # commits in the #9517 incident; 144 still scanned fine). 250 leaves
-          # margin to bump the pin without a fire drill.
-          MAX_DRIFT: '250'
+          # commits in the #9517 incident; 144 still scanned fine). With
+          # commit-batch-size capped at 25, 300 still leaves substantial margin
+          # below release-please's 500-commit search limit while allowing a
+          # lagging component release boundary to advance safely.
+          MAX_DRIFT: '300'
           # pull_request checkouts use a synthetic merge commit. Count the
           # proposed branch tip instead so the merge wrapper does not consume
           # one commit of drift headroom.
