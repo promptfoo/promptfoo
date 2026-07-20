@@ -191,7 +191,7 @@ export const strategies: Strategy[] = [
     displayName: 'Indirect Web Pwn',
     description: 'Malicious web-content injection',
     longDescription:
-      'Tests whether a browsing-capable target follows injected instructions or leaks data from attacker-controlled pages; requires Promptfoo Cloud',
+      'Tests whether a browsing-capable target follows injected instructions or leaks data from attacker-controlled pages; requires Promptfoo Cloud, a target that can fetch public URLs, and data-exfil for deterministic leak tracking',
     cost: 'High',
     link: '/docs/red-team/strategies/indirect-web-pwn/',
     isRemote: true,
@@ -343,7 +343,7 @@ export const strategies: Strategy[] = [
     displayName: 'Layer',
     description: 'Compose multiple strategies',
     longDescription:
-      'Composes multiple red team strategies sequentially, such as jailbreak:meta followed by base64',
+      'Composes compatible strategies sequentially. Supports one orchestrating attack strategy followed by text transforms and one final multimodal transform; target-specific configuration may be required',
     cost: 'Variable',
     link: '/docs/red-team/strategies/layer/',
   },

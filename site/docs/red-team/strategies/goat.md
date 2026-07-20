@@ -29,7 +29,7 @@ If your system maintains a conversation history and only expects the latest mess
 
 ## How It Works
 
-![GOAT LLM attack](/img/docs/goat.svg)
+![Diagram showing the GOAT attacker and target exchanging turns while the attacker adapts to responses](/img/docs/goat.svg)
 
 GOAT uses an attacker LLM that engages in multi-turn conversations with a target model.
 
@@ -41,7 +41,7 @@ Each conversation turn follows a structured three-step reasoning process:
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach
 3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt
 
-![GOAT attack flow](/img/docs/goat-attack-flow.svg)
+![Flow diagram showing GOAT generating, evaluating, and refining multi-turn attacks](/img/docs/goat-attack-flow.svg)
 
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 

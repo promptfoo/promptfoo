@@ -33,7 +33,7 @@ The model follows the injected instruction instead of answering the travel quest
 | **Typical vectors**     | Chat input, form fields | RAG docs, emails, profiles, tickets            |
 | **Why it's riskier**    | Scoped to one session   | Can affect unaware users in privileged context |
 
-## How it works
+## How It Works
 
 1. Specify which template variable contains untrusted data
 2. Promptfoo injects adversarial payloads into that variable

@@ -32,7 +32,7 @@
         <rect width="160" height="100" rx="10" x="8" y="8" fill="#4F46E5" opacity="0.5" />
         <rect width="160" height="100" rx="10" x="0" y="0" fill="url(#pluginGradient)" filter="url(#shadow)" />
         <text x="80" y="45" font-family="system-ui" font-size="16" text-anchor="middle" fill="white" font-weight="bold">Plugin</text>
-        <text x="80" y="65" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Adversarial LLM</text>
+        <text x="80" y="65" font-family="system-ui" font-size="12" text-anchor="middle" fill="white">Test Generator</text>
     </g>
     
     <!-- Payload Boxes -->

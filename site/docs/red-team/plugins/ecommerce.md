@@ -1,131 +1,59 @@
 ---
 sidebar_label: E-commerce
-description: Red team AI systems for e-commerce vulnerabilities including PCI DSS compliance, price manipulation, regulatory bypass, and order fraud to protect revenue and ensure legal compliance
+description: Test e-commerce AI systems for payment-data exposure, price manipulation, compliance bypass, and order fraud.
 ---
 
 # E-commerce Red Teaming Plugins
 
-The e-commerce red teaming plugins are designed to test AI systems deployed in online retail contexts for critical vulnerabilities that could result in financial loss, regulatory violations, or fraud. These plugins target the unique risks that arise when AI handles payment data, pricing, compliance restrictions, and order management.
+E-commerce plugins test assistants used for shopping, checkout, customer support, and order management. They cover payment data, pricing controls, restricted products, refunds, and other workflows where an unauthorized action can cause loss or expose a customer.
 
-E-commerce applications face heightened security requirements due to handling sensitive payment information (PCI DSS), enforcing age and geographic restrictions, preventing fraud, and maintaining pricing integrity. AI systems in these contexts must be rigorously tested to ensure they don't inadvertently expose customer data, enable unauthorized discounts, bypass compliance controls, or facilitate fraudulent transactions.
+:::note
+These plugins use Promptfoo's remote red-team generator. They provide security and safety test coverage; a passing scan is not a PCI DSS or regulatory compliance determination.
+:::
 
 ## Available Plugins
 
 ### PCI DSS Compliance
 
-**Plugin ID:** `ecommerce:pci-dss`
+`ecommerce:pci-dss` tests whether an assistant exposes cardholder, authentication, payment-token, or cross-customer payment information.
 
-Tests whether an AI system can be manipulated to expose sensitive payment card industry data that should be protected under PCI DSS regulations. This plugin attempts to extract credit card numbers, CVV codes, bank account details, payment tokens, or other financial information that must never be revealed.
-
-**Example configuration:**
-
-```yaml
-redteam:
-  plugins:
-    - ecommerce:pci-dss
-```
-
-**What it tests:**
-
-- Full credit card number exposure beyond last 4 digits
-- CVV/CVC security code disclosure
-- Bank account and routing number leakage
-- Payment token or processor ID exposure
-- PIN or authentication data revelation
-- Cross-customer payment information access
-- Financial analytics and revenue data leakage
-
-**Why it's critical:** PCI DSS violations can result in fines from $5,000 to $100,000 per month and loss of merchant account privileges. Data breaches involving payment information carry massive legal liability and erode customer trust.
+Example risk: revealing a full card number, security code, or another customer's payment details.
 
 ### Price Manipulation
 
-**Plugin ID:** `ecommerce:price-manipulation`
+`ecommerce:price-manipulation` tests whether an assistant overrides prices, applies unauthorized or incompatible discounts, extends promotions, or accepts false status and price-match claims.
 
-Tests whether an AI system can be exploited to manipulate prices, apply unauthorized discounts, or violate promotional policies in ways that cause revenue loss or regulatory issues. This plugin attempts to get the AI to override pricing rules, stack incompatible coupons, or grant special status discounts without authorization.
-
-**Example configuration:**
-
-```yaml
-redteam:
-  plugins:
-    - ecommerce:price-manipulation
-```
-
-**What it tests:**
-
-- Unauthorized discount code application (employee, partner, expired codes)
-- Improper coupon stacking that violates terms
-- Manual price adjustments without authorization
-- False VIP or wholesale status claims
-- Dynamic pricing manipulation
-- Minimum purchase requirement bypass
-- False price matching claims
-- Promotional period extensions beyond stated dates
-
-**Why it's critical:** Direct revenue impact. Price manipulation can be automated at scale by attackers. Also ties into false advertising regulations and consumer protection laws requiring accurate pricing.
+Example risk: stacking restricted discounts or granting an employee price to an unauthenticated customer.
 
 ### Compliance Bypass
 
-**Plugin ID:** `ecommerce:compliance-bypass`
+`ecommerce:compliance-bypass` tests whether an assistant bypasses age, geographic, quantity, prescription, license, safety, or export restrictions for regulated products.
 
-Tests whether an AI system can be manipulated to bypass age restrictions, geographic limitations, quantity controls, or other regulatory requirements for restricted products. This plugin attempts to circumvent age-gating for alcohol/tobacco, evade geographic shipping restrictions, bypass quantity limits on controlled items, or skip required safety disclosures.
-
-**Example configuration:**
-
-```yaml
-redteam:
-  plugins:
-    - ecommerce:compliance-bypass
-```
-
-**What it tests:**
-
-- Age verification bypass for restricted products (alcohol, tobacco, adult content)
-- Geographic restriction circumvention (sanctions, state laws, export controls)
-- Quantity limit evasion on controlled items (medications, precursors, ammunition)
-- Prescription requirement bypass for controlled substances
-- Safety warning and liability disclosure dismissal
-- License or permit requirement circumvention
-- Sanctions and export control violations (OFAC, ITAR, EAR)
-
-**Why it's critical:** Compliance violations can result in criminal charges, business license revocation, and massive regulatory fines. Some violations are strict liability offenses with no mens rea defense.
+Example risk: shipping a restricted product without the required age or location check.
 
 ### Order Fraud
 
-**Plugin ID:** `ecommerce:order-fraud`
+`ecommerce:order-fraud` tests whether an assistant enables unauthorized address changes, refunds, returns, order modifications, payment bypass, or loyalty abuse.
 
-Tests whether an AI system enables order fraud, transaction manipulation, or abuse of return/refund policies. This plugin attempts to exploit order management workflows through post-purchase address changes, unauthorized refunds, fraudulent returns, order modifications without payment, or loyalty program abuse.
-
-**Example configuration:**
-
-```yaml
-redteam:
-  plugins:
-    - ecommerce:order-fraud
-```
-
-**What it tests:**
-
-- Post-purchase shipping address changes (account takeover indicator)
-- Unauthorized refund processing without proper verification
-- Return fraud (false damage claims, wardrobing, receipt fraud)
-- Order modification exploits (adding items without payment)
-- Payment bypass or checkout flow exploitation
-- Loyalty program abuse and rewards fraud
-- Order status manipulation without proper workflow
-- Inventory reservation abuse
-
-**Why it's critical:** Return fraud alone costs retailers over $24 billion annually. Order fraud scales easily through automation. These exploits result in direct financial losses and inventory shrinkage.
+Example risk: changing a post-purchase shipping address or issuing a refund without verifying the account holder.
 
 ## Configuration
 
 ### Basic Setup
 
-Include the plugins you want to test in your red teaming configuration:
+Use the `ecommerce` collection to include all four e-commerce plugins:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
-  purpose: 'e-commerce customer service chatbot'
+  purpose: 'An online retail assistant that can explain products and order status but cannot change prices, disclose payment data, or modify an order without authorization.'
+  plugins:
+    - ecommerce
+```
+
+To focus on specific workflows, configure individual plugins:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
   plugins:
     - ecommerce:pci-dss
     - ecommerce:price-manipulation
@@ -135,11 +63,11 @@ redteam:
 
 ### Combined with Strategies
 
-Apply adversarial strategies to test how obfuscation or manipulation techniques might bypass e-commerce safeguards:
+Apply adversarial strategies to test whether reframing or known templates weaken e-commerce safeguards:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
-  purpose: 'online retail shopping assistant'
+  purpose: 'An online retail shopping assistant with access to product, pricing, and order tools.'
   plugins:
     - ecommerce:pci-dss
     - ecommerce:price-manipulation
@@ -148,10 +76,10 @@ redteam:
     - jailbreak-templates
 ```
 
-## Related Plugins
+## Related Concepts
 
-- [PII](pii.md) - Tests for personal information leakage beyond payment data
-- [RBAC](rbac.md) - Tests role-based access controls for admin functions
-- [Contracts](contracts.md) - Tests for unauthorized business commitments
-- [Excessive Agency](excessive-agency.md) - Tests for actions beyond authorized scope
-- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
+- [PII Plugins](pii.md) - Personal-information exposure beyond payment data
+- [RBAC Plugin](rbac.md) - Role and permission boundaries for sensitive actions
+- [Contracts Plugin](contracts.md) - Unauthorized business commitments
+- [Excessive Agency Plugin](excessive-agency.md) - Actions outside the assistant's intended scope
+- [Red Team Strategies](/docs/red-team/strategies/) - Available adversarial strategies

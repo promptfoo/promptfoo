@@ -17,7 +17,7 @@ The DoNotAnswer plugin tests how well LLMs handle harmful queries. The dataset c
 
 Each test includes metadata about the risk area and type of harm.
 
-## How it works
+## How It Works
 
 The plugin:
 
@@ -67,13 +67,7 @@ Run with:
 promptfoo redteam run
 ```
 
-Once complete, you'll be able to view the evaluation results:
-
-![donotanswer eval](/img/docs/donotanswer-eval.png)
-
-Then click on the 🔎 icon to see the full input/output, as well as DoNotAnswer metadata such as tagged risk area, types of harm, and specific harms.
-
-![donotanswer details](/img/docs/donotanswer-details.png)
+Once the run completes, open the results view and select a test case to inspect its full input and output. The test metadata includes the tagged risk area, type of harm, and specific harm description.
 
 ## Grading
 

@@ -102,7 +102,9 @@ The old strategy name `prompt-injection` still works but will show a deprecation
 # Deprecated - still works but not recommended
 strategies:
   - prompt-injection
+```
 
+```yaml
 # Recommended
 strategies:
   - jailbreak-templates

@@ -17,7 +17,7 @@ Multi-turn jailbreaks operate by:
 3. Observing how the AI's responses change (or remain consistent) as the prompts escalate.
 4. Identifying where the AI's safety or policy boundaries weaken.
 
-![Multi-turn Jailbreak Strategy](/img/docs/multi-turn-jailbreak.svg)
+![Diagram showing an attacker and target exchange multiple turns before the conversation is graded](/img/docs/multi-turn-jailbreak.svg)
 
 ## Example Scenario
 

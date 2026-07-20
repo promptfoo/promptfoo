@@ -20,7 +20,7 @@ MCP enables AI models to use tools, maintain context, and perform complex intera
 3. Techniques that manipulate tool usage in unintended ways
 4. Methods to bypass security controls in MCP implementations
 
-## How it Works
+## How It Works
 
 The MCP Plugin:
 
@@ -91,7 +91,7 @@ Here's an example configuration for testing an MCP-enabled customer support agen
 description: Red Teaming MCP with tool use
 
 providers:
-  - id: anthropic:messages:claude-3-haiku-20240307
+  - id: anthropic:messages:claude-haiku-4-5-20251001
     config:
       mcp:
         enabled: true

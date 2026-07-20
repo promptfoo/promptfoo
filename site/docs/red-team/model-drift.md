@@ -355,7 +355,7 @@ targets:
     label: gpt-4.1-baseline
   - id: openai:gpt-4.1-mini
     label: gpt-4.1-mini-comparison
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-6
     label: claude-sonnet-comparison
 
 redteam:

@@ -57,7 +57,7 @@ defaultTest:
     transformVars: '{ ...vars, sessionId: context.uuid }'
 ```
 
-![Tree-based Jailbreaks Strategy](/img/docs/tree-jailbreak.svg)
+![Diagram showing a tree search branching through attack variants and selecting promising paths](/img/docs/tree-jailbreak.svg)
 
 ## Example Scenario
 

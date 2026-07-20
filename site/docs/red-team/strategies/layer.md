@@ -88,13 +88,19 @@ Key limitations:
 ```yaml
 # Transform chain (no agentic)
 steps: [base64, rot13]
+```
 
+```yaml
 # Transform + multimodal
 steps: [leetspeak, audio]
+```
 
+```yaml
 # Agentic only
 steps: [jailbreak:hydra]
+```
 
+```yaml
 # Agentic + multimodal (recommended for voice/vision targets)
 steps: [jailbreak:hydra, audio]
 ```
@@ -104,13 +110,19 @@ steps: [jailbreak:hydra, audio]
 ```yaml
 # Transforms the initial goal, not each turn
 steps: [base64, jailbreak:hydra]
+```
 
+```yaml
 # Transforms the generated audio payload instead of its transcript
 steps: [audio, base64]
+```
 
+```yaml
 # Only the first agentic strategy orchestrates
 steps: [jailbreak:hydra, crescendo]
+```
 
+```yaml
 # A target generally accepts one multimodal payload format
 steps: [audio, image]
 ```

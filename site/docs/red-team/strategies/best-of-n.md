@@ -28,7 +28,7 @@ strategies:
 
 ## How It Works
 
-![BoN Overview](/img/docs/best-of-n-cycle.svg)
+![Diagram showing Best-of-N generating text variations, sending candidates to the target, and grading the selected response](/img/docs/best-of-n-cycle.svg)
 
 Promptfoo's BoN strategy works in three steps:
 

@@ -1,11 +1,11 @@
 ---
 sidebar_label: Aegis
-description: Red team LLM content safety using NVIDIA's Aegis dataset to detect harmful outputs across 13 risk categories including hate speech, violence, and exploitation
+description: Test LLM content safety with user-message prompts from NVIDIA's Aegis v1 dataset, covering risks such as hate speech, violence, and exploitation.
 ---
 
 # Aegis: NVIDIA AI Content Safety Dataset
 
-The Aegis plugin uses NVIDIA's [Aegis AI Content Safety Dataset](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), a collection of over 26,000 manually annotated human-LLM interactions designed for content safety evaluation.
+The Aegis plugin uses the training split of NVIDIA's [Aegis AI Content Safety Dataset v1](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0), which contains about 12,000 manually annotated interactions across its train and test splits.
 
 The dataset covers 13 critical safety categories:
 
@@ -25,14 +25,14 @@ The dataset covers 13 critical safety categories:
 
 The dataset also includes **Safe** content and **Needs Caution** examples for ambiguous cases requiring careful consideration.
 
-## How it Works
+## How It Works
 
 The plugin:
 
-- Fetches test cases from NVIDIA's professionally annotated dataset
-- Samples from multiple interaction formats (user prompts, multi-turn conversations)
-- Tests model responses against the comprehensive 13-category safety taxonomy
-- Evaluates both clear violations and edge cases marked as "Needs Caution"
+- Fetches records from the Aegis v1 training split
+- Selects records whose `text_type` is `user_message` and uses each message as a single-turn prompt
+- Preserves the dataset label as test metadata
+- Grades the target response with Promptfoo's general content-safety rubric
 
 ## Quick Start
 
@@ -63,18 +63,19 @@ redteam:
 
 ## Grading
 
-The plugin evaluates model responses using the same methodology as NVIDIA's research, checking if outputs appropriately handle unsafe content across all 13 safety categories. The grader looks for:
+The plugin uses Promptfoo's general content-safety grader. It checks whether the response assists with or promotes harmful activity and treats standard refusals as passing. It does not reproduce NVIDIA's taxonomy-specific annotation methodology or grade consistency across conversation turns.
+
+The grader looks for:
 
 - Proper identification of safety violations
 - Appropriate refusal of harmful requests
-- Nuanced handling of ambiguous "Needs Caution" cases
-- Consistent safety responses across conversation turns
+- Safe handling of ambiguous or high-risk requests
 
 ## Dataset Information
 
-- **Size**: 26,000+ annotated examples (ongoing expansion)
+- **Size**: 10,798 training records and 1,199 test records in Aegis v1
 - **Annotation**: Professional team of 12 annotators with quality assurance
-- **Formats**: User prompts, system prompts, single-turn and multi-turn conversations
+- **Formats**: The dataset includes several interaction formats; this plugin selects user messages from the training split
 - **License**: CC-BY-4.0 (open source)
 
 ## References

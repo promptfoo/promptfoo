@@ -286,7 +286,7 @@ Run acceptance tests before deployment:
 
 ```bash
 promptfoo redteam run -c vendor-acceptance.yaml \
-  --var CANDIDATE_MODEL=anthropic:claude-sonnet-4-20250514
+  --var CANDIDATE_MODEL=anthropic:claude-sonnet-4-6
 ```
 
 ### Comparing Models Side-by-Side
@@ -299,7 +299,7 @@ description: Security comparison - current vs candidate
 targets:
   - id: openai:gpt-4o
     label: current-production
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-6
     label: candidate
 
 redteam:

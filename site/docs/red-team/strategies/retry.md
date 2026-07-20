@@ -24,7 +24,7 @@ redteam:
         numTests: 10 # Number of historical test cases to include per plugin
         plugins:
           - harmful:hate # Only retry failed tests from these plugins
-          - harmful:illegal
+          - harmful:illegal-activities
 ```
 
 You can configure:
@@ -32,7 +32,7 @@ You can configure:
 - `numTests`: Maximum number of historical test cases to include per plugin (default: matches each plugin's numTests setting)
 - `plugins`: List of specific plugins to apply retry strategy to (default: all plugins)
 
-For example, with the above configuration and two plugins specified, the retry strategy would include up to 10 historical test cases for `harmful:hate` and another 10 for `harmful:illegal`, all specific to your current target system.
+For example, with the above configuration and two plugins specified, the retry strategy would include up to 10 historical test cases for `harmful:hate` and another 10 for `harmful:illegal-activities`, all specific to your current target system.
 
 For basic usage without configuration:
 
