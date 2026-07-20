@@ -13,6 +13,12 @@ This strategy is **plugin-agnostic** and works with any plugin to test two disti
 - **Data exfiltration** (with `data-exfil` plugin): Deterministic server-side tracking of attempted data leaks
 - **Indirect prompt injection** (with any other plugin): LLM-based analysis of whether the agent followed injected instructions
 
+:::note Prerequisites
+
+`indirect-web-pwn` requires Promptfoo Cloud for page generation and tracking, plus a target that can fetch public URLs. Enable a browser, web-fetch or HTTP-fetch tool, or an MCP browsing tool on the target; a plain chat-completion target cannot exercise this strategy.
+
+:::
+
 ## Quick Start
 
 ### Data Exfiltration Detection
@@ -20,12 +26,22 @@ This strategy is **plugin-agnostic** and works with any plugin to test two disti
 Test whether injected instructions can trick the agent into leaking sensitive data to external URLs:
 
 ```yaml title="promptfooconfig.yaml"
+targets:
+  - id: file://provider.js
+    label: AI assistant with web fetch
+
 redteam:
+  purpose: An assistant that can fetch and summarize public web pages.
   plugins:
     - data-exfil
   strategies:
-    - indirect-web-pwn
+    - id: indirect-web-pwn
+      config:
+        maxTurns: 5
+        maxFetchAttempts: 3
 ```
+
+For a runnable provider that implements the required `web_fetch` tool, initialize the example with `npx promptfoo@latest init --example redteam-indirect-web-pwn`.
 
 ### Indirect Prompt Injection
 

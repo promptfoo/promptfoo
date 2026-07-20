@@ -59,7 +59,7 @@ The resulting test case contains the same semantic content as the original but i
 
 This strategy helps test whether:
 
-1. Content filters remain effective against non-plaintext formats
+1. Content filters remain effective against audio inputs
 2. The model can handle and extract information from audio data
 3. The same content is treated consistently across formats
 4. Audio processing uses appropriate safety thresholds

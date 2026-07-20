@@ -54,9 +54,11 @@ redteam:
 
   strategies:
     - basic
-    - best-of-n
     - jailbreak:meta
+    - jailbreak:hydra
 ```
+
+`basic` establishes a baseline for MCP-specific prompts, `jailbreak:meta` varies single-turn attempts to elicit tool disclosure or unauthorized calls, and `jailbreak:hydra` tests whether tool and permission boundaries weaken over a conversation.
 
 ### Recommended Plugin Combinations for MCP Testing
 
@@ -121,8 +123,8 @@ redteam:
 
   strategies:
     - basic
-    - best-of-n
     - jailbreak:meta
+    - jailbreak:hydra
 ```
 
 ## Working With Results

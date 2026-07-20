@@ -37,7 +37,7 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 
 ### Mode 2: Agentic + Per-Turn Transforms
 
-When the **first step** is an agentic strategy (Hydra, Goblin, Crescendo, GOAT, Meta, etc.), layer applies the remaining transformations to each turn or attempt:
+When a step is an agentic strategy (Hydra, Goblin, Crescendo, GOAT, Meta, etc.), layer applies the steps after it to each turn or attempt. Steps before it run once against the initial test case.
 
 1. **Agentic Orchestration**: The agentic strategy controls the attack loop
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
@@ -70,9 +70,17 @@ redteam:
           - audio
 ```
 
-## Ordering Rules
+## Limitations and Ordering Rules
 
-Agentic strategies such as `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, and `jailbreak:meta` must come first (maximum one), and multimodal strategies (`audio`, `image`) must come last (maximum one). Text transforms such as `base64`, `rot13`, and `leetspeak` can be chained in between.
+Layer supports one orchestrating agentic strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, or `jailbreak:meta` first when later steps should transform every turn or attempt. Text transforms such as `base64`, `rot13`, and `leetspeak` can be chained after it, followed by an output transform such as `audio` or `image`.
+
+Key limitations:
+
+- Steps before an agentic strategy transform the initial goal once, not each turn.
+- Only the first agentic strategy orchestrates the attack; do not chain multiple agentic strategies.
+- `mischievous-user` and `simba` do not support per-turn transforms.
+- Audio and image transforms require a target and prompt that accept the resulting payload. Use one multimodal output transform at the end of the layer.
+- `indirect-web-pwn` requires Promptfoo Cloud and a target that can fetch public URLs.
 
 ### Valid Patterns
 
@@ -90,27 +98,21 @@ steps: [jailbreak:hydra]
 steps: [jailbreak:hydra, audio]
 ```
 
-### Invalid Patterns
+### Patterns to Avoid
 
 ```yaml
-# ❌ Wrong: Agentic not first (transforms will corrupt the goal)
+# Transforms the initial goal, not each turn
 steps: [base64, jailbreak:hydra]
 
-# ❌ Wrong: Multimodal not last
+# Transforms the generated audio payload instead of its transcript
 steps: [audio, base64]
 
-# ❌ Wrong: Multiple agentic strategies
+# Only the first agentic strategy orchestrates
 steps: [jailbreak:hydra, crescendo]
 
-# ❌ Wrong: Multiple multimodal strategies
+# A target generally accepts one multimodal payload format
 steps: [audio, image]
 ```
-
-:::warning
-
-Transforms before an agentic strategy modify the attack goal, not each turn—rarely useful.
-
-:::
 
 ## Configuration Options
 
@@ -205,6 +207,27 @@ redteam:
 
 ## Example Scenarios
 
+### Multi-Turn Web Injection Attack
+
+Test a browsing agent with adaptive attacks that place prompt injections in fetched web content:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  purpose: An assistant that can fetch and summarize public web pages.
+  plugins:
+    - data-exfil
+    - pii:direct
+  strategies:
+    - id: layer
+      config:
+        label: hydra-web-injection
+        steps:
+          - jailbreak:hydra
+          - indirect-web-pwn
+```
+
+Hydra adapts the conversation while `indirect-web-pwn` generates and tracks the injected page for each attempt. The target must have a browser, web-fetch or HTTP-fetch tool, or MCP browsing tool enabled. See [Indirect Web Pwn](/docs/red-team/strategies/indirect-web-pwn/) for a complete target configuration.
+
 ### Multi-Turn Audio Attack
 
 Test voice-enabled AI agents with adaptive jailbreak attempts:
@@ -215,11 +238,11 @@ redteam:
     - id: layer
       config:
         steps:
-          - jailbreak:hydra # Multi-turn jailbreak
+          - jailbreak:goblin # Multi-turn jailbreak
           - audio # Convert each turn to speech
 ```
 
-Hydra will orchestrate the attack, and each turn's prompt will be converted to audio before being sent to your target. Your custom provider receives a hybrid payload with conversation history (as text) and the current turn (as audio).
+Goblin orchestrates the attack, and each turn's prompt is converted to audio before being sent to your target. Your custom provider receives a hybrid payload with conversation history (as text) and the current turn (as audio).
 
 ### Multi-Turn Image Attack
 
@@ -412,7 +435,7 @@ The hybrid payload structure:
 Be aware of test case growth when combining strategies:
 
 - Some strategies may multiply test cases (e.g., if you set global `language: ['en', 'es', 'fr']`, all test cases multiply by 3)
-- Layered strategies process sequentially, so test count growth is usually linear
+- Layered strategies process sequentially, so expanding steps can compound test count growth
 - Plan your test counts accordingly to avoid excessive evaluation time
 
 ### Optimization Tips
@@ -431,8 +454,8 @@ Be aware of test case growth when combining strategies:
 
 ## Tips and Best Practices
 
-1. **Agentic First**: When combining agentic with transforms, always place the agentic strategy first
-2. **Multimodal Last**: Audio and image transforms must be the final step
+1. **Agentic First**: Place the agentic strategy first when transforms should apply to every turn
+2. **Multimodal Last**: Put audio and image transforms at the end so the target receives the expected payload
 3. **Logical Combinations**: Stack strategies that make semantic sense together
 4. **Debug Incrementally**: Test each step individually before combining
 5. **Document Complex Layers**: Add comments explaining the attack chain logic
@@ -442,7 +465,7 @@ Be aware of test case growth when combining strategies:
 
 ## Supported Agentic Strategies
 
-The following strategies can be used as the first step with per-turn transforms:
+The following strategies can orchestrate a layer and apply later steps as per-turn transforms:
 
 | Strategy           | Type          | Description                       |
 | ------------------ | ------------- | --------------------------------- |

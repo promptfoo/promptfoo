@@ -80,10 +80,10 @@ export const strategies: Strategy[] = [
   {
     category: 'Dynamic (Single-Turn)',
     strategy: 'gcg',
-    displayName: 'GCG',
+    displayName: 'Greedy Coordinate Gradient (GCG)',
     description: 'Transferable adversarial suffixes',
     longDescription:
-      'Generates GCG-inspired adversarial suffixes with hosted inference; it does not calculate gradients against the target',
+      'Generates Greedy Coordinate Gradient-inspired adversarial suffixes with hosted inference; it does not calculate gradients against the target',
     cost: 'High',
     link: '/docs/red-team/strategies/gcg/',
     isRemote: true,
@@ -190,7 +190,7 @@ export const strategies: Strategy[] = [
     displayName: 'Indirect Web Pwn',
     description: 'Malicious web-content injection',
     longDescription:
-      'Tests whether browsing agents follow injected instructions or exfiltrate data from attacker-controlled web content',
+      'Requires Promptfoo Cloud and a browsing-capable target; tests whether agents follow injected instructions or exfiltrate data from attacker-controlled web content',
     cost: 'High',
     link: '/docs/red-team/strategies/indirect-web-pwn/',
     isRemote: true,
