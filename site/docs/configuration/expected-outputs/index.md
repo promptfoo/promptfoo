@@ -235,7 +235,7 @@ If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contai
 A `threshold` of `0` makes the test case pass regardless of individual assertion failures, since the combined score is always at least 0. Use it to collect assertion scores without letting any single failure fail the test. The same applies to an `assert-set` threshold.
 
 :::info
-If weight is set to 0, the assertion automatically passes.
+If weight is set to 0, the assertion automatically passes — unless it also sets `metricOnly: true`, in which case its real outcome is preserved in `componentResults` and shown in the web UI's per-assertion details (it still does not affect the test's pass/fail status).
 :::
 
 ### Metric-only assertions

@@ -261,7 +261,6 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
   // aggregate grading reason so the failure is still explained.
   if (
     !output.pass &&
-    failReasons.length === 0 &&
     countedResults.length === 0 &&
     (output.gradingResult?.componentResults?.length ?? 0) > 0 &&
     output.gradingResult?.reason
@@ -628,7 +627,7 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   const componentResults = countedComponentResults(output.gradingResult?.componentResults);
   if (componentResults.length) {
     componentResults.forEach((result) => {
-      if (result?.pass) {
+      if (result.pass) {
         passCount++;
       } else {
         failCount++;

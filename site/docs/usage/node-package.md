@@ -121,7 +121,10 @@ cached?: number;
 // Additional matcher/provider metadata
 metadata?: Record<string, unknown>;
 
-// List of results for each component of the assertion
+// List of results for each component of the assertion.
+// Entries whose `assertion.metricOnly` is true only emit a named score: they
+// do not affect pass/fail, so a failing entry does not imply the test failed.
+// Exclude them before aggregating (see `countedComponentResults` below).
 componentResults?: GradingResult[];
 
 // The assertion that was evaluated
@@ -132,6 +135,26 @@ assertion?: Assertion;
 </details>
 
 For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
+
+#### Filtering metric-only results
+
+[Metric-only assertions](/docs/configuration/expected-outputs/#metric-only-assertions) (`metricOnly: true`) record a named score without affecting pass/fail. They still appear in `componentResults`, so code that aggregates assertion outcomes should filter them out first. The package exports `countedComponentResults` for this:
+
+```ts
+import promptfoo, { countedComponentResults } from 'promptfoo';
+
+const evalRecord = await promptfoo.evaluate(testSuite);
+const summary = await evalRecord.toEvaluateSummary();
+
+for (const result of summary.results) {
+  // Only the assertions that actually decide pass/fail
+  const counted = countedComponentResults(result.gradingResult?.componentResults);
+  const failed = counted.filter((component) => !component.pass);
+  console.log(`${failed.length} of ${counted.length} assertions failed`);
+}
+```
+
+The helper drops metric-only entries (and any nullish ones) and returns `GradingResult[]`.
 
 ### Transform functions
 

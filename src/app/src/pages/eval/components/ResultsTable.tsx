@@ -21,6 +21,7 @@ import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
+  countedComponentResults,
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
@@ -839,7 +840,7 @@ export function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    const countedResults = componentResults.filter((result) => !result.assertion?.metricOnly);
+    const countedResults = countedComponentResults(componentResults);
     if (countedResults.length > 0) {
       finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
       finalScore = averageComponentResultScore(countedResults, finalScore);
