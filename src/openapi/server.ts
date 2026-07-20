@@ -65,6 +65,18 @@ const OpenApiTestSessionRequestSchema = z.object({
   mainInputVariable: z.string().optional(),
 });
 
+// Runtime validation uses ProviderOptionsSchema, which contains z.custom fields
+// that zod-to-openapi cannot represent. Keep the documented request shape
+// equivalent without weakening route validation.
+const OpenApiPreviewGenerationProviderSchema = z.union([
+  z.string().min(1),
+  OpenApiProviderOptionsWithIdSchema,
+]);
+
+const OpenApiTestCaseGenerationRequestSchema = RedteamSchemas.GenerateTest.Request.extend({
+  provider: OpenApiPreviewGenerationProviderSchema.optional(),
+});
+
 const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.Response,
   EvalSchemas.Table.JsonExportResponse,
@@ -963,7 +975,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Redteam'],
     summary: 'Generate one or more redteam test cases',
     request: {
-      body: jsonBody('TestCaseGenerationRequest', RedteamSchemas.GenerateTest.Request),
+      body: jsonBody('TestCaseGenerationRequest', OpenApiTestCaseGenerationRequestSchema),
     },
     responses: {
       200: jsonResponse('TestCaseGenerationResponse', RedteamSchemas.GenerateTest.Response),
