@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import Ajv2020 from 'ajv/dist/2020';
 import { describe, expect, it } from 'vitest';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
+import { TestCaseGenerationSchema } from '../../src/types/api/redteam';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
 
@@ -186,6 +188,33 @@ describe('server OpenAPI generation', () => {
         type: 'object',
       }),
     );
+  });
+
+  it('matches preview provider input placement validation', () => {
+    const document = createServerOpenApiDocument();
+    const requestSchema = (document.paths?.['/api/redteam/generate-test']?.post as any)?.requestBody
+      ?.content?.['application/json']?.schema;
+    const request = {
+      plugin: { id: 'aegis', config: {} },
+      strategy: { id: 'basic', config: {} },
+      config: { applicationDefinition: { purpose: 'test assistant' } },
+      provider: {
+        id: 'openai:chat:gpt-4.1',
+        inputs: {
+          document: {
+            description: 'PDF document',
+            type: 'pdf',
+            config: { injectionPlacements: ['comment'] },
+          },
+        },
+      },
+    };
+    const validateOpenApiRequest = new Ajv2020({ allErrors: true, strict: false }).compile(
+      requestSchema,
+    );
+
+    expect(validateOpenApiRequest(request)).toBe(false);
+    expect(TestCaseGenerationSchema.safeParse(request).success).toBe(false);
   });
 
   it('documents explicit server-error response paths', () => {

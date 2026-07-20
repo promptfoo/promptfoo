@@ -107,14 +107,19 @@ export async function encodeMathPrompt(
   text: string,
   concept: string,
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
+  generationProvider?: ApiProvider,
 ): Promise<string> {
-  const loadedProvider = await redteamProviderManager.getProvider({
-    jsonOnly: true,
-    preferSmallModel: true,
-  });
-  const redteamProvider = wrapGenerationProvider
-    ? wrapGenerationProvider(loadedProvider)
-    : loadedProvider;
+  const loadedProvider =
+    generationProvider ||
+    (await redteamProviderManager.getProvider({
+      jsonOnly: true,
+      preferSmallModel: true,
+    }));
+  const redteamProvider = generationProvider
+    ? generationProvider
+    : wrapGenerationProvider
+      ? wrapGenerationProvider(loadedProvider)
+      : loadedProvider;
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
   const result = await redteamProvider.callApi(
@@ -193,6 +198,7 @@ export async function addMathPrompt(
         originalText,
         concept,
         config.__wrapGenerationProvider,
+        config.__generationProvider,
       );
 
       encodedTestCases.push({

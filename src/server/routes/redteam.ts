@@ -124,7 +124,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyTestCases = await strategyFactory.action(
           testCases as TestCaseWithPlugin[],
           injectVar,
-          strategy.config || {},
+          {
+            ...(strategy.config || {}),
+            // Keep strategy generation on the same request-scoped provider as plugin generation.
+            redteamProvider,
+            __generationProvider: redteamProvider,
+          },
           strategy.id,
         );
 

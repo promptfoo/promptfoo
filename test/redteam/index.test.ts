@@ -19,6 +19,7 @@ import {
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -3961,13 +3962,13 @@ describe('Language configuration', () => {
       });
     });
 
-    it('should pass redteamProvider from cliState.config to strategy actions', async () => {
+    it('should pass the resolved request provider to strategy actions', async () => {
       // Import cliState to set up the redteam provider config
       const cliState = (await import('../../src/cliState')).default;
       const originalConfig = cliState.config;
 
-      // Set up cliState with a mock redteam provider - this is the provider that should
-      // be passed to strategies for use by agentic providers (iterative, crescendo, etc.)
+      // Keep stale process-global config present to prove it does not replace the
+      // provider resolved for this synthesis request.
       cliState.config = {
         redteam: {
           provider: 'vertex:gemini-2.5-flash',
@@ -4017,14 +4018,16 @@ describe('Language configuration', () => {
             numTests: 1,
             plugins: [{ id: 'test-plugin', numTests: 1 }],
             prompts: ['Test prompt'],
+            provider: 'openai:chat:gpt-4.1',
             strategies: [{ id: 'jailbreak' }],
             targetIds: ['test-provider'],
           });
 
-          // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
+          expect(getProviderSpy).toHaveBeenCalledWith({ provider: 'openai:chat:gpt-4.1' });
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+          expect(capturedConfig?.redteamProvider.id()).toBe('mock-provider');
+          expect(capturedConfig?.__generationProvider).toBe(capturedConfig?.redteamProvider);
           expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
           getProviderSpy.mockRestore();
@@ -4037,7 +4040,49 @@ describe('Language configuration', () => {
       }
     });
 
-    it('should pass redteamProvider as undefined when not configured in cliState', async () => {
+    it('keeps an explicit provider through local math-prompt generation when cache is present', async () => {
+      vi.mocked(loadYaml).mockImplementation((source) => JSON.parse(source));
+      const cachedProvider = {
+        id: () => 'cached-provider',
+        callApi: vi.fn().mockResolvedValue({ output: JSON.stringify({ encodedPrompt: 'cached' }) }),
+      };
+      const explicitProvider = {
+        id: () => 'explicit-provider',
+        callApi: vi
+          .fn()
+          .mockResolvedValue({ output: JSON.stringify({ encodedPrompt: 'explicit' }) }),
+      };
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'test-plugin',
+      });
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return Array.prototype.find.call(Strategies, predicate);
+      });
+
+      await redteamProviderManager.setProvider(cachedProvider as any);
+      try {
+        const result = await synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: explicitProvider as any,
+          strategies: [{ id: 'math-prompt', config: { mathConcepts: ['topology'] } }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(explicitProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(cachedProvider.callApi).not.toHaveBeenCalled();
+        expect(
+          result.testCases.some((testCase) => testCase.metadata?.strategyId === 'math-prompt'),
+        ).toBe(true);
+      } finally {
+        redteamProviderManager.clearProvider();
+      }
+    });
+
+    it('should pass the resolved default provider when no provider is configured', async () => {
       const cliState = (await import('../../src/cliState')).default;
       const originalConfig = cliState.config;
 
@@ -4077,14 +4122,14 @@ describe('Language configuration', () => {
 
         expect(mockStrategyAction).toHaveBeenCalled();
         expect(capturedConfig).toBeDefined();
-        // When not configured, redteamProvider should be undefined
-        expect(capturedConfig?.redteamProvider).toBeUndefined();
+        expect(capturedConfig?.redteamProvider).toBeDefined();
+        expect(capturedConfig?.__generationProvider).toBe(capturedConfig?.redteamProvider);
       } finally {
         cliState.config = originalConfig;
       }
     });
 
-    it('should pass redteamProvider as object when configured as provider options', async () => {
+    it('should pass the resolved provider when configured with provider options', async () => {
       const cliState = (await import('../../src/cliState')).default;
       const originalConfig = cliState.config;
 
@@ -4144,8 +4189,8 @@ describe('Language configuration', () => {
 
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          // Should pass the full provider options object
-          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+          expect(capturedConfig?.redteamProvider.id()).toBe('mock-provider');
+          expect(capturedConfig?.__generationProvider).toBe(capturedConfig?.redteamProvider);
         } finally {
           getProviderSpy.mockRestore();
           getGradingProviderSpy.mockRestore();

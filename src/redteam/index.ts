@@ -698,8 +698,10 @@ async function applyStrategies(
       {
         ...(strategy.config || {}),
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
-        // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
-        redteamProvider: cliState.config?.redteam?.provider,
+        // Keep every strategy phase on the provider already selected for this synthesis run.
+        // Re-reading cliState here can select a stale or cached provider after plugin generation.
+        redteamProvider: provider,
+        __generationProvider: provider,
         // Generation-time strategies that load a specialized local provider must remain in usage totals.
         __wrapGenerationProvider: wrapGenerationProvider,
         excludeTargetOutputFromAgenticAttackGeneration,

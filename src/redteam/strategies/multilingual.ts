@@ -349,18 +349,24 @@ async function translateBatchCore(
   text: string,
   languages: string[],
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
+  generationProvider?: ApiProvider,
 ): Promise<Record<string, string>> {
   // Prefer a preconfigured multilingual provider if available (set by the server at boot).
-  const cachedMultilingual = await redteamProviderManager.getMultilingualProvider();
+  const cachedMultilingual = generationProvider
+    ? undefined
+    : await redteamProviderManager.getMultilingualProvider();
   const loadedProvider =
+    generationProvider ||
     cachedMultilingual ||
     (await redteamProviderManager.getProvider({
       jsonOnly: true,
       preferSmallModel: true,
     }));
-  const redteamProvider = wrapGenerationProvider
-    ? wrapGenerationProvider(loadedProvider)
-    : loadedProvider;
+  const redteamProvider = generationProvider
+    ? generationProvider
+    : wrapGenerationProvider
+      ? wrapGenerationProvider(loadedProvider)
+      : loadedProvider;
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 
@@ -490,6 +496,7 @@ export async function translateBatch(
   languages: string[],
   initialBatchSize?: number,
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
+  generationProvider?: ApiProvider,
 ): Promise<Record<string, string>> {
   const batchSize = initialBatchSize || languages.length;
   const allTranslations: Record<string, string> = {};
@@ -497,12 +504,22 @@ export async function translateBatch(
 
   for (let i = 0; i < languages.length; i += currentBatchSize) {
     const languageBatch = languages.slice(i, i + currentBatchSize);
-    const translations = await translateBatchCore(text, languageBatch, wrapGenerationProvider);
+    const translations = await translateBatchCore(
+      text,
+      languageBatch,
+      wrapGenerationProvider,
+      generationProvider,
+    );
 
     if (Object.keys(translations).length === 0 && currentBatchSize > 1) {
       // Try each language individually as fallback
       for (const lang of languageBatch) {
-        const singleTranslation = await translateBatchCore(text, [lang], wrapGenerationProvider);
+        const singleTranslation = await translateBatchCore(
+          text,
+          [lang],
+          wrapGenerationProvider,
+          generationProvider,
+        );
         if (Object.keys(singleTranslation).length > 0) {
           Object.assign(allTranslations, singleTranslation);
         }
@@ -520,6 +537,7 @@ export async function translateBatch(
               text,
               [lang],
               wrapGenerationProvider,
+              generationProvider,
             );
             if (Object.keys(singleTranslation).length > 0) {
               Object.assign(allTranslations, singleTranslation);
@@ -613,6 +631,7 @@ export async function addMultilingual(
       languages,
       batchSize,
       config.__wrapGenerationProvider,
+      config.__generationProvider,
     );
 
     // Create test cases for each successful translation

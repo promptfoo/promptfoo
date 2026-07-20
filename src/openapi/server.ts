@@ -14,7 +14,7 @@ import { ConfigSchemas } from '../types/api/configs';
 import { EvalSchemas } from '../types/api/eval';
 import { MediaSchemas } from '../types/api/media';
 import { ModelAuditSchemas } from '../types/api/modelAudit';
-import { ProviderSchemas } from '../types/api/providers';
+import { JsonProviderOptionsWithIdSchema, ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
 import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
@@ -28,24 +28,6 @@ const TEXT_CSV = 'text/csv';
 const SERVER_OPENAPI_VERSION = '3.1.0';
 
 const OpenApiLooseObjectSchema = z.record(z.string(), z.unknown());
-const OpenApiProviderEnvSchema = z.record(z.string(), z.string());
-const OpenApiInputConfigSchema = z.object({
-  benign: z.boolean().optional(),
-  inputPurpose: z.string().min(1).optional(),
-  injectionPlacements: z.array(z.string().min(1)).min(1).optional(),
-});
-const OpenApiInputDefinitionSchema = z.union([
-  z.string().min(1),
-  z.object({
-    config: OpenApiInputConfigSchema.optional(),
-    description: z.string().min(1),
-    type: z.enum(['text', 'pdf', 'docx', 'image']).optional(),
-  }),
-]);
-const OpenApiInputsSchema = z.record(
-  z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
-  OpenApiInputDefinitionSchema,
-);
 const OpenApiProvidersSchema = z.union([
   z.string(),
   z.array(z.unknown()),
@@ -61,19 +43,7 @@ const OpenApiCreateJobRequestSchema = z
   })
   .passthrough();
 
-const OpenApiProviderOptionsWithIdSchema = z
-  .object({
-    id: z.string().min(1),
-    label: z.string().optional(),
-    config: z.unknown().optional(),
-    prompts: z.array(z.string()).optional(),
-    // Function-valued transforms are valid in in-process configs but cannot be sent as JSON.
-    transform: z.string().optional(),
-    delay: z.number().optional(),
-    env: OpenApiProviderEnvSchema.optional(),
-    inputs: OpenApiInputsSchema.optional(),
-  })
-  .passthrough();
+const OpenApiProviderOptionsWithIdSchema = JsonProviderOptionsWithIdSchema;
 
 const OpenApiTestProviderRequestSchema = z.object({
   prompt: z.string().optional(),
@@ -91,12 +61,11 @@ const OpenApiTestSessionRequestSchema = z.object({
   mainInputVariable: z.string().optional(),
 });
 
-// Runtime validation uses ProviderOptionsSchema, which contains z.custom fields
-// that zod-to-openapi cannot represent. Keep the documented request shape
-// equivalent without weakening route validation.
+// Runtime normalization accepts blank/incomplete provider values as unset. OpenAPI
+// documents only the non-empty values that remain after normalization.
 const OpenApiPreviewGenerationProviderSchema = z.union([
   z.string().min(1),
-  OpenApiProviderOptionsWithIdSchema,
+  JsonProviderOptionsWithIdSchema,
 ]);
 
 const OpenApiTestCaseGenerationRequestSchema = RedteamSchemas.GenerateTest.Request.extend({

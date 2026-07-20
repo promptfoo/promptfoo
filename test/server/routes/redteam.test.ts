@@ -16,6 +16,7 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import {
   extractGeneratedPrompt,
   getPluginConfigurationError,
@@ -178,6 +179,107 @@ describe('Redteam Routes', () => {
           provider: 'openai:chat:gpt-4.1',
           fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
         });
+      });
+
+      it('preserves custom environment overrides on object preview providers', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const provider = {
+          id: 'openai:chat:${MY_MODEL}',
+          env: {
+            MY_MODEL: 'gpt-4.1',
+            MY_CUSTOM_KEY: 'secret',
+            OPENAI_API_KEY: 'standard-key',
+          },
+        };
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'aegis', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+            provider,
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+          provider,
+          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+        });
+      });
+
+      it.each([
+        ['empty string', ''],
+        ['whitespace string', '   '],
+        ['missing object id', {}],
+        ['empty object id', { id: '' }],
+      ])('treats an %s preview provider as unset', async (_name, provider) => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'aegis', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+            provider,
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+          provider: undefined,
+          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+        });
+      });
+
+      it('passes the resolved preview provider through strategy generation', async () => {
+        const previewProvider = {
+          id: () => 'preview-provider',
+          callApi: vi.fn(),
+        };
+        mockedRedteamProviderManager.getProvider.mockResolvedValue(previewProvider as any);
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyAction = vi.fn().mockResolvedValue([{ vars: { query: 'transformed' } }]);
+        const strategySpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: strategyAction,
+        } as any);
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'aegis', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+              provider: 'openai:chat:gpt-4.1',
+            });
+
+          expect(response.status).toBe(200);
+          expect(strategyAction).toHaveBeenCalledWith(
+            expect.any(Array),
+            'query',
+            expect.objectContaining({
+              __generationProvider: previewProvider,
+              redteamProvider: previewProvider,
+            }),
+            'math-prompt',
+          );
+        } finally {
+          strategySpy.mockRestore();
+        }
       });
 
       it('should exclude dataset-exempt plugins with multi-input config', async () => {

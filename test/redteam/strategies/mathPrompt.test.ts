@@ -177,6 +177,25 @@ describe('mathPrompt', () => {
       expect(String(result[0]?.vars?.prompt)).toContain('tracked');
     });
 
+    it('uses the request-scoped generation provider for local encoding', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      const requestProvider = createMockProvider({
+        id: 'request-provider',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'request-scoped' }),
+        }),
+      });
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+        __generationProvider: requestProvider,
+      });
+
+      expect(redteamProviderManager.getProvider).not.toHaveBeenCalled();
+      expect(requestProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(String(result[0]?.vars?.prompt)).toContain('request-scoped');
+    });
+
     it('should validate mathConcepts config', async () => {
       await expect(addMathPrompt([], 'prompt', { mathConcepts: 'invalid' })).rejects.toThrow(
         'MathPrompt strategy: `mathConcepts` must be an array of strings',

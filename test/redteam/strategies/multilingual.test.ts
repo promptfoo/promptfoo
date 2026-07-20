@@ -36,4 +36,21 @@ describe('multilingual', () => {
     expect(trackedProvider.callApi).toHaveBeenCalledTimes(1);
     expect(result[0]?.vars?.prompt).toBe('con seguimiento');
   });
+
+  it('uses the request-scoped generation provider for local fallback', async () => {
+    const requestProvider = createMockProvider({
+      id: 'request-provider',
+      response: createProviderResponse({ output: JSON.stringify({ es: 'con proveedor actual' }) }),
+    });
+
+    const result = await addMultilingual([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+      languages: ['es'],
+      __generationProvider: requestProvider,
+    });
+
+    expect(redteamProviderManager.getMultilingualProvider).not.toHaveBeenCalled();
+    expect(redteamProviderManager.getProvider).not.toHaveBeenCalled();
+    expect(requestProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(result[0]?.vars?.prompt).toBe('con proveedor actual');
+  });
 });
