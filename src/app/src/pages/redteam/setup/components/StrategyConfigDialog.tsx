@@ -27,6 +27,9 @@ import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
+  FLIP_ATTACK_MODES,
+  type FlipAttackMode,
+  isFlipAttackMode,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
@@ -49,6 +52,14 @@ type StepType = string | { id: string; config?: Partial<StrategyConfig> };
 // Helper to extract step ID from either format
 const getStepId = (step: StepType): string => {
   return typeof step === 'string' ? step : step.id;
+};
+
+// Labels for the flipattack `mode` options. Keyed by FlipAttackMode so adding a
+// mode to FLIP_ATTACK_MODES fails to compile until a label is supplied here.
+const FLIP_ATTACK_MODE_LABELS: Record<FlipAttackMode, string> = {
+  char_in_sentence: 'Reverse all characters (default)',
+  word_order: 'Reverse word order',
+  char_in_word: 'Reverse characters within each word',
 };
 
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
@@ -1301,8 +1312,7 @@ export default function StrategyConfigDialog({
 
   const renderFlipAttackStrategyConfig = () => {
     const rawMode = localConfig.mode;
-    const mode =
-      rawMode === 'word_order' || rawMode === 'char_in_word' ? rawMode : 'char_in_sentence';
+    const mode: FlipAttackMode = isFlipAttackMode(rawMode) ? rawMode : 'char_in_sentence';
     return (
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
@@ -1320,9 +1330,11 @@ export default function StrategyConfigDialog({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="char_in_sentence">Reverse all characters (default)</SelectItem>
-              <SelectItem value="word_order">Reverse word order</SelectItem>
-              <SelectItem value="char_in_word">Reverse characters within each word</SelectItem>
+              {FLIP_ATTACK_MODES.map((flipMode) => (
+                <SelectItem key={flipMode} value={flipMode}>
+                  {FLIP_ATTACK_MODE_LABELS[flipMode]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
