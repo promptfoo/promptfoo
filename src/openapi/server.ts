@@ -8,6 +8,8 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { VERSION } from '../constants';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { InputsSchema } from '../contracts/shared';
 import { BlobsSchemas } from '../types/api/blobs';
 import { ErrorResponseSchema } from '../types/api/common';
 import { ConfigSchemas } from '../types/api/configs';
@@ -46,6 +48,14 @@ const OpenApiCreateJobRequestSchema = z
 const OpenApiProviderOptionsWithIdSchema = z
   .object({
     id: z.string().min(1),
+    label: z.string().optional(),
+    config: z.unknown().optional(),
+    prompts: z.array(z.string()).optional(),
+    // Function-valued transforms are valid in in-process configs but cannot be sent as JSON.
+    transform: z.string().optional(),
+    delay: z.number().optional(),
+    env: ProviderEnvOverridesSchema.optional(),
+    inputs: InputsSchema.optional(),
   })
   .passthrough();
 
