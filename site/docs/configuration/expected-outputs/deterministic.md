@@ -41,6 +41,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [ends-with](#ends-with)                                         | output ends with string                                            |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
@@ -71,7 +72,6 @@ These metrics are created by logical tests that are run on LLM output.
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
 | [similar](#similar)                                             | Embedding similarity is above threshold                            |
-| [ends-with](#ends-with)                                         | output ends with string                                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |

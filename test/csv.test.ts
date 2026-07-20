@@ -714,6 +714,14 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('Expected');
   });
 
+  it('should create an ends-with assertion', () => {
+    const expected = 'ends-with:Expected';
+
+    const result: Assertion = assertionFromString(expected);
+    expect(result.type).toBe('ends-with');
+    expect(result.value).toBe('Expected');
+  });
+
   it('should create a levenshtein assertion', () => {
     const expected = 'levenshtein(5):Expected output';
 
@@ -881,6 +889,7 @@ describe('assertionFromString', () => {
       'perplexity',
       'rouge-n',
       'starts-with',
+      'ends-with',
     ];
 
     for (const type of assertionTypes) {
