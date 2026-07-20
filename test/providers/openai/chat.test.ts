@@ -2191,6 +2191,40 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
     });
 
+    it('should classify capabilities from the passthrough model override', async () => {
+      const routedToRegular = new OpenAiChatCompletionProvider('gpt-5', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 123,
+          passthrough: { model: 'gpt-4.1' },
+        },
+      });
+      const routedToReasoning = new OpenAiChatCompletionProvider('gpt-4.1', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 123,
+          max_completion_tokens: 456,
+          passthrough: { model: 'o3' },
+        },
+      });
+
+      const { body: regularBody } = await routedToRegular.getOpenAiBody('Test prompt');
+      const { body: reasoningBody } = await routedToReasoning.getOpenAiBody('Test prompt');
+
+      expect(regularBody).toMatchObject({
+        model: 'gpt-4.1',
+        temperature: 0.7,
+        max_tokens: 123,
+      });
+      expect(regularBody.max_completion_tokens).toBeUndefined();
+      expect(reasoningBody).toMatchObject({
+        model: 'o3',
+        max_completion_tokens: 456,
+      });
+      expect(reasoningBody.temperature).toBeUndefined();
+      expect(reasoningBody.max_tokens).toBeUndefined();
+    });
+
     it('should strip max_tokens from passthrough for GPT-5 models', async () => {
       const mockResponse = {
         data: {

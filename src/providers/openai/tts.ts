@@ -299,15 +299,21 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       hasSensitiveUrlCredentials = true;
       hasSensitiveUrlPath = true;
     }
-    const usesAuthenticatedCustomEndpoint =
-      !sendsToOpenAiApi &&
-      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
+    const hasAuthentication =
+      hasSensitiveUrlCredentials ||
+      Object.entries(requestHeaders).some(
+        ([key, value]) => isSensitiveCacheHeader(key) && value.trim().length > 0,
+      );
+    const usesAuthenticatedCustomEndpoint = !sendsToOpenAiApi && hasAuthentication;
+    const usesAuthenticatedOpenAiApiWithoutTenantDiscriminator =
+      sendsToOpenAiApi && hasAuthentication && !hasTenantDiscriminator;
     const cacheEnabled =
       isCacheEnabled() &&
       !hasSensitiveBody &&
       !hasSensitiveHeaderValue &&
       !hasSensitiveUrlPath &&
       !usesAuthenticatedCustomEndpoint &&
+      !usesAuthenticatedOpenAiApiWithoutTenantDiscriminator &&
       !(typeof body.voice === 'object' && body.voice !== null && !hasTenantDiscriminator);
     const cacheKey = `openai:tts:${sha256(
       JSON.stringify(

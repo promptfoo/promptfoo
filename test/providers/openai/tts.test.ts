@@ -359,7 +359,9 @@ describe('OpenAiTtsProvider', () => {
     mockedIsCacheEnabled.mockReturnValue(true);
     mockedGetCache.mockReturnValue(cache as any);
     mockedFetch.mockResolvedValue(audioResponse());
-    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', headers: { 'OpenAI-Project': 'project-a' } },
+    });
 
     const first = await provider.callApi('Cache this speech');
     const second = await provider.callApi('Cache this speech');
@@ -371,6 +373,40 @@ describe('OpenAiTtsProvider', () => {
     expect(busted.cached).toBe(false);
     expect(mockedFetch).toHaveBeenCalledTimes(2);
     expect(cache.set).toHaveBeenCalledOnce();
+  });
+
+  it('does not share default OpenAI speech responses across API keys', async () => {
+    const values = new Map<string, string>();
+    const cache = {
+      get: vi.fn(async (key: string) => values.get(key)),
+      set: vi.fn(async (key: string, value: string) => values.set(key, value)),
+    };
+    mockedIsCacheEnabled.mockReturnValue(true);
+    mockedGetCache.mockReturnValue(cache as any);
+    mockedFetch.mockImplementation(async (_url, options) => {
+      const authorization = new Headers(options?.headers).get('authorization');
+      return audioResponse(new TextEncoder().encode(`audio-for-${authorization}`));
+    });
+
+    const firstAccount = new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'account-a' },
+    });
+    const secondAccount = new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'account-b' },
+    });
+
+    const first = await firstAccount.callApi('same input');
+    const second = await secondAccount.callApi('same input');
+
+    expect(Buffer.from(first.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer account-a',
+    );
+    expect(Buffer.from(second.audio?.data ?? '', 'base64').toString()).toBe(
+      'audio-for-Bearer account-b',
+    );
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(cache.get).not.toHaveBeenCalled();
+    expect(cache.set).not.toHaveBeenCalled();
   });
 
   it('keeps custom-header tenants isolated without using secret auth headers in the cache key', async () => {
@@ -477,7 +513,9 @@ describe('OpenAiTtsProvider', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
       return audioResponse();
     });
-    const provider = new OpenAiTtsProvider('tts-1', { config: { apiKey: 'test-key' } });
+    const provider = new OpenAiTtsProvider('tts-1', {
+      config: { apiKey: 'test-key', headers: { 'OpenAI-Project': 'project-a' } },
+    });
 
     const results = await Promise.all([
       provider.callApi('same input'),
@@ -955,10 +993,18 @@ describe('OpenAiTtsProvider', () => {
     mockedFetch.mockResolvedValue(audioResponse());
 
     const first = await new OpenAiTtsProvider('tts-1', {
-      config: { apiKey: 'test-key', passthrough: { vendor: { alpha: 1, beta: 2 } } },
+      config: {
+        apiKey: 'test-key',
+        headers: { 'OpenAI-Project': 'project-a' },
+        passthrough: { vendor: { alpha: 1, beta: 2 } },
+      },
     }).callApi('same input');
     const second = await new OpenAiTtsProvider('tts-1', {
-      config: { apiKey: 'test-key', passthrough: { vendor: { beta: 2, alpha: 1 } } },
+      config: {
+        apiKey: 'test-key',
+        headers: { 'OpenAI-Project': 'project-a' },
+        passthrough: { vendor: { beta: 2, alpha: 1 } },
+      },
     }).callApi('same input');
 
     expect(first.cached).toBe(false);

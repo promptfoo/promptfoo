@@ -256,10 +256,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       /(^|\/)ft:/,
       '$1',
     );
-    const isGPT5Model =
-      this.isGPT5Model() ||
-      capabilityModelName.startsWith('gpt-5') ||
-      capabilityModelName.includes('/gpt-5');
+    const capabilityModelIsGPT5 =
+      capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
     const isOSeriesModel =
       capabilityModelName.startsWith('o1') ||
       capabilityModelName.startsWith('o3') ||
@@ -267,9 +265,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o1') ||
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
-    const isPassthroughReasoningModel =
-      passthroughModel !== undefined && (isGPT5Model || isOSeriesModel);
-    const isReasoningModel = this.isReasoningModel() || isGPT5Model || isOSeriesModel;
+    const isGPT5Model = passthroughModel === undefined ? this.isGPT5Model() : capabilityModelIsGPT5;
+    const isReasoningModel =
+      passthroughModel === undefined
+        ? this.isReasoningModel()
+        : capabilityModelIsGPT5 || isOSeriesModel;
+    const supportsTemperature =
+      passthroughModel === undefined ? this.supportsTemperature() : !isReasoningModel;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -286,10 +288,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature =
-      this.supportsTemperature() && !isPassthroughReasoningModel
-        ? (config.temperature ?? temperatureDefault)
-        : undefined;
+    const temperature = supportsTemperature
+      ? (config.temperature ?? temperatureDefault)
+      : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
