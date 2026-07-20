@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
+  clampCachedTokens,
   getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -263,6 +264,28 @@ describe('Shared Provider Functions', () => {
     it('should return undefined if tokens are undefined', () => {
       expect(calculateCost('model1', {}, undefined, 500, models)).toBeUndefined();
       expect(calculateCost('model1', {}, 1000, undefined, models)).toBeUndefined();
+    });
+  });
+
+  describe('clampCachedTokens', () => {
+    it('should pass through cached tokens within [0, promptTokens]', () => {
+      expect(clampCachedTokens(300, 1000)).toBe(300);
+      expect(clampCachedTokens(0, 1000)).toBe(0);
+      expect(clampCachedTokens(1000, 1000)).toBe(1000);
+    });
+
+    it('should clamp cached tokens that exceed prompt tokens', () => {
+      expect(clampCachedTokens(1500, 1000)).toBe(1000);
+    });
+
+    it('should clamp negative cached tokens to zero', () => {
+      expect(clampCachedTokens(-500, 1000)).toBe(0);
+    });
+
+    it('should treat undefined and non-finite cached tokens as zero', () => {
+      expect(clampCachedTokens(undefined, 1000)).toBe(0);
+      expect(clampCachedTokens(Number.NaN, 1000)).toBe(0);
+      expect(clampCachedTokens(Number.POSITIVE_INFINITY, 1000)).toBe(0);
     });
   });
 

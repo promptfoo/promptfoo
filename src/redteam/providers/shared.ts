@@ -14,13 +14,10 @@ import {
   type AssertionOrSet,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  type EvaluateResult,
-  type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
-  type TokenUsage,
   type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
@@ -578,27 +575,6 @@ type SharedBacktrackingStopReason =
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
 export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
-
-/**
- * Base metadata interface shared by all redteam providers
- */
-export interface BaseRedteamMetadata {
-  redteamFinalPrompt?: string;
-  messages: Record<string, any>[];
-  stopReason: string;
-  redteamHistory?: RedteamHistoryEntry[];
-}
-
-/**
- * Base response interface shared by all redteam providers
- */
-export interface BaseRedteamResponse {
-  output: string;
-  metadata: BaseRedteamMetadata;
-  tokenUsage: TokenUsage;
-  guardrails?: GuardrailResponse;
-  additionalResults?: EvaluateResult[];
-}
 
 /**
  * Externalize large blob payloads in provider responses before they are copied into

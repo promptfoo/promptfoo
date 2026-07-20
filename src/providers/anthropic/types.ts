@@ -105,7 +105,7 @@ export interface AnthropicMessageOptions {
   temperature?: number;
   thinking?: Anthropic.Messages.ThinkingConfigParam;
   tool_choice?: Anthropic.Messages.ToolChoice | OpenAIToolChoice;
-  tools?: (Anthropic.Tool | AnthropicToolConfig)[];
+  tools?: (Anthropic.Messages.ToolUnion | AnthropicToolConfig)[];
   top_k?: number;
   top_p?: number;
   beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10', 'structured-outputs-2025-11-13'

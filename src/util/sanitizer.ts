@@ -15,6 +15,8 @@ export const REDACTED = '[REDACTED]';
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =
   /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+const OPAQUE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 /**
  * Whether a `scheme://user:pass@host` userinfo password is present. Implemented
@@ -886,5 +888,34 @@ export function sanitizeUrl(url: string): string {
     // redaction would destroy non-secret bare domains, relative paths, and prose
     // in persisted eval results and user-facing config error messages.
     return unparseableUrlMightLeakSecret(url) ? REDACTED : url;
+  }
+}
+
+/**
+ * Sanitize a URL specifically for diagnostic output. Opaque path segments can be
+ * legitimate resource IDs in persisted provider results, so only logging paths
+ * use this stricter redaction.
+ */
+export function sanitizeUrlForLogging(url: string): string {
+  const sanitized = sanitizeUrl(url);
+  try {
+    const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
+    const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
+    parsed.pathname = parsed.pathname
+      .split('/')
+      .map((segment) => {
+        try {
+          const decoded = decodeURIComponent(segment);
+          return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)
+            ? '%5BREDACTED%5D'
+            : segment;
+        } catch {
+          return segment;
+        }
+      })
+      .join('/');
+    return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
+  } catch {
+    return sanitized;
   }
 }

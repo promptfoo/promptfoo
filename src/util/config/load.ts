@@ -44,7 +44,10 @@ import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProv
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
-import { validateTestPromptReferences } from '../validateTestPromptReferences';
+import {
+  type PromptReferenceSource,
+  validateTestPromptReferences,
+} from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
@@ -452,6 +455,30 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   }
 }
 
+async function readPromptReferenceSources(configPaths: string[]): Promise<PromptReferenceSource[]> {
+  const sources: PromptReferenceSource[] = [];
+  for (const configPath of configPaths) {
+    const resolvedPath = path.resolve(process.cwd(), configPath);
+    const globPaths =
+      globSync(resolvedPath, {
+        windowsPathsNoEscape: true,
+      }) ?? [];
+
+    for (const globPath of globPaths) {
+      const ext = path.parse(globPath).ext;
+      if (ext !== '.yaml' && ext !== '.yml') {
+        continue;
+      }
+      sources.push({
+        path: globPath,
+        content: await fsPromises.readFile(globPath, 'utf-8'),
+      });
+    }
+  }
+
+  return sources;
+}
+
 /**
  * Build a dedupe key for a provider entry. Provider functions and instances
  * whose behavior is identity-sensitive use reference identity. Provider option
@@ -746,8 +773,10 @@ export async function resolveConfigs(
   let fileConfig: Partial<UnifiedConfig> = {};
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
+  let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
     fileConfig = await combineConfigs(configPaths);
+    promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
@@ -1043,6 +1072,7 @@ export async function resolveConfigs(
     testSuite.tests || [],
     testSuite.prompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    { promptReferenceSources },
   );
 
   cliState.config = config;

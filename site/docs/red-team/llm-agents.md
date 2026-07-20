@@ -527,8 +527,8 @@ When testing specific agent components, you can customize your red team configur
 redteam:
   # For testing tool selection
   plugins:
-    - 'rbac'  # Tests if the model properly implements Role-Based Access Control
-    - 'bola'  # Checks for Broken Object Level Authorization vulnerabilities
+    - 'rbac' # Tests if the model properly implements Role-Based Access Control
+    - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
 
   # For testing reasoning
   plugins:
@@ -537,7 +537,7 @@ redteam:
 
   # For testing execution
   plugins:
-    - 'ssrf'  # Tests for Server-Side Request Forgery vulnerabilities
+    - 'ssrf' # Tests for Server-Side Request Forgery vulnerabilities
     - 'sql-injection'
 ```
 

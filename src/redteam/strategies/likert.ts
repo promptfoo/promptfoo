@@ -92,7 +92,7 @@ async function generateLikertPrompts(
           },
           assert: testCase.assert?.map((assertion) => ({
             ...assertion,
-            metric: `${assertion.metric}/Likert`,
+            metric: assertion.metric ? `${assertion.metric}/Likert` : assertion.metric,
           })),
           metadata: {
             ...testCase.metadata,
