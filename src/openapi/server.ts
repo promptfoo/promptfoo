@@ -8,8 +8,6 @@ import {
 } from '@asteasolutions/zod-to-openapi';
 import { z } from 'zod';
 import { VERSION } from '../constants';
-import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { InputsSchema } from '../contracts/shared';
 import { BlobsSchemas } from '../types/api/blobs';
 import { ErrorResponseSchema } from '../types/api/common';
 import { ConfigSchemas } from '../types/api/configs';
@@ -30,6 +28,24 @@ const TEXT_CSV = 'text/csv';
 const SERVER_OPENAPI_VERSION = '3.1.0';
 
 const OpenApiLooseObjectSchema = z.record(z.string(), z.unknown());
+const OpenApiProviderEnvSchema = z.record(z.string(), z.string());
+const OpenApiInputConfigSchema = z.object({
+  benign: z.boolean().optional(),
+  inputPurpose: z.string().min(1).optional(),
+  injectionPlacements: z.array(z.string().min(1)).min(1).optional(),
+});
+const OpenApiInputDefinitionSchema = z.union([
+  z.string().min(1),
+  z.object({
+    config: OpenApiInputConfigSchema.optional(),
+    description: z.string().min(1),
+    type: z.enum(['text', 'pdf', 'docx', 'image']).optional(),
+  }),
+]);
+const OpenApiInputsSchema = z.record(
+  z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
+  OpenApiInputDefinitionSchema,
+);
 const OpenApiProvidersSchema = z.union([
   z.string(),
   z.array(z.unknown()),
@@ -54,8 +70,8 @@ const OpenApiProviderOptionsWithIdSchema = z
     // Function-valued transforms are valid in in-process configs but cannot be sent as JSON.
     transform: z.string().optional(),
     delay: z.number().optional(),
-    env: ProviderEnvOverridesSchema.optional(),
-    inputs: InputsSchema.optional(),
+    env: OpenApiProviderEnvSchema.optional(),
+    inputs: OpenApiInputsSchema.optional(),
   })
   .passthrough();
 
