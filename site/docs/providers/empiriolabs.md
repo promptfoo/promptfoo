@@ -106,11 +106,6 @@ providers:
       apiBaseUrl: https://api.empiriolabs.ai/v1
       apiKeyEnvar: EMPIRIOLABS_API_KEY
 
-  - id: openai:transcription:deepgram-nova-3
-    config:
-      apiBaseUrl: https://api.empiriolabs.ai/v1
-      apiKeyEnvar: EMPIRIOLABS_API_KEY
-
 tests:
   - vars:
       # Use a literal path here. The transcription provider reads this file directly.
