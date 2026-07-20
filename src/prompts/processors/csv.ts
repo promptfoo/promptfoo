@@ -54,6 +54,21 @@ function buildCsvPrompts(
 }
 
 /**
+ * Fallback for content that can't be parsed as delimited CSV: treat every
+ * non-empty line as a prompt, skipping a leading `prompt` header if present.
+ */
+function processCsvLines(content: string, basePrompt: Partial<Prompt>): Prompt[] {
+  const lines = content.split(/\r?\n/).filter((line) => line.trim());
+
+  const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
+  const promptLines = lines.slice(startIndex);
+  return buildCsvPrompts(
+    promptLines.map((raw) => ({ raw })),
+    basePrompt,
+  );
+}
+
+/**
  * Process a CSV file containing prompts
  *
  * CSV format can be either:
@@ -74,14 +89,7 @@ export async function processCsvPrompts(
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
   if (!content.includes(delimiter)) {
-    const lines = content.split(/\r?\n/).filter((line) => line.trim());
-
-    const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
-    const promptLines = lines.slice(startIndex);
-    return buildCsvPrompts(
-      promptLines.map((raw) => ({ raw })),
-      basePrompt,
-    );
+    return processCsvLines(content, basePrompt);
   }
 
   try {
@@ -101,13 +109,6 @@ export async function processCsvPrompts(
       basePrompt,
     );
   } catch {
-    const lines = content.split(/\r?\n/).filter((line) => line.trim());
-
-    const startIndex = lines[0]?.toLowerCase().trim() === 'prompt' ? 1 : 0;
-    const promptLines = lines.slice(startIndex);
-    return buildCsvPrompts(
-      promptLines.map((raw) => ({ raw })),
-      basePrompt,
-    );
+    return processCsvLines(content, basePrompt);
   }
 }
