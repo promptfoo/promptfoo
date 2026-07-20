@@ -23,7 +23,21 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 
-function getChoiceErrorMetadata(code: unknown): ProviderResponse['metadata'] | undefined {
+/**
+ * Build retry metadata for a choice-level error returned inside an HTTP 200
+ * envelope.
+ *
+ * `headers` are the *transport* response headers. OpenRouter still emits
+ * `Retry-After` / `X-RateLimit-*` on these 200-wrapped rate limits, and the
+ * scheduler only reads rate-limit headers off `metadata.http.headers`
+ * (see `getProviderResponseHeaders`). Dropping them here would silently
+ * downgrade the retry to blind exponential backoff and can re-issue the
+ * request before the reset time OpenRouter asked for.
+ */
+function getChoiceErrorMetadata(
+  code: unknown,
+  headers?: Record<string, string>,
+): ProviderResponse['metadata'] | undefined {
   const status =
     typeof code === 'number'
       ? code
@@ -33,13 +47,13 @@ function getChoiceErrorMetadata(code: unknown): ProviderResponse['metadata'] | u
   if (status === 429) {
     return {
       rateLimitKind: 'rate_limit',
-      http: { status, statusText: 'Too Many Requests' },
+      http: { status, statusText: 'Too Many Requests', headers: headers ?? {} },
     };
   }
   if (status === 502 || status === 503 || status === 504) {
     return {
       retryableErrorKind: 'transient_availability',
-      http: { status, statusText: 'OpenRouter generation error' },
+      http: { status, statusText: 'OpenRouter generation error', headers: headers ?? {} },
     };
   }
   return undefined;
@@ -199,25 +213,32 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
 
     try {
-      ({ data, cached, status, statusText, deleteFromCache } =
-        await fetchWithCache<OpenRouterChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${this.getApiKey()}`,
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenRouterChatCompletionResponse>(
+        `${this.getApiUrl()}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          getRequestTimeoutMs(),
-          'json',
-          context?.bustCache ?? context?.debug,
-        ));
+          body: JSON.stringify(body),
+        },
+        getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
+      ));
 
       if (status < 200 || status >= 300) {
         return {
@@ -244,7 +265,9 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     if (choice?.error || finishReason === 'error') {
       await deleteFromCache?.();
-      const errorMetadata = choice?.error ? getChoiceErrorMetadata(choice.error.code) : undefined;
+      const errorMetadata = choice?.error
+        ? getChoiceErrorMetadata(choice.error.code, responseHeaders)
+        : undefined;
       return {
         error: 'API error: OpenRouter provider returned a generation error',
         tokenUsage,

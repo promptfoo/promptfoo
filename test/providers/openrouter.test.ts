@@ -695,6 +695,91 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('preserves Retry-After headers on a choice-level rate limit', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: { code: 429, message: 'rate limited' },
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({
+                'Content-Type': 'application/json',
+                'Retry-After': '30',
+                'X-RateLimit-Remaining': '0',
+              }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        // The scheduler reads rate-limit headers off metadata.http.headers only.
+        expect(result.metadata?.http?.headers).toMatchObject({
+          'retry-after': '30',
+          'x-ratelimit-remaining': '0',
+        });
+
+        const options = createProviderRateLimitOptions();
+        expect(options.getHeaders?.(result)).toMatchObject({ 'retry-after': '30' });
+        // Without the headers this falls through to blind exponential backoff.
+        expect(options.getRetryAfter?.(result, undefined)).toBe(30_000);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves Retry-After headers on a transient choice-level generation error', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('gpt-4o', {});
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: { content: 'partial output' },
+                  finish_reason: 'error',
+                  error: { code: 503, message: 'temporary upstream failure' },
+                },
+              ],
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({
+                'Content-Type': 'application/json',
+                'Retry-After': '12',
+              }),
+            },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toMatchObject({
+          retryableErrorKind: 'transient_availability',
+          http: { status: 503, headers: { 'retry-after': '12' } },
+        });
+        expect(createProviderRateLimitOptions().getRetryAfter?.(result, undefined)).toBe(12_000);
+      } finally {
+        restoreEnv();
+        restoreEnv();
+      }
+    });
+
     it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
