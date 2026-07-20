@@ -301,6 +301,9 @@ type EnvVars = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;
 
+  // Eden AI
+  EDENAI_API_KEY?: string;
+
   // CometAPI
   COMETAPI_KEY?: string;
 
