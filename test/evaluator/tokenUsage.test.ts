@@ -10,6 +10,50 @@ import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpe
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator token usage', () => {
+  it('preserves unknown provider usage and cost through persistence and export', async () => {
+    const providerWithoutUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-without-usage'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Generated output',
+        tokenUsage: { numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithoutUsage],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    evalRecord.clearResults();
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.version).toBe(3);
+    if (!('prompts' in summary)) {
+      throw new Error('Expected a persisted v3 evaluation summary');
+    }
+
+    const result = summary.results[0];
+    expect(result.cost).toBeUndefined();
+    expect(result.response?.tokenUsage).toEqual({ numRequests: 1 });
+    expect(result.tokenUsage).toMatchObject({ numRequests: 1 });
+    expect(result.tokenUsage).not.toHaveProperty('prompt');
+    expect(result.tokenUsage).not.toHaveProperty('completion');
+    expect(result.tokenUsage).not.toHaveProperty('cached');
+    expect(result.tokenUsage).not.toHaveProperty('total');
+
+    expect(summary.prompts[0].metrics?.cost).toBeUndefined();
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('prompt');
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('completion');
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('cached');
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('total');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('prompt');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('completion');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('cached');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('total');
+    expect(JSON.parse(JSON.stringify(summary.prompts[0].metrics))).not.toHaveProperty('cost');
+  });
+
   it('should accumulate token usage correctly', async () => {
     const mockOptions = {
       delay: 0,

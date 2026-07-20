@@ -640,6 +640,37 @@ describe('evaluator', () => {
       expect(exportedRow.metadata).not.toHaveProperty('__promptfoo');
       expect(JSON.stringify(summary)).not.toContain('__promptfoo');
     });
+
+    it('preserves unknown provider usage and cost through persistence and export', async () => {
+      const resultWithUnknownUsage = createEvaluateResult({
+        cost: undefined,
+        gradingResult: null,
+        response: {
+          output: '[Video: generated](blob://video/omni)',
+          tokenUsage: { numRequests: 1 },
+        },
+        tokenUsage: { numRequests: 1 },
+      });
+
+      const evaluation = await Eval.create({ description: 'Unknown usage export coverage' }, [], {
+        results: [resultWithUnknownUsage as unknown as EvalResult],
+      });
+
+      const db = await getDb();
+      const [persistedRow] = await db
+        .select({ cost: evalResultsTable.cost })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, evaluation.id));
+      expect(persistedRow.cost).toBeNull();
+
+      const summary = await evaluation.toEvaluateSummary();
+      expect('results' in summary).toBe(true);
+      const [exportedRow] = (summary as { results: EvaluateResult[] }).results;
+      expect(exportedRow.cost).toBeUndefined();
+      expect(exportedRow.tokenUsage).toEqual({ numRequests: 1 });
+      expect(exportedRow.response?.tokenUsage).toEqual({ numRequests: 1 });
+      expect(JSON.parse(JSON.stringify(exportedRow))).not.toHaveProperty('cost');
+    });
   });
 
   describe('setResults trace linkage', () => {

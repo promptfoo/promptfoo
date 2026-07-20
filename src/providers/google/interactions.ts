@@ -69,6 +69,13 @@ function getAbortError(signal: AbortSignal): Error {
   return error;
 }
 
+function hasUnsupportedSafetySettings(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+  return !Array.isArray(value) || value.length > 0;
+}
+
 async function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
   if (!signal) {
     await sleep(ms);
@@ -274,6 +281,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
   config: GoogleProviderConfig;
   env?: EnvOverrides;
   private providerId?: string;
+  private readonly isVertexProvider: boolean;
 
   constructor(
     modelName: string,
@@ -283,6 +291,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     this.config = options.config || {};
     this.env = options.env;
     this.providerId = options.id;
+    this.isVertexProvider = this.config.vertexai === true;
   }
 
   id(): string {
@@ -306,10 +315,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
       return { error: 'Prompt is required for Gemini Interactions API' };
     }
 
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    ) as GoogleProviderConfig;
+    const config = {
+      ...mergeGoogleCompletionOptions(
+        this.config,
+        context?.prompt?.config as Partial<CompletionOptions> | undefined,
+      ),
+      vertexai: this.isVertexProvider,
+    } as GoogleProviderConfig;
     if (
       config.vertexai &&
       (config.previousInteractionId !== undefined ||
@@ -322,9 +334,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       };
     }
     if (
-      config.safetySettings !== undefined ||
-      config.passthrough?.safetySettings !== undefined ||
-      config.passthrough?.safety_settings !== undefined
+      hasUnsupportedSafetySettings(config.safetySettings) ||
+      hasUnsupportedSafetySettings(config.passthrough?.safetySettings) ||
+      hasUnsupportedSafetySettings(config.passthrough?.safety_settings)
     ) {
       return {
         error:
@@ -387,6 +399,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           ...config.headers,
         };
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
         return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
       }
     } else {
@@ -413,7 +428,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       throw getAbortError(abortSignal);
     }
     const unsupportedGenerationFields = new Set([
-      ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
+      'temperature',
+      'top_p',
+      'topP',
       'stop_sequences',
       'stopSequences',
       'negative_prompt',
@@ -428,10 +445,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(config.maxOutputTokens === undefined
         ? {}
         : { max_output_tokens: config.maxOutputTokens }),
-      ...(config.vertexai && config.temperature !== undefined
-        ? { temperature: config.temperature }
-        : {}),
-      ...(config.vertexai && config.topP !== undefined ? { top_p: config.topP } : {}),
       ...Object.fromEntries(
         Object.entries({
           ...(config.generationConfig || {}),
@@ -453,6 +466,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ([field]) =>
           field !== 'generation_config' &&
           field !== 'generationConfig' &&
+          field !== 'safetySettings' &&
+          field !== 'safety_settings' &&
           !unsupportedGenerationFields.has(field),
       ),
     );

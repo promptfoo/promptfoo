@@ -3,7 +3,9 @@ import {
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
+  accumulateResponseTokenUsagePreservingUnknown,
   accumulateTokenUsage,
+  accumulateTokenUsagePreservingUnknown,
   createEmptyAssertions,
   createEmptyTokenUsage,
   getErrorTokenUsage,
@@ -305,6 +307,83 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('unknown-preserving accumulation', () => {
+    it('omits unknown token counts for a counted response', () => {
+      const target: TokenUsage = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsagePreservingUnknown(target, {
+        tokenUsage: { numRequests: 1 },
+      });
+
+      expect(target).toMatchObject({ numRequests: 1 });
+      expect(target).not.toHaveProperty('prompt');
+      expect(target).not.toHaveProperty('completion');
+      expect(target).not.toHaveProperty('cached');
+      expect(target).not.toHaveProperty('total');
+      expect(target).not.toHaveProperty('completionDetails');
+    });
+
+    it('keeps aggregate counts unknown after a later request reports usage', () => {
+      const target: TokenUsage = createEmptyTokenUsage();
+      accumulateTokenUsagePreservingUnknown(target, { numRequests: 1 });
+
+      accumulateTokenUsagePreservingUnknown(target, {
+        prompt: 6,
+        completion: 4,
+        cached: 0,
+        total: 10,
+        numRequests: 1,
+      });
+
+      expect(target.numRequests).toBe(2);
+      expect(target).not.toHaveProperty('prompt');
+      expect(target).not.toHaveProperty('completion');
+      expect(target).not.toHaveProperty('cached');
+      expect(target).not.toHaveProperty('total');
+    });
+
+    it('retains fully reported usage for the first counted request', () => {
+      const target: TokenUsage = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsagePreservingUnknown(target, {
+        tokenUsage: {
+          prompt: 6,
+          completion: 4,
+          cached: 0,
+          total: 10,
+          numRequests: 1,
+        },
+      });
+
+      expect(target).toMatchObject({
+        prompt: 6,
+        completion: 4,
+        cached: 0,
+        total: 10,
+        numRequests: 1,
+      });
+    });
+
+    it('does not count response-only usage when countAsRequest is false', () => {
+      const target: TokenUsage = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsagePreservingUnknown(
+        target,
+        {
+          tokenUsage: {
+            prompt: 6,
+            completion: 4,
+            total: 10,
+            numRequests: 1,
+          },
+        },
+        { countAsRequest: false },
+      );
+
+      expect(target).toMatchObject({ prompt: 6, completion: 4, total: 10, numRequests: 0 });
     });
   });
 
