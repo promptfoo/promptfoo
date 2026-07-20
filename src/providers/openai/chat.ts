@@ -264,8 +264,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o3') ||
       capabilityModelName.includes('/o4');
     const isGPT5Model = this.isGPT5Model(passthroughModel);
-    const isReasoningModel = this.isReasoningModel(passthroughModel);
-    const supportsTemperature = this.supportsTemperature(passthroughModel);
+    const isOpenAiReasoningModel = isGPT5Model || isOSeriesModel;
+    const isReasoningModel = this.isReasoningModel(passthroughModel) || isOpenAiReasoningModel;
+    const supportsTemperature =
+      this.supportsTemperature(passthroughModel) && !isOpenAiReasoningModel;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;

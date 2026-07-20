@@ -70,6 +70,27 @@ describe('TrueFoundry', () => {
         const provider = new TrueFoundryProvider('vertex-ai/gemini-2.5-pro', {});
         expect((provider as any).isReasoningModel()).toBe(false);
       });
+
+      it('should preserve normalized o-series capabilities for a passthrough override', async () => {
+        const model = 'openai/ft:o4-mini-2025-04-16:company::model';
+        const provider = new TrueFoundryProvider(model, {
+          config: {
+            temperature: 0.7,
+            max_tokens: 123,
+            max_completion_tokens: 456,
+            passthrough: { model },
+          },
+        });
+
+        const { body } = await provider.getOpenAiBody('Test prompt');
+
+        expect(body).toMatchObject({
+          model,
+          max_completion_tokens: 456,
+        });
+        expect(body.temperature).toBeUndefined();
+        expect(body.max_tokens).toBeUndefined();
+      });
     });
 
     it('should return correct id', () => {
