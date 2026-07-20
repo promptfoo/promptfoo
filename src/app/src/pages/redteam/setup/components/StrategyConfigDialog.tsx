@@ -339,13 +339,26 @@ export default function StrategyConfigDialog({
         const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
         if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
+          const strategyConfig = allStrategies.find((s) => {
+            const id = typeof s === 'string' ? s : s.id;
+            return id === trimmedValue;
+          });
+          const unicodeNormalizationForm =
+            typeof strategyConfig === 'object' ? strategyConfig.config?.form : undefined;
 
+          // Unicode normalization has a backend default, so it does not require configuration.
+          // Preserve an explicitly selected form when composing it into a layer, while keeping the
+          // string form for unconfigured strategies so the backend default still applies.
+          if (
+            trimmedValue === 'unicode-normalization' &&
+            isUnicodeNormalizationForm(unicodeNormalizationForm)
+          ) {
+            setSteps((prev) => [
+              ...prev,
+              { id: trimmedValue, config: { form: unicodeNormalizationForm } },
+            ]);
+          } else if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
+            // If strategy requires config, get its config from allStrategies
             if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
               // Add step with its config
               setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);

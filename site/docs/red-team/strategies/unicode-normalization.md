@@ -65,6 +65,8 @@ redteam:
 
 Ordering matters. Applying `NFKD` after homoglyph substitution can fold some compatibility characters back to simpler forms, while applying homoglyph substitution last preserves those substitutions in the final probe.
 
+Inside a Layer pipeline, an unchanged normalization step passes its input to later steps. During test generation, Promptfoo omits the final probe only when the complete pipeline leaves the input unchanged. For per-turn layers on an agentic strategy, the unchanged prompt is sent through so the conversation can continue.
+
 ## When to Use It
 
 Use this strategy when the target or a control in front of it performs character-level matching, tokenization, script detection, or Unicode canonicalization. It is particularly relevant for multilingual input and text containing combining marks, fullwidth characters, ligatures, or other compatibility characters.

@@ -1070,6 +1070,56 @@ describe('StrategyConfigDialog', () => {
       });
     });
 
+    it.each([
+      'NFC',
+      'NFD',
+      'NFKC',
+      'NFKD',
+    ] as const)('should preserve the configured %s Unicode normalization form when adding it as a step', async (form) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'unicode-normalization', config: { form } }]}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'unicode-normalization' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        steps: [{ id: 'unicode-normalization', config: { form } }],
+      });
+    });
+
+    it('should keep an unconfigured Unicode normalization step as a string', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'unicode-normalization' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        steps: ['unicode-normalization'],
+      });
+    });
+
     it('should disable save button when no steps are configured', () => {
       renderWithProviders(
         <StrategyConfigDialog

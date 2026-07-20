@@ -69,6 +69,30 @@ describe('validateStrategies', () => {
     );
   });
 
+  it('should validate Unicode normalization forms nested in Layer steps', async () => {
+    const validStrategies: RedteamStrategyObject[] = [
+      {
+        id: 'layer',
+        config: {
+          steps: [{ id: 'unicode-normalization', config: { form: 'NFC' } }, 'rot13'],
+        },
+      },
+    ];
+    const invalidStrategies: RedteamStrategyObject[] = [
+      {
+        id: 'layer',
+        config: {
+          steps: [{ id: 'unicode-normalization', config: { form: 'nfkd' } }],
+        },
+      },
+    ];
+
+    await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
+    await expect(validateStrategies(invalidStrategies)).rejects.toThrow(
+      'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
+    );
+  });
+
   it('should skip validation for file:// strategies', async () => {
     const strategies: RedteamStrategyObject[] = [{ id: 'file://custom.js' }];
     await expect(validateStrategies(strategies)).resolves.toBeUndefined();

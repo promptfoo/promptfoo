@@ -168,13 +168,21 @@ describe('unicode normalization strategy', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
-    it('skips missing and non-string injected values when normalization cannot change them', () => {
+    it('skips missing and non-string injected values without coercing them', () => {
       const results = addUnicodeNormalization(
-        [{ vars: {} }, { vars: { prompt: null as any } }, { vars: { prompt: 123 } }],
+        [
+          {},
+          { vars: {} },
+          { vars: { prompt: null as any } },
+          { vars: { prompt: 123 } },
+          { vars: { prompt: ['Ａdmin'] } },
+          { vars: { prompt: { value: 'Ａdmin' } } },
+        ],
         'prompt',
       );
 
       expect(results).toEqual([]);
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     it('preserves test cases without assertions', () => {

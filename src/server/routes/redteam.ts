@@ -5,6 +5,7 @@ import logger from '../../logger';
 import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
+  isUnicodeNormalizationOnlyStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
   REDTEAM_MODEL,
@@ -123,6 +124,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           strategy.id,
         );
 
+        if (
+          (!strategyTestCases || strategyTestCases.length === 0) &&
+          isUnicodeNormalizationOnlyStrategy(strategy.id, strategy.config)
+        ) {
+          res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+          return;
+        }
         if (strategyTestCases && strategyTestCases.length > 0) {
           finalTestCases = strategyTestCases;
         }

@@ -30,6 +30,25 @@ export function normalizeUnicode(
 }
 
 /**
+ * Returns whether normalizing a test case would change the injected value.
+ *
+ * Layer composition uses this to distinguish Unicode's intentional no-op
+ * filtering from strategies that return an empty array for other reasons.
+ */
+export function wouldUnicodeNormalizationChange(
+  testCase: TestCase,
+  injectVar: string,
+  config: Record<string, unknown> = {},
+): boolean {
+  const form = resolveUnicodeNormalizationForm(config);
+  const originalText = testCase.vars?.[injectVar];
+  if (typeof originalText !== 'string') {
+    return false;
+  }
+  return normalizeUnicode(originalText, form) !== originalText;
+}
+
+/**
  * Rewrites the injected variable using one of the Unicode normalization forms
  * defined by Unicode Standard Annex #15.
  */
@@ -39,10 +58,15 @@ export function addUnicodeNormalization(
   config: Record<string, unknown> = {},
 ): TestCase[] {
   const form = resolveUnicodeNormalizationForm(config);
+  let normalizationCandidateCount = 0;
 
   const normalizedTestCases = testCases
     .map((testCase): TestCase | undefined => {
-      const originalText = String(testCase.vars![injectVar]);
+      const originalText = testCase.vars?.[injectVar];
+      if (typeof originalText !== 'string') {
+        return undefined;
+      }
+      normalizationCandidateCount++;
       const normalizedText = normalizeUnicode(originalText, form);
 
       // Do not emit a second probe when normalization is a byte-for-byte no-op.
@@ -72,9 +96,9 @@ export function addUnicodeNormalization(
     })
     .filter((testCase): testCase is TestCase => testCase !== undefined);
 
-  if (testCases.length > 0 && normalizedTestCases.length === 0) {
+  if (normalizationCandidateCount > 0 && normalizedTestCases.length === 0) {
     logger.warn(
-      `[unicode-normalization] Skipped all ${testCases.length} test cases because ${form} normalization produced no changes.`,
+      `[unicode-normalization] Skipped all ${normalizationCandidateCount} test cases because ${form} normalization produced no changes.`,
     );
   }
 

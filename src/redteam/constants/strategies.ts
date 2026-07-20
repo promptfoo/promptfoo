@@ -153,6 +153,87 @@ export function isUnicodeNormalizationForm(form: unknown): form is UnicodeNormal
   return typeof form === 'string' && UNICODE_NORMALIZATION_FORM_SET.has(form);
 }
 
+type StrategyConfigLike = Record<string, unknown> | undefined;
+
+export interface InvalidUnicodeNormalizationForm {
+  form: unknown;
+  path: Array<string | number>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Finds invalid Unicode normalization forms on a strategy or in nested Layer steps.
+ */
+export function findInvalidUnicodeNormalizationForms(
+  strategyId: string,
+  config: StrategyConfigLike,
+  configPath: Array<string | number> = ['config'],
+): InvalidUnicodeNormalizationForm[] {
+  if (strategyId === 'unicode-normalization') {
+    const form = config?.form;
+    return form !== undefined && !isUnicodeNormalizationForm(form)
+      ? [{ form, path: [...configPath, 'form'] }]
+      : [];
+  }
+
+  if (strategyId !== 'layer' || !Array.isArray(config?.steps)) {
+    return [];
+  }
+
+  return config.steps.flatMap((step, index) => {
+    if (typeof step === 'string') {
+      return [];
+    }
+
+    const stepRecord = asRecord(step);
+    if (!stepRecord || typeof stepRecord.id !== 'string') {
+      return [];
+    }
+
+    return findInvalidUnicodeNormalizationForms(stepRecord.id, asRecord(stepRecord.config), [
+      ...configPath,
+      'steps',
+      index,
+      'config',
+    ]);
+  });
+}
+
+/**
+ * Returns true when the strategy is Unicode normalization, or a non-empty Layer
+ * tree composed exclusively of Unicode normalization steps.
+ */
+export function isUnicodeNormalizationOnlyStrategy(
+  strategyId: string,
+  config: StrategyConfigLike,
+): boolean {
+  if (strategyId === 'unicode-normalization') {
+    return true;
+  }
+
+  if (strategyId !== 'layer' || !Array.isArray(config?.steps) || config.steps.length === 0) {
+    return false;
+  }
+
+  return config.steps.every((step) => {
+    if (typeof step === 'string') {
+      return step === 'unicode-normalization';
+    }
+
+    const stepRecord = asRecord(step);
+    return (
+      !!stepRecord &&
+      typeof stepRecord.id === 'string' &&
+      isUnicodeNormalizationOnlyStrategy(stepRecord.id, asRecord(stepRecord.config))
+    );
+  });
+}
+
 /**
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */

@@ -86,6 +86,12 @@ describe('addLayerTestCases', () => {
     throw new Error(`Strategy not found: ${path}`);
   });
 
+  const unicodeNormalizationStrategy: Strategy = {
+    id: 'unicode-normalization',
+    action: async (testCases, injectVar, config) =>
+      addUnicodeNormalization(testCases, injectVar, config),
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -310,15 +316,14 @@ describe('addLayerTestCases', () => {
     expect(mockStrategies[0].action).toHaveBeenCalledWith([], 'input', expect.any(Object));
   });
 
-  it('should stop cleanly when Unicode normalization filters an unchanged layer input', async () => {
-    const unicodeNormalizationStrategy: Strategy = {
-      id: 'unicode-normalization',
-      action: async (testCases, injectVar, config) =>
-        addUnicodeNormalization(testCases, injectVar, config),
-    };
+  it('should pass an unchanged Unicode input through to a later transform', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {
         vars: { input: 'plain ASCII' },
+        metadata: { pluginId: 'test-plugin' },
+      },
+      {
+        vars: { input: 'Ａdmin' },
         metadata: { pluginId: 'test-plugin' },
       },
     ];
@@ -331,8 +336,42 @@ describe('addLayerTestCases', () => {
       mockLoadStrategy,
     );
 
+    expect(result).toHaveLength(2);
+    expect(result.map((testCase) => testCase.vars?.input)).toEqual(['cynva NFPVV', 'Nqzva']);
+    expect(mockStrategies[1].action).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ vars: { input: 'plain ASCII' } }),
+        expect.objectContaining({ vars: { input: 'Admin' } }),
+      ],
+      'input',
+      expect.any(Object),
+    );
+  });
+
+  it('should not emit a duplicate when Unicode is the only no-op layer', async () => {
+    const result = await addLayerTestCases(
+      [{ vars: { input: 'plain ASCII' }, metadata: { pluginId: 'test-plugin' } }],
+      'input',
+      { steps: ['unicode-normalization'] },
+      [...mockStrategies, unicodeNormalizationStrategy],
+      mockLoadStrategy,
+    );
+
     expect(result).toEqual([]);
-    expect(mockStrategies[1].action).toHaveBeenCalledWith([], 'input', expect.any(Object));
+  });
+
+  it('should retain a prior transformation when a later Unicode step is a no-op', async () => {
+    const result = await addLayerTestCases(
+      [{ vars: { input: 'test' }, metadata: { pluginId: 'test-plugin' } }],
+      'input',
+      { steps: ['base64', 'unicode-normalization'] },
+      [...mockStrategies, unicodeNormalizationStrategy],
+      mockLoadStrategy,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].vars?.input).toBe('dGVzdA==');
+    expect(result[0].metadata?.strategyId).toBe('base64');
   });
 
   it('should handle colon-separated strategy IDs', async () => {
@@ -693,6 +732,41 @@ describe('addLayerTestCases', () => {
           { id: 'base64', config: { someOption: true } },
         ]);
       }
+    });
+
+    it('should respect plugin exclusions for per-turn layers on each test case', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'coding-agent test' },
+          metadata: {
+            pluginId: 'coding-agent:secret-file-read',
+            pluginConfig: { excludeStrategies: ['unicode-normalization'] },
+          },
+        },
+        {
+          vars: { input: 'general test' },
+          metadata: { pluginId: 'harmful:test' },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:hydra', 'unicode-normalization', 'audio'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      const codingAgentProvider = result[0].provider;
+      const generalProvider = result[1].provider;
+      expect(codingAgentProvider).toMatchObject({
+        config: { _perTurnLayers: ['audio'] },
+      });
+      expect(generalProvider).toMatchObject({
+        config: { _perTurnLayers: ['unicode-normalization', 'audio'] },
+      });
+      expect(result[0].metadata?.strategyId).toBe('jailbreak:hydra/audio');
+      expect(result[1].metadata?.strategyId).toBe('jailbreak:hydra/unicode-normalization/audio');
     });
 
     it('should generate correct metric suffix for each attack provider', async () => {

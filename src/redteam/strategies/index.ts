@@ -3,7 +3,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { isCustomStrategy } from '../constants/strategies';
+import { findInvalidUnicodeNormalizationForms, isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -32,7 +32,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
-import { addUnicodeNormalization, resolveUnicodeNormalizationForm } from './unicodeNormalization';
+import { addUnicodeNormalization } from './unicodeNormalization';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
@@ -418,8 +418,8 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
       continue;
     }
 
-    if (strategy.id === 'unicode-normalization') {
-      resolveUnicodeNormalizationForm(strategy.config);
+    if (findInvalidUnicodeNormalizationForms(strategy.id, strategy.config).length > 0) {
+      throw new Error('Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD');
     }
   }
 
