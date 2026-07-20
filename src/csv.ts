@@ -210,8 +210,7 @@ export function assertionFromString(expected: string): Assertion {
       type === 'perplexity' ||
       type === 'rouge-n' ||
       type === 'similar' ||
-      type === 'starts-with' ||
-      type === 'ends-with'
+      type === 'starts-with'
     ) {
       const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
       return {
