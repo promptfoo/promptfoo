@@ -38,7 +38,9 @@ function collectKeys(content: string): { live: KeyEntry[]; commented: KeyEntry[]
   const commented: KeyEntry[] = [];
   const stack: { key: string; indent: number }[] = [];
 
-  content.split('\n').forEach((line, index) => {
+  // Split on \r?\n so a Windows CRLF checkout does not leave a trailing \r on
+  // every line, which would break the key regex below.
+  content.split(/\r?\n/).forEach((line, index) => {
     const lineNumber = index + 1;
     const isComment = /^\s*#/.test(line);
     const match = KEY_RE.exec(isComment ? uncomment(line) : line);
@@ -106,7 +108,9 @@ describe('helm chart values.yaml', () => {
    */
   it('documents only value keys that the chart actually reads', () => {
     const doc = fs.readFileSync(selfHostingDocPath, 'utf-8');
-    const block = /```yaml title="my-values\.yaml"\n([\s\S]*?)```/.exec(doc);
+    // \r?\n so the fence still matches on Windows checkouts, where git hands
+    // back CRLF line endings and a bare \n never matches.
+    const block = /```yaml title="my-values\.yaml"\r?\n([\s\S]*?)```/.exec(doc);
     expect(block).not.toBeNull();
 
     const documented = collectKeys(block![1]).live.filter((entry) => entry.indent === 0);
