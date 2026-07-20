@@ -41,7 +41,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
-import { redteamProviderManager } from './providers/shared';
+import { type LoadableRedteamProvider, redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
   remoteGenerationContextPayload,
@@ -617,6 +617,7 @@ async function applyStrategies(
   strategies: RedteamStrategyObject[],
   injectVar: string,
   provider: ApiProvider,
+  providerSpec: LoadableRedteamProvider | undefined,
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
@@ -698,16 +699,20 @@ async function applyStrategies(
       {
         ...(strategy.config || {}),
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
-        // Keep every strategy phase on the provider already selected for this synthesis run.
-        // Re-reading cliState here can select a stale or cached provider after plugin generation.
-        redteamProvider: provider,
-        __generationProvider: provider,
-        // Generation-time strategies that load a specialized local provider must remain in usage totals.
-        __wrapGenerationProvider: wrapGenerationProvider,
+        // This config can be sent to remote generation and persisted in generated test cases.
+        // Keep it declarative; live providers can hold credentials and are not YAML-safe.
+        redteamProvider: providerSpec,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
       strategy.id,
+      {
+        // Keep every local strategy phase on the provider already selected for this synthesis run.
+        // Re-reading cliState here can select a stale or cached provider after plugin generation.
+        generationProvider: provider,
+        // Specialized local providers still need to contribute to generation usage totals.
+        wrapGenerationProvider,
+      },
     );
 
     // Filter out null/undefined
@@ -1098,6 +1103,7 @@ export async function synthesize({
   const providerForGeneration = await redteamProviderManager.getProvider({
     provider,
   });
+  const redteamProviderSpec = redteamProviderManager.getProviderSpec({ provider });
   const generationTokenUsage: TokenUsage = {
     cached: 0,
     completion: 0,
@@ -1712,6 +1718,7 @@ export async function synthesize({
       [retryStrategy],
       injectVar,
       redteamProvider,
+      redteamProviderSpec,
       purpose,
       undefined,
       maxCharsPerMessage,
@@ -1738,6 +1745,7 @@ export async function synthesize({
       nonBasicStrategies,
       injectVar,
       redteamProvider,
+      redteamProviderSpec,
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,

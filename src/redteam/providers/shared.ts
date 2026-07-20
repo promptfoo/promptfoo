@@ -113,6 +113,7 @@ async function loadRedteamProvider({
 
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
+  private providerSpec: LoadableRedteamProvider | undefined;
   private jsonOnlyProvider: ApiProvider | undefined;
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
@@ -140,6 +141,7 @@ class RedteamProviderManager {
 
   clearProvider() {
     this.provider = undefined;
+    this.providerSpec = undefined;
     this.jsonOnlyProvider = undefined;
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
@@ -149,8 +151,55 @@ class RedteamProviderManager {
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
+    this.providerSpec =
+      typeof provider === 'string' || isProviderOptions(provider) ? provider : undefined;
     this.provider = await loadRedteamProvider({ provider });
     this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+  }
+
+  private getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
+    if (typeof cliState.config?.defaultTest !== 'object') {
+      return undefined;
+    }
+
+    return (
+      (cliState.config.defaultTest as any)?.provider ||
+      (cliState.config.defaultTest as any)?.options?.provider?.text ||
+      (cliState.config.defaultTest as any)?.options?.provider ||
+      undefined
+    );
+  }
+
+  /**
+   * Resolves the declarative provider using the same precedence as getProvider().
+   * Runtime ApiProvider instances are deliberately excluded because they can contain credentials.
+   */
+  getProviderSpec({
+    provider,
+    fallbackProvider,
+  }: {
+    provider?: RedteamFileConfig['provider'];
+    fallbackProvider?: RedteamFileConfig['provider'];
+  } = {}): LoadableRedteamProvider | undefined {
+    const toSpec = (value: RedteamFileConfig['provider'] | undefined) =>
+      typeof value === 'string' || isProviderOptions(value) ? value : undefined;
+
+    if (provider) {
+      return toSpec(provider);
+    }
+    if (this.provider && this.jsonOnlyProvider) {
+      return this.providerSpec;
+    }
+    if (fallbackProvider) {
+      return toSpec(fallbackProvider);
+    }
+
+    const configuredProvider = cliState.config?.redteam?.provider;
+    if (configuredProvider) {
+      return toSpec(configuredProvider);
+    }
+
+    return toSpec(this.getDefaultTestProvider());
   }
 
   async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
@@ -209,14 +258,7 @@ class RedteamProviderManager {
     // 4) If no configured redteam provider, try defaultTest config chain as fallback
     // This ensures users who configure defaultTest.options.provider get consistent behavior
     if (!configuredProvider) {
-      const defaultTestProvider =
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.provider) ||
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.options?.provider) ||
-        undefined;
+      const defaultTestProvider = this.getDefaultTestProvider();
 
       if (defaultTestProvider) {
         logger.debug(

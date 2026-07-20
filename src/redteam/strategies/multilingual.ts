@@ -18,6 +18,7 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { ApiProvider, TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 /**
  * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
@@ -562,6 +563,7 @@ export async function addMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   // Deprecation warning - this strategy will be removed in a future version
   logger.debug(
@@ -583,7 +585,12 @@ export async function addMultilingual(
 
   // Fallback: No language modifiers found - use old translation logic
   // This maintains backward compatibility for users who specify language differently
-  if (shouldGenerateRemote()) {
+  // Remote generation can only reproduce the selected provider from its declarative spec.
+  // If the winner is an opaque runtime provider, keep generation local instead of routing
+  // the request to the remote service's default provider.
+  const canGenerateRemote =
+    !runtimeContext?.generationProvider || config.redteamProvider !== undefined;
+  if (shouldGenerateRemote() && canGenerateRemote) {
     const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
     if (multilingualTestCases.length > 0) {
       return multilingualTestCases;
@@ -630,8 +637,8 @@ export async function addMultilingual(
       originalText,
       languages,
       batchSize,
-      config.__wrapGenerationProvider,
-      config.__generationProvider,
+      runtimeContext?.wrapGenerationProvider,
+      runtimeContext?.generationProvider,
     );
 
     // Create test cases for each successful translation

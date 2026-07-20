@@ -5,7 +5,7 @@ import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
-import type { Strategy } from './types';
+import type { Strategy, StrategyRuntimeContext } from './types';
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -43,6 +43,7 @@ export async function addLayerTestCases(
   config: Record<string, unknown>,
   strategies: Strategy[],
   loadStrategy: (strategyPath: string) => Promise<Strategy>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   // Compose strategies in-order. Config example:
   // { steps: [ 'base64', { id: 'rot13' } ] }
@@ -158,10 +159,13 @@ export async function addLayerTestCases(
       pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
     );
 
-    const next = await stepAction(applicable, injectVar, {
+    const stepConfig = {
       ...(stepObj.config || {}),
       ...(config || {}),
-    });
+    };
+    const next = runtimeContext
+      ? await stepAction(applicable, injectVar, stepConfig, undefined, runtimeContext)
+      : await stepAction(applicable, injectVar, stepConfig);
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
     current = next as TestCaseWithPlugin[];

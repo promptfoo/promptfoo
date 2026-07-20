@@ -167,10 +167,16 @@ describe('mathPrompt', () => {
 
       vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(loadedProvider);
 
-      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
-        mathConcepts: ['topology'],
-        __wrapGenerationProvider: wrapGenerationProvider,
-      });
+      const result = await addMathPrompt(
+        [{ vars: { prompt: 'test' } }] as any,
+        'prompt',
+        {
+          mathConcepts: ['topology'],
+        },
+        {
+          wrapGenerationProvider,
+        },
+      );
 
       expect(wrapGenerationProvider).toHaveBeenCalledWith(loadedProvider);
       expect(trackedProvider.callApi).toHaveBeenCalledTimes(1);
@@ -186,14 +192,74 @@ describe('mathPrompt', () => {
         }),
       });
 
-      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
-        mathConcepts: ['topology'],
-        __generationProvider: requestProvider,
-      });
+      const result = await addMathPrompt(
+        [{ vars: { prompt: 'test' } }] as any,
+        'prompt',
+        {
+          mathConcepts: ['topology'],
+        },
+        {
+          generationProvider: requestProvider,
+        },
+      );
 
       expect(redteamProviderManager.getProvider).not.toHaveBeenCalled();
       expect(requestProvider.callApi).toHaveBeenCalledTimes(1);
       expect(String(result[0]?.vars?.prompt)).toContain('request-scoped');
+    });
+
+    it('keeps runtime providers out of remote generation payloads', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      const requestProvider = {
+        id: () => 'anthropic:claude-sonnet-4-20250514',
+        callApi: vi.fn(),
+        apiKey: 'resolved-secret',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { result: [{ vars: { prompt: 'remote-encoded' } }] },
+      } as any);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      await addMathPrompt(
+        [{ vars: { prompt: 'test' } }] as any,
+        'prompt',
+        { redteamProvider: 'anthropic:claude-sonnet-4-20250514' },
+        { generationProvider: requestProvider as any },
+      );
+
+      const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+      expect(requestBody).toBeTypeOf('string');
+      expect(requestBody).not.toContain('resolved-secret');
+      expect(JSON.parse(requestBody as string).config).toEqual({
+        redteamProvider: 'anthropic:claude-sonnet-4-20250514',
+      });
+    });
+
+    it('stays local when a runtime provider has no serializable spec', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      const requestProvider = createMockProvider({
+        id: 'runtime-only',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'local-runtime' }),
+        }),
+      });
+
+      const result = await addMathPrompt(
+        [{ vars: { prompt: 'test' } }] as any,
+        'prompt',
+        { mathConcepts: ['topology'] },
+        { generationProvider: requestProvider },
+      );
+
+      expect(fetchWithCache).not.toHaveBeenCalled();
+      expect(requestProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(String(result[0]?.vars?.prompt)).toContain('local-runtime');
     });
 
     it('should validate mathConcepts config', async () => {

@@ -310,6 +310,22 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Preloads regular and jsonOnly caches
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(1, ['test-provider']);
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(2, ['test-provider']);
+      expect(redteamProviderManager.getProviderSpec()).toBe('test-provider');
+    });
+
+    it('does not expose runtime provider instances as cached provider specs', async () => {
+      const runtimeProvider = createMockProvider({ id: 'runtime-provider' });
+      setCliStateConfig({ redteam: { provider: 'stale-provider' } });
+
+      await redteamProviderManager.setProvider(runtimeProvider);
+
+      expect(redteamProviderManager.getProviderSpec()).toBeUndefined();
+    });
+
+    it('returns the defaultTest provider spec when it wins resolution', () => {
+      setCliStateConfig({ defaultTest: { options: { provider: 'default-test-provider' } } });
+
+      expect(redteamProviderManager.getProviderSpec()).toBe('default-test-provider');
     });
 
     it('prefers an explicit provider over cached providers', async () => {

@@ -391,6 +391,10 @@ describe('synthesize', () => {
           maxCharsPerMessage: 12,
         }),
         'goat',
+        expect.objectContaining({
+          generationProvider: expect.any(Object),
+          wrapGenerationProvider: expect.any(Function),
+        }),
       );
       expect(result.testCases).toEqual(
         expect.arrayContaining([
@@ -3985,13 +3989,17 @@ describe('Language configuration', () => {
 
         // Mock strategy that captures the config it receives
         let capturedConfig: Record<string, any> | undefined;
-        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
-          capturedConfig = config;
-          return testCases.map((tc: any) => ({
-            ...tc,
-            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
-          }));
-        });
+        let capturedRuntimeContext: Record<string, any> | undefined;
+        const mockStrategyAction = vi
+          .fn()
+          .mockImplementation((testCases, _injectVar, config, _strategyId, runtimeContext) => {
+            capturedConfig = config;
+            capturedRuntimeContext = runtimeContext;
+            return testCases.map((tc: any) => ({
+              ...tc,
+              metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+            }));
+          });
 
         vi.spyOn(Strategies, 'find').mockReturnValue({
           id: 'jailbreak',
@@ -4026,8 +4034,9 @@ describe('Language configuration', () => {
           expect(getProviderSpy).toHaveBeenCalledWith({ provider: 'openai:chat:gpt-4.1' });
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          expect(capturedConfig?.redteamProvider.id()).toBe('mock-provider');
-          expect(capturedConfig?.__generationProvider).toBe(capturedConfig?.redteamProvider);
+          expect(capturedConfig?.redteamProvider).toBe('openai:chat:gpt-4.1');
+          expect(capturedConfig).not.toHaveProperty('__generationProvider');
+          expect(capturedRuntimeContext?.generationProvider.id()).toBe('mock-provider');
           expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
           getProviderSpy.mockRestore();
@@ -4099,13 +4108,17 @@ describe('Language configuration', () => {
         });
 
         let capturedConfig: Record<string, any> | undefined;
-        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
-          capturedConfig = config;
-          return testCases.map((tc: any) => ({
-            ...tc,
-            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
-          }));
-        });
+        let capturedRuntimeContext: Record<string, any> | undefined;
+        const mockStrategyAction = vi
+          .fn()
+          .mockImplementation((testCases, _injectVar, config, _strategyId, runtimeContext) => {
+            capturedConfig = config;
+            capturedRuntimeContext = runtimeContext;
+            return testCases.map((tc: any) => ({
+              ...tc,
+              metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+            }));
+          });
 
         vi.spyOn(Strategies, 'find').mockReturnValue({
           id: 'jailbreak',
@@ -4122,8 +4135,9 @@ describe('Language configuration', () => {
 
         expect(mockStrategyAction).toHaveBeenCalled();
         expect(capturedConfig).toBeDefined();
-        expect(capturedConfig?.redteamProvider).toBeDefined();
-        expect(capturedConfig?.__generationProvider).toBe(capturedConfig?.redteamProvider);
+        expect(capturedConfig?.redteamProvider).toBeUndefined();
+        expect(capturedConfig).not.toHaveProperty('__generationProvider');
+        expect(capturedRuntimeContext?.generationProvider).toBeDefined();
       } finally {
         cliState.config = originalConfig;
       }
@@ -4152,13 +4166,17 @@ describe('Language configuration', () => {
         });
 
         let capturedConfig: Record<string, any> | undefined;
-        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
-          capturedConfig = config;
-          return testCases.map((tc: any) => ({
-            ...tc,
-            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
-          }));
-        });
+        let capturedRuntimeContext: Record<string, any> | undefined;
+        const mockStrategyAction = vi
+          .fn()
+          .mockImplementation((testCases, _injectVar, config, _strategyId, runtimeContext) => {
+            capturedConfig = config;
+            capturedRuntimeContext = runtimeContext;
+            return testCases.map((tc: any) => ({
+              ...tc,
+              metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+            }));
+          });
 
         vi.spyOn(Strategies, 'find').mockReturnValue({
           id: 'jailbreak',
@@ -4189,8 +4207,9 @@ describe('Language configuration', () => {
 
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          expect(capturedConfig?.redteamProvider.id()).toBe('mock-provider');
-          expect(capturedConfig?.__generationProvider).toBe(capturedConfig?.redteamProvider);
+          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+          expect(capturedConfig).not.toHaveProperty('__generationProvider');
+          expect(capturedRuntimeContext?.generationProvider.id()).toBe('mock-provider');
         } finally {
           getProviderSpy.mockRestore();
           getGradingProviderSpy.mockRestore();

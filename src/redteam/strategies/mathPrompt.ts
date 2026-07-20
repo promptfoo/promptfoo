@@ -16,6 +16,7 @@ import {
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { ApiProvider, TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -160,8 +161,14 @@ export async function addMathPrompt(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
-  if (shouldGenerateRemote()) {
+  // Remote generation can only reproduce the selected provider from its declarative spec.
+  // If the winner is an opaque runtime provider, keep generation local instead of routing
+  // the request to the remote service's default provider.
+  const canGenerateRemote =
+    !runtimeContext?.generationProvider || config.redteamProvider !== undefined;
+  if (shouldGenerateRemote() && canGenerateRemote) {
     const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);
     if (mathPromptTestCases.length > 0) {
       return mathPromptTestCases;
@@ -197,8 +204,8 @@ export async function addMathPrompt(
       const encodedText = await encodeMathPrompt(
         originalText,
         concept,
-        config.__wrapGenerationProvider,
-        config.__generationProvider,
+        runtimeContext?.wrapGenerationProvider,
+        runtimeContext?.generationProvider,
       );
 
       encodedTestCases.push({

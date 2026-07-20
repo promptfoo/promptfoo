@@ -89,6 +89,37 @@ describe('addLayerTestCases', () => {
     vi.clearAllMocks();
   });
 
+  it('passes runtime provider context to nested strategies', async () => {
+    const runtimeContext = {
+      generationProvider: { id: () => 'request-provider', callApi: vi.fn() } as any,
+    };
+    const nestedAction = vi.fn(async (testCases: TestCaseWithPlugin[]) => testCases);
+    const strategies: Strategy[] = [{ id: 'math-prompt', action: nestedAction }];
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'test' },
+        metadata: { pluginId: 'test-plugin' },
+      },
+    ];
+
+    await addLayerTestCases(
+      testCases,
+      'input',
+      { steps: ['math-prompt'] },
+      strategies,
+      mockLoadStrategy,
+      runtimeContext,
+    );
+
+    expect(nestedAction).toHaveBeenCalledWith(
+      testCases,
+      'input',
+      expect.objectContaining({ steps: ['math-prompt'] }),
+      undefined,
+      runtimeContext,
+    );
+  });
+
   it('should return empty array when no steps are provided', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {

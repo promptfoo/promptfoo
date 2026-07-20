@@ -50,6 +50,9 @@ describe('Redteam Routes', () => {
         id: () => 'test-provider',
         callApi: vi.fn(),
       } as any);
+      mockedRedteamProviderManager.getProviderSpec.mockImplementation(
+        ({ provider, fallbackProvider } = {}) => (provider ?? fallbackProvider) as any,
+      );
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
     });
 
@@ -272,11 +275,53 @@ describe('Redteam Routes', () => {
             expect.any(Array),
             'query',
             expect.objectContaining({
-              __generationProvider: previewProvider,
-              redteamProvider: previewProvider,
+              redteamProvider: 'openai:chat:gpt-4.1',
             }),
             'math-prompt',
+            { generationProvider: previewProvider },
           );
+          expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('__generationProvider');
+        } finally {
+          strategySpy.mockRestore();
+        }
+      });
+
+      it('keeps the cached provider spec serializable during strategy generation', async () => {
+        const previewProvider = {
+          id: () => 'cached-preview-provider',
+          callApi: vi.fn(),
+          apiKey: 'resolved-secret',
+        };
+        mockedRedteamProviderManager.getProvider.mockResolvedValue(previewProvider as any);
+        mockedRedteamProviderManager.getProviderSpec.mockReturnValue('anthropic:claude-sonnet-4');
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyAction = vi.fn().mockResolvedValue([{ vars: { query: 'transformed' } }]);
+        const strategySpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: strategyAction,
+        } as any);
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'aegis', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+            });
+
+          expect(response.status).toBe(200);
+          expect(strategyAction.mock.calls[0]?.[2]).toEqual(
+            expect.objectContaining({ redteamProvider: 'anthropic:claude-sonnet-4' }),
+          );
+          expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('apiKey');
+          expect(strategyAction.mock.calls[0]?.[4]).toEqual({
+            generationProvider: previewProvider,
+          });
         } finally {
           strategySpy.mockRestore();
         }

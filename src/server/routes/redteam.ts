@@ -94,6 +94,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       provider: provider as RedteamFileConfig['provider'],
       fallbackProvider: REDTEAM_MODEL,
     });
+    const redteamProviderSpec = redteamProviderManager.getProviderSpec({
+      provider: provider as RedteamFileConfig['provider'],
+      fallbackProvider: REDTEAM_MODEL,
+    });
 
     const testCases = await pluginFactory.action({
       provider: redteamProvider,
@@ -126,11 +130,14 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           injectVar,
           {
             ...(strategy.config || {}),
-            // Keep strategy generation on the same request-scoped provider as plugin generation.
-            redteamProvider,
-            __generationProvider: redteamProvider,
+            // Strategy config may be serialized remotely or saved in generated tests.
+            redteamProvider: redteamProviderSpec,
           },
           strategy.id,
+          {
+            // Live provider instances stay request-local because they can contain credentials.
+            generationProvider: redteamProvider,
+          },
         );
 
         if (strategyTestCases && strategyTestCases.length > 0) {
