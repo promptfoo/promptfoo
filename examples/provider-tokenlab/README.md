@@ -34,10 +34,14 @@ providers:
   - id: anthropic:messages:claude-sonnet-4-6
     config:
       apiBaseUrl: https://api.tokenlab.sh
+      apiKey: '{{env.TOKENLAB_API_KEY}}'
   - id: google:gemini-2.5-flash
     config:
       apiBaseUrl: https://api.tokenlab.sh
+      apiKey: '{{env.TOKENLAB_API_KEY}}'
 ```
+
+Set `apiKey` explicitly on each provider: these providers only read their own vendor credentials (`ANTHROPIC_API_KEY` for Anthropic, `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google), so pointing them at TokenLab without `apiKey` sends an unauthenticated request even when `TOKENLAB_API_KEY` is exported.
 
 Both providers append their own path: the Anthropic SDK requests `/v1/messages`, and the Google provider requests `/v1beta/models/<model>:generateContent`. Reach for the [`http` provider](https://www.promptfoo.dev/docs/providers/http/) only when you need a request or response shape those providers don't cover.
 
