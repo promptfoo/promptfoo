@@ -216,9 +216,9 @@ Update the model in the provider configuration:
 
 ```yaml
 config:
-  model: "gpt-4o-mini"  # More cost-effective option
+  model: 'gpt-4o-mini' # More cost-effective option
   # or
-  model: "openai:chat:gpt-5.4"      # Latest OpenAI model
+  model: 'openai:chat:gpt-5.4' # Latest OpenAI model
 ```
 
 ## Security Considerations

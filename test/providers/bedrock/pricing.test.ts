@@ -84,10 +84,10 @@ describe('calculateBedrockCost', () => {
     expect(calculateBedrockCost('cohere.command-r-plus-v1:0', 1e6, 1e6)).toBeCloseTo(18, 6);
   });
 
-  it('uses Claude Sonnet long-context rates above 200k effective input tokens', () => {
-    // Global endpoint isolates the long-context tier from the regional premium.
+  it('bills Claude Sonnet 4.6 at standard rates above 200k effective input tokens', () => {
+    // The full 1M context bills at the flat $3/$15 — no surcharge above 200K tokens.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-4-6', 200_001, 1_000)).toBeCloseTo(
-      (200_001 / 1e6) * 6 + (1_000 / 1e6) * 22.5,
+      (200_001 / 1e6) * 3 + (1_000 / 1e6) * 15,
       6,
     );
   });
@@ -101,9 +101,8 @@ describe('calculateBedrockCost', () => {
   });
 
   it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-    // Unlike Sonnet 4.5/4.6, Sonnet 5 bills its full 1M context at the standard rate, so a
-    // >200K request must NOT switch to the $6/$22.5 tier. Use the global endpoint to isolate
-    // this from the regional premium.
+    // Sonnet 5 bills its full 1M context at the standard rate. Use the global endpoint to
+    // isolate this from the regional premium.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
       (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
       6,

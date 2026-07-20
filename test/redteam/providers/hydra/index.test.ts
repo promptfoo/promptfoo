@@ -122,6 +122,11 @@ describe('HydraProvider', () => {
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
     mockCheckExfilTracking.mockReset().mockResolvedValue(undefined);
+    mockApplyRuntimeTransforms.mockReset().mockImplementation(async ({ prompt }) => ({
+      transformedPrompt: prompt,
+      audio: undefined,
+      image: undefined,
+    }));
     mockGetSessionId.mockReset().mockImplementation((response, context) => {
       return response?.sessionId ?? context?.vars?.sessionId;
     });
@@ -307,6 +312,43 @@ describe('HydraProvider', () => {
       expect(result.metadata?.stopReason).toBe('Max turns reached');
       // agent (100) + target (50) + learning update (100) = 250
       expect(result.tokenUsage?.total).toBe(250);
+    });
+
+    it('should execute an attack when the agent returns a prompt object', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: { prompt: 'Structured attack message' },
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
+      expect(result.metadata?.redteamHistory).toEqual([
+        expect.objectContaining({
+          prompt: 'Structured attack message',
+          output: 'Target response',
+        }),
+      ]);
     });
 
     it('should detect vulnerability when grader fails', async () => {

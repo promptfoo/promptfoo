@@ -7,4 +7,6 @@ export type CacheOptions = {
   bust?: boolean;
   /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
   repeatIndex?: number;
+  /** Precomputed, credential-free cache identity for callers with tenant-scoped keys. */
+  cacheKey?: string;
 };

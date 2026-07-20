@@ -425,6 +425,7 @@ export default function StrategyConfigDialog({
       });
     } else if (
       strategy === 'jailbreak' ||
+      strategy === 'jailbreak:goblin' ||
       strategy === 'jailbreak:hydra' ||
       strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
@@ -693,56 +694,61 @@ export default function StrategyConfigDialog({
     );
   };
 
-  const renderHydraStrategyConfig = () => (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        Hydra tracks its own attack history across turns and reuses what it learns during the scan.
-        By default it sends the full transcript to the target on every turn.
-      </p>
+  const renderHydraLikeStrategyConfig = () => {
+    const strategyName = strategy === 'jailbreak:goblin' ? 'Goblin' : 'Hydra';
+    const strategySlug = strategyName.toLowerCase();
 
-      <div className="space-y-2">
-        <Label htmlFor="hydra-max-turns">Max Turns</Label>
-        <Input
-          id="hydra-max-turns"
-          type="number"
-          value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
-          onChange={(e) => {
-            const parsedValue = Number.parseInt(e.target.value, 10);
-            setLocalConfig({
-              ...localConfig,
-              maxTurns: Number.isNaN(parsedValue)
-                ? undefined
-                : clampValue(parsedValue, 1, maxTurnsLimit),
-            });
-          }}
-          placeholder="Maximum conversation turns (default: 10)"
-          min={1}
-          max={maxTurnsLimit}
-        />
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          {strategyName} tracks its own attack history across turns and reuses what it learns during
+          the scan. By default it sends the full transcript to the target on every turn.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor={`${strategySlug}-max-turns`}>Max Turns</Label>
+          <Input
+            id={`${strategySlug}-max-turns`}
+            type="number"
+            value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
+            onChange={(e) => {
+              const parsedValue = Number.parseInt(e.target.value, 10);
+              setLocalConfig({
+                ...localConfig,
+                maxTurns: Number.isNaN(parsedValue)
+                  ? undefined
+                  : clampValue(parsedValue, 1, maxTurnsLimit),
+              });
+            }}
+            placeholder="Maximum conversation turns (default: 10)"
+            min={1}
+            max={maxTurnsLimit}
+          />
+          <p className="text-xs text-muted-foreground">
+            Maximum number of back-and-forth exchanges with the target model.
+            {!isCloudEnabled && ' — sign in for higher limits'}
+          </p>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <Switch
+            id={`${strategySlug}-stateful`}
+            checked={localConfig.stateful === true}
+            onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
+            className="mt-0.5"
+          />
+          <Label htmlFor={`${strategySlug}-stateful`} className="text-sm font-normal">
+            Use target-managed session memory. {strategyName} will send only the newest turn, so
+            your provider must preserve prior turns for the same session.
+          </Label>
+        </div>
+
         <p className="text-xs text-muted-foreground">
-          Maximum number of back-and-forth exchanges with the target model.
-          {!isCloudEnabled && ' — sign in for higher limits'}
+          {strategyName} requires Promptfoo Cloud remote generation.
         </p>
       </div>
-
-      <div className="flex items-start gap-3">
-        <Switch
-          id="hydra-stateful"
-          checked={localConfig.stateful === true}
-          onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
-          className="mt-0.5"
-        />
-        <Label htmlFor="hydra-stateful" className="text-sm font-normal">
-          Use target-managed session memory. Hydra will send only the newest turn, so your provider
-          must preserve prior turns for the same session.
-        </Label>
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        Hydra requires Promptfoo Cloud remote generation.
-      </p>
-    </div>
-  );
+    );
+  };
 
   const renderMultiTurnStrategyConfig = () => (
     <div className="flex flex-col gap-4">
@@ -1312,8 +1318,9 @@ export default function StrategyConfigDialog({
         return renderBestOfNStrategyConfig();
       case 'custom':
         return renderCustomStrategyConfig();
+      case 'jailbreak:goblin':
       case 'jailbreak:hydra':
-        return renderHydraStrategyConfig();
+        return renderHydraLikeStrategyConfig();
       case 'jailbreak:meta':
         return renderMetaStrategyConfig();
       case 'jailbreak:tree':

@@ -130,6 +130,11 @@ beforeEach(() => {
     retryDelayMs: 500,
     sanitizeAttributes: true,
   });
+  mockApplyRuntimeTransforms.mockReset().mockImplementation(async ({ prompt }) => ({
+    transformedPrompt: prompt,
+    audio: undefined,
+    image: undefined,
+  }));
 });
 
 describe('MemorySystem', () => {

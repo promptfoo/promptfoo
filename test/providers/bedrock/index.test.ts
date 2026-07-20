@@ -913,6 +913,34 @@ describe('AwsBedrockGenericProvider', () => {
     });
   });
 
+  describe('BEDROCK_MODEL TITAN_TEXT', () => {
+    const modelHandler = BEDROCK_MODEL.TITAN_TEXT;
+
+    it('should extract outputText from the first result', () => {
+      const mockResponse = { results: [{ outputText: 'This is a test response.' }] };
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined when results are missing instead of throwing', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+      expect(modelHandler.output({}, { results: [] })).toBeUndefined();
+    });
+  });
+
+  describe('BEDROCK_MODEL COHERE_COMMAND', () => {
+    const modelHandler = BEDROCK_MODEL.COHERE_COMMAND;
+
+    it('should extract text from the first generation', () => {
+      const mockResponse = { generations: [{ text: 'This is a test response.' }] };
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined when generations are missing instead of throwing', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+      expect(modelHandler.output({}, { generations: [] })).toBeUndefined();
+    });
+  });
+
   describe('getCredentials', () => {
     it('should return credentials if accessKeyId and secretAccessKey are provided', async () => {
       const provider = new (class extends AwsBedrockGenericProvider {
@@ -3392,6 +3420,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // so they must not appear in the InvokeModel model map.
     expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-sol']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-terra']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-luna']).toBeUndefined();
   });
 
   describe('getHandlerForModel OpenAI routing', () => {
@@ -3415,6 +3446,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       // a direct/forced InvokeModel resolution should explain that rather than silently try.
       expect(() => getHandlerForModel('openai.gpt-5.5')).toThrow(/Responses API/);
       expect(() => getHandlerForModel('openai.gpt-5.4')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-sol')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-terra')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-luna')).toThrow(/Responses API/);
     });
 
     it('should suggest the bare frontier id when a region/geo-prefixed frontier id is forced down InvokeModel', () => {
