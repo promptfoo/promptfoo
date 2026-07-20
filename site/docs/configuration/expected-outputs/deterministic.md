@@ -1140,7 +1140,7 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number between 0 and 100; out-of-range values cause an assertion error
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
