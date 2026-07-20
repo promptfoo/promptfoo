@@ -19,11 +19,11 @@
 
   <!-- Apply Augmentations -->
   <g transform="translate(650,225)">
-    <rect x="-90" y="-40" width="180" height="80" rx="5" fill="#fff3e6" stroke="#ff9800" stroke-width="2"/>
+    <rect x="-90" y="-40" width="180" height="100" rx="5" fill="#fff3e6" stroke="#ff9800" stroke-width="2"/>
     <text x="0" y="-20" text-anchor="middle" font-family="Arial" font-size="14">Apply Augmentations</text>
     <text x="0" y="0" text-anchor="middle" font-family="Arial" font-size="12">• Random capitalization</text>
     <text x="0" y="20" text-anchor="middle" font-family="Arial" font-size="12">• Character scrambling</text>
-    <text x="0" y="40" text-anchor="middle" font-family="Arial" font-size="12">• ASCII noise</text>
+    <text x="0" y="40" text-anchor="middle" font-family="Arial" font-size="12">• Character noising</text>
   </g>
 
   <!-- Language Model -->
@@ -64,7 +64,7 @@
     <!-- Original Request to Augmentations -->
     <path d="M 490 125 Q 600 125 650 185" marker-end="url(#arrowhead)"/>
     <!-- Augmentations to Model -->
-    <path d="M 650 265 L 650 395" marker-end="url(#arrowhead)"/>
+    <path d="M 650 285 L 650 395" marker-end="url(#arrowhead)"/>
     <!-- Model to Response -->
     <path d="M 560 425 Q 500 425 400 495" marker-end="url(#arrowhead)"/>
     <!-- Response to Classifier -->

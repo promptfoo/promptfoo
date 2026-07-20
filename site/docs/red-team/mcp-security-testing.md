@@ -70,7 +70,7 @@ redteam:
 
   strategies:
     - multi-turn # Multi-turn conversation attacks
-    - jailbreak # Attempt to bypass restrictions
+    - jailbreak:meta # Attempt to bypass restrictions
     - jailbreak-templates # Applies static jailbreak templates
 ```
 
@@ -156,7 +156,7 @@ redteam:
     - bfla
 
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:tree
     - jailbreak:composite
 ```

@@ -6,7 +6,7 @@ sidebar_label: Layer
 
 # Layer Strategy
 
-The Layer strategy allows you to compose multiple red team strategies sequentially, creating sophisticated attack chains by feeding the output of one strategy into the next. This enables complex transformations like applying multiple encoding layers or combining agentic attacks with multi-modal output (audio/image).
+The Layer strategy composes multiple red team strategies sequentially by feeding the output of one strategy into the next. Use it to apply multiple encoding layers or combine agentic attacks with multimodal output such as audio or images.
 
 ## Quick Start
 
@@ -37,11 +37,11 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 
 ### Mode 2: Agentic + Per-Turn Transforms
 
-When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:
+When the **first step** is an agentic strategy (Hydra, Goblin, Crescendo, GOAT, Meta, etc.), layer applies the remaining transformations to each turn or attempt:
 
 1. **Agentic Orchestration**: The agentic strategy controls the attack loop
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
-3. **Multi-Modal Attacks**: Combine conversation-based attacks with audio/image delivery
+3. **Multimodal Attacks**: Combine conversation-based attacks with audio or image delivery
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -64,15 +64,15 @@ redteam:
     - id: layer
       config:
         steps:
-          - id: jailbreak
+          - id: jailbreak:meta
             config:
-              maxIterations: 2
+              numIterations: 2
           - audio
 ```
 
 ## Ordering Rules
 
-Agentic strategies (hydra, crescendo, goat, jailbreak) must come first (max 1), and multi-modal strategies (audio, image) must come last (max 1). Text transforms (base64, rot13, leetspeak) can be chained in between.
+Agentic strategies such as `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, and `jailbreak:meta` must come first (maximum one), and multimodal strategies (`audio`, `image`) must come last (maximum one). Text transforms such as `base64`, `rot13`, and `leetspeak` can be chained in between.
 
 ### Valid Patterns
 
@@ -80,13 +80,13 @@ Agentic strategies (hydra, crescendo, goat, jailbreak) must come first (max 1), 
 # Transform chain (no agentic)
 steps: [base64, rot13]
 
-# Transform + multi-modal
+# Transform + multimodal
 steps: [leetspeak, audio]
 
 # Agentic only
 steps: [jailbreak:hydra]
 
-# Agentic + multi-modal (recommended for voice/vision targets)
+# Agentic + multimodal (recommended for voice/vision targets)
 steps: [jailbreak:hydra, audio]
 ```
 
@@ -96,13 +96,13 @@ steps: [jailbreak:hydra, audio]
 # ❌ Wrong: Agentic not first (transforms will corrupt the goal)
 steps: [base64, jailbreak:hydra]
 
-# ❌ Wrong: Multi-modal not last
+# ❌ Wrong: Multimodal not last
 steps: [audio, base64]
 
 # ❌ Wrong: Multiple agentic strategies
-steps: [hydra, crescendo]
+steps: [jailbreak:hydra, crescendo]
 
-# ❌ Wrong: Multiple multi-modal strategies
+# ❌ Wrong: Multiple multimodal strategies
 steps: [audio, image]
 ```
 
@@ -165,9 +165,9 @@ redteam:
       config:
         steps:
           # Step with custom configuration
-          - id: jailbreak
+          - id: jailbreak:meta
             config:
-              maxIterations: 10
+              numIterations: 10
 
           # Simple step
           - hex
@@ -190,7 +190,7 @@ redteam:
         plugins: ['harmful', 'pii'] # Default for all steps
         steps:
           # Override for specific step
-          - id: jailbreak
+          - id: jailbreak:meta
             config:
               plugins: ['harmful'] # Only apply to harmful plugin
 
@@ -207,7 +207,7 @@ redteam:
 
 ### Multi-Turn Audio Attack
 
-Test voice-enabled AI agents with sophisticated jailbreak attempts:
+Test voice-enabled AI agents with adaptive jailbreak attempts:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -237,7 +237,7 @@ redteam:
 
 ### Single-Turn Audio Attack
 
-For multi-attempt strategies (jailbreak, jailbreak:meta, jailbreak:tree), each independent attempt is converted to audio:
+For multi-attempt strategies such as `jailbreak:meta` and `jailbreak:tree`, each independent attempt is converted to audio:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -360,10 +360,13 @@ class AudioProvider {
             });
           }
         }
-      } catch (e) {
-        // Fallback to treating as plain text
-        messages = [{ role: 'user', content: prompt }];
+      } catch {
+        // Treat invalid JSON as plain text below
       }
+    }
+
+    if (messages.length === 0) {
+      messages = [{ role: 'user', content: prompt }];
     }
 
     // Call your audio-capable API (e.g., OpenAI gpt-audio-1.5)
@@ -429,33 +432,35 @@ Be aware of test case growth when combining strategies:
 ## Tips and Best Practices
 
 1. **Agentic First**: When combining agentic with transforms, always place the agentic strategy first
-2. **Multi-Modal Last**: Audio and image transforms must be the final step
+2. **Multimodal Last**: Audio and image transforms must be the final step
 3. **Logical Combinations**: Stack strategies that make semantic sense together
 4. **Debug Incrementally**: Test each step individually before combining
 5. **Document Complex Layers**: Add comments explaining the attack chain logic
-6. **Consider Target Models**: Voice/vision targets need appropriate multi-modal steps
+6. **Consider Target Models**: Voice/vision targets need appropriate multimodal steps
 7. **Use Plugin Targeting**: Focus different steps on different vulnerability types
-8. **Custom Provider Required**: Audio/image attacks require a custom provider that handles the hybrid payload format
+8. **Provider Support**: Audio/image attacks may require a custom provider that handles the hybrid payload format
 
 ## Supported Agentic Strategies
 
 The following strategies can be used as the first step with per-turn transforms:
 
-| Strategy          | Type          | Description                       |
-| ----------------- | ------------- | --------------------------------- |
-| `jailbreak:hydra` | Multi-turn    | Branching conversation attack     |
-| `crescendo`       | Multi-turn    | Gradual escalation attack         |
-| `goat`            | Multi-turn    | Goal-oriented adversarial testing |
-| `custom`          | Multi-turn    | Custom multi-turn strategy        |
-| `jailbreak`       | Multi-attempt | Iterative single-turn attempts    |
-| `jailbreak:meta`  | Multi-attempt | Meta-agent attack generation      |
-| `jailbreak:tree`  | Multi-attempt | Tree-based attack search          |
+| Strategy           | Type          | Description                       |
+| ------------------ | ------------- | --------------------------------- |
+| `jailbreak:hydra`  | Multi-turn    | Branching conversation attack     |
+| `jailbreak:goblin` | Multi-turn    | IICL-inspired conversation attack |
+| `crescendo`        | Multi-turn    | Gradual escalation attack         |
+| `goat`             | Multi-turn    | Generative Offensive Agent Tester |
+| `custom`           | Multi-turn    | Custom multi-turn strategy        |
+| `jailbreak`        | Multi-attempt | Iterative single-turn attempts    |
+| `jailbreak:meta`   | Multi-attempt | Meta-agent attack generation      |
+| `jailbreak:tree`   | Multi-attempt | Tree-based attack search          |
 
 ## Related Concepts
 
 - [Audio Strategy](./audio.md) - Text-to-speech conversion
 - [Image Strategy](./image.md) - Text-to-image conversion
-- [Hydra Strategy](./multi-turn.md) - Multi-turn jailbreak attacks
+- [Hydra Strategy](./hydra.md) - Multi-turn jailbreak attacks
+- [Goblin Strategy](./goblin.md) - IICL-inspired multi-turn attacks
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies

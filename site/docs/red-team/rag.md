@@ -48,7 +48,7 @@ redteam:
     - 'rbac'
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
 ```
 
 The `indirect-prompt-injection` plugin injects adversarial instructions into the variable named by `indirectInjectionVar` (your retrieved-context field) to test whether the RAG pipeline executes them. The value of `indirectInjectionVar` must match a variable in your prompt template (e.g. a `{{context}}` variable that holds retrieved documents) — see the [plugin documentation](/docs/red-team/plugins/indirect-prompt-injection/) for a complete example. The configuration also includes supporting plugins:
@@ -238,7 +238,7 @@ redteam:
           to infer individual customer information.
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
 ```
 
 This configuration uses:
@@ -632,7 +632,7 @@ This provider will handle the entire process of retrieving documents and generat
              It should not disclose sensitive employee information or confidential company data.
              The system should be resilient against attempts to manipulate it into providing false or misleading information.
      strategies:
-       - 'jailbreak'
+       - 'jailbreak:meta'
        - 'jailbreak-templates'
    ```
 

@@ -6,7 +6,7 @@ description: Stack multiple research-proven jailbreak methods including DAN, AIM
 
 # Composite Jailbreaks Strategy
 
-The Composite Jailbreaks strategy combines multiple jailbreak techniques from top research papers to create more sophisticated attacks.
+The Composite Jailbreaks strategy combines multiple jailbreak techniques from published research to create compound attacks.
 
 It works by chaining together individual techniques in different combinations to find effective bypasses.
 
@@ -188,7 +188,6 @@ The composite approach is often more effective than single techniques because:
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
 - [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
 - [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Citation Strategy](citation.md) - Academic framing technique used within composite approach

@@ -369,7 +369,7 @@ redteam:
     - hijacking
     - prompt-extraction
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 
 providers:

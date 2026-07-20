@@ -67,6 +67,6 @@ Wordplay prompts are useful because they test indirect content steering rather t
 ## Related Concepts
 
 - [Harmful Content](harmful.md)
-- [Prompt Injection](/docs/red-team/strategies/prompt-injection/)
+- [Jailbreak Templates](/docs/red-team/strategies/jailbreak-templates/)
 - [Hijacking](hijacking.md)
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

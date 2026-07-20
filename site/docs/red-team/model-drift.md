@@ -361,7 +361,7 @@ targets:
 redteam:
   plugins:
     - harmful
-    - jailbreak
+    - jailbreak:meta
     - prompt-extraction
 ```
 

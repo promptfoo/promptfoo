@@ -22,10 +22,14 @@ Add the strategy to your `promptfooconfig.yaml` to enable multi-turn adaptive te
 ```yaml title="promptfooconfig.yaml"
 redteam:
   strategies:
-    # Basic usage
     - jailbreak:hydra
+```
 
-    # With configuration
+To configure the strategy:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  strategies:
     - id: jailbreak:hydra
       config:
         # Optional: maximum turns before hydra stops (default: 10)
@@ -64,11 +68,11 @@ Hydra keeps a per-scan memory so later test cases can reuse successful tactics d
 
 ## Hydra vs Other Agentic Strategies
 
-| Strategy          | Turn Model           | Best For                          | Cost Profile |
-| ----------------- | -------------------- | --------------------------------- | ------------ |
-| `jailbreak`       | Single-turn          | Fast baselines, low cost          | Low          |
-| `jailbreak:meta`  | Iterative taxonomy   | Broad single-shot coverage        | Medium       |
-| `jailbreak:hydra` | Multi-turn branching | Stateful agents, evasive defenses | High         |
+| Strategy           | Turn Model           | Best For                                      |
+| ------------------ | -------------------- | --------------------------------------------- |
+| `jailbreak:meta`   | Single-turn          | Broad coverage without a conversation         |
+| `jailbreak:hydra`  | Multi-turn branching | General-purpose conversational attacks        |
+| `jailbreak:goblin` | Multi-turn branching | Encoding, logic, and pattern-completion paths |
 
 ## When to Use Hydra
 
@@ -80,8 +84,8 @@ Hydra is most effective when paired with plugin suites like `harmful`, `pii`, or
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) – Baseline single-turn optimization strategy
 - [Meta-Agent Jailbreaks](meta.md) – Strategic taxonomy builder for complex single-turn attacks
+- [Goblin Multi-turn](goblin.md) – Complementary multi-turn strategy focused on abstract and encoded attacks
 - [Multi-turn Jailbreaks](multi-turn.md) – Overview of conversational attacker agents
 - [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions) – Configure real target-side conversation state
 - [Tree-based Jailbreaks](tree.md) – Branching exploration without multi-turn conversations

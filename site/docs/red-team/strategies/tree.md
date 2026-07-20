@@ -81,9 +81,8 @@ This approach can cover a wide range of inputs and identify weaknesses that migh
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
 - [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
-- [Prompt Injections](prompt-injection.md) - Direct injection techniques
+- [Jailbreak Templates](jailbreak-templates.md) - Static jailbreak templates
 - [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
 

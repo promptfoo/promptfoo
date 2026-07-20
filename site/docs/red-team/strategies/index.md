@@ -14,7 +14,7 @@ Strategies are attack techniques that systematically probe LLM applications for 
 
 ## Recommended Strategies
 
-Most users only need two strategies for comprehensive coverage. These agentic methods provide the highest attack success rates across use cases.
+Start with a single-turn and a multi-turn strategy, then add specialized strategies for the attack surfaces your application exposes.
 
 ### Meta Agent: Best for Single-Turn
 
@@ -30,7 +30,7 @@ The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack t
 
 ### Quick Start
 
-For most applications, this configuration provides comprehensive red team coverage:
+For most applications, start with:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -55,7 +55,7 @@ Transform inputs using predefined patterns to bypass security controls. These ar
 
 Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive.
 
-By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
+By default, dynamic strategies like `jailbreak:meta` and `jailbreak:composite` will:
 
 - Make multiple attempts to bypass the target's security controls
 - Stop after exhausting the configured token budget
@@ -75,7 +75,7 @@ Indirect prompt injection strategies test whether AI agents can be manipulated t
 Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
 
 :::note
-All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
+All single-turn strategies can be applied to multi-turn applications. Multi-turn strategies need access to conversation context, either by replaying the transcript or by using a target-managed session.
 :::
 
 ## Configuration

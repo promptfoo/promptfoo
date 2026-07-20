@@ -61,7 +61,7 @@ redteam:
     # Add the jailbreak-templates strategy
     - jailbreak-templates
     # Additional strategies such as "jailbreak" are related to prompt injection
-    - jailbreak
+    - jailbreak:meta
 ```
 
 ## 2. Sensitive Information Disclosure (LLM02)
@@ -103,7 +103,7 @@ redteam:
   strategies:
     # Apply additional techniques to extract PII
     - jailbreak-templates
-    - jailbreak
+    - jailbreak:meta
 ```
 
 Or, using the OWASP shorthand:
@@ -167,7 +167,7 @@ redteam:
     - harmful
     - pii
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -495,7 +495,7 @@ redteam:
     - owasp:llm
   strategies:
     - jailbreak-templates
-    - jailbreak
+    - jailbreak:meta
 ```
 
 To learn more about setting up Promptfoo and finding LLM vulnerabilities, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).

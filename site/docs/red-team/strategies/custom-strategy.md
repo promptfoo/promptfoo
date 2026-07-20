@@ -14,7 +14,7 @@ tags: [red-team, strategies, custom, multi-turn]
 
 # Custom Strategy
 
-Write natural language instructions to create powerful multi-turn red team strategies. No coding required.
+Write natural language instructions to create reusable multi-turn red team strategies. No coding required.
 
 :::tip Quick Start
 
@@ -182,14 +182,14 @@ strategies:
   - id: custom
     config:
       strategyText: 'Your instructions'
-      stateful: true # Remember conversation state between API calls
+      stateful: true # Send only the latest turn; the target provider must preserve the session
       continueAfterSuccess: true # Keep testing even after achieving objective
-      maxBacktracks: 5 # How many times to retry if refused (default: 10)
+      maxBacktracks: 0 # Backtracking is disabled when stateful is true
 ```
 
 :::note
 
-There's also a global red team configuration option `excludeTargetOutputFromAgenticAttackGeneration` that prevents the AI from seeing target responses when generating follow-up attacks. This applies to all strategies, not just custom.
+The global red team option `excludeTargetOutputFromAgenticAttackGeneration` prevents an agentic attacker from seeing target responses when generating follow-up attacks. This applies to agentic strategies, not just Custom Strategy.
 
 :::
 
@@ -204,7 +204,7 @@ There's also a global red team configuration option `excludeTargetOutputFromAgen
 
 ### Stateful
 
-- Maintains conversation history
+- Sends only the latest turn and relies on the target provider to maintain conversation history
 - No rewinding - always moves forward
 - Preserves session data between turns
 - Use when: Testing stateful applications or specific conversation flows
@@ -220,6 +220,8 @@ strategies:
         Test if you can contradict earlier statements.
       stateful: true
 ```
+
+Configure the target provider to preserve the session between turns. See [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions).
 
 ## Creating Strategy Variants
 
@@ -296,4 +298,4 @@ If your strategy isn't working:
 
 ---
 
-**Remember**: The best custom strategies come from real discoveries. Start by manually testing, find patterns that work, then automate them.
+Start by manually testing, identify patterns that work, and then automate them.

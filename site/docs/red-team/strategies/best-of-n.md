@@ -85,23 +85,22 @@ For initial testing, we recommend starting with `useBasicRefusal: true` and rela
 
 BoN achieves impressive attack success rates across different models and modalities:
 
-- Text: 89% on GPT-4, 78% on Claude 3.5 Sonnet (10,000 samples)
-- Vision: 56% on GPT-4 Vision
-- Audio: 72% on GPT-4 Audio
+- Text: 89% on GPT-4o and 78% on Claude 3.5 Sonnet with 10,000 samples
+- Vision and audio: the paper also demonstrates attacks against GPT-4o vision and Gemini 1.5 Pro audio using modality-specific augmentations
 
 The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested. This illustrates why [ASR comparisons must account for attempt budget](/blog/asr-not-portable-metric): a 1% per-attempt method becomes 98% with 392 tries.
 
 ## Key Features
 
 - **Simple Implementation**: No need for gradients or model internals
-- **Multi-modal Support**: Works across text, vision, and audio inputs
+- **Multimodal Support**: Works across text, vision, and audio inputs
 - **Highly Parallelizable**: Can test multiple variations concurrently
 - **Predictable Scaling**: Success rate follows power-law behavior
 
 ## Related Concepts
 
 - [GOAT Strategy](goat.md)
-- [Iterative Jailbreaks](iterative.md)
+- [Meta-Agent Jailbreaks](meta.md)
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Best of N configuration example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-bestOfN-strategy)
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

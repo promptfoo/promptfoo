@@ -110,5 +110,5 @@ Outputs are graded as either PASS (secure) or FAIL (vulnerable) based on these c
 ## Related Concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [Prompt Injection](../strategies/prompt-injection.md)
+- [Jailbreak Templates](../strategies/jailbreak-templates.md)
 - [Language Configuration](../configuration.md#language) - Test in multiple languages

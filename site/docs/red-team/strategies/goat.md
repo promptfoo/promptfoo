@@ -1,14 +1,14 @@
 ---
 sidebar_label: GOAT
 title: GOAT Jailbreaking Strategy
-description: Apply GOAT (Generative Offensive Agent Tester) for sophisticated multi-turn jailbreaking using adversarial agent dialogues
+description: Apply GOAT (Generative Offensive Agent Tester) for adaptive multi-turn jailbreaking using adversarial agent dialogues
 ---
 
 # GOAT Technique for Jailbreaking LLMs
 
 The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
 
-It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems, with an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
+It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and simulates how real users interact with AI systems. The paper reports an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4 on the JailbreakBench dataset.
 
 ## Implementation
 
@@ -20,6 +20,7 @@ strategies:
     config:
       maxTurns: 5 # Maximum conversation turns (default)
       stateful: false # Sends the entire conversation history with each turn (Default)
+      continueAfterSuccess: false # Stop after the first successful attack (default)
 ```
 
 :::info
@@ -52,5 +53,5 @@ Instead of relying on brute-force approaches or static prompts, its dynamic conv
 
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Tree-based Jailbreaks](tree.md)
-- [Iterative Jailbreaks](iterative.md)
+- [Meta-Agent Jailbreaks](meta.md)
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

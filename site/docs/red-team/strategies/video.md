@@ -14,7 +14,7 @@ This strategy helps security researchers and AI developers:
 
 1. **Test model capabilities**: Assess if models can extract and process text from base64-encoded videos
 2. **Evaluate security measures**: Determine if video-encoded text can bypass content filters that typically scan plain text
-3. **Assess multi-modal behavior**: Identify differences in how models respond to the same content in different formats
+3. **Assess multimodal behavior**: Identify differences in how models respond to the same content in different formats
 4. **Discover inconsistencies**: Reveal potential vulnerabilities by comparing text-based and video-based processing pathways
 
 ## How It Works
@@ -42,14 +42,14 @@ Use it in your promptfooconfig.yaml like this:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Multi-modal redteam'
+description: 'Multimodal red team'
 targets:
   - bedrock:amazon.nova-lite-v1:0
 prompts:
   - file://path/to/your/prompt.json
 redteam:
   plugins:
-    - ...
+    - pii:direct
   strategies:
     - video
     - id: basic
@@ -58,7 +58,7 @@ redteam:
 ```
 
 :::note
-You should only disable all other strategies when using the video strategy. You can do this by setting `enabled: false` for the basic strategy and removing other strategies from the strategies array.
+Disable other strategies when your prompt template only accepts video input. Set `enabled: false` for the basic strategy and remove other strategies from the array.
 :::
 
 Your prompt.json file should look like this:
@@ -128,18 +128,18 @@ This strategy requires more processing resources than other encoding strategies 
 
 ## Importance
 
-This strategy is worth implementing because:
+This strategy helps test whether:
 
-1. It tests the robustness of content filtering mechanisms against video formats
-2. It evaluates the model's ability to handle and extract information from video data
-3. It can reveal inconsistencies in how models handle the same content presented in different formats
-4. Video modalities may have different thresholds or processing pipelines for harmful content
-5. It complements image and audio strategies to provide comprehensive multi-modal testing
+1. Content filters remain effective against video formats
+2. The model can handle and extract information from video data
+3. The same content is treated consistently across formats
+4. Video processing uses appropriate safety thresholds
+5. Image, audio, and video inputs receive consistent safety treatment
 
 ## Related Concepts
 
 - [Audio Jailbreaking](/docs/red-team/strategies/audio) - Similar approach using speech audio
 - [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images
-- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
+- [Multimodal Red Teaming Guide](/docs/guides/multimodal-red-team) - Guide for testing multimodal models
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

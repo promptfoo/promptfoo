@@ -55,7 +55,7 @@ redteam:
   strategies:
     - basic
     - best-of-n
-    - jailbreak
+    - jailbreak:meta
 ```
 
 ### Recommended Plugin Combinations for MCP Testing
@@ -122,7 +122,7 @@ redteam:
   strategies:
     - basic
     - best-of-n
-    - jailbreak
+    - jailbreak:meta
 ```
 
 ## Working With Results

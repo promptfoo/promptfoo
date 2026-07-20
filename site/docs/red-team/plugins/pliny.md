@@ -43,7 +43,7 @@ redteam:
 ## Related Concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [Prompt Injection](../strategies/prompt-injection.md)
+- [Jailbreak Templates](../strategies/jailbreak-templates.md)
 - [Jailbreak strategies](../strategies/composite-jailbreaks.md)
 
 ## License

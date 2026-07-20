@@ -79,7 +79,7 @@ Remote-only plugins include:
 - Security plugins: `ssrf`, `bola`, `bfla`, `indirect-prompt-injection`, `ascii-smuggling`
 - Others: `competitors`, `hijacking`, `off-topic`, `system-prompt-override`
 
-Remote-only strategies include: `audio`, `citation`, `gcg`, `goat`, `jailbreak:composite`, `jailbreak:goblin`, `jailbreak:hydra`, `jailbreak:likert`, `jailbreak:meta`
+Remote-only strategies include: `audio`, `authoritative-markup-injection`, `best-of-n`, `citation`, `gcg`, `goat`, `indirect-web-pwn`, `jailbreak:composite`, `jailbreak:goblin`, `jailbreak:hydra`, `jailbreak:likert`, and `jailbreak:meta`. The deprecated top-level `jailbreak` alias also runs `jailbreak:meta`.
 
 ## Disabling Remote Generation
 

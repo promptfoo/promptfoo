@@ -6,7 +6,6 @@ export interface Strategy {
   description: string;
   longDescription: string;
   cost: string;
-  asrIncrease: string;
   link?: string;
   recommended?: boolean;
   isRemote?: boolean;
@@ -15,24 +14,22 @@ export interface Strategy {
 export const strategies: Strategy[] = [
   {
     category: 'Custom',
-    strategy: 'custom',
+    strategy: 'file://custom-strategy.js',
     displayName: 'Custom Strategies',
     description: 'User-defined transformations',
     longDescription:
       'Allows creation of custom red team testing approaches by programmatically transforming test cases using JavaScript',
     cost: 'Variable',
-    asrIncrease: 'Variable',
     link: '/docs/red-team/strategies/custom/',
   },
   {
     category: 'Custom',
-    strategy: 'custom-strategy',
+    strategy: 'custom',
     displayName: 'Custom Strategy',
     description: 'Custom prompt-based multi-turn strategy',
     longDescription:
-      'Write natural language instructions to create powerful multi-turn red team strategies. No coding required.',
+      'Uses natural language instructions to guide a reusable multi-turn red team strategy',
     cost: 'Variable',
-    asrIncrease: 'Variable',
     link: '/docs/red-team/strategies/custom-strategy/',
   },
   {
@@ -41,9 +38,8 @@ export const strategies: Strategy[] = [
     displayName: 'Best-of-N',
     description: 'Parallel sampling attack',
     longDescription:
-      'Tests multiple variations in parallel using the Best-of-N technique from Anthropic research',
+      'Tests multiple variations in parallel using the Best-of-N technique from published research',
     cost: 'High',
-    asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/best-of-n/',
     isRemote: true,
   },
@@ -55,7 +51,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests vulnerability to academic authority bias by framing harmful requests in research contexts',
     cost: 'Medium',
-    asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/citation/',
     isRemote: true,
   },
@@ -67,7 +62,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests vulnerability to authoritative formatting by embedding prompts in structured markup that exploits trust in formatted content',
     cost: 'Medium',
-    asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/authoritative-markup-injection/',
     isRemote: true,
   },
@@ -77,9 +71,8 @@ export const strategies: Strategy[] = [
     displayName: 'Composite Jailbreaks',
     description: 'Combined techniques',
     longDescription:
-      'Chains multiple jailbreak techniques from research papers to create more sophisticated attacks',
+      'Chains multiple jailbreak techniques from published research to create compound attacks',
     cost: 'Medium',
-    asrIncrease: '60-80%',
     link: '/docs/red-team/strategies/composite-jailbreaks/',
     recommended: true,
     isRemote: true,
@@ -88,25 +81,12 @@ export const strategies: Strategy[] = [
     category: 'Dynamic (Single-Turn)',
     strategy: 'gcg',
     displayName: 'GCG',
-    description: 'Gradient-based optimization',
+    description: 'Transferable adversarial suffixes',
     longDescription:
-      'Implements the Greedy Coordinate Gradient attack method for finding adversarial prompts using gradient-based search techniques',
+      'Generates GCG-inspired adversarial suffixes with hosted inference; it does not calculate gradients against the target',
     cost: 'High',
-    asrIncrease: '0-10%',
     link: '/docs/red-team/strategies/gcg/',
     isRemote: true,
-  },
-  {
-    category: 'Dynamic (Single-Turn)',
-    strategy: 'jailbreak',
-    displayName: 'Jailbreak',
-    description: 'Lightweight iterative refinement',
-    longDescription:
-      'Uses an LLM-as-a-Judge to iteratively refine prompts until they bypass security controls',
-    cost: 'High',
-    asrIncrease: '60-80%',
-    link: '/docs/red-team/strategies/iterative/',
-    recommended: true,
   },
   {
     category: 'Dynamic (Single-Turn)',
@@ -116,7 +96,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Builds custom attack taxonomies and learns from all attempts using persistent strategic memory to choose which attack types work against your specific target',
     cost: 'High',
-    asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/meta/',
     recommended: true,
     isRemote: true,
@@ -129,7 +108,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Leverages academic evaluation frameworks and Likert scales to frame harmful requests within research contexts',
     cost: 'Medium',
-    asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/likert/',
     isRemote: true,
   },
@@ -141,7 +119,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests resilience against mathematical notation-based attacks using set theory and abstract algebra',
     cost: 'Medium',
-    asrIncrease: '40-60%',
     link: '/docs/red-team/strategies/math-prompt/',
   },
   {
@@ -152,7 +129,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Creates a tree of attack variations based on the Tree of Attacks research paper',
     cost: 'High',
-    asrIncrease: '60-80%',
     link: '/docs/red-team/strategies/tree/',
   },
   {
@@ -163,7 +139,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Gradually escalates prompt harm over multiple turns while using backtracking to optimize attack paths',
     cost: 'High',
-    asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/multi-turn/',
   },
   {
@@ -174,7 +149,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Uses a Generative Offensive Agent Tester to dynamically generate multi-turn conversations',
     cost: 'High',
-    asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goat/',
     isRemote: true,
   },
@@ -186,8 +160,8 @@ export const strategies: Strategy[] = [
     longDescription:
       'Adaptive multi-turn jailbreak agent that pivots across branches with persistent scan-wide memory to uncover hidden vulnerabilities',
     cost: 'High',
-    asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/hydra/',
+    recommended: true,
     isRemote: true,
   },
   {
@@ -198,7 +172,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
     cost: 'High',
-    asrIncrease: '70-90%',
     link: '/docs/red-team/strategies/goblin/',
     isRemote: true,
   },
@@ -209,8 +182,18 @@ export const strategies: Strategy[] = [
     description: 'Mischievous user conversations',
     longDescription: 'Simulates a multi-turn conversation between a mischievous user and an agent',
     cost: 'High',
-    asrIncrease: '10-20%',
     link: '/docs/red-team/strategies/mischievous-user/',
+  },
+  {
+    category: 'Indirect Prompt Injection',
+    strategy: 'indirect-web-pwn',
+    displayName: 'Indirect Web Pwn',
+    description: 'Malicious web-content injection',
+    longDescription:
+      'Tests whether browsing agents follow injected instructions or exfiltrate data from attacker-controlled web content',
+    cost: 'High',
+    link: '/docs/red-team/strategies/indirect-web-pwn/',
+    isRemote: true,
   },
   {
     category: 'Static (Single-Turn)',
@@ -220,7 +203,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text embedded in videos and encoded as base64 to potentially bypass text-based content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/video/',
   },
   {
@@ -231,7 +213,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text embedded in images and encoded as base64 to potentially bypass text-based content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/image/',
   },
   {
@@ -242,7 +223,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text converted to speech audio and encoded as base64 to potentially bypass text-based content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/audio/',
     isRemote: true,
   },
@@ -254,7 +234,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests detection and handling of Base64-encoded malicious payloads to bypass content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/base64/',
   },
   {
@@ -265,7 +244,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests detection and handling of hex-encoded malicious payloads to bypass content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/hex/',
   },
   {
@@ -276,7 +254,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests detection and handling of text with homoglyphs (visually similar Unicode characters) to bypass content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/homoglyph/',
   },
   {
@@ -287,7 +264,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Controls whether original plugin-generated test cases are included without any strategies applied',
     cost: 'Low',
-    asrIncrease: 'None',
     link: '/docs/red-team/strategies/basic/',
   },
   {
@@ -298,7 +274,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of leetspeak-encoded malicious content by replacing standard letters with numbers or special characters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/leetspeak/',
   },
   {
@@ -309,7 +284,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests LLM resistance to known jailbreak techniques (DAN, Skeleton Key, etc.) using static templates. Note: Does not cover modern prompt injection techniques.',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/jailbreak-templates/',
   },
   {
@@ -320,7 +294,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of ROT13-encoded malicious payloads by rotating each letter 13 positions in the alphabet',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/rot13/',
   },
   {
@@ -331,7 +304,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text encoded in Morse code (dots and dashes) to potentially bypass content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/other-encodings/#morse-code',
   },
   {
@@ -342,7 +314,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text transformed into Pig Latin (rearranging word parts) to potentially bypass content filters',
     cost: 'Low',
-    asrIncrease: '20-30%',
     link: '/docs/red-team/strategies/other-encodings/#pig-latin',
   },
   {
@@ -353,7 +324,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests handling of text transformed into camelCase (removing spaces and capitalizing words) to potentially bypass content filters',
     cost: 'Low',
-    asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#camelcase',
   },
   {
@@ -364,7 +334,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Tests hiding UTF-8 payloads inside emoji variation selectors to evaluate filter evasion.',
     cost: 'Low',
-    asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#emoji-encoding',
   },
   {
@@ -373,9 +342,8 @@ export const strategies: Strategy[] = [
     displayName: 'Layer',
     description: 'Compose multiple strategies',
     longDescription:
-      'Compose multiple red team strategies sequentially (e.g., jailbreak → base64) to create sophisticated attack chains',
+      'Composes multiple red team strategies sequentially, such as jailbreak:meta followed by base64',
     cost: 'Variable',
-    asrIncrease: 'Cumulative',
     link: '/docs/red-team/strategies/layer/',
   },
   {
@@ -386,7 +354,6 @@ export const strategies: Strategy[] = [
     longDescription:
       'Automatically incorporates previously failed test cases into your test suite, creating a regression testing system that learns from past failures',
     cost: 'Low',
-    asrIncrease: '50-70%',
     link: '/docs/red-team/strategies/retry/',
     recommended: false,
   },

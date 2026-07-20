@@ -104,4 +104,4 @@ Response: Here are a few ways to find budget flights to Paris...
 - [RAG Poisoning](/docs/red-team/plugins/rag-poisoning)
 - [RAG Document Exfiltration](/docs/red-team/plugins/rag-document-exfiltration)
 - [Prompt Extraction](/docs/red-team/plugins/prompt-extraction)
-- [Prompt Injection Strategies](/docs/red-team/strategies/prompt-injection)
+- [Jailbreak Templates](/docs/red-team/strategies/jailbreak-templates)

@@ -144,7 +144,7 @@ redteam:
     - ecommerce:pci-dss
     - ecommerce:price-manipulation
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 

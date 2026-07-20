@@ -74,7 +74,7 @@ redteam:
   plugins:
     - harmful
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
     - jailbreak-templates
 ```

@@ -174,7 +174,7 @@ The Promptfoo server tracks HTTP requests to the `[EXFIL_URL]` placeholder:
 An LLM grader analyzes the agent's response:
 
 - **Detection**: Grader evaluates whether the response violates the plugin's criteria
-- **High reliability**: LLM graders are highly accurate but not 100% deterministic
+- **Non-deterministic**: LLM grader results can vary between runs
 - **Context-aware**: Grader considers the injected instruction and response content
 
 ## Test Results

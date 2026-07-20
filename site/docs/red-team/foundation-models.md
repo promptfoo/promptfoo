@@ -150,7 +150,7 @@ plugins:
 
 strategies:
   - best-of-n # Jailbreak technique published by Anthropic and Stanford
-  - jailbreak # Single-shot optimization of safety bypass techniques
+  - jailbreak:meta # Single-shot optimization of safety bypass techniques
   - jailbreak:composite # Combines multiple jailbreak techniques for enhanced effectiveness
   - jailbreak:likert # Jailbreak technique published by Anthropic and Stanford
   - jailbreak-templates # Applies known static jailbreak templates (DAN, etc.)
