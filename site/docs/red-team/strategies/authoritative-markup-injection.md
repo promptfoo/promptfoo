@@ -45,6 +45,10 @@ redteam:
 
 The `injectVar` parameter specifies which variable in your prompt template should receive the authoritative markup injection. If not specified, the strategy will use the default `prompt` injection variable.
 
+:::info Remote Generation Required
+This strategy generates authoritative markup through a hosted generation endpoint. It cannot run when remote red team generation is disabled.
+:::
+
 Combine with red team plugins to test specific vulnerability categories:
 
 ```yaml title="promptfooconfig.yaml"

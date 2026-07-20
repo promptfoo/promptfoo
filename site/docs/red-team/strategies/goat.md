@@ -8,7 +8,7 @@ description: Apply GOAT (Generative Offensive Agent Tester) for adaptive multi-t
 
 The GOAT (Generative Offensive Agent Tester) strategy uses an attacker LLM to generate **multi-turn** conversations that probe a target model's safety measures.
 
-It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and simulates how real users interact with AI systems. The paper reports an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4 on the JailbreakBench dataset.
+It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and simulates how real users interact with AI systems. The paper reports an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
 
 ## Implementation
 
@@ -45,9 +45,7 @@ Each conversation turn follows a structured three-step reasoning process:
 
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 
-GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication.
-
-Instead of relying on brute-force approaches or static prompts, its dynamic conversation and reasoning make it particularly effective at identifying vulnerabilities in LLM applications.
+GOAT changes tactics based on the target's responses instead of repeating a static prompt. This helps it find conversational paths that a single-turn test can miss.
 
 ## Related Concepts
 

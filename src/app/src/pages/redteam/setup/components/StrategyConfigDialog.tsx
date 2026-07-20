@@ -26,11 +26,11 @@ import useCloudConfig from '@app/hooks/useCloudConfig';
 import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
-  AGENTIC_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
+import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
@@ -40,8 +40,10 @@ import type { StrategyCardData } from './strategies/types';
 // ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
 // We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
 // like 'default', 'multilingual' which aren't meant to be composed as layer steps.
-// We exclude 'layer' itself to prevent infinite recursion.
-const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+// We exclude 'layer' itself to prevent infinite recursion and the deprecated bare 'jailbreak' ID.
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
+  (s) => s !== 'layer' && s !== 'jailbreak',
+).sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -111,7 +113,7 @@ export default function StrategyConfigDialog({
   // Helper functions to check strategy types
   const isAgenticStrategy = React.useCallback((step: StepType): boolean => {
     const strategyId = getStepId(step);
-    return (AGENTIC_STRATEGIES as readonly string[]).includes(strategyId);
+    return isAttackProvider(strategyId);
   }, []);
 
   const isMultiModalStrategy = React.useCallback((step: StepType): boolean => {

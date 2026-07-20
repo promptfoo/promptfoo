@@ -6,7 +6,7 @@ description: Deploy multi-turn red teaming conversations simulating mischievous 
 
 # Mischievous User Strategy
 
-The **Mischievous User** simulates a multi-turn conversation between a user who is innocently mischievous and likes to play subtle games with your agent. It is inspired by the simulated-user approach from [τ-bench](https://github.com/sierra-research/tau2-bench).
+The **Mischievous User** simulates a multi-turn conversation between a user who is innocently mischievous and likes to play subtle games with your agent. It is inspired by the simulated-user approach from [τ-bench](https://github.com/sierra-research/tau-bench).
 
 ## Implementation
 

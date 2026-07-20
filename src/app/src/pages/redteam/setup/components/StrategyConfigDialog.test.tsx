@@ -1310,5 +1310,24 @@ describe('StrategyConfigDialog', () => {
       // The autocomplete should show that multi-modal must be last
       expect(screen.getByText(/Multi-modal strategies must be the last step/)).toBeInTheDocument();
     });
+
+    it('should allow indirect-web-pwn after an orchestrating attack strategy', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+
+      expect(screen.getByRole('option', { name: 'indirect-web-pwn' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'jailbreak' })).not.toBeInTheDocument();
+    });
   });
 });

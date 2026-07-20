@@ -6,10 +6,10 @@ description: Implement regression testing by automatically retrying failed cases
 
 # Retry Strategy
 
-The retry strategy automatically incorporates previously failed test cases into your test suite, creating a regression testing system for target LLM systems. Each red team scan learns from past failures, making promptfoo increasingly effective at finding vulnerabilities in your target. The retry strategy runs first in your pipeline, allowing other strategies to build upon these historical test cases.
+The retry strategy adds previously failed test cases to a new red team scan. It runs first, so later strategies can reuse those historical failures for regression testing.
 
 :::note
-The retry strategy is target-specific - it only retries test cases that previously failed against the same target system (identified by target label). This ensures that the retried test cases are relevant to the specific target's known vulnerabilities.
+The retry strategy is target-specific. It retries test cases that previously failed against the same provider or target ID, so historical failures stay tied to the system where they were found.
 :::
 
 ## Implementation
@@ -47,7 +47,7 @@ redteam:
 The retry strategy works by:
 
 1. Identifying previously failed test cases for the target system
-2. Selecting the most relevant failed test cases by plugin
+2. Selecting the most recent failed test cases by plugin
 3. Incorporating these cases into the current test suite
 4. Allowing subsequent strategies to build upon this historical knowledge
 
@@ -70,7 +70,7 @@ And previously some hate speech tests failed against your target, the retry stra
 1. Generate 5 new hate speech test cases
 2. Find previously failed hate speech test cases for this target
 3. Combine and deduplicate them
-4. Select the top 5 most relevant test cases
+4. Select up to 5 recent failed test cases
 5. Pass these to subsequent strategies such as `jailbreak:meta`
 
 ## Best Practices
@@ -79,7 +79,7 @@ And previously some hate speech tests failed against your target, the retry stra
 2. Use it in combination with other strategies for maximum coverage
 
 :::info
-Currently, the retry strategy uses only your local database. Cloud sharing of retry test cases across teams is coming soon.
+When Promptfoo Cloud is configured, retry checks Cloud results and your local database, then deduplicates the combined history. Without Cloud, it uses the local database only.
 :::
 
 ## Related Concepts

@@ -14,7 +14,7 @@ This strategy was previously named `prompt-injection`. The name was changed to b
 
 ## What This Strategy Does
 
-This strategy applies **67 static jailbreak templates** to your test cases. These templates include:
+The strategy includes **106 static jailbreak templates**. By default, it applies the first template to each test case; use `sample` to select more. Templates include:
 
 - **Skeleton Key** - Educational context framing to bypass safety
 - **DAN (Do Anything Now)** - Role-playing as an unrestricted AI

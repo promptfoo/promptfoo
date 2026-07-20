@@ -72,15 +72,16 @@ redteam:
 
 ## Limitations and Ordering Rules
 
-Layer supports one orchestrating agentic strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, or `jailbreak:meta` first when later steps should transform each turn or attempt. Chain text transforms such as `base64`, `rot13`, and `leetspeak` after it, then add an output transform such as `audio` or `image`.
+Layer supports one orchestrating attack strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, `custom`, `jailbreak:meta`, or `jailbreak:tree` first when later steps should transform each turn or attempt. Chain text transforms such as `base64`, `rot13`, and `leetspeak` after it, then add an output transform such as `audio` or `image`.
 
 Key limitations:
 
 - Steps before an agentic strategy transform the initial goal once, not each turn.
-- Only the first agentic strategy orchestrates the attack; do not chain multiple agentic strategies.
+- Only the first supported attack strategy orchestrates the attack; do not chain multiple attack strategies.
 - `mischievous-user` and `simba` do not support per-turn transforms.
 - Audio and image transforms require a target and prompt that accept the resulting payload. Use one multimodal output transform at the end of the layer.
 - `indirect-web-pwn` requires Promptfoo Cloud and a target that can fetch public URLs.
+- Crescendo and Custom do not transform unblocking prompts. If `PROMPTFOO_ENABLE_UNBLOCKING=true`, an audio- or image-only target can still receive a text turn.
 
 ### Valid Patterns
 
@@ -448,7 +449,7 @@ Be aware of test case growth when combining strategies:
 ## Implementation Notes
 
 - **Empty Step Handling**: If any step returns no test cases, subsequent steps receive an empty array
-- **Error Handling**: Failed steps are logged and skipped; the pipeline continues
+- **Error Handling**: Unknown or unloadable steps are logged and skipped. Errors raised while a step transforms test cases stop the layer.
 - **Metadata Preservation**: Each step preserves and extends test case metadata
 - **Strategy Resolution**: Supports both built-in strategies and `file://` custom strategies
 
@@ -474,9 +475,10 @@ The following strategies can orchestrate a layer and apply later steps as per-tu
 | `crescendo`        | Multi-turn    | Gradual escalation attack         |
 | `goat`             | Multi-turn    | Generative Offensive Agent Tester |
 | `custom`           | Multi-turn    | Custom multi-turn strategy        |
-| `jailbreak`        | Multi-attempt | Iterative single-turn attempts    |
 | `jailbreak:meta`   | Multi-attempt | Meta-agent attack generation      |
 | `jailbreak:tree`   | Multi-attempt | Tree-based attack search          |
+
+The deprecated bare `jailbreak` ID resolves to the legacy iterative provider inside a layer. Use `jailbreak:meta` instead.
 
 ## Related Concepts
 

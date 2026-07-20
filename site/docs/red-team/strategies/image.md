@@ -86,7 +86,7 @@ Your prompt.json file should look like this:
 ```
 
 :::note
-You should update the prompt.json to match the prompt format of your LLM provider. Base64 images are all encoded as PNG images.
+Update `prompt.json` to match your LLM provider's prompt format. When rendering succeeds, the generated image is a base64-encoded PNG.
 :::
 
 :::note
@@ -100,6 +100,10 @@ This strategy requires you to install the `sharp` package for image creation.
 npm i sharp
 ```
 
+:::
+
+:::warning
+If Sharp cannot load or image rendering fails, the current implementation falls back to base64-encoded plaintext, not a PNG. Check generation logs and validate the payload before relying on image results.
 :::
 
 ## Related Concepts

@@ -19,6 +19,21 @@ strategies:
   - jailbreak:tree
 ```
 
+To control the search budget:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - id: jailbreak:tree
+    config:
+      maxAttempts: 250
+      maxDepth: 25
+      maxWidth: 10
+      branchingFactor: 4
+      maxNoImprovement: 25
+```
+
+These values are the authenticated defaults. Without a Cloud login, Promptfoo caps the search at 30 attempts, depth 5, width 3, and branching factor 2.
+
 ## How It Works
 
 The Tree-based Jailbreaks strategy works by:
@@ -29,7 +44,7 @@ The Tree-based Jailbreaks strategy works by:
 4. Exploring this tree of possibilities to find the most effective single-shot prompts.
 
 :::warning
-This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
+Tree can make up to 250 target attempts per test with the default authenticated budget. Start with fewer tests or lower limits before running a full scan.
 :::
 
 ## Session Management

@@ -6,6 +6,7 @@ import {
   getDefaultNFanout,
   isCustomStrategy,
   isFanoutStrategy,
+  STRATEGIES_REQUIRING_REMOTE_SET,
   STRATEGY_COLLECTIONS,
 } from '../../../src/redteam/constants/strategies';
 
@@ -38,5 +39,11 @@ describe('strategies constants', () => {
     expect(getDefaultNFanout('gcg')).toBeGreaterThanOrEqual(1);
 
     expect(isFanoutStrategy('base64')).toBe(false);
+  });
+
+  it('should mark hosted-only strategies as requiring remote generation', () => {
+    expect(STRATEGIES_REQUIRING_REMOTE_SET.has('authoritative-markup-injection')).toBe(true);
+    expect(STRATEGIES_REQUIRING_REMOTE_SET.has('best-of-n')).toBe(true);
+    expect(STRATEGIES_REQUIRING_REMOTE_SET.has('mischievous-user')).toBe(true);
   });
 });

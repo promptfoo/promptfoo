@@ -199,6 +199,8 @@ export function isFanoutStrategy(strategyId: string): strategyId is FanOutStrate
 // These strategies will be disabled in the UI when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
 export const STRATEGIES_REQUIRING_REMOTE = [
   'audio',
+  'authoritative-markup-injection',
+  'best-of-n',
   'citation',
   'gcg',
   'goat',
@@ -208,6 +210,7 @@ export const STRATEGIES_REQUIRING_REMOTE = [
   'jailbreak:hydra',
   'jailbreak:likert',
   'jailbreak:meta',
+  'mischievous-user',
 ] as const;
 export const STRATEGIES_REQUIRING_REMOTE_SET: ReadonlySet<string> = new Set(
   STRATEGIES_REQUIRING_REMOTE,

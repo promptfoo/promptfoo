@@ -183,6 +183,7 @@ export const strategies: Strategy[] = [
     longDescription: 'Simulates a multi-turn conversation between a mischievous user and an agent',
     cost: 'High',
     link: '/docs/red-team/strategies/mischievous-user/',
+    isRemote: true,
   },
   {
     category: 'Indirect Prompt Injection',

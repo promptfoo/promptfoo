@@ -79,7 +79,7 @@ Remote-only plugins include:
 - Security plugins: `ssrf`, `bola`, `bfla`, `indirect-prompt-injection`, `ascii-smuggling`
 - Others: `competitors`, `hijacking`, `off-topic`, `system-prompt-override`
 
-Remote-only strategies include: `audio`, `authoritative-markup-injection`, `best-of-n`, `citation`, `gcg`, `goat`, `indirect-web-pwn`, `jailbreak:composite`, `jailbreak:goblin`, `jailbreak:hydra`, `jailbreak:likert`, and `jailbreak:meta`. The deprecated top-level `jailbreak` alias also runs `jailbreak:meta`.
+Remote-only strategies include: `audio`, `authoritative-markup-injection`, `best-of-n`, `citation`, `gcg`, `goat`, `indirect-web-pwn`, `jailbreak:composite`, `jailbreak:goblin`, `jailbreak:hydra`, `jailbreak:likert`, `jailbreak:meta`, and `mischievous-user`. The deprecated top-level `jailbreak` alias also runs `jailbreak:meta`.
 
 ## Disabling Remote Generation
 
@@ -91,7 +91,7 @@ export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
 
 This disables supported remote-generation fallbacks for red team generation paths, including red team target/provider setup helpers that rely on remote generation. It is not a network isolation guarantee and does not disable telemetry, account/license checks, sharing, Cloud sync, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, or explicitly configured providers. You must provide your own `OPENAI_API_KEY` or configure a local model for generation and grading.
 
-For red-team-specific control (keeps SimulatedUser remote generation enabled):
+For red-team-specific control (keeps non-red-team SimulatedUser generation enabled):
 
 ```bash
 export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true

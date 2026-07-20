@@ -84,7 +84,7 @@ Your prompt.json file should look like this:
 ```
 
 :::note
-You should update the prompt.json to match the prompt format of your LLM provider. Base64 videos are encoded as MP4 format.
+Update `prompt.json` to match your LLM provider's prompt format. When local rendering succeeds, the generated video is a base64-encoded MP4.
 :::
 
 :::note
@@ -93,7 +93,15 @@ The `{{video}}` syntax in the examples is a Nunjucks template variable. When pro
 
 ## Requirements
 
-This strategy requires FFmpeg to be installed on your system:
+This strategy requires FFmpeg and local red team generation. Install FFmpeg, then disable remote red team generation before creating video test cases:
+
+```bash
+export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+```
+
+Remote-only plugins and strategies cannot be generated with this setting. Use plugins that support local generation when testing video inputs.
+
+Install FFmpeg on your system:
 
 **On macOS:**
 
@@ -123,7 +131,7 @@ choco install ffmpeg
 - **Processing**: All video creation is done locally using FFmpeg
 
 :::warning
-This strategy requires more processing resources than other encoding strategies due to video generation. It may take longer to run, especially on large test sets.
+If remote red team generation is enabled or FFmpeg fails, the current implementation falls back to base64-encoded plaintext, not an MP4. Check generation logs and validate the payload before relying on video results. Video generation can also take longer than text encodings on large test sets.
 :::
 
 ## Importance

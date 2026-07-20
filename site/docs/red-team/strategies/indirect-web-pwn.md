@@ -37,8 +37,7 @@ redteam:
   strategies:
     - id: indirect-web-pwn
       config:
-        maxTurns: 5
-        maxFetchAttempts: 3
+        maxFetchAttempts: 3 # Maximum attempts to get the target to fetch the page (default)
 ```
 
 For a runnable provider that implements the required `web_fetch` tool, initialize the example with `npx promptfoo@latest init --example redteam-indirect-web-pwn`.
@@ -101,7 +100,7 @@ redteam:
 
 #### With Jailbreak Strategies
 
-Combine with jailbreak strategies using `layer` for more effective attacks:
+Combine with a jailbreak strategy using `layer` to test adaptive web-injection attacks:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:

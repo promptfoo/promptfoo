@@ -16,7 +16,13 @@ The hosted service currently generates at most two suffixes per prompt. Use this
 
 ## Implementation
 
-Add it to your `promptfooconfig.yaml`:
+GCG requires an authenticated Promptfoo Cloud account. Sign in before generating tests:
+
+```bash
+promptfoo auth login
+```
+
+Then add it to your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
