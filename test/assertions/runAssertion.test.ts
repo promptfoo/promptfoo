@@ -1117,7 +1117,7 @@ describe('runAssertion', () => {
     const result: GradingResult = await runAssertion({
       prompt: 'Some prompt',
       provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-      assertion: { ...isJsonAssertionWithSchemaYamlString, type: 'contains-json' },
+      assertion: { type: 'contains-json', value: isJsonAssertionWithSchemaYamlString.value },
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
