@@ -1376,7 +1376,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
    */
   private async fetchCurrentPromptParts(
     client: OpenCodeClient,
-    session: { sessionId: string; sessionQuery?: OpenCodeSessionQuery },
+    session: OpenCodeSessionContext,
     response: OpenCodeSdkResult<OpenCodePromptResponse>,
     abortSignal?: AbortSignal,
   ): Promise<OpenCodePromptPart[]> {

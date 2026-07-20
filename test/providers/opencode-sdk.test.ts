@@ -122,6 +122,17 @@ const createMockPromptResponse = (
   },
 });
 
+// Helper to stamp history anchors onto a mock prompt response. The provider
+// slices session history between the assistant message's parentID (start) and
+// its own id (end), so tests that exercise skill tracking need both set.
+const createMockPromptResponseWithAnchors = (
+  text: string,
+  anchors: { id: string; parentID: string },
+) => {
+  const base = createMockPromptResponse([{ type: 'text', text }]);
+  return { data: { ...base.data, info: { ...base.data.info, ...anchors } } };
+};
+
 describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
@@ -532,16 +543,12 @@ describe('OpenCodeSDKProvider', () => {
         // would see no tool parts and return [] — causing skill-used assertions to fail.
         // parentID on the assistant message anchors the slice to the user message
         // that triggered this prompt, so only the relevant turns are inspected.
-        mockSessionPrompt.mockResolvedValue({
-          data: {
-            ...createMockPromptResponse([{ type: 'text', text: 'All done.' }]).data,
-            info: {
-              ...createMockPromptResponse([{ type: 'text', text: 'All done.' }]).data.info,
-              id: 'assistant-msg-1',
-              parentID: 'user-msg-1',
-            },
-          },
-        });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
         // Session messages use { info: { id }, parts } structure (matching the real API)
         mockSessionMessages.mockResolvedValue([
           // Message from a PREVIOUS prompt — must not bleed into this evaluation
@@ -612,16 +619,12 @@ describe('OpenCodeSDKProvider', () => {
         // If another prompt fires on the same persistent session while session.messages
         // is in flight, messages after the current assistant message must be excluded.
         // The end anchor (assistantMessage.id) bounds the slice from above.
-        mockSessionPrompt.mockResolvedValue({
-          data: {
-            ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data,
-            info: {
-              ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data.info,
-              id: 'assistant-msg-1',
-              parentID: 'user-msg-1',
-            },
-          },
-        });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
         mockSessionMessages.mockResolvedValue([
           {
             info: { id: 'user-msg-1', role: 'user' },
@@ -705,16 +708,12 @@ describe('OpenCodeSDKProvider', () => {
         // A truncated/paginated history (or a server that does not echo the
         // parent user message) must not cause the whole session history to be
         // attributed to this prompt — that would resurrect cross-prompt bleed.
-        mockSessionPrompt.mockResolvedValue({
-          data: {
-            ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data,
-            info: {
-              ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data.info,
-              id: 'assistant-msg-9',
-              parentID: 'user-msg-9',
-            },
-          },
-        });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Done.', {
+            id: 'assistant-msg-9',
+            parentID: 'user-msg-9',
+          }),
+        );
         // History from earlier prompts only; user-msg-9 is absent
         mockSessionMessages.mockResolvedValue([
           {
@@ -748,16 +747,12 @@ describe('OpenCodeSDKProvider', () => {
       });
 
       it('should not attribute later skill calls when the assistant end anchor is missing from history', async () => {
-        mockSessionPrompt.mockResolvedValue({
-          data: {
-            ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data,
-            info: {
-              ...createMockPromptResponse([{ type: 'text', text: 'Done.' }]).data.info,
-              id: 'assistant-msg-1',
-              parentID: 'user-msg-1',
-            },
-          },
-        });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('Done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
         mockSessionMessages.mockResolvedValue([
           {
             info: { id: 'user-msg-1', role: 'user' },
@@ -900,16 +895,12 @@ describe('OpenCodeSDKProvider', () => {
             createOpencodeClient: mockCreateOpencodeClient,
           };
         });
-        mockSessionPrompt.mockResolvedValue({
-          data: {
-            ...createMockPromptResponse([{ type: 'text', text: 'All done.' }]).data,
-            info: {
-              ...createMockPromptResponse([{ type: 'text', text: 'All done.' }]).data.info,
-              id: 'assistant-msg-1',
-              parentID: 'user-msg-1',
-            },
-          },
-        });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponseWithAnchors('All done.', {
+            id: 'assistant-msg-1',
+            parentID: 'user-msg-1',
+          }),
+        );
         mockSessionMessages.mockResolvedValue([
           {
             info: { id: 'user-msg-1', role: 'user' },
