@@ -122,11 +122,12 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
-  const pathToUse =
-    functionName && !isExecutableFile
-      ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
-      : cleanPath;
+  // For non-Python/JS files, use the original path (ignore potential function name).
+  // Reaching here with a function name implies the file is not executable: the guard
+  // above already returned for executable files.
+  const pathToUse = functionName
+    ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
+    : cleanPath;
 
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
