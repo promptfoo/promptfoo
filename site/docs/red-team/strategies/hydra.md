@@ -6,9 +6,9 @@ description: Adaptive multi-turn jailbreak agent that pivots across branches to 
 
 # Hydra Multi-turn Strategy
 
-The Hydra strategy (`jailbreak:hydra`) runs a multi-turn attacker agent that adapts to every response from your target system. It maintains structured memory, evaluates past attempts, and branches into new attack approaches when the direct path fails.
+The Hydra strategy (`jailbreak:hydra`) runs a multi-turn attacker that adapts to target responses. It tracks earlier attempts and branches into new approaches when a path fails.
 
-Unlike single-turn jailbreaks that retry variations of one payload, Hydra continuously reasons about prior turns, retries with fresh context, and shares learnings across every test in the same scan.
+Unlike single-turn attacks, Hydra uses prior turns to choose the next message, can backtrack after refusals in replay mode, and shares learnings across the scan.
 
 Hydra has two target-delivery modes:
 
@@ -58,8 +58,8 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 ## How It Works
 
-1. **Goal selection** – Hydra pulls the red team goal from the plugin metadata or injected variable.
-2. **Agent decisioning** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
+1. **Goal selection** – Hydra reads the red team goal from the plugin metadata or injected variable.
+2. **Next-message selection** – A coordinating agent in Promptfoo Cloud evaluates prior turns and chooses the next attack message.
 3. **Target probing** – The selected message is sent either as a replayed transcript or as the newest turn in a target-managed session.
 4. **Outcome grading** – Responses are graded with the configured plugin assertions and stored for later learning.
 5. **Adaptive branching** – On refusals, Hydra backtracks and explores alternate branches until it succeeds, exhausts `maxBacktracks`, or reaches `maxTurns`.
@@ -78,9 +78,9 @@ Hydra keeps a per-scan memory so later test cases can reuse successful tactics d
 
 - Your product exposes a conversational bot or agent workflow with stateful behavior.
 - Guardrails block straightforward jailbreaks and you need an adversary that can pivot.
-- You want to reuse learnings across an entire scan (e.g., large org-wide red teams).
+- You want later tests in a scan to reuse earlier attacker learnings.
 
-Hydra is most effective when paired with plugin suites like `harmful`, `pii`, or `rbac` that define concrete failure conditions via graders.
+Pair Hydra with plugins such as `harmful`, `pii`, or `rbac` that define clear failure conditions for the grader.
 
 ## Related Concepts
 

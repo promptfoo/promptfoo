@@ -6,9 +6,7 @@ description: Execute multi-turn attack sequences that gradually escalate harmful
 
 # Multi-turn Jailbreaks Strategy
 
-Multi-turn or "conversational" jailbreaks gradually escalate the potential harm of prompts, exploiting the fuzzy boundary between acceptable and unacceptable responses.
-
-Because they are conversational, this approach can surface vulnerabilities that only emerge after multiple interactions.
+Multi-turn or conversational jailbreaks gradually escalate prompts across a conversation. They can surface vulnerabilities that appear only after multiple interactions.
 
 ## How Conversational Jailbreaks Work
 
@@ -17,7 +15,7 @@ Multi-turn jailbreaks operate by:
 1. Starting with a relatively innocuous prompt related to a potentially sensitive topic.
 2. Gradually increasing the complexity, specificity, or potential harm of subsequent prompts.
 3. Observing how the AI's responses change (or remain consistent) as the prompts escalate.
-4. Identifying any points where the AI's ethical boundaries might weaken or break.
+4. Identifying where the AI's safety or policy boundaries weaken.
 
 ![Multi-turn Jailbreak Strategy](/img/docs/multi-turn-jailbreak.svg)
 
@@ -42,7 +40,7 @@ Gradually increases the intensity or harmfulness of the prompt with each turn, s
 
 #### 2. Hydra
 
-Hydra coordinates an attacker agent that branches across multiple conversational paths. It remembers every refusal, automatically manages backtracking, and shares successful tactics across the entire scan. Use Hydra when you need the attacker to pivot rapidly and reuse prior learnings.
+Hydra branches across conversational paths, can backtrack after refusals in replay mode, and shares attacker learnings across the scan. Use it when an attacker needs to change approach and reuse earlier findings.
 
 #### 3. Goblin
 
@@ -116,7 +114,7 @@ redteam:
         stateful: false
 ```
 
-Increasing the number of turns (and backtracks for strategies that expose that option) will make the strategy more aggressive, but it will also take longer to complete and cost more.
+Increasing the turn or backtrack limit gives the attacker more opportunities, but also increases runtime and cost.
 
 Multi-turn strategies can be resource intensive. Start with a smaller number of tests and plugins or a lower-cost provider; use [Meta-Agent Jailbreaks](meta.md) when single-turn coverage is sufficient.
 
@@ -210,7 +208,7 @@ Start with unblocking disabled to establish a baseline, then enable it if you no
 
 Multi-turn jailbreaks like Crescendo identify vulnerabilities that only emerge after multiple interactions.
 
-They also exploit the tendency of LLMs to become more compliant throughout a conversation, and more likely to ignore their original instructions.
+They test whether safety decisions change as conversation context builds.
 
 For strategies that support it, backtracking avoids rebuilding entire conversation histories when an attack path is refused.
 

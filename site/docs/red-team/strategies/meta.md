@@ -1,14 +1,14 @@
 ---
 sidebar_label: Meta-Agent Jailbreaks
 title: Meta-Agent Jailbreaks Strategy
-description: Strategic jailbreak testing with adaptive decision-making to test system resilience
+description: Adapt single-turn jailbreak attacks based on how the target responds
 ---
 
 # Meta-Agent Jailbreaks Strategy
 
-The Meta-Agent Jailbreaks strategy (`jailbreak:meta`) uses strategic decision-making to test your system's resilience against adaptive attacks.
+The Meta-Agent Jailbreaks strategy (`jailbreak:meta`) adapts single-turn attacks based on how your target responds.
 
-Unlike standard iterative approaches that refine a single prompt, the meta-agent builds a custom taxonomy of approaches and adapts its strategy based on your target's responses.
+Instead of repeatedly refining one prompt, the meta-agent builds an attack taxonomy and tries different approaches.
 
 ## Implementation
 
@@ -43,21 +43,19 @@ This strategy requires Promptfoo Cloud to maintain persistent memory and strateg
 
 ## How It Works
 
-The meta-agent maintains memory across iterations to systematically explore different attack approaches. When one type of approach fails, it pivots to fundamentally different techniques rather than continuing to refine the same pattern.
+The meta-agent remembers earlier attempts. When one approach fails, it can switch to a different technique instead of repeating the same pattern. The broader search requires additional API calls.
 
-This explores multiple distinct approaches to find weaknesses, at the cost of additional API calls.
-
-## Meta-Agent vs Standard Jailbreak
+## Deprecated Jailbreak Alias
 
 The top-level `jailbreak` strategy is deprecated and now runs `jailbreak:meta`. Replace `jailbreak` with `jailbreak:meta` in existing configurations to avoid the deprecation warning.
 
-The meta-agent stops when it finds a vulnerability, determines the target is secure, or reaches max iterations.
+The meta-agent stops when an attack succeeds, the attacker stops, or it reaches the iteration limit.
 
 ## When to Use
 
 Use `jailbreak:meta` when:
 
-- Testing production systems where you need comprehensive coverage of attack types
+- Testing production systems across different attack types
 - Your guardrails might block obvious approaches but miss alternative attack angles
 - You need broader single-turn coverage than static transformations provide
 

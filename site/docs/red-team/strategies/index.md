@@ -1,14 +1,14 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Comprehensive catalog of red team attack strategies for systematically identifying and exploiting LLM application vulnerabilities
+description: Catalog of red team strategies for finding vulnerabilities in LLM applications
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
 
 # Red Team Strategies
 
-Strategies are attack techniques that systematically probe LLM applications for vulnerabilities. While [plugins](/docs/red-team/plugins/) generate adversarial inputs, strategies determine how these inputs are delivered to maximize attack success rates.
+Strategies change how adversarial inputs reach an LLM application. [Plugins](/docs/red-team/plugins/) generate the inputs; strategies transform, adapt, or sequence them to probe for vulnerabilities.
 
 ![Strategy Flow](/img/docs/strategy-flow.svg)
 
@@ -16,17 +16,17 @@ Strategies are attack techniques that systematically probe LLM applications for 
 
 Start with a single-turn and a multi-turn strategy, then add specialized strategies for the attack surfaces your application exposes.
 
-### Meta Agent: Best for Single-Turn
+### Meta Agent: Single-Turn Coverage
 
-The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack taxonomy and learns from attack history to optimize bypass attempts. It learns which attack types work best against your specific target.
+The [Meta Agent](/docs/red-team/strategies/meta/) builds an attack taxonomy, tracks earlier attempts, and adapts single-turn attacks to your target.
 
-### Hydra Multi-Turn: Best for Multi-Turn
+### Hydra Multi-Turn: Adaptive Conversations
 
-[Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide attacker memory. It can either replay the full transcript to a stateless target or use target-managed session memory for applications that persist prior turns.
+[Hydra](/docs/red-team/strategies/hydra/) adapts across conversation turns and shares attacker learnings across a scan. It can replay the full transcript to a stateless target or use a target-managed session when the application stores prior turns.
 
 ### Goblin Multi-Turn: IICL-Inspired Exploration
 
-[Goblin](/docs/red-team/strategies/goblin/) uses Hydra's multi-turn mechanics with an attacker prompt inspired by IICL-style abstract few-shot pattern completion and occasional encoding shifts. Use it as a complementary strategy when you want research-inspired exploration rather than the default general-purpose attacker.
+[Goblin](/docs/red-team/strategies/goblin/) uses Hydra's multi-turn mechanics with an attacker prompt inspired by IICL-style pattern completion and encoding shifts. Add it when you want to probe abstract or encoded attack paths alongside Hydra.
 
 ### Quick Start
 
@@ -49,26 +49,21 @@ _🌐 indicates that strategy uses remote inference in Promptfoo Community editi
 
 ### Static Strategies
 
-Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `jailbreak-templates` wraps the payload in known jailbreak templates like DAN or Skeleton Key.
+Static strategies transform inputs using predefined patterns and do not require an attacker LLM. They use fewer resources, but familiar patterns may be easy for a target to detect. For example, `base64` encodes an input, while `jailbreak-templates` wraps it in a known template such as DAN or Skeleton Key.
 
 ### Dynamic Strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive.
+Dynamic strategies generate or refine attack variants with hosted models or attacker agents. They can cover more attack paths than static transformations, but may require additional model calls.
 
-By default, dynamic strategies like `jailbreak:meta` and `jailbreak:composite` will:
-
-- Make multiple attempts to bypass the target's security controls
-- Stop after exhausting the configured token budget
-- Stop early if they successfully generate a harmful output
-- Track token usage to prevent runaway costs
+For example, `jailbreak:meta` tries different single-turn approaches until an attack succeeds, the attacker stops, or it reaches the configured iteration limit. `jailbreak:composite` generates compound attack variants during test generation.
 
 ### Multi-turn Strategies
 
-Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. They are particularly effective against stateful applications where they can convince the target to act against its purpose over time. Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+Multi-turn strategies use an attacker agent to probe the target across a conversation. They can reveal failures that appear only after context builds up, at the cost of more model calls than single-turn strategies.
 
 ### Indirect Prompt Injection Strategies
 
-Indirect prompt injection strategies test whether AI agents can be manipulated through malicious instructions embedded in external content they consume. These strategies generate realistic attack surfaces containing hidden payloads to test both data exfiltration and behavior manipulation. Currently available: [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn/) for web browsing agents.
+Indirect prompt injection strategies test whether agents follow malicious instructions hidden in external content. [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn/) generates pages with injected payloads and tests browsing agents for data leaks and behavior changes.
 
 ### Regression Strategies
 
@@ -91,7 +86,7 @@ redteam:
 
 ### Plugin Targeting
 
-Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
+Strategies apply to all plugins by default. To limit a strategy to specific plugins, set its `plugins` option:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:

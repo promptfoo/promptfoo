@@ -83,7 +83,7 @@ export const strategies: Strategy[] = [
     displayName: 'Greedy Coordinate Gradient (GCG)',
     description: 'Transferable adversarial suffixes',
     longDescription:
-      'Generates Greedy Coordinate Gradient-inspired adversarial suffixes with hosted inference; it does not calculate gradients against the target',
+      'Uses hosted inference to generate transferable GCG-inspired suffixes; it does not calculate gradients against the target',
     cost: 'High',
     link: '/docs/red-team/strategies/gcg/',
     isRemote: true,
@@ -94,7 +94,7 @@ export const strategies: Strategy[] = [
     displayName: 'Meta-Agent Jailbreaks',
     description: 'Strategic taxonomy builder',
     longDescription:
-      'Builds custom attack taxonomies and learns from all attempts using persistent strategic memory to choose which attack types work against your specific target',
+      'Builds an attack taxonomy, learns from earlier attempts, and adapts single-turn attacks to the target',
     cost: 'High',
     link: '/docs/red-team/strategies/meta/',
     recommended: true,
@@ -190,7 +190,7 @@ export const strategies: Strategy[] = [
     displayName: 'Indirect Web Pwn',
     description: 'Malicious web-content injection',
     longDescription:
-      'Requires Promptfoo Cloud and a browsing-capable target; tests whether agents follow injected instructions or exfiltrate data from attacker-controlled web content',
+      'Tests whether a browsing-capable target follows injected instructions or leaks data from attacker-controlled pages; requires Promptfoo Cloud',
     cost: 'High',
     link: '/docs/red-team/strategies/indirect-web-pwn/',
     isRemote: true,

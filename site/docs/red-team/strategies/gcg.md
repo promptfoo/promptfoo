@@ -1,7 +1,7 @@
 ---
 sidebar_label: GCG
 title: Greedy Coordinate Gradient Strategy
-description: Generate adversarial prompts using Greedy Coordinate Gradient optimization to systematically bypass LLM safety guardrails
+description: Test whether transferable Greedy Coordinate Gradient-inspired suffixes affect your target
 ---
 
 # Greedy Coordinate Gradient (GCG)

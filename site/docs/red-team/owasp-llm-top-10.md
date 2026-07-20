@@ -60,7 +60,7 @@ redteam:
   strategies:
     # Add the jailbreak-templates strategy
     - jailbreak-templates
-    # Additional strategies such as "jailbreak" are related to prompt injection
+    # Add adaptive single-turn attacks
     - jailbreak:meta
 ```
 

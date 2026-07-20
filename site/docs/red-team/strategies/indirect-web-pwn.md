@@ -15,7 +15,7 @@ This strategy is **plugin-agnostic** and works with any plugin to test two disti
 
 :::note Prerequisites
 
-`indirect-web-pwn` requires Promptfoo Cloud for page generation and tracking, plus a target that can fetch public URLs. Enable a browser, web-fetch or HTTP-fetch tool, or an MCP browsing tool on the target; a plain chat-completion target cannot exercise this strategy.
+`indirect-web-pwn` requires Promptfoo Cloud and a target that can fetch public URLs. Enable a browser, web-fetch or HTTP-fetch tool, or an MCP browsing tool. A plain chat-completion target cannot exercise this strategy.
 
 :::
 

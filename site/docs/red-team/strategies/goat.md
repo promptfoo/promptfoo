@@ -6,7 +6,7 @@ description: Apply GOAT (Generative Offensive Agent Tester) for adaptive multi-t
 
 # GOAT Technique for Jailbreaking LLMs
 
-The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
+The GOAT (Generative Offensive Agent Tester) strategy uses an attacker LLM to generate **multi-turn** conversations that probe a target model's safety measures.
 
 It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and simulates how real users interact with AI systems. The paper reports an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4 on the JailbreakBench dataset.
 

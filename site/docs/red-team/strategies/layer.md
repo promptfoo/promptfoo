@@ -72,7 +72,7 @@ redteam:
 
 ## Limitations and Ordering Rules
 
-Layer supports one orchestrating agentic strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, or `jailbreak:meta` first when later steps should transform every turn or attempt. Text transforms such as `base64`, `rot13`, and `leetspeak` can be chained after it, followed by an output transform such as `audio` or `image`.
+Layer supports one orchestrating agentic strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, or `jailbreak:meta` first when later steps should transform each turn or attempt. Chain text transforms such as `base64`, `rot13`, and `leetspeak` after it, then add an output transform such as `audio` or `image`.
 
 Key limitations:
 
@@ -226,7 +226,7 @@ redteam:
           - indirect-web-pwn
 ```
 
-Hydra adapts the conversation while `indirect-web-pwn` generates and tracks the injected page for each attempt. The target must have a browser, web-fetch or HTTP-fetch tool, or MCP browsing tool enabled. See [Indirect Web Pwn](/docs/red-team/strategies/indirect-web-pwn/) for a complete target configuration.
+Hydra adapts the conversation while `indirect-web-pwn` generates and tracks an injected page for each attempt. Enable a browser, web-fetch or HTTP-fetch tool, or an MCP browsing tool on the target. See [Indirect Web Pwn](/docs/red-team/strategies/indirect-web-pwn/) for a runnable target configuration.
 
 ### Multi-Turn Audio Attack
 

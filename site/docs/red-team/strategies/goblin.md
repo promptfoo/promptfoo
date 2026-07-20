@@ -6,9 +6,9 @@ description: Adaptive multi-turn jailbreak agent focused on encoding, math, and 
 
 # Goblin Multi-turn Strategy
 
-The Goblin strategy (`jailbreak:goblin`) uses the same multi-turn execution, backtracking, and scan-wide learning mechanics as [Hydra](hydra.md). Its attacker prompt is biased toward adversarial techniques such as exotic encodings, interleaving questions, logic problems, and other approaches that might bypass semantic guardrails and basic safety training.
+The Goblin strategy (`jailbreak:goblin`) uses the same multi-turn execution, backtracking, and scan-wide learning as [Hydra](hydra.md). Its attacker prompt favors techniques such as unusual encodings, interleaved questions, and logic problems that may bypass semantic guardrails.
 
-Goblin is designed to complement Hydra. Whereas Hydra is more likely to expose weaknesses through natural language, Goblin tests edge cases inspired by [Involuntary In-Context Learning (IICL)](https://arxiv.org/abs/2604.19461), including abstract few-shot pattern completion and encoding shifts.
+Goblin complements Hydra by testing edge cases inspired by [Involuntary In-Context Learning (IICL)](https://arxiv.org/abs/2604.19461), including abstract few-shot pattern completion and encoding shifts.
 
 ## Implementation
 
@@ -36,7 +36,7 @@ Goblin relies on Promptfoo Cloud for its attacker agent and scan-wide learnings.
 
 ## When to Use Goblin
 
-Use Goblin when straightforward multi-turn attacks are being recognized and you want an attacker that can explore abstract pattern-completion framing without committing to one fixed template. Prefer Hydra for general-purpose adaptive multi-turn coverage across multiple modalities; use Goblin as a complementary, advanced strategy for testing applications that may be exposed to more adversarial users.
+Use Goblin to test abstract pattern-completion and encoding paths without relying on one fixed template. Start with Hydra for general-purpose multi-turn coverage, then add Goblin for complementary attack paths.
 
 ## Related Concepts
 

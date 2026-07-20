@@ -361,8 +361,9 @@ targets:
 redteam:
   plugins:
     - harmful
-    - jailbreak:meta
     - prompt-extraction
+  strategies:
+    - jailbreak:meta
 ```
 
 This reveals which models are more resistant to specific attack types and helps inform model selection decisions.
