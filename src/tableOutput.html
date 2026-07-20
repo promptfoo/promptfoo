@@ -260,8 +260,10 @@
       }
 
       /* Error payloads live in the interactive detail drawer; this duplicate copy in the
-         cell is print/PDF-only so exported reports keep the information. */
-      .output-error-print {
+         cell is print/PDF-only so exported reports keep the information. The element also
+         carries `.output-section` (display: grid), declared later at equal specificity, so
+         this rule must match both classes to win on screen. */
+      .output-section.output-error-print {
         display: none;
       }
 
@@ -660,7 +662,7 @@
           display: none;
         }
 
-        .output-error-print {
+        .output-section.output-error-print {
           display: block;
         }
 

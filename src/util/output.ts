@@ -616,9 +616,9 @@ async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<voi
   let chromium;
   try {
     ({ chromium } = await import('playwright'));
-  } catch {
+  } catch (error) {
     throw new Error(
-      'PDF output requires the playwright package. Install it with: npm install playwright && npx playwright install chromium',
+      `PDF output requires the playwright package. Install it with: npm install playwright && npx playwright install chromium\n${error instanceof Error ? error.message : String(error)}`,
     );
   }
   const htmlOutput = await renderEvalHtmlReport(evalRecord);

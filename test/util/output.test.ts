@@ -1536,21 +1536,25 @@ describe('writeOutput', () => {
       'min-width: 920px;',
       '.detail-button {',
       '.toolbar {',
-      '.output-error-print {',
     ]) {
       expect(templateContent.indexOf(baseRule)).toBeGreaterThan(-1);
       expect(templateContent.indexOf(baseRule)).toBeLessThan(printBlockIndex);
     }
 
-    // The print-only error copy must exist in the cell markup and be escaped.
-    expect(templateContent).toContain('output-error-print');
-
     // `indexOf` above only ever finds the base rules, so assert on the print block
     // itself: the overrides that make errors and wide tables survive PDF export must
     // actually live inside @media print.
     const printBlock = templateContent.slice(printBlockIndex);
-    expect(printBlock).toMatch(/\.output-error-print\s*\{\s*display:\s*block;/);
     expect(printBlock).toMatch(/table\s*\{[^}]*table-layout:\s*fixed;/);
+
+    // The error copy is hidden on screen and revealed in print. It carries both
+    // `.output-section` (display: grid) and `.output-error-print`, so at equal
+    // specificity the later `.output-section` rule would win and leak the error into
+    // the cell on screen, duplicating the detail drawer. Both rules must therefore
+    // match on both classes rather than relying on source order.
+    const baseBlock = templateContent.slice(0, printBlockIndex);
+    expect(baseBlock).toMatch(/\.output-section\.output-error-print\s*\{\s*display:\s*none;/);
+    expect(printBlock).toMatch(/\.output-section\.output-error-print\s*\{\s*display:\s*block;/);
 
     // ...and the markup the print rule reveals must exist, guarded on cell.error.
     expect(templateContent).toContain('{% if cell.error %}');
