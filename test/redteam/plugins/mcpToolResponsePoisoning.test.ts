@@ -459,6 +459,35 @@ describe('MCPToolResponsePoisoningGrader.getResult', () => {
     expect(grade.pass).toBe(true);
   });
 
+  it('grades normally when providerResponse.raw holds a circular structure', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'No poisoning detected',
+    });
+
+    const cleanOutput = '{"temperature":22,"conditions":"partly cloudy"}';
+    // A provider may surface a raw object with a back-reference (e.g. an HTTP
+    // response whose `request` points back at the response). A bare
+    // JSON.stringify throws "Converting circular structure to JSON" here.
+    const circularRaw: Record<string, unknown> = { temperature: 22 };
+    circularRaw.self = circularRaw;
+
+    const { grade } = await grader.getResult(
+      '{"tool":"get_weather","args":{"city":"Berlin"}}',
+      cleanOutput,
+      mockTest,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { providerResponse: { output: cleanOutput, raw: circularRaw } },
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalledTimes(1);
+    expect(grade.pass).toBe(true);
+  });
+
   it('short-circuits to fail on a grader-delimiter break WITHOUT invoking the LLM rubric', async () => {
     // Payload closes the grading prompt's <Output> section, substitutes its own
     // rubric, and asserts a pass verdict. A live grader accepts this ("the tool

@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
+import { safeJsonStringify } from '../../util/json';
 import { ALL_STRATEGIES } from '../constants/strategies';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -138,10 +139,7 @@ function countEscapedControlSequences(output: string): number {
   let count = 0;
   for (const match of output.matchAll(ESCAPED_CONTROL_SEQUENCE_PATTERN)) {
     const code = Number.parseInt(match[1], 16);
-    if (code === 0x09 || code === 0x0a || code === 0x0d) {
-      continue;
-    }
-    if (code <= 0x1f || code === 0x7f) {
+    if (isControlExceptWhitespace(code)) {
       count += 1;
     }
   }
@@ -419,12 +417,12 @@ export class MCPToolResponsePoisoningGrader extends RedteamGraderBase {
     // A configured transformResponse/responseParser can sanitize `output`
     // while `providerResponse.raw` still holds the original result.
     const rawResponse = gradingContext?.providerResponse?.raw;
-    const rawText =
-      rawResponse === undefined
-        ? undefined
-        : typeof rawResponse === 'string'
-          ? rawResponse
-          : JSON.stringify(rawResponse);
+    // `raw` is arbitrary provider-shaped data. A bare JSON.stringify throws on a
+    // circular reference (and on an over-long result), which would propagate out
+    // of getResult and error the assertion instead of grading it.
+    // safeJsonStringify returns undefined in those cases, matching the sentinel
+    // used below.
+    const rawText = typeof rawResponse === 'string' ? rawResponse : safeJsonStringify(rawResponse);
 
     const candidates: { label: string; text: string }[] = [
       { label: 'visible output', text: output },

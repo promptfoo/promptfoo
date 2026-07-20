@@ -56,6 +56,12 @@ redteam:
 
 The target must be `id: mcp`. If you point this plugin at any other provider, the JSON envelope it generates will be sent as a literal string prompt and the test will not exercise a real tool call.
 
+:::note Strategy exclusions
+
+Every strategy except `basic` is automatically excluded from this plugin. The MCP provider parses the entire prompt as JSON, so any strategy that rewrites, wraps, or re-encodes the payload (jailbreaks, `base64`, multi-turn strategies, and so on) breaks the tool call. Only the verbatim `basic` baseline reaches the server. Strategies you configure for other plugins in the same scan are unaffected.
+
+:::
+
 ## Example poisoned responses caught
 
 ```json
@@ -73,7 +79,9 @@ Other patterns the regex layer catches:
 
 ## Attack coverage
 
-The plugin is designed to detect **response-side** poisoning across the techniques below. Each row is one attack technique; the variations are the concrete forms exercised by Promptfoo's MCP red team test suite and reliably flagged by the grader.
+The plugin is designed to detect **response-side** poisoning across the techniques below. Each row is one attack technique; the variations are the concrete forms it looks for.
+
+Detection strength differs by layer. The deterministic pre-screens always fire on what they cover — invisible Unicode tag characters, zero-width and bidirectional-override characters, raw or JSON-escaped control/ANSI bytes, grading-delimiter injection, and the named regex markers (`SYSTEM:` directives, `ignore previous instructions`, `_internal_instructions`, `debug`/policy-override fields, exfiltration phrasing, `CRITICAL TOOL`, `leak credentials`). Everything else in the table — homoglyph substitution, Base64-encoded directives, spreadsheet formula injection, HTML/script passthrough, Markdown-rendering tricks, provenance and cross-tool manipulation — reaches the LLM rubric instead, so it is best-effort and non-deterministic rather than guaranteed.
 
 | Attack technique                                   | Variations detected                                                                                                                                                                                                                                                             |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
