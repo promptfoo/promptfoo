@@ -7,7 +7,6 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
@@ -87,8 +86,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // be passed in as a configuration option.
     const injectVar = 'query';
 
-    // Get the red team provider
-    const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
+    // Use the configured red team provider when available. The manager falls back to its
+    // default model when no org, team, or config provider has been selected.
+    const redteamProvider = await redteamProviderManager.getProvider({});
 
     const testCases = await pluginFactory.action({
       provider: redteamProvider,

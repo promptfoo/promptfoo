@@ -115,6 +115,35 @@ describe('Redteam Routes', () => {
         expect(response.body.prompt).toBe('generated test prompt');
       });
 
+      it('does not override configured provider selection with a hard-coded default', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'aegis',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({});
+      });
+
       it('should exclude dataset-exempt plugins with multi-input config', async () => {
         // 'beavertails' is a DATASET_EXEMPT_PLUGIN - should be excluded with inputs
         const response = await request(app)
