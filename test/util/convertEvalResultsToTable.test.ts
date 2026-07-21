@@ -58,7 +58,6 @@ describe('convertResultsToTable', () => {
               prompt: 'test prompt',
               provider: 'Test Provider',
               pass: true,
-              cost: 0,
               success: true,
               response: {
                 output: 'test output',
@@ -88,6 +87,7 @@ describe('convertResultsToTable', () => {
 
     const result = convertResultsToTable(resultsFile);
     expect(result).toEqual(expected);
+    expect(result.body[0].outputs[0]).not.toHaveProperty('cost');
   });
 
   it('should handle error responses', () => {

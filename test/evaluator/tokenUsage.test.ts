@@ -54,6 +54,35 @@ describeEvaluator('evaluator token usage', () => {
     expect(JSON.parse(JSON.stringify(summary.prompts[0].metrics))).not.toHaveProperty('cost');
   });
 
+  it('treats a successful Promptfoo cache hit as zero incremental cost', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cache-aware-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) =>
+        prompt === 'fresh'
+          ? {
+              output: 'Fresh output',
+              cost: 0.25,
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            }
+          : {
+              output: 'Cached output',
+              cached: true,
+              tokenUsage: { numRequests: 0 },
+            },
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{kind}}')],
+      tests: [{ vars: { kind: 'fresh' } }, { vars: { kind: 'cached' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts[0].metrics?.cost).toBe(0.25);
+  });
+
   it('should accumulate token usage correctly', async () => {
     const mockOptions = {
       delay: 0,

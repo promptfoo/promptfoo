@@ -189,6 +189,18 @@ export function accumulateTokenUsagePreservingUnknown(
 
   accumulateTokenUsage(target, update, incrementRequests);
 
+  if (updateRequests === 0) {
+    for (const field of ['prompt', 'completion', 'cached', 'total'] as const) {
+      if (priorCounts[field] === undefined) {
+        delete target[field];
+      }
+    }
+    if (priorCompletionDetails === undefined) {
+      delete target.completionDetails;
+    }
+    return;
+  }
+
   if (updateRequests > 0) {
     for (const field of ['prompt', 'completion', 'cached', 'total'] as const) {
       const priorCount = priorCounts[field];

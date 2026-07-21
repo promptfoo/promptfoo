@@ -345,6 +345,20 @@ describe('tokenUsageUtils', () => {
       expect(target).not.toHaveProperty('total');
     });
 
+    it('keeps aggregate counts unknown after a zero-request update', () => {
+      const target: TokenUsage = createEmptyTokenUsage();
+      accumulateTokenUsagePreservingUnknown(target, { numRequests: 1 });
+
+      accumulateTokenUsagePreservingUnknown(target, createEmptyTokenUsage());
+
+      expect(target.numRequests).toBe(1);
+      expect(target).not.toHaveProperty('prompt');
+      expect(target).not.toHaveProperty('completion');
+      expect(target).not.toHaveProperty('cached');
+      expect(target).not.toHaveProperty('total');
+      expect(target).not.toHaveProperty('completionDetails');
+    });
+
     it('retains fully reported usage for the first counted request', () => {
       const target: TokenUsage = createEmptyTokenUsage();
 

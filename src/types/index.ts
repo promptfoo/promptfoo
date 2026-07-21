@@ -414,7 +414,7 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
-  cost: number;
+  cost?: number;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
   id: string;

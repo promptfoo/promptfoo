@@ -3301,7 +3301,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (row.cost === undefined) {
-      if (row.response && !row.response.error) {
+      if (row.response && !row.response.error && !row.response.cached) {
         metrics.cost = undefined;
       }
     } else if (promptEvalCount === 1) {

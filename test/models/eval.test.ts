@@ -670,6 +670,16 @@ describe('evaluator', () => {
       expect(exportedRow.tokenUsage).toEqual({ numRequests: 1 });
       expect(exportedRow.response?.tokenUsage).toEqual({ numRequests: 1 });
       expect(JSON.parse(JSON.stringify(exportedRow))).not.toHaveProperty('cost');
+
+      const fullTable = await evaluation.getTable();
+      const fullTableOutput = fullTable.body[0].outputs[0];
+      expect(fullTableOutput.cost).toBeUndefined();
+      expect(JSON.parse(JSON.stringify(fullTableOutput))).not.toHaveProperty('cost');
+
+      const pagedTable = await evaluation.getTablePage({ filters: [] });
+      const pagedTableOutput = pagedTable.body[0].outputs[0];
+      expect(pagedTableOutput.cost).toBeUndefined();
+      expect(JSON.parse(JSON.stringify(pagedTableOutput))).not.toHaveProperty('cost');
     });
   });
 
@@ -970,6 +980,37 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('keeps unknown usage after a later prompt contributes no requests', () => {
+      const eval1 = new Eval({});
+      eval1.prompts = [
+        {
+          raw: 'unknown usage',
+          metrics: {
+            tokenUsage: { numRequests: 1 },
+          },
+        } as any,
+        {
+          raw: 'untouched',
+          metrics: {
+            tokenUsage: {
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              total: 0,
+              numRequests: 0,
+            },
+          },
+        } as any,
+      ];
+
+      const stats = eval1.getStats();
+      expect(stats.tokenUsage.numRequests).toBe(1);
+      expect(stats.tokenUsage).not.toHaveProperty('prompt');
+      expect(stats.tokenUsage).not.toHaveProperty('completion');
+      expect(stats.tokenUsage).not.toHaveProperty('cached');
+      expect(stats.tokenUsage).not.toHaveProperty('total');
+    });
+
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
       eval1.prompts = [
