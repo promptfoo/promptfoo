@@ -6,15 +6,20 @@ import { createTransformResponse, WebSocketProvider } from '../../src/providers/
 const websocketMocks = vi.hoisted(() => {
   let factory: (() => Mocked<WebSocket>) | null = null;
 
-  const WebSocketMock = vi.fn(function () {
+  const createWebSocket = function () {
     return factory?.() ?? ({} as Mocked<WebSocket>);
-  });
+  };
+  const WebSocketMock = vi.fn(createWebSocket);
 
   const setFactory = (nextFactory: () => Mocked<WebSocket>) => {
     factory = nextFactory;
   };
+  const reset = () => {
+    WebSocketMock.mockReset();
+    WebSocketMock.mockImplementation(createWebSocket);
+  };
 
-  return { WebSocketMock, setFactory };
+  return { WebSocketMock, setFactory, reset };
 });
 
 vi.mock('ws', () => ({
@@ -83,7 +88,7 @@ describe('WebSocketProvider', () => {
       onopen: vi.fn(),
     } as unknown as Mocked<WebSocket>;
 
-    websocketMocks.WebSocketMock.mockClear();
+    websocketMocks.reset();
     websocketMocks.setFactory(() => mockWs);
 
     provider = new WebSocketProvider('ws://test.com', {
