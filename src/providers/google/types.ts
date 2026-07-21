@@ -118,6 +118,15 @@ export type ClaudeThinkingConfig =
   | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
   | { type: 'disabled' };
 
+export interface GoogleSpeechConfig {
+  voiceConfig?: {
+    prebuiltVoiceConfig?: {
+      voiceName?: string;
+    };
+  };
+  languageCode?: string;
+}
+
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
@@ -128,11 +137,29 @@ export interface CompletionOptions {
   inputCost?: number;
   /** Custom per-token output cost override. Takes precedence over cost. */
   outputCost?: number;
+  /** Custom per-token audio input/output cost override. */
+  audioCost?: number;
+  /** Custom per-token audio input cost override. */
+  audioInputCost?: number;
+  /** Custom per-token audio output cost override. */
+  audioOutputCost?: number;
+  /** Custom per-token video output cost override. */
+  videoOutputCost?: number;
+  /** Custom per-token image input cost override. */
+  imageInputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
+  /** Gemini inference service tier. */
+  service_tier?: 'standard' | 'priority' | 'flex';
+  /** Additional top-level Gemini request fields. */
+  passthrough?: Record<string, unknown>;
   projectId?: string;
   region?: string;
   publisher?: string;
-  apiVersion?: string; // For Live API: 'v1alpha' or 'v1' (default: v1alpha)
+  apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
+  /** Previous Gemini Interactions API ID for conversational video editing. */
+  previousInteractionId?: string;
+  /** Keep a Gemini interaction available for subsequent editing turns. */
+  store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format
   /**
@@ -193,6 +220,9 @@ export interface CompletionOptions {
   // Live API websocket timeout
   timeoutMs?: number;
 
+  // Live API top-level speech configuration
+  speechConfig?: GoogleSpeechConfig;
+
   generationConfig?: {
     context?: string;
     examples?: { input: string; output: string }[];
@@ -209,15 +239,11 @@ export interface CompletionOptions {
     // Live API
     response_modalities?: string[];
 
+    // GenerateContent API
+    responseModalities?: string[];
+
     // Speech configuration
-    speechConfig?: {
-      voiceConfig?: {
-        prebuiltVoiceConfig?: {
-          voiceName?: string;
-        };
-      };
-      languageCode?: string;
-    };
+    speechConfig?: GoogleSpeechConfig;
 
     // Transcription configuration
     outputAudioTranscription?: Record<string, any>;
