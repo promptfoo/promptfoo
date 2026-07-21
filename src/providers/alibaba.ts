@@ -1,5 +1,4 @@
 import logger from '../logger';
-import { renderVarsInObject } from '../util/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
@@ -289,19 +288,20 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
     });
   }
 
+  protected override isReasoningModel(): boolean {
+    return supportsReasoningEffort(this.modelName) || super.isReasoningModel();
+  }
+
+  protected override supportsTemperature(): boolean {
+    return !super.isReasoningModel();
+  }
+
   override async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
-
-    if (supportsReasoningEffort(this.modelName) && result.config.reasoning_effort !== undefined) {
-      result.body.reasoning_effort = renderVarsInObject(
-        result.config.reasoning_effort,
-        context?.vars,
-      );
-    }
 
     if (!pinsSamplingParams(this.modelName)) {
       return result;
