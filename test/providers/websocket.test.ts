@@ -134,6 +134,7 @@ describe('WebSocketProvider', () => {
       config: {
         url: 'ws://test.com/sessions/{{ sessionId }}',
         messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
       },
     });
 
@@ -165,6 +166,7 @@ describe('WebSocketProvider', () => {
       config: {
         url: 'wss://test.com/ws?token={{ token }}',
         messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
       },
     });
 
