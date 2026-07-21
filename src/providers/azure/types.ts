@@ -128,7 +128,7 @@ export interface AzureResponsesOptions extends AzureChatResponsesOptions {
   /**
    * Specifies the latency tier used to process the request.
    */
-  service_tier?: 'auto' | 'default' | 'flex' | 'scale' | 'priority' | null;
+  service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
 }
 
 export interface AzureModelCost {

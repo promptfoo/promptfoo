@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import * as azureUtil from '../../../src/providers/azure/util';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import { mockProcessEnv } from '../../util/utils';
 import type { MockedFunction } from 'vitest';
+
+import type { AzureResponsesOptions } from '../../../src/providers/azure/types';
 
 // Mock external dependencies
 vi.mock('../../../src/cache');
@@ -59,6 +61,12 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
       expect(provider).toBeInstanceOf(AzureResponsesProvider);
       expect(provider.deploymentName).toBe('gpt-4.1-test');
+    });
+
+    it('should type only Azure-supported request service tiers', () => {
+      expectTypeOf<AzureResponsesOptions['service_tier']>().toEqualTypeOf<
+        'auto' | 'default' | 'flex' | 'priority' | null | undefined
+      >();
     });
   });
 
