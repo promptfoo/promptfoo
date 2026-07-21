@@ -92,7 +92,7 @@ redteam:
     # Standard strategies that work well with GPT models
     - jailbreak
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ### Configuration Breakdown

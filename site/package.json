@@ -51,18 +51,19 @@
     "framer-motion": "^12.34.3",
     "gray-matter": "^4.0.3",
     "jsdom": "^29.0.0",
-    "langium": "4.2.4",
+    "langium": "4.3.1",
     "lucide-react": "^1.0.0",
     "prism-react-renderer": "^2.4.1",
+    "prismjs": "^1.30.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "satori": "^0.26.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
-    "webpack": "5.107.2"
+    "webpack": "5.108.4"
   },
   "optionalDependencies": {
-    "sharp": "^0.35.1"
+    "sharp": "^0.35.3"
   },
   "overrides": {
     "lodash-es": "^4.18.1"
@@ -90,7 +91,8 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "dompurify": "^3.4.8",
+    "js-yaml": "5.2.1",
     "react-countup": "^6.5.3",
-    "swiper": "^12.1.2"
+    "swiper": "^14.0.0"
   }
 }

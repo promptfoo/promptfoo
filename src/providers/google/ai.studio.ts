@@ -9,6 +9,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
@@ -18,6 +19,7 @@ import {
   isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -237,7 +239,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ? {
             cached: data.usageMetadata?.totalTokenCount,
             total: data.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
@@ -247,10 +249,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: data.usageMetadata?.promptTokenCount,
+            prompt:
+              data.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : data.usageMetadata.promptTokenCount +
+                  (data.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: data.usageMetadata?.candidatesTokenCount,
             total: data.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(data.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: data.usageMetadata.cachedContentTokenCount,
+            }),
             ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: data.usageMetadata.thoughtsTokenCount,
@@ -268,11 +277,13 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
             config,
             data.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            data.usageMetadata,
           );
 
       return {
@@ -319,6 +330,15 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const {
+      service_tier: passthroughServiceTier,
+      tools: passthroughTools,
+      ...passthrough
+    } = config.passthrough || {};
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
 
     const body: Record<string, any> = {
       contents,
@@ -333,11 +353,37 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           maxOutputTokens: config.maxOutputTokens,
         }),
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      // Normalize a single-object passthrough `tools` value to a one-element array and
+      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
+      // stays the array shape the Gemini API requires.
+      ...(requestPassthroughTools === undefined
+        ? {}
+        : {
+            tools: [
+              ...requestTools,
+              ...(Array.isArray(requestPassthroughTools)
+                ? requestPassthroughTools
+                : [requestPassthroughTools]),
+            ],
+          }),
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
 
     if (config.responseSchema) {
@@ -440,7 +486,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 0,
+            numRequests: 1,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -450,10 +496,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           }
         : {
-            prompt: lastData.usageMetadata?.promptTokenCount,
+            prompt:
+              lastData.usageMetadata?.promptTokenCount === undefined
+                ? undefined
+                : lastData.usageMetadata.promptTokenCount +
+                  (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
             completion: lastData.usageMetadata?.candidatesTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
+            ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+              cached: lastData.usageMetadata.cachedContentTokenCount,
+            }),
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,
@@ -472,15 +525,19 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
-        : calculateGoogleCost(
+        : calculateGoogleCostFromUsage(
             this.modelName,
             config,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
+            false,
+            lastData.usageMetadata,
           );
+      const audio = normalizeGeminiAudio(output);
 
       return {
         output,
+        ...(audio && { audio }),
         tokenUsage,
         cost,
         raw: data,
@@ -595,9 +652,13 @@ export class AIStudioEmbeddingProvider
     return {
       embedding: values,
       tokenUsage: cached
-        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 1 }
         : { total: promptTokens ?? 0, numRequests: 1 },
       cached,
+      cost:
+        cached || promptTokens === undefined
+          ? undefined
+          : calculateGoogleCost(this.modelName, this.config, promptTokens, 0),
     };
   }
 }

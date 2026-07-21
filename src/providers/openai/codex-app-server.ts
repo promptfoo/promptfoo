@@ -62,10 +62,26 @@ export type CodexAppServerReasoningEffort =
   | 'low'
   | 'medium'
   | 'high'
-  | 'xhigh';
+  | 'xhigh'
+  | 'max'
+  | 'ultra';
 export type CodexAppServerReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
 export type CodexAppServerServiceTier = 'fast' | 'flex';
 export type CodexAppServerPersonality = 'none' | 'friendly' | 'pragmatic';
+
+function redactAppServerText(value: string): string {
+  return value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
+    .replace(
+      /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
+      REDACTED,
+    )
+    .replace(
+      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
+      (_match, key, separator, spacing, quote) =>
+        `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+    );
+}
 
 export interface CodexAppServerCollaborationMode {
   mode: 'plan' | 'default';
@@ -112,6 +128,7 @@ type CodexAppServerMcpElicitationPolicy =
 type JsonRpcId = string | number;
 
 const MAX_BUFFERED_JSON_RPC_CHARS = 5_000_000;
+const MAX_BUFFERED_TURN_EVENT_CHARS = 10_000_000;
 
 type CodexAppServerPromptInputItem =
   | {
@@ -286,6 +303,7 @@ interface ServerRequestRecord {
 }
 
 interface CodexAppServerTurnState {
+  connection: CodexAppServerConnection;
   connectionKey: string;
   connectionInstanceId: string;
   threadId: string;
@@ -297,6 +315,7 @@ interface CodexAppServerTurnState {
   itemStarts: any[];
   notifications: JsonRpcMessage[];
   notificationCount: number;
+  bufferedEventChars: number;
   serverRequests: ServerRequestRecord[];
   agentMessageDeltas: string[];
   agentMessageDeltasByItemId: Map<string, string>;
@@ -375,6 +394,8 @@ const CodexAppServerReasoningEffortSchema = z.enum([
   'medium',
   'high',
   'xhigh',
+  'max',
+  'ultra',
 ]);
 
 const CodexAppServerGranularApprovalPolicySchema = z
@@ -532,7 +553,7 @@ const CodexAppServerConfigShape = {
   server_request_policy: ServerRequestPolicySchema.optional(),
 } as const;
 
-const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
+export const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
 const CodexAppServerMergedPromptConfigSchema = z.object(CodexAppServerConfigShape).strip();
 
 function createDeferred<T>(): Deferred<T> {
@@ -896,19 +917,22 @@ class CodexAppServerConnection {
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
     const candidate = candidateLines.join('\\n');
+    if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
+      this.bufferedJsonRpcLines = [];
+      this.handleProcessFailure(
+        new Error(
+          `codex app-server JSON-RPC message exceeded ${MAX_BUFFERED_JSON_RPC_CHARS} characters`,
+        ),
+      );
+      void this.close();
+      return;
+    }
     let message: JsonRpcMessage;
     try {
       message = JSON.parse(candidate) as JsonRpcMessage;
     } catch (error) {
       if (this.shouldBufferJsonRpcLine(error, trimmed)) {
         this.bufferedJsonRpcLines = candidateLines;
-        if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
-          logger.warn('[CodexAppServer] Dropping oversized partial JSON-RPC message', {
-            error,
-            bufferedChars: candidate.length,
-          });
-          this.bufferedJsonRpcLines = [];
-        }
         return;
       }
 
@@ -1013,7 +1037,9 @@ class CodexAppServerConnection {
       this.stderrChunks = [truncated];
       this.stderrTotalLength = truncated.length;
     }
-    logger.debug('[CodexAppServer] stderr', { text });
+    logger.debug('[CodexAppServer] stderr', {
+      text: redactAppServerText(sanitizeObject(text, { context: 'Codex app-server stderr' })),
+    });
   }
 
   private handleProcessFailure(error: Error): void {
@@ -1021,12 +1047,20 @@ class CodexAppServerConnection {
       return;
     }
     this.closed = true;
-    this.rejectPending(error);
+    const stderr = this.getStderr().trim();
+    const sanitizedStderr = stderr
+      ? redactAppServerText(sanitizeObject(stderr, { context: 'Codex app-server stderr' }))
+      : undefined;
+    const failure =
+      typeof sanitizedStderr === 'string' && sanitizedStderr
+        ? new Error(`${error.message}: ${sanitizedStderr}`)
+        : error;
+    this.rejectPending(failure);
     logger.error('[CodexAppServer] Process failure', {
-      error: error.message,
-      stderr: this.getStderr(),
+      error: failure.message,
+      stderr: sanitizedStderr,
     });
-    this.options.onClose(error);
+    this.options.onClose(failure);
   }
 
   private closeAfterRequestTimeout(method: string, error: Error): void {
@@ -1168,6 +1202,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
     );
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -1304,6 +1342,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return await this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
           turnStarted = true;
           const state = this.createTurnState(
+            connection,
             connectionKey,
             connection.instanceId,
             threadHandle.threadId,
@@ -2140,6 +2179,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private createTurnState(
+    connection: CodexAppServerConnection,
     connectionKey: string,
     connectionInstanceId: string,
     threadId: string,
@@ -2148,6 +2188,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     appServerEnv: Record<string, string>,
   ): CodexAppServerTurnState {
     return {
+      connection,
       connectionKey,
       connectionInstanceId,
       threadId,
@@ -2158,6 +2199,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       itemStarts: [],
       notifications: [],
       notificationCount: 0,
+      bufferedEventChars: 0,
       serverRequests: [],
       agentMessageDeltas: [],
       agentMessageDeltasByItemId: new Map(),
@@ -2232,6 +2274,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const state = this.getTurnState(params.threadId, params.turnId);
     if (!state) {
       logger.debug('[CodexAppServer] Notification without active turn', { method: message.method });
+      return;
+    }
+
+    if (!this.reserveTurnEvent(state, message)) {
       return;
     }
 
@@ -2429,6 +2475,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): Promise<unknown> {
     const params = message.params ?? {};
     const state = this.getTurnState(params.threadId ?? params.conversationId, params.turnId);
+    if (state && !this.reserveTurnEvent(state, message)) {
+      throw new Error(state.error ?? 'Codex app-server turn event limit exceeded');
+    }
     const record: ServerRequestRecord = {
       id: message.id as JsonRpcId,
       method: message.method ?? 'unknown',
@@ -2446,6 +2495,18 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state?.serverRequests.push(record);
       throw error;
     }
+  }
+
+  private reserveTurnEvent(state: CodexAppServerTurnState, message: JsonRpcMessage): boolean {
+    state.bufferedEventChars += JSON.stringify(message).length;
+    if (state.bufferedEventChars <= MAX_BUFFERED_TURN_EVENT_CHARS) {
+      return true;
+    }
+
+    state.error = `codex app-server turn events exceeded ${MAX_BUFFERED_TURN_EVENT_CHARS} characters`;
+    state.completed.resolve();
+    void state.connection.close();
+    return false;
   }
 
   private buildServerRequestResponse(
@@ -3393,17 +3454,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private redactTracePii(value: unknown): unknown {
     if (typeof value === 'string') {
-      return value
-        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
-        .replace(
-          /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
-          REDACTED,
-        )
-        .replace(
-          /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
-          (_match, key, separator, spacing, quote) =>
-            `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
-        );
+      return redactAppServerText(value);
     }
 
     if (Array.isArray(value)) {

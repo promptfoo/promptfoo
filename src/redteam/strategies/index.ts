@@ -12,6 +12,7 @@ import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
+import { addGoblin } from './goblin';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
@@ -237,6 +238,16 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addHydra(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} hydra jailbreak test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'jailbreak:goblin',
+    requiresGoalExtraction: true,
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding goblin multi-turn jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addGoblin(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} goblin jailbreak test cases`);
       return newTestCases;
     },
   },

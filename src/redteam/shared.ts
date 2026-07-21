@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import chalk from 'chalk';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
@@ -199,16 +199,5 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
     }
-  }
-}
-
-/**
- * Custom error class for target permission-related failures.
- * Thrown when users lack necessary permissions to access or create targets.
- */
-export class TargetPermissionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TargetPermissionError';
   }
 }

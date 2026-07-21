@@ -277,6 +277,65 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle meta providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('meta:muse-spark-1.1'));
+      expect(factory).toBeDefined();
+
+      const metaOptions: ProviderOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { temperature: 0.42, apiKey: 'meta-test-key' },
+      };
+      // Bare meta:<model> defaults to the Responses API surface.
+      const provider = await factory!.create('meta:muse-spark-1.1', metaOptions, mockContext);
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('meta:responses:muse-spark-1.1');
+      const config = (provider as any).config;
+      expect(config.temperature).toBe(0.42);
+      expect(config.apiKey).toBe('meta-test-key');
+      expect(config.apiBaseUrl).toBe('https://api.meta.ai/v1');
+      expect(config.apiKeyEnvar).toBe('MODEL_API_KEY');
+    });
+
+    it('should route meta sub-types correctly', async () => {
+      const factory = providerMap.find((f) => f.test('meta:chat:muse-spark-1.1'));
+      expect(factory).toBeDefined();
+
+      const chatProvider = await factory!.create(
+        'meta:chat:muse-spark-1.1',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const defaultProvider = await factory!.create(
+        'meta:',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const responsesProvider = await factory!.create(
+        'meta:responses:muse-spark-1.1',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+      const messagesProvider = await factory!.create(
+        'meta:messages:muse-spark-1.1',
+        { ...mockProviderOptions, id: undefined },
+        mockContext,
+      );
+
+      expect(chatProvider.id()).toBe('meta:chat:muse-spark-1.1');
+      expect(defaultProvider.id()).toBe('meta:responses:muse-spark-1.1');
+      expect(responsesProvider.id()).toBe('meta:responses:muse-spark-1.1');
+      expect(messagesProvider.id()).toBe('meta:messages:muse-spark-1.1');
+
+      await expect(
+        factory!.create(
+          'meta:embedding:foo',
+          { ...mockProviderOptions, id: undefined },
+          mockContext,
+        ),
+      ).rejects.toThrow(/does not expose/);
+    });
+
     it('should handle moonshot providers correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:moonshot-v1-8k'));
       expect(factory).toBeDefined();
@@ -316,7 +375,7 @@ describe('Provider Registry', () => {
       );
 
       expect(chatProvider.id()).toBe('moonshot:kimi-k2.6');
-      expect(defaultProvider.id()).toBe('moonshot:kimi-k2.6');
+      expect(defaultProvider.id()).toBe('moonshot:kimi-k3');
       const { body } = await (chatProvider as any).getOpenAiBody('Hello');
       expect(body.temperature).toBeUndefined();
       expect(body.max_tokens).toBeUndefined();
@@ -428,6 +487,7 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(completionProvider).toBeDefined();
+
       expect(completionProvider.id()).toBe('anthropic:claude-2');
 
       const shorthandProvider = await factory!.create(
@@ -438,13 +498,13 @@ describe('Provider Registry', () => {
       expect(shorthandProvider).toBeDefined();
       expect(shorthandProvider.id()).toBe('anthropic:claude-3-5-sonnet-20241022');
 
-      for (const model of ['claude-fable-5', 'claude-mythos-5']) {
-        const claude5Provider = await factory!.create(
+      for (const model of ['claude-fable-5', 'claude-mythos-5', 'claude-sonnet-5']) {
+        const shorthandModelProvider = await factory!.create(
           `anthropic:${model}`,
           anthropicOptions,
           mockContext,
         );
-        expect(claude5Provider.id()).toBe(`anthropic:${model}`);
+        expect(shorthandModelProvider.id()).toBe(`anthropic:${model}`);
       }
 
       // Test error case with invalid model type
@@ -490,6 +550,19 @@ describe('Provider Registry', () => {
       );
       expect(completionProvider).toBeDefined();
 
+      const realtimeProvider = await factory!.create(
+        'azure:realtime:gpt-realtime-1.5-2026-02-23',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(realtimeProvider).toBeDefined();
+      await expect(
+        factory!.create('azure:realtime:gpt-realtime-whisper', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/transcription-only/);
+      await expect(
+        factory!.create('azure:realtime:gpt-realtime-translate', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/translation-only/);
+
       const imageProvider = await factory!.create(
         'azure:image:mai-image-2-5',
         mockProviderOptions,
@@ -507,7 +580,7 @@ describe('Provider Registry', () => {
 
       // Model types without a default deployment must name one in the path. Cover both
       // the missing (`azure:chat`) and empty (`azure:chat:`) third-segment variants.
-      for (const prefix of ['azure:chat', 'azure:completion']) {
+      for (const prefix of ['azure:chat', 'azure:completion', 'azure:realtime']) {
         await expect(factory!.create(prefix, mockProviderOptions, mockContext)).rejects.toThrow(
           /requires a deployment name/,
         );
@@ -717,6 +790,33 @@ describe('Provider Registry', () => {
       if (expectedModelType) {
         expect(provider).toHaveProperty('modelType', expectedModelType);
       }
+    });
+
+    it.each([
+      [
+        'mistral:mistral-large-latest',
+        'MistralChatCompletionProvider',
+        'mistral:mistral-large-latest',
+      ],
+      ['mistral:embedding', 'MistralEmbeddingProvider', 'mistral:embedding:mistral-embed'],
+      [
+        'mistral:embeddings:mistral-embed',
+        'MistralEmbeddingProvider',
+        'mistral:embedding:mistral-embed',
+      ],
+      [
+        'mistral:embedding:codestral-embed',
+        'MistralEmbeddingProvider',
+        'mistral:embedding:codestral-embed',
+      ],
+    ])('should route %s correctly', async (path, expectedProviderName, expectedId) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(path, { config: {} }, mockContext);
+      expect(provider.constructor.name).toBe(expectedProviderName);
+      expect(provider.id()).toBe(expectedId);
     });
 
     it('should handle bedrock Luma Ray video provider with model version', async () => {
@@ -985,17 +1085,17 @@ describe('Provider Registry', () => {
     });
 
     it('should handle groq provider correctly', async () => {
-      const factory = providerMap.find((f) => f.test('groq:llama-3.3-70b-versatile'));
+      const factory = providerMap.find((f) => f.test('groq:openai/gpt-oss-120b'));
       expect(factory).toBeDefined();
 
       // Use options without id to verify the provider generates its own id
       const groqOptions = { ...mockProviderOptions, id: undefined };
-      const provider = await factory!.create('groq:llama-3.3-70b-versatile', groqOptions, {
+      const provider = await factory!.create('groq:openai/gpt-oss-120b', groqOptions, {
         ...mockContext,
         options: groqOptions,
       });
       expect(provider).toBeDefined();
-      expect(provider.id()).toBe('groq:llama-3.3-70b-versatile');
+      expect(provider.id()).toBe('groq:openai/gpt-oss-120b');
 
       // Test error case with missing model
       await expect(factory!.create('groq:', groqOptions, mockContext)).rejects.toThrow(
@@ -1030,7 +1130,7 @@ describe('Provider Registry', () => {
 
     it('should handle groq:responses provider correctly', async () => {
       // groq:responses: is handled by the same factory as groq:
-      const factory = providerMap.find((f) => f.test('groq:responses:llama-3.3-70b-versatile'));
+      const factory = providerMap.find((f) => f.test('groq:responses:openai/gpt-oss-120b'));
       expect(factory).toBeDefined();
 
       // Use options without id to verify the provider generates its own id
@@ -1209,7 +1309,25 @@ describe('Provider Registry', () => {
         'google:gemini-2.5-flash-image',
         async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
       ],
+      // Nano Banana 2 / 2 Lite / Pro GA: bare google:<model> routes dispatch on the '-image' substring.
+      [
+        'google:gemini-3.1-flash-lite-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'google:gemini-3.1-flash-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
+      [
+        'google:gemini-3-pro-image',
+        async () => (await import('../../src/providers/google/gemini-image')).GeminiImageProvider,
+      ],
       // Bare google:<model> default chat route (no service-type segment).
+      [
+        'google:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
       [
         'google:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
@@ -1222,11 +1340,21 @@ describe('Provider Registry', () => {
         'vertex:chat:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
+      [
+        'vertex:chat:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
       // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
       // (distinct from the vertex:chat: branch, which slices from index 2).
       [
         'vertex:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
         'vertex:embedding:gemini-embedding-001',
@@ -1251,6 +1379,17 @@ describe('Provider Registry', () => {
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect((provider as any).config?.vertexai).toBe(true);
+      expect(provider.id()).toBe(providerPath);
+    });
+
+    it.each([
+      'vertex:gemini-omni-flash-preview',
+      'vertex:chat:gemini-omni-flash-preview',
+    ])('applies vertexai config and provider id for %s', async (providerPath) => {
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);

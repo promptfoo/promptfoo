@@ -1,0 +1,131 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Allowlist policy: every ignore below must state WHY it exists. Entries marked
+  // "cloud-consumed" are imported by promptfoo-cloud (which compiles @promptfoo/*
+  // directly from this repo's src/); removing them breaks cloud at the next
+  // submodule bump even though nothing in this repo references them.
+  // See AGENTS.md ("Knip / dead-code CI check") before editing.
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/**/*.{js,cjs,mjs,ts}",
+        "plugins/**/scripts/**/*.{js,cjs,mjs,ts}",
+        "src/redteam/plugins/policy/evals/**/*.{js,cjs,mjs,ts}",
+        // Referenced by path string in src/app/vite.shared.ts browserModuleReplacements.
+        "src/logger.browser.ts",
+        "src/util/createHash.browser.ts",
+        // Cloud-consumed (pre-wired): CLI-side handler for TargetLink FS_* probe
+        // events driven by promptfoo-cloud over Socket.IO (see cloud
+        // server/src/services/autoDiscovery/targetSetupSocket/). Not yet attached
+        // in this repo; keep until the recon wiring lands or is abandoned.
+        "src/util/agent/targetLinkFs.ts",
+        "test/__fixtures__/**/*.{js,cjs,mjs,ts}",
+        "test/fixtures/**/*.{js,cjs,mjs,ts}",
+        "test/smoke/fixtures/**/*.{js,cjs,mjs,ts}",
+        "test/**/*.bench.ts"
+      ],
+      "project": [
+        "src/**/*.{js,ts,tsx}",
+        "scripts/**/*.{js,cjs,mjs,ts}",
+        "plugins/**/*.{js,cjs,mjs,ts}",
+        "test/**/*.{js,ts,tsx,cjs,mjs}",
+        "!src/app/**/*"
+      ],
+      "ignoreFiles": [],
+      "ignoreDependencies": [
+        // Imported by test/code-scan-action/*.test.ts; declared in
+        // code-scan-action/package.json rather than the root manifest.
+        "@actions/*",
+        "@octokit/rest",
+        // Types for a dynamically-imported dependency.
+        "@types/pdf-parse",
+        // Install-side-effect git-hook tool; never imported.
+        "block-no-verify",
+        // Transitive pin for google-auth-library behavior (see comments in
+        // src/providers/google/auth.ts); never imported directly.
+        "gcp-metadata",
+        // Transitive pin; never imported directly.
+        "langium"
+      ],
+      "paths": {
+        "@promptfoo/*": ["./src/*"]
+      }
+    },
+    "src/app": {
+      "entry": ["index.html"],
+      "project": ["src/**/*.{js,ts,tsx}"],
+      "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
+      "ignoreDependencies": [
+        // Build-tool/CSS deps invisible to import analysis (Tailwind v4 pipeline).
+        "@kurkle/color",
+        "lightningcss",
+        "tailwindcss"
+      ],
+      "paths": {
+        "@app/*": ["./src/*"],
+        "@promptfoo/*": ["../../*"]
+      }
+    },
+    "site": {
+      "entry": [
+        "*.config.{js,ts}",
+        "src/**/*.{js,ts,tsx}",
+        "blog/**/*.{js,ts,tsx}",
+        "docs/**/*.{md,mdx}"
+      ],
+      "project": ["**/*.{js,ts,tsx}"],
+      "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
+      "ignoreDependencies": [
+        // Docusaurus aliasing/preset conventions resolved at build time.
+        "@docusaurus/types",
+        "@docusaurus/theme-common",
+        "@theme/*",
+        "@mui/*",
+        "@generated/*",
+        "@docusaurus/plugin-content-blog",
+        "@swc/core",
+        "@swc/jest",
+        // Transitive pins for the Docusaurus build; never imported directly.
+        "dompurify",
+        "langium",
+        "webpack"
+      ]
+    },
+    "code-scan-action": {
+      "project": ["src/**/*.{js,ts,tsx}"]
+    }
+  },
+  "ignoreBinaries": [
+    // System tools invoked via child_process, plus the npm bin script.
+    "act",
+    "dist/src/entrypoint.js",
+    "ffmpeg",
+    "gh",
+    "go",
+    "modelaudit",
+    "python3",
+    "ruby",
+    "security"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreIssues": {
+    // Internal intentional alias/duplicate-export patterns.
+    "src/contracts/api/user.ts": ["duplicates"],
+    // Cloud-consumed: server/src/task/hydra.ts and server/src/task/h4rm3l
+    // import @promptfoo/redteam/plugins/multiInputFormat.
+    "src/redteam/plugins/multiInputFormat.ts": ["exports"],
+    "src/redteam/providers/custom/index.ts": ["duplicates"],
+    "src/redteam/providers/hydra/index.ts": ["duplicates"],
+    // Internal zod schema + inferred-type export pairs.
+    "src/types/api/**": ["duplicates", "types"],
+    // Cloud-consumed: server/src/services/codeScan/types imports
+    // @promptfoo/types/codeScan.
+    "src/types/codeScan.ts": ["exports", "types"],
+    "src/types/modelAudit.ts": ["types"],
+    // Cloud-consumed: cloud targetSetupSocket services import these event types.
+    "src/types/targetLink.ts": ["types"],
+    // Legacy aliases (sanitizeHeaders/sanitizeQueryParams === sanitizeObject),
+    // pinned by test/util/sanitizer.test.ts.
+    "src/util/sanitizer.ts": ["duplicates"]
+  }
+}
