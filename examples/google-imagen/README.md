@@ -69,16 +69,21 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ### Imagen Models (use `google:image:` prefix)
 
-- `imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
-- `imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)
-- `imagen-4.0-fast-generate-preview-06-06` - Fast generation ($0.02/image)
+- `imagen-4.0-ultra-generate-001` - Ultra quality ($0.06/image)
+- `imagen-4.0-generate-001` - Standard quality ($0.04/image)
+- `imagen-4.0-fast-generate-001` - Fast generation ($0.02/image)
 - `imagen-3.0-generate-002` - Imagen 3.0 ($0.04/image)
+
+Google has deprecated the Imagen 4 models with an August 17, 2026 shutdown and recommends `gemini-3.1-flash-image` as the replacement. The older `imagen-4.0-*-preview-06-06` ids are already shut down.
 
 ### Gemini Native Image Generation
 
-- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.05/image, estimated)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only)
+- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) with native image generation (~$0.134/image at 1K/2K)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
+
+Use the GA ids above; Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on June 25, 2026. Nano Banana 2 Lite never had a `-preview` alias.
 
 ## Running the Example
 

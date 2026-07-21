@@ -2,6 +2,17 @@ import type { AzureModelCost, AzureVideoSize } from './types';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
 
+/**
+ * Default route for Microsoft MAI image generation models in Microsoft Foundry
+ * (e.g. MAI-Image-2.5). Unlike Azure OpenAI image models, MAI image models are
+ * served from a Microsoft-managed `/mai/v1/...` route rather than
+ * `/openai/deployments/<name>/images/generations`, and they do not take an
+ * `api-version` query parameter.
+ *
+ * @see https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai
+ */
+export const DEFAULT_AZURE_MAI_IMAGE_API_PATH = '/mai/v1/images/generations';
+
 // =============================================================================
 // Video Generation Constants (Sora)
 // =============================================================================
@@ -33,131 +44,300 @@ export const AZURE_VIDEO_DURATIONS = [5, 10, 15, 20] as const;
  */
 export const AZURE_SORA_COST_PER_SECOND = 0.1;
 
+/**
+ * Prompt-token count above which GPT-5.x models switch to their long-context
+ * pricing tier. Matches OpenAI's own threshold (see `GPT_5_LONG_CONTEXT_THRESHOLD`
+ * in `src/providers/openai/util.ts`).
+ */
+const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+
 export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // GPT-5 Series (Latest Flagship)
-  // Note: Pricing is provisional/estimated based on relative model capabilities
+  // Global Standard rates verified against the Azure Retail Prices API (prices.azure.com, eastus2)
   // =============================================================================
   {
     id: 'gpt-5',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-2025-08-07',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-pro',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 15 / 1000000, output: 120 / 1000000 },
   },
   {
     id: 'gpt-5-pro-2025-10-06',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: { input: 15 / 1000000, output: 120 / 1000000 },
+  },
+  ...['gpt-5.6', 'gpt-5.6-sol'].map((id) => ({
+    id,
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      cacheRead: 0.5 / 1000000,
+      priorityMultiplier: 2,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+        cacheRead: 1 / 1000000,
+      },
+    },
+  })),
+  {
+    id: 'gpt-5.6-terra',
+    cost: {
+      input: 2.5 / 1000000,
+      output: 15 / 1000000,
+      cacheRead: 0.25 / 1000000,
+      priorityMultiplier: 2,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+        cacheRead: 0.5 / 1000000,
+      },
+    },
+  },
+  {
+    id: 'gpt-5.6-luna',
+    cost: {
+      input: 1 / 1000000,
+      output: 6 / 1000000,
+      cacheRead: 0.1 / 1000000,
+      priorityMultiplier: 2,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 2 / 1000000,
+        output: 9 / 1000000,
+        cacheRead: 0.2 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 15 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-2026-03-05',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 15 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 5 / 1000000,
+        output: 22.5 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-pro',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 30 / 1000000,
+      output: 180 / 1000000,
+      cacheRead: 3 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+        cacheRead: 6 / 1000000,
+      },
+    },
   },
   {
     id: 'gpt-5.4-pro-2026-03-05',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 30 / 1000000,
+      output: 180 / 1000000,
+      cacheRead: 3 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+        cacheRead: 6 / 1000000,
+      },
+    },
+  },
+  ...['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'].map((id) => ({
+    id,
+    cost: {
+      input: 0.75 / 1000000,
+      output: 4.5 / 1000000,
+      cacheRead: 0.075 / 1000000,
+    },
+  })),
+  ...['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'].map((id) => ({
+    id,
+    cost: {
+      input: 0.2 / 1000000,
+      output: 1.25 / 1000000,
+      cacheRead: 0.02 / 1000000,
+    },
+  })),
+  // gpt-5.5 / gpt-5.2 / gpt-5.3 — Global Standard rates verified against the Azure Retail Prices
+  // API (prices.azure.com, serviceFamily 'AI + Machine Learning'). gpt-5.5 long-context is 10/45
+  // above the threshold. gpt-5.2/5.3 chat and codex share 1.75/14.
+  {
+    id: 'gpt-5.5',
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
   },
   {
-    id: 'gpt-5.4-mini',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    id: 'gpt-5.5-2026-04-23',
+    cost: {
+      input: 5 / 1000000,
+      output: 30 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1000000,
+        output: 45 / 1000000,
+      },
+    },
+  },
+  ...['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'].map((id) => ({
+    id,
+    cost: {
+      input: 30 / 1000000,
+      output: 180 / 1000000,
+      cacheRead: 3 / 1000000,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1000000,
+        output: 270 / 1000000,
+        cacheRead: 6 / 1000000,
+      },
+    },
+  })),
+  {
+    id: 'gpt-5.2',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
-    id: 'gpt-5.4-mini-2026-03-17',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    id: 'gpt-5.2-2025-12-11',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
+  },
+  ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((id) => ({
+    id,
+    cost: { input: 21 / 1000000, output: 168 / 1000000 },
+  })),
+  {
+    id: 'gpt-5.2-chat',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
-    id: 'gpt-5.4-nano',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    id: 'gpt-5.2-chat-2025-12-11',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
   },
   {
-    id: 'gpt-5.4-nano-2026-03-17',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    id: 'gpt-5.2-codex',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
+  },
+  {
+    id: 'gpt-5.3-chat',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
+  },
+  {
+    id: 'gpt-5.3-codex',
+    cost: { input: 1.75 / 1000000, output: 14 / 1000000 },
+  },
+  {
+    id: 'gpt-5.1-codex-max',
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-mini',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
   {
     id: 'gpt-5-mini-2025-08-07',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
   {
     id: 'gpt-5-nano',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    cost: { input: 0.05 / 1000000, output: 0.4 / 1000000 },
   },
   {
     id: 'gpt-5-nano-2025-08-07',
-    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+    cost: { input: 0.05 / 1000000, output: 0.4 / 1000000 },
   },
   {
     id: 'gpt-5-chat',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5-chat-latest',
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-chat-2025-08-07',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-chat-2025-10-03',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-codex',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5-codex-2025-09-15',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
 
   // =============================================================================
   // GPT-5.1 Series (Newest)
-  // Note: Pricing is provisional/estimated based on relative model capabilities
+  // Global Standard rates verified against the Azure Retail Prices API (prices.azure.com, eastus2)
   // =============================================================================
   {
     id: 'gpt-5.1',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-2025-11-13',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-chat',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-chat-2025-11-13',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex-2025-11-13',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex-mini',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
   {
     id: 'gpt-5.1-codex-mini-2025-11-13',
-    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+    cost: { input: 0.25 / 1000000, output: 2 / 1000000 },
   },
 
   // =============================================================================
@@ -201,11 +381,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'o3',
-    cost: { input: 10 / 1000000, output: 40 / 1000000 },
+    cost: { input: 2 / 1000000, output: 8 / 1000000 },
   },
   {
     id: 'o3-2025-04-16',
-    cost: { input: 10 / 1000000, output: 40 / 1000000 },
+    cost: { input: 2 / 1000000, output: 8 / 1000000 },
   },
   {
     id: 'o3-pro',
@@ -289,71 +469,234 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   {
     id: 'gpt-4o-realtime-preview',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-4o-realtime-preview-2024-10-01',
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      cacheReadAudio: 20 / 1000000,
+      audioInput: 100 / 1000000,
+      audioOutput: 200 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-realtime-preview-2024-12-17',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-realtime-preview-2025-06-03',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 20 / 1000000,
+      cacheRead: 2.5 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-realtime-preview',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      cacheRead: 0.3 / 1000000,
+      cacheReadAudio: 0.3 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      cacheRead: 0.3 / 1000000,
+      cacheReadAudio: 0.3 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-audio-preview',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-audio-preview-2024-12-17',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 40 / 1000000,
+      audioOutput: 80 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-audio-preview',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-4o-mini-audio-preview-2024-12-17',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
+      cacheReadImage: 0.5 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+      imageInput: 5 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-2025-08-28',
-    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
+      cacheReadImage: 0.5 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+      imageInput: 5 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-realtime-1.5',
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
+      cacheReadImage: 0.5 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+      imageInput: 5 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-realtime-1.5-2026-02-23',
+    cost: {
+      input: 4 / 1000000,
+      output: 16 / 1000000,
+      cacheRead: 0.4 / 1000000,
+      cacheReadAudio: 0.4 / 1000000,
+      cacheReadImage: 0.5 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+      imageInput: 5 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-mini',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      cacheRead: 0.06 / 1000000,
+      cacheReadAudio: 0.3 / 1000000,
+      cacheReadImage: 0.08 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+      imageInput: 0.8 / 1000000,
+    },
   },
   {
     id: 'gpt-realtime-mini-2025-10-06',
-    cost: { input: 0.6 / 1000000, output: 2.4 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      cacheRead: 0.06 / 1000000,
+      cacheReadAudio: 0.3 / 1000000,
+      cacheReadImage: 0.08 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+      imageInput: 0.8 / 1000000,
+    },
   },
   {
     id: 'gpt-audio',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-2025-08-28',
-    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-audio-1.5',
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
+  },
+  {
+    id: 'gpt-audio-1.5-2026-02-23',
+    cost: {
+      input: 2.5 / 1000000,
+      output: 10 / 1000000,
+      audioInput: 32 / 1000000,
+      audioOutput: 64 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-mini',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
   {
     id: 'gpt-audio-mini-2025-10-06',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: {
+      input: 0.6 / 1000000,
+      output: 2.4 / 1000000,
+      audioInput: 10 / 1000000,
+      audioOutput: 20 / 1000000,
+    },
   },
 
   // =============================================================================
@@ -369,11 +712,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'gpt-4o-mini-transcribe',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 5 / 1000000 },
   },
   {
     id: 'gpt-4o-mini-transcribe-2025-03-20',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 1.25 / 1000000, output: 5 / 1000000 },
   },
   {
     id: 'gpt-4o-transcribe-diarize',
@@ -383,14 +726,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'gpt-4o-transcribe-diarize-2025-10-15',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
   },
-  {
-    id: 'gpt-4o-mini-tts',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
-  },
-  {
-    id: 'gpt-4o-mini-tts-2025-03-20',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
-  },
+  ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-03-20'].map((id) => ({
+    id,
+    cost: { input: 0.6 / 1000000, output: 12 / 1000000, audioOutput: 12 / 1000000 },
+  })),
 
   // =============================================================================
   // GPT-4 Legacy
@@ -466,28 +805,68 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   {
     id: 'gpt-image-1',
-    cost: { input: 5 / 1000000, output: 40 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 40 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 10 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1-2025-04-15',
-    cost: { input: 5 / 1000000, output: 40 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 40 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 10 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1-mini',
-    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+      cacheRead: 0.2 / 1000000,
+      imageInput: 2.5 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1-mini-2025-10-06',
-    cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+      cacheRead: 0.2 / 1000000,
+      imageInput: 2.5 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1.5',
-    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 32 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 8 / 1000000,
+    },
   },
   {
     id: 'gpt-image-1.5-2025-12-16',
-    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+    cost: {
+      input: 5 / 1000000,
+      output: 32 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 8 / 1000000,
+    },
   },
+  ...['gpt-image-2', 'gpt-image-2-2026-04-21'].map((id) => ({
+    id,
+    cost: {
+      input: 5 / 1000000,
+      output: 10 / 1000000,
+      cacheRead: 1.25 / 1000000,
+      imageInput: 8 / 1000000,
+      imageOutput: 30 / 1000000,
+    },
+  })),
   {
     id: 'dall-e-3',
     cost: { input: 40 / 1000000, output: 40 / 1000000 },
@@ -537,8 +916,20 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // Anthropic Claude Models (via Azure AI Foundry)
   // =============================================================================
   {
+    id: 'claude-fable-5',
+    cost: { input: 10 / 1000000, output: 50 / 1000000 },
+  },
+  {
+    id: 'claude-opus-4-8',
+    cost: { input: 5 / 1000000, output: 25 / 1000000 },
+  },
+  {
     id: 'claude-opus-4-7',
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
+  },
+  {
+    id: 'claude-sonnet-5',
+    cost: { input: 3 / 1000000, output: 15 / 1000000 },
   },
   {
     id: 'claude-sonnet-4-6',
@@ -578,11 +969,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'claude-haiku-4-5',
-    cost: { input: 0.8 / 1000000, output: 4 / 1000000 },
+    cost: { input: 1 / 1000000, output: 5 / 1000000 },
   },
   {
     id: 'claude-haiku-4-5-20251001',
-    cost: { input: 0.8 / 1000000, output: 4 / 1000000 },
+    cost: { input: 1 / 1000000, output: 5 / 1000000 },
   },
 
   // =============================================================================
@@ -652,6 +1043,39 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'DeepSeek-V3.1',
     cost: { input: 0.27 / 1000000, output: 1.1 / 1000000 },
   },
+  // DeepSeek V3.2 / V4 — Global Standard rates from the Azure Retail Prices API (prices.azure.com).
+  {
+    id: 'DeepSeek-V3.2',
+    cost: { input: 0.58 / 1000000, output: 1.68 / 1000000 },
+  },
+  {
+    id: 'DeepSeek-V3.2-Speciale',
+    cost: { input: 0.58 / 1000000, output: 1.68 / 1000000 },
+  },
+  {
+    id: 'DeepSeek-V4-Flash',
+    cost: { input: 0.19 / 1000000, output: 0.51 / 1000000 },
+  },
+  {
+    id: 'DeepSeek-V4-Pro',
+    cost: { input: 1.74 / 1000000, output: 3.48 / 1000000 },
+  },
+
+  // =============================================================================
+  // MoonshotAI Kimi Models (via Azure AI Foundry) — Global Standard (prices.azure.com)
+  // =============================================================================
+  {
+    id: 'Kimi-K2-Thinking',
+    cost: { input: 0.6 / 1000000, output: 2.5 / 1000000 },
+  },
+  {
+    id: 'Kimi-K2.5',
+    cost: { input: 0.6 / 1000000, output: 3 / 1000000 },
+  },
+  {
+    id: 'Kimi-K2.6',
+    cost: { input: 0.95 / 1000000, output: 4 / 1000000 },
+  },
 
   // =============================================================================
   // xAI Grok Models (via Azure AI Foundry)
@@ -678,7 +1102,22 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'grok-code-fast-1',
-    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+    cost: { input: 0.2 / 1000000, output: 1.5 / 1000000 },
+  },
+  // Newer Grok on Azure — Global Standard from the Azure Retail Prices API (prices.azure.com).
+  // (grok-4-20 is intentionally omitted: its catalog id maps ambiguously to either the "Grok 4.2"
+  // meter ($1.25/$2.50) or base "Grok-4" ($3/$15), so it is left unpriced rather than guessed.)
+  {
+    id: 'grok-4.3',
+    cost: { input: 1.25 / 1000000, output: 2.5 / 1000000 },
+  },
+  {
+    id: 'grok-4-1-fast-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  {
+    id: 'grok-4-1-fast-non-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
   },
 
   // =============================================================================
@@ -702,7 +1141,7 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'Phi-4-multimodal-instruct',
-    cost: { input: 0.07 / 1000000, output: 0.14 / 1000000 },
+    cost: { input: 0.08 / 1000000, output: 0.32 / 1000000, audioInput: 4 / 1000000 },
   },
   {
     id: 'Phi-3.5-MoE-instruct',
@@ -727,6 +1166,30 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'Phi-3-mini-128k-instruct',
     cost: { input: 0.026 / 1000000, output: 0.026 / 1000000 },
+  },
+  // Phi-3 4K/8K context variants — same Global Standard rate as their 128K counterparts per the
+  // Azure Retail Prices API (prices.azure.com).
+  {
+    id: 'Phi-3-medium-4k-instruct',
+    cost: { input: 0.17 / 1000000, output: 0.68 / 1000000 },
+  },
+  {
+    id: 'Phi-3-mini-4k-instruct',
+    cost: { input: 0.13 / 1000000, output: 0.52 / 1000000 },
+  },
+  {
+    id: 'Phi-3-small-8k-instruct',
+    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
+  },
+
+  // =============================================================================
+  // OpenAI open-weight (gpt-oss) via Azure AI Foundry — Global Standard (prices.azure.com).
+  // gpt-oss-20b is intentionally omitted: Azure exposes only fine-tuning meters for it, with no
+  // base Global Standard inference rate, so it is left unpriced rather than guessed.
+  // =============================================================================
+  {
+    id: 'gpt-oss-120b',
+    cost: { input: 0.15 / 1000000, output: 0.6 / 1000000 },
   },
 
   // =============================================================================
@@ -843,5 +1306,44 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'Falcon3-7B-Instruct',
     cost: { input: 0.05 / 1000000, output: 0.05 / 1000000 },
+  },
+
+  // =============================================================================
+  // Microsoft MAI Models (Foundry Models sold by Azure)
+  // Microsoft's first-party model family. Image models are billed per token; the
+  // `/mai/v1/images` route reports token counts either under a `usage` object
+  // (num_output_tokens / num_input_text_tokens / num_input_image_tokens) or, in
+  // an older shape, as a top-level `num_output_tokens`. AzureImageProvider reads
+  // both and prices input + output. Cost lookup is keyed by the model id, so set
+  // `model` in the provider config (deployment names can't contain the dots in
+  // ids like `MAI-Image-2.5`) to enable cost reporting. Rates marked
+  // "provisional" are estimates pending published pricing.
+  // =============================================================================
+  {
+    // Reasoning chat model (DeepSeek-R1 lineage). Provisional pricing mirrors
+    // DeepSeek-R1 on Foundry pending a published MAI-DS-R1 rate.
+    id: 'MAI-DS-R1',
+    cost: { input: 0.55 / 1000000, output: 2.19 / 1000000 },
+  },
+  {
+    // Text-to-image. Text input $5/1M; image output $33/1M (Microsoft).
+    id: 'MAI-Image-2',
+    cost: { input: 5 / 1000000, output: 33 / 1000000 },
+  },
+  {
+    // Efficient image. Text input $5/1M; image output $19.50/1M (Microsoft).
+    id: 'MAI-Image-2e',
+    cost: { input: 5 / 1000000, output: 19.5 / 1000000 },
+  },
+  {
+    // Flagship text-to-image + image edits. Text input $5/1M confirmed; image
+    // output rate provisional.
+    id: 'MAI-Image-2.5',
+    cost: { input: 5 / 1000000, output: 33 / 1000000 },
+  },
+  {
+    // Efficient flagship image variant. Pricing provisional (flash tier).
+    id: 'MAI-Image-2.5-Flash',
+    cost: { input: 5 / 1000000, output: 19.5 / 1000000 },
   },
 ];

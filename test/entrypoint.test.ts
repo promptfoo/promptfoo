@@ -120,7 +120,6 @@ const nodeEngineComparatorSets: NodeEngineComparator[][] = [
   ],
   [{ operator: '>=', version: '22.22.0' }],
 ];
-
 describe('entrypoint version check logic', () => {
   describe('Node.js version parsing', () => {
     it('parses full semver versions with optional prefixes and suffixes', () => {

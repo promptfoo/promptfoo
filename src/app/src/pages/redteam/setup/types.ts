@@ -1,6 +1,7 @@
+import type { Inputs } from '@promptfoo/contracts';
 import type { HttpProviderConfig } from '@promptfoo/providers/http';
 import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { ProviderOptions as CoreProviderOptions, Inputs, TestCase } from '@promptfoo/types';
+import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfoo/types';
 
 /**
  * UI-specific TLS configuration properties for tracking input methods.
@@ -100,6 +101,7 @@ export interface ProviderOptions {
     headers?: Record<string, string>;
     body?: string | object;
     messageTemplate?: string;
+    protocols?: string[];
     // Browser specific options
     steps?: BrowserStep[];
     headless?: boolean;

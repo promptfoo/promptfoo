@@ -8,6 +8,7 @@ import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { getTraceparent } from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
@@ -52,6 +53,11 @@ vi.mock('../../src/esm', async (importOriginal) => {
 // Mock the SDK package (for type safety)
 vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 
+vi.mock('../../src/tracing/genaiTracer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/genaiTracer')>()),
+  getTraceparent: vi.fn(),
+}));
+
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
   finalResponse: string,
@@ -90,6 +96,7 @@ describe('OpenAICodexSDKProvider', () => {
   let existsSyncSpy: MockInstance;
   const mockImportModule = vi.mocked(importModule);
   const mockResolvePackageEntryPoint = vi.mocked(resolvePackageEntryPoint);
+  const mockGetTraceparent = vi.mocked(getTraceparent);
   let originalBasePath: string | undefined;
   let originalOpenAiApiKey: string | undefined;
   let originalCodexApiKey: string | undefined;
@@ -115,6 +122,7 @@ describe('OpenAICodexSDKProvider', () => {
     mockImportModule.mockResolvedValue(mockCodexSDK);
     mockResolvePackageEntryPoint.mockReset();
     mockResolvePackageEntryPoint.mockReturnValue('@openai/codex-sdk');
+    mockGetTraceparent.mockReturnValue(undefined);
 
     // Default mocks
     statSyncSpy = vi.spyOn(fs, 'statSync').mockReturnValue({
@@ -154,6 +162,12 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.apiKey).toBe('test-key');
     });
 
+    it('should accept maxRetries for scheduler-managed rate limit retries', () => {
+      const provider = new OpenAICodexSDKProvider({ config: { maxRetries: 5 } });
+
+      expect(provider.config.maxRetries).toBe(5);
+    });
+
     it('should accept promptfoo cloud linkedTargetId metadata', () => {
       const provider = new OpenAICodexSDKProvider({
         config: {
@@ -172,14 +186,12 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it('should warn about unknown model', () => {
+    it.each(['unknown-model', 'gpt-5.6'])('should warn about unknown model %s', (model) => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-      new OpenAICodexSDKProvider({ config: { model: 'unknown-model' } });
+      new OpenAICodexSDKProvider({ config: { model } });
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK: unknown-model',
-      );
+      expect(warnSpy).toHaveBeenCalledWith(`Using unknown model for OpenAI Codex SDK: ${model}`);
 
       warnSpy.mockRestore();
     });
@@ -204,6 +216,55 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not warn about provider-specific model ids when routing through a custom model_provider', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // Amazon Bedrock model ids live in a different namespace than OpenAI's allowlist.
+      new OpenAICodexSDKProvider({
+        config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
+      });
+      for (const model of ['openai.gpt-5.6-sol', 'openai.gpt-5.6-terra', 'openai.gpt-5.6-luna']) {
+        new OpenAICodexSDKProvider({ config: { model, model_provider: 'amazon-bedrock' } });
+      }
+      // Same when the provider is supplied through raw cli_config.
+      new OpenAICodexSDKProvider({
+        config: { model: 'openai.gpt-5.4', cli_config: { model_provider: 'amazon-bedrock' } },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should still warn about unknown models when model_provider is openai', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      new OpenAICodexSDKProvider({
+        config: { model: 'unknown-model', model_provider: 'openai' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for OpenAI Codex SDK: unknown-model',
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('should treat model_provider case-insensitively (OpenAI is not a custom provider)', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      // `OpenAI` normalizes to the default provider, so an unknown model still warns.
+      new OpenAICodexSDKProvider({
+        config: { model: 'unknown-model', model_provider: 'OpenAI' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for OpenAI Codex SDK: unknown-model',
+      );
 
       warnSpy.mockRestore();
     });
@@ -370,6 +431,94 @@ describe('OpenAICodexSDKProvider', () => {
         expect(errorSpy).toHaveBeenCalled();
 
         errorSpy.mockRestore();
+      });
+
+      it('should not classify unrelated errors containing a tpm path as throttling', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(new Error('Unable to read /tmp/tpm/output.json'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe(
+          'Error calling OpenAI Codex SDK: Unable to read /tmp/tpm/output.json',
+        );
+        expect(result.metadata).toBeUndefined();
+      });
+
+      it('should expose transient TPM throttles with scheduler retry timing', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          new Error(
+            'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 1.25s.',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('Please try again in 1.25s.');
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '1250' },
+          },
+        });
+      });
+
+      it('should use a one-minute retry delay for TPM throttles without an SDK reset hint', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          new Error(
+            'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000.',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '60000' },
+          },
+        });
+      });
+
+      it('should classify hard quota exhaustion as non-retryable', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        mockRun.mockRejectedValue(
+          new Error(
+            'insufficient_quota: You exceeded your current quota. Please check your plan and billing details.',
+          ),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Quota exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('Retries will not help');
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'quota',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: {},
+          },
+        });
       });
 
       it('should ignore non-provider prompt config keys merged from test options', async () => {
@@ -1501,6 +1650,33 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it.each([
+        ['gpt-5.6-sol', 'max'],
+        ['gpt-5.6-sol', 'ultra'],
+        ['gpt-5.6-terra', 'max'],
+        ['gpt-5.6-terra', 'ultra'],
+        ['gpt-5.6-luna', 'max'],
+      ] as const)('should pass %s %s reasoning to thread options', async (model, effort) => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model,
+            model_reasoning_effort: effort,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model,
+            modelReasoningEffort: effort,
+          }),
+        );
+      });
+
       it('should pass approval_policy to thread options', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -1702,6 +1878,115 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(result.error).toBe('OpenAI Codex SDK call aborted before it started');
+      });
+
+      it('should expose streamed TPM failures with scheduler retry timing', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'turn.failed',
+            error: {
+              message:
+                'Rate limit reached for gpt-5.5 on tokens per min (TPM). Please try again in 250ms.',
+            },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata).toEqual({
+          rateLimitKind: 'rate_limit',
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '250' },
+          },
+        });
+      });
+
+      it('should let Codex recover after an intermediate stream error event', async () => {
+        vi.spyOn(logger, 'debug').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message:
+              'Reconnecting... 2/5 (Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000)',
+          };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Recovered response' },
+          };
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 2 },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Recovered response');
+      });
+
+      it('should retry if a stream ends after a TPM error event', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message:
+              'Reconnecting... 5/5 (Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000)',
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
+      });
+
+      it('should preserve TPM context when a stream later fails generically', async () => {
+        vi.spyOn(logger, 'error').mockImplementation(() => {});
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message:
+              'Rate limit reached for gpt-5.5 on tokens per min (TPM): Limit 36000000, Used 36000000',
+          };
+          yield {
+            type: 'turn.failed',
+            error: { message: 'Turn terminated after reconnect attempts' },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Rate limit exceeded: HTTP 429 Too Many Requests');
+        expect(result.error).toContain('Turn terminated after reconnect attempts');
+        expect(result.metadata?.http?.headers).toEqual({ 'retry-after-ms': '60000' });
       });
     });
 
@@ -2035,6 +2320,97 @@ describe('OpenAICodexSDKProvider', () => {
         }
       });
 
+      it('should propagate promptfoo trace resource attributes for deep tracing', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const spanId = 'b7ad6b7169203331';
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            deep_tracing: true,
+            cli_env: {
+              OTEL_RESOURCE_ATTRIBUTES:
+                'deployment.environment=test,promptfoo.trace_id=stale,promptfoo.parent_span_id=stale',
+            },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${traceId}-${spanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES:
+                `deployment.environment=test,promptfoo.trace_id=${traceId},` +
+                `promptfoo.parent_span_id=${spanId}`,
+            }),
+          }),
+        );
+      });
+
+      it('should prefer a valid active traceparent over the evaluator trace', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const activeTraceId = '0af7651916cd43dd8448eb211c80319c';
+        const activeSpanId = 'b7ad6b7169203331';
+        mockGetTraceparent.mockReturnValue(`00-${activeTraceId}-${activeSpanId}-01`);
+        const evaluatorTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+        const evaluatorSpanId = '00f067aa0ba902b7';
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${evaluatorTraceId}-${evaluatorSpanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${activeTraceId}-${activeSpanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES:
+                `promptfoo.trace_id=${activeTraceId},` + `promptfoo.parent_span_id=${activeSpanId}`,
+            }),
+          }),
+        );
+      });
+
+      it.each([
+        '00-00000000000000000000000000000000-b7ad6b7169203331-01',
+        '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
+      ])('should ignore an invalid active traceparent and use the evaluator trace', async (active) => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        mockGetTraceparent.mockReturnValue(active);
+        const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+        const spanId = '00f067aa0ba902b7';
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt', {
+          traceparent: `00-${traceId}-${spanId}-01`,
+          prompt: { raw: 'Test prompt', label: 'test' },
+          vars: {},
+        } as CallApiContextParams);
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              TRACEPARENT: `00-${traceId}-${spanId}-01`,
+              OTEL_RESOURCE_ATTRIBUTES: `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+            }),
+          }),
+        );
+      });
+
       it('should handle codex_path_override', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -2144,6 +2520,35 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should ignore attached live provider objects before rendering prompt config vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const attachedProvider: Record<string, unknown> = {
+          id: () => 'attached-provider',
+        };
+        attachedProvider.self = attachedProvider;
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              config: {
+                model: '{{ model }}',
+                provider: attachedProvider,
+              } as any,
+            },
+            vars: { model: 'gpt-5.2' },
+          } as any),
+        ).resolves.toMatchObject({
+          output: 'Response',
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
       it('should use CODEX_API_KEY from env if available', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -2181,6 +2586,46 @@ describe('OpenAICodexSDKProvider', () => {
         expect(MockCodex).toHaveBeenCalledWith(
           expect.objectContaining({
             config: { collaboration_mode: 'coding', model_provider: { timeout: 30 } },
+          }),
+        );
+      });
+
+      it('should map the first-class model_provider into the Codex CLI config object', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.5',
+            model_provider: 'amazon-bedrock',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { model_provider: 'amazon-bedrock' },
+          }),
+        );
+      });
+
+      it('should let the first-class model_provider take precedence over cli_config', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model_provider: 'amazon-bedrock',
+            cli_config: { model_provider: 'openai', model_providers: { 'amazon-bedrock': {} } },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { model_provider: 'amazon-bedrock', model_providers: { 'amazon-bedrock': {} } },
           }),
         );
       });
@@ -2235,6 +2680,85 @@ describe('OpenAICodexSDKProvider', () => {
         } finally {
           mockProcessEnv({ PROMPTFOO_TEST_EXISTING: undefined });
         }
+      });
+
+      it('should not leak an inherited OpenAI key into the CLI env when routing to a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
+          // Ambient OpenAI key unrelated to the Bedrock backend.
+          env: { OPENAI_API_KEY: 'sk-unrelated' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+        expect(codexCall?.env?.OPENAI_API_KEY).toBeUndefined();
+        expect(codexCall?.env?.CODEX_API_KEY).toBeUndefined();
+        // The SDK forwards a constructor `apiKey` into the spawned CLI as CODEX_API_KEY, so it
+        // must also be withheld — otherwise the env gating above is silently defeated.
+        expect(codexCall?.apiKey).toBeUndefined();
+      });
+
+      it('should not pass an inherited OpenAI key as the SDK constructor apiKey for a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'openai.gpt-5.5', model_provider: 'amazon-bedrock' },
+          env: { OPENAI_API_KEY: 'sk-unrelated' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+        expect(codexCall?.apiKey).toBeUndefined();
+      });
+
+      it('should strip an inherited OpenAI key from the CLI env when inherit_process_env is set with a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const restore = mockProcessEnv({
+          OPENAI_API_KEY: 'sk-process-unrelated',
+          CODEX_API_KEY: 'codex-process-unrelated',
+        });
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              model: 'openai.gpt-5.5',
+              model_provider: 'amazon-bedrock',
+              inherit_process_env: true,
+            },
+          });
+
+          await provider.callApi('Test prompt');
+
+          const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+          expect(codexCall?.env?.OPENAI_API_KEY).toBeUndefined();
+          expect(codexCall?.env?.CODEX_API_KEY).toBeUndefined();
+          expect(codexCall?.apiKey).toBeUndefined();
+        } finally {
+          restore();
+        }
+      });
+
+      it('should still inject an explicit config.apiKey when routing to a custom provider', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.5',
+            model_provider: 'amazon-bedrock',
+            apiKey: 'explicit-key',
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const codexCall = MockCodex.mock.calls.at(-1)?.[0];
+        expect(codexCall?.env?.OPENAI_API_KEY).toBe('explicit-key');
+        // Explicit key is the active backend credential, so it IS passed to the SDK too.
+        expect(codexCall?.apiKey).toBe('explicit-key');
       });
 
       it('should warn when CODEX_HOME from process.env is omitted from the default minimal CLI env', async () => {
@@ -2335,7 +2859,38 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2, GPT-5.3, GPT-5.4, and GPT-5.5 models', () => {
+    describe('GPT-5.2 through GPT-5.6 models', () => {
+      it.each([
+        'gpt-5.6-sol',
+        'gpt-5.6-terra',
+        'gpt-5.6-luna',
+      ])('should recognize %s as a known model', (model) => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe(model);
+      });
+
+      it('should omit gpt-5.6 cost when Codex does not report cache-write tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.6-sol' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeUndefined();
+      });
+
       it('should recognize gpt-5.5 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.5' },
@@ -2631,7 +3186,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.00875, 6);
       });
 
-      it('should calculate cost for gpt-5.3-codex-spark model', async () => {
+      it('should leave cost unset for the Codex-only gpt-5.3-codex-spark model', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
@@ -2647,11 +3202,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.3-codex-spark: $0.5/1M input, $0.05/1M cache_read, $4/1M output
-        // uncached input = 2000 - 500 = 1500, cached = 500
-        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 4/1000000)
-        //      = 0.00075 + 0.000025 + 0.004 = 0.004775
-        expect(result.cost).toBeCloseTo(0.004775, 6);
+        expect(result.cost).toBeUndefined();
       });
     });
 
@@ -2744,7 +3295,7 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.error).toContain('Codex turn failed: Model overloaded');
       });
 
-      it('should handle fatal stream error events', async () => {
+      it('should return stream error events that reach end-of-stream without completion', async () => {
         const mockEvents = async function* () {
           yield {
             type: 'error',
@@ -2761,7 +3312,248 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toContain('Codex stream error: Stream transport failed');
+        expect(result.error).toContain('Codex stream ended after error: Stream transport failed');
+      });
+
+      it('emits a gen_ai.turn span even when the stream omits turn.started', async () => {
+        // Mirrors `should handle item.updated events` shape — the SDK can send
+        // `item.*` events followed directly by `turn.completed`. The lazy-open
+        // logic should still produce one `gen_ai.turn` span and tag the item
+        // span with `gen_ai.turn.index`.
+        const opentelemetry = await import('@opentelemetry/api');
+        const emitted: Array<{ name: string; attrs: Record<string, any> }> = [];
+        const tracerSpy = vi.spyOn(opentelemetry.trace, 'getTracer').mockReturnValue({
+          startSpan: (name: string, options: any) => {
+            const attrs: Record<string, any> = { ...(options?.attributes ?? {}) };
+            const entry = { name, attrs };
+            emitted.push(entry);
+            return {
+              setAttribute: (k: string, v: unknown) => {
+                attrs[k] = v;
+              },
+              setAttributes: (a: Record<string, unknown>) => {
+                Object.assign(attrs, a);
+              },
+              setStatus: () => undefined,
+              end: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+              setAttributeIfMissing: () => undefined,
+            } as unknown as ReturnType<
+              ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
+            >;
+          },
+          startActiveSpan: (...args: any[]) => {
+            const fn = args[args.length - 1];
+            return fn({
+              end: () => undefined,
+              setAttribute: () => undefined,
+              setAttributes: () => undefined,
+              setStatus: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            });
+          },
+        } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
+
+        const mockEvents = async function* () {
+          yield {
+            type: 'item.started',
+            item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+          };
+          yield {
+            type: 'item.completed',
+            item: { id: 'item-1', type: 'agent_message', text: 'Hi' },
+          };
+          yield {
+            type: 'turn.completed',
+            usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 20 },
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toBeUndefined();
+
+        const turnSpans = emitted.filter((s) => s.name.startsWith('gen_ai.turn '));
+        expect(turnSpans.length).toBe(1);
+        expect(turnSpans[0].attrs['gen_ai.turn.index']).toBe(1);
+        // Turn span end-time hook records usage from `turn.completed`.
+        expect(turnSpans[0].attrs['gen_ai.usage.input_tokens']).toBe(10);
+        expect(turnSpans[0].attrs['gen_ai.usage.output_tokens']).toBe(20);
+
+        // Item spans inherit the turn index.
+        const itemSpans = emitted.filter((s) => s.attrs['codex.item.type']);
+        expect(itemSpans.length).toBeGreaterThan(0);
+        for (const s of itemSpans) {
+          expect(s.attrs['gen_ai.turn.index']).toBe(1);
+        }
+
+        tracerSpy.mockRestore();
+      });
+
+      // Records span name, attributes, and status so error/cleanup paths can be
+      // asserted (the SpanStatusCode.ERROR enum value is 2).
+      const installTurnSpanTracerSpy = async () => {
+        const opentelemetry = await import('@opentelemetry/api');
+        const emitted: Array<{ name: string; attrs: Record<string, any>; status?: any }> = [];
+        const spy = vi.spyOn(opentelemetry.trace, 'getTracer').mockReturnValue({
+          startSpan: (name: string, options: any) => {
+            const attrs: Record<string, any> = { ...(options?.attributes ?? {}) };
+            const entry: { name: string; attrs: Record<string, any>; status?: any } = {
+              name,
+              attrs,
+            };
+            emitted.push(entry);
+            return {
+              setAttribute: (k: string, v: unknown) => {
+                attrs[k] = v;
+              },
+              setAttributes: (a: Record<string, unknown>) => {
+                Object.assign(attrs, a);
+              },
+              setStatus: (s: unknown) => {
+                entry.status = s;
+              },
+              end: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            } as unknown as ReturnType<
+              ReturnType<typeof opentelemetry.trace.getTracer>['startSpan']
+            >;
+          },
+          startActiveSpan: (...args: any[]) => {
+            const fn = args[args.length - 1];
+            return fn({
+              end: () => undefined,
+              setAttribute: () => undefined,
+              setAttributes: () => undefined,
+              setStatus: () => undefined,
+              addEvent: () => undefined,
+              recordException: () => undefined,
+              spanContext: () => ({ traceId: 'x', spanId: 'y' }),
+              isRecording: () => true,
+              updateName: () => undefined,
+            });
+          },
+        } as unknown as ReturnType<typeof opentelemetry.trace.getTracer>);
+        return { emitted, spy };
+      };
+
+      it('marks the turn span ERROR on turn.failed (lazy-open)', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.failed', error: { message: 'Model overloaded' } };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Codex turn failed: Model overloaded');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        expect(turnSpan?.status?.message).toContain('Model overloaded');
+        spy.mockRestore();
+      });
+
+      it('marks the turn span ERROR on a fatal stream error (lazy-open)', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'error', message: 'Stream transport failed' };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Codex stream ended after error: Stream transport failed');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        spy.mockRestore();
+      });
+
+      it('marks a dangling turn span ERROR when the stream ends mid-turn', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        // turn.started + an unclosed item, then the stream ends with no
+        // turn.completed — the finally cleanup must close both with ERROR.
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.started' };
+            yield {
+              type: 'item.started',
+              item: { id: 'item-1', type: 'command_execution', command: 'ls' },
+            };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan).toBeDefined();
+        expect(turnSpan?.status?.code).toBe(2);
+        expect(turnSpan?.status?.message).toContain('not properly closed');
+        spy.mockRestore();
+      });
+
+      it('carries cached and reasoning token usage onto the turn span', async () => {
+        const { emitted, spy } = await installTurnSpanTracerSpy();
+        mockRunStreamed.mockResolvedValue({
+          events: (async function* () {
+            yield { type: 'turn.started' };
+            yield {
+              type: 'turn.completed',
+              usage: {
+                input_tokens: 100,
+                output_tokens: 40,
+                cached_input_tokens: 25,
+                reasoning_output_tokens: 12,
+              },
+            };
+          })(),
+        });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
+        expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
+        expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
+        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
+        spy.mockRestore();
       });
     });
   });

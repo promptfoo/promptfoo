@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 
 import type { ApiProvider } from '../../src/types/index';
@@ -158,6 +162,65 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
 
+    it('should return true for OpenAI responses provider with the current web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it.each([
+      'openai:chat:gpt-5-search-api',
+      'openai:chat:gpt-5-search-api-2025-10-14',
+      'openai:chat:gpt-4o-search-preview',
+      'openai:chat:gpt-4o-mini-search-preview-2025-03-11',
+    ])('should return true for built-in OpenAI Chat Completions search model %s', (id) => {
+      expect(hasWebSearchCapability({ id: () => id, config: {} } as ApiProvider)).toBe(true);
+    });
+
+    it('should detect a real OpenAI Chat search provider with a custom API base URL', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5-search-api', {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
+
+      expect(provider.id()).toBe('gpt-5-search-api');
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should detect an OpenAI Chat search provider with a configured ID alias', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5-search-api', {
+        id: 'search-grader',
+      });
+
+      expect(provider.id()).toBe('search-grader');
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should detect an OpenAI Chat search model supplied through passthrough', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
+        id: 'search-grader',
+        config: { passthrough: { model: 'gpt-5-search-api' } },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it.each([
+      'openai/gpt-5-search-api',
+      'openai/gpt-5-search-api-2025-10-14',
+      'github/openai/gpt-4o-mini-search-preview-2025-03-11',
+    ])('should detect a vendor-prefixed OpenAI Chat search model %s', (model) => {
+      const provider = new OpenAiChatCompletionProvider(model, {
+        id: 'search-grader',
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
     it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
       const provider = new OpenAiResponsesProvider('gpt-5.5-2026-04-23', {
         config: {
@@ -167,6 +230,22 @@ describe('webSearchUtils', () => {
 
       expect(provider.id()).toBe('openai:gpt-5.5-2026-04-23');
       expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should not treat a Responses provider using a Chat-only search model as search-capable', () => {
+      const provider = new OpenAiResponsesProvider('gpt-5-search-api', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(hasWebSearchCapability(provider)).toBe(false);
+    });
+
+    it.each([
+      new OpenAiCompletionProvider('gpt-5-search-api'),
+      new OpenAiEmbeddingProvider('gpt-4o-search-preview'),
+      new OpenAiTtsProvider('gpt-4o-mini-search-preview-2025-03-11'),
+    ])('should not treat non-Chat OpenAI providers as built-in search models', (provider) => {
+      expect(hasWebSearchCapability(provider)).toBe(false);
     });
 
     it('should return false for a generic OpenAI provider whose id omits the responses prefix', () => {
@@ -297,7 +376,7 @@ describe('webSearchUtils', () => {
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
     const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
-      id: () => 'anthropic:messages:claude-opus-4-6',
+      id: () => 'anthropic:messages:claude-opus-4-8',
       config: {
         tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
       },
@@ -345,7 +424,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-6',
+        'anthropic:messages:claude-opus-4-8',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -447,6 +526,7 @@ describe('webSearchUtils', () => {
     it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
         id: () => 'xai:responses:grok-4.3',
+        config: { tools: [{ type: 'web_search' }] },
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -456,7 +536,7 @@ describe('webSearchUtils', () => {
         .mockRejectedValueOnce(new Error('Vertex failed'))
         .mockResolvedValueOnce(mockProvider as ApiProvider);
 
-      await loadWebSearchProvider(true);
+      const result = await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
         'xai:responses:grok-4.3',
@@ -468,6 +548,7 @@ describe('webSearchUtils', () => {
           }),
         }),
       );
+      expect(result).toBe(mockProvider);
     });
 
     it('should use default value (false) for preferAnthropic parameter', async () => {

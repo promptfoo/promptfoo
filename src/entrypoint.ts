@@ -40,7 +40,6 @@ const nodeEngineComparatorSets =
   typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
     ? fallbackNodeEngineComparatorSets
     : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
-
 function parseNodeEngineVersion(
   version: string,
   options: ParseNodeEngineVersionOptions = {},
@@ -163,7 +162,9 @@ const invokedAsCli =
 // Structured code-scan modes reserve stdout for the payload. This has to happen
 // before importing main.ts because some startup modules log while they initialize.
 if (invokedAsCli && requestsStructuredCodeScanOutput(process.argv.slice(2))) {
-  Object.assign(process.env, { LOG_LEVEL: 'error' });
+  // Reserve stdout for the SARIF/JSON payload: quiet the logger and route
+  // whatever it still emits to stderr so it cannot corrupt that payload.
+  Object.assign(process.env, { LOG_LEVEL: 'error', PROMPTFOO_LOG_TO_STDERR: 'true' });
 }
 
 // Update argv[1] so isMainModule() in main.ts correctly detects CLI execution.

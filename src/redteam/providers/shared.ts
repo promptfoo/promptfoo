@@ -14,13 +14,10 @@ import {
   type AssertionOrSet,
   type CallApiContextParams,
   type CallApiOptionsParams,
-  type EvaluateResult,
-  type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
-  type TokenUsage,
   type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
@@ -28,6 +25,7 @@ import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { TransformInputType, transform } from '../../util/transform';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
@@ -579,27 +577,6 @@ export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max ro
 export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
 
 /**
- * Base metadata interface shared by all redteam providers
- */
-export interface BaseRedteamMetadata {
-  redteamFinalPrompt?: string;
-  messages: Record<string, any>[];
-  stopReason: string;
-  redteamHistory?: RedteamHistoryEntry[];
-}
-
-/**
- * Base response interface shared by all redteam providers
- */
-export interface BaseRedteamResponse {
-  output: string;
-  metadata: BaseRedteamMetadata;
-  tokenUsage: TokenUsage;
-  guardrails?: GuardrailResponse;
-  additionalResults?: EvaluateResult[];
-}
-
-/**
  * Externalize large blob payloads in provider responses before they are copied into
  * redteam conversation/history (prevents meta prompts from exploding with base64).
  */
@@ -622,11 +599,13 @@ export async function tryUnblocking({
   lastResponse,
   goal,
   purpose,
+  targetId,
 }: {
   messages: Message[];
   lastResponse: string;
   goal: string | undefined;
   purpose?: string;
+  targetId?: string;
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
@@ -664,6 +643,7 @@ export async function tryUnblocking({
       task: 'blocking-question-analysis',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(targetId),
     });
 
     const unblockingRequest = {

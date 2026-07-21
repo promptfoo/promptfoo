@@ -339,6 +339,30 @@ class TestMain(unittest.TestCase):
         finally:
             os.unlink(script_path)
 
+    def test_ready_signal_survives_partial_stdout_during_import(self) -> None:
+        """Regression (#10097): a user module that leaves stdout mid-line at
+        import time must not clobber the READY marker - Node matches it as a
+        whole line."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write('import sys\nsys.stdout.write("loading")\ndef test_func(): pass\n')
+            f.flush()
+            script_path = f.name
+
+        try:
+            stdout_capture = io.StringIO()
+            stdin_mock = io.StringIO("SHUTDOWN\n")
+
+            with patch.object(
+                sys, "argv", ["persistent_wrapper.py", script_path, "test_func"]
+            ):
+                with patch("sys.stdin", stdin_mock):
+                    with patch("sys.stdout", stdout_capture):
+                        persistent_wrapper.main()
+
+            self.assertIn("READY", stdout_capture.getvalue().splitlines())
+        finally:
+            os.unlink(script_path)
+
     def test_handles_stdin_close(self) -> None:
         """Tests graceful exit when stdin is closed."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
@@ -452,6 +476,33 @@ class TestHandleCall(unittest.TestCase):
         self.assertEqual(response["type"], "result")
         self.assertEqual(response["data"], 5)
 
+    def test_done_marker_starts_own_line_after_partial_stdout(self) -> None:
+        """Regression (#10097): user code that leaves stdout mid-line must not
+        clobber the DONE| marker - Node matches it line-anchored."""
+
+        def partial_stdout_func():
+            sys.stdout.write("partial provider output")
+            return {"ok": True}
+
+        self.mock_module.partial_stdout_func = partial_stdout_func
+        with open(self.request_file, "w") as f:
+            json.dump([], f)
+
+        stdout_capture = io.StringIO()
+        with patch("sys.stdout", stdout_capture):
+            persistent_wrapper.handle_call(
+                f"CALL|partial_stdout_func|{self.request_file}|{self.response_file}",
+                self.mock_module,
+                "default_func",
+            )
+
+        done_lines = [
+            line
+            for line in stdout_capture.getvalue().splitlines()
+            if line.startswith("DONE|")
+        ]
+        self.assertEqual(done_lines, [f"DONE|{self.response_file}"])
+
     def test_legacy_format_success(self) -> None:
         """Tests successful CALL with legacy 3-part format."""
         with open(self.request_file, "w") as f:
@@ -473,7 +524,7 @@ class TestHandleCall(unittest.TestCase):
         self.assertEqual(response["data"], 30)
 
     def test_invalid_format_writes_error(self) -> None:
-        """Tests that invalid command format writes error response."""
+        """Tests that invalid command format reports the error without emitting a bogus DONE marker."""
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
 
@@ -485,7 +536,9 @@ class TestHandleCall(unittest.TestCase):
                     "test_func",
                 )
 
-        self.assertIn("DONE", stdout_capture.getvalue())
+        # No response_file means no useful DONE| can be emitted; the stderr is
+        # the real signal and Node will resolve the call via timeout.
+        self.assertNotIn("DONE", stdout_capture.getvalue())
         self.assertIn("Invalid CALL command format", stderr_capture.getvalue())
 
     def test_function_execution_error(self) -> None:

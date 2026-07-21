@@ -17,7 +17,7 @@ const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
 const mockImportModule = vi.hoisted(() => vi.fn());
 
 // Mock database
-vi.mock('better-sqlite3', () => {
+vi.mock('libsql', () => {
   return vi.fn().mockReturnValue({
     prepare: vi.fn(),
     transaction: vi.fn(),
@@ -350,6 +350,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
           },
         },
         tools,
+        passthrough: { tools: [{ googleSearch: {} }] },
       },
     });
 
@@ -426,7 +427,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
               allowedFunctionNames: ['get_weather'],
             },
           },
-          tools,
+          tools: [...tools, { googleSearch: {} }],
         }),
       }),
     );
@@ -453,6 +454,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
     provider = new VertexChatProvider('gemini-pro', {
       config: {
         tools,
+        passthrough: {
+          tools: [
+            { functionDeclarations: [{ name: 'passthrough_function' }] },
+            { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
+            { codeExecution: {} },
+          ],
+        },
         [key]: value,
       } as any,
     });
@@ -479,7 +487,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-          tools: [{ googleSearch: {} }],
+          tools: [{ googleSearch: {} }, { codeExecution: {} }],
         }),
       }),
     );
@@ -529,6 +537,45 @@ describe('VertexChatProvider.callGeminiApi', () => {
     // Reset cache state so other tests aren't affected.
     mockIsCacheEnabled.mockReturnValue(false);
     mockCacheGet.mockReset();
+  });
+
+  it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_choice: 'none',
+        passthrough: {
+          tools: {
+            function_declarations: [{ name: 'passthrough_snake_case_function' }],
+            codeExecution: {},
+          },
+        },
+      } as any,
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
+          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
+        },
+      ],
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((c) => c as any);
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('hi');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ codeExecution: {} }],
+        }),
+      }),
+    );
   });
 
   it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
@@ -706,6 +753,41 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
   });
 
+  it('should not reuse cached responses across effective API hosts', async () => {
+    const cachedResponses = new Map<string, string>();
+    mockCacheGet.mockImplementation(async (key: string) => cachedResponses.get(key) ?? null);
+    mockCacheSet.mockImplementation(async (key: string, value: string) => {
+      cachedResponses.set(key, value);
+    });
+
+    const mockRequest = mockVertexRequest({
+      candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+      usageMetadata: {
+        totalTokenCount: 10,
+        promptTokenCount: 5,
+        candidatesTokenCount: 5,
+      },
+    });
+    const publicProvider = new VertexChatProvider('gemini-pro', {
+      config: { region: 'global' },
+    });
+    const proxyProvider = new VertexChatProvider('gemini-pro', {
+      config: { region: 'global' },
+      env: { VERTEX_API_HOST: 'vertex-proxy.example.test' },
+    });
+
+    await publicProvider.callGeminiApi('same prompt');
+    await proxyProvider.callGeminiApi('same prompt');
+
+    const [publicCacheKey, proxyCacheKey] = mockCacheGet.mock.calls.map(([key]) => key as string);
+    expect(publicCacheKey).not.toBe(proxyCacheKey);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+    expect(mockRequest.mock.calls.map(([request]) => request.url)).toEqual([
+      expect.stringContaining('https://aiplatform.googleapis.com/'),
+      expect.stringContaining('https://vertex-proxy.example.test/'),
+    ]);
+  });
+
   it('should handle function tool callbacks correctly', async () => {
     const mockCachedResponse = {
       cached: true,
@@ -811,6 +893,32 @@ describe('VertexChatProvider.callGeminiApi', () => {
       cost: undefined,
       metadata: {},
     });
+  });
+
+  it('should normalize Gemini priority service tier for Vertex requests', async () => {
+    const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
+      config: { passthrough: { service_tier: 'priority' } },
+    });
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        usageMetadata: {
+          promptTokenCount: 1_000,
+          candidatesTokenCount: 100,
+          totalTokenCount: 1_100,
+        },
+      },
+    ]);
+
+    const response = await priorityProvider.callGeminiApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ serviceTier: 'priority' }),
+      }),
+    );
+    expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
+    expect(response.cost).toBeCloseTo((1.8 * (1_000 * 2 + 100 * 12)) / 1e6, 12);
   });
 
   it('should handle errors in function tool callbacks', async () => {
@@ -2275,9 +2383,40 @@ describe('VertexChatProvider.callLlamaApi', () => {
       'utf8',
     );
   });
+
+  it('honors VERTEX_API_HOST overrides on the Llama path', async () => {
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'Llama response content' } }],
+        usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+      },
+    });
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: { region: 'us-central1' },
+      env: { VERTEX_API_HOST: 'llama-proxy.example.test' },
+    });
+
+    await provider.callLlamaApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining('https://llama-proxy.example.test/'),
+      }),
+    );
+  });
 });
 
-describe('VertexChatProvider.callClaudeApi parameter naming', () => {
+describe('VertexChatProvider.callClaudeApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
@@ -2286,6 +2425,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockReset();
 
+    mockIsCacheEnabled.mockReset();
     mockIsCacheEnabled.mockReturnValue(true);
   });
 
@@ -2474,6 +2614,243 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
     expect(sentBody.temperature).toBeUndefined();
     expect(sentBody.max_tokens).toBe(32);
+  });
+
+  it('omits temperature, top_p, and top_k for Claude Opus 4.8 on Vertex', async () => {
+    provider = new VertexChatProvider('claude-opus-4-8', {
+      config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-4-8',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
+    expect(sentBody.max_tokens).toBe(32);
+  });
+
+  it.each([
+    {
+      name: 'at the 200K boundary',
+      region: 'global',
+      inputTokens: 200_000,
+      outputTokens: 10_000,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      pricingOverrides: {},
+      expectedCost: 0.75,
+    },
+    {
+      name: 'above 200K globally',
+      region: 'global',
+      inputTokens: 300_000,
+      outputTokens: 20_000,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      pricingOverrides: {},
+      expectedCost: 2.25,
+    },
+    {
+      name: 'when cache tokens cross 200K regionally',
+      region: 'us-central1',
+      inputTokens: 150_000,
+      outputTokens: 10_000,
+      cacheReadTokens: 60_000,
+      cacheCreationTokens: 10_000,
+      pricingOverrides: {},
+      expectedCost: 1.3596,
+    },
+    {
+      name: 'with custom regional rates above 200K',
+      region: 'us-central1',
+      inputTokens: 300_000,
+      outputTokens: 20_000,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      pricingOverrides: { inputCost: 2 / 1e6, outputCost: 7 / 1e6 },
+      expectedCost: 0.74,
+    },
+  ])('prices Vertex Sonnet 4.5 $name', async ({
+    region,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    pricingOverrides,
+    expectedCost,
+  }) => {
+    const model = 'claude-sonnet-4-5@20250929';
+    provider = new VertexChatProvider(model, {
+      config: { region, max_tokens: 32, ...pricingOverrides },
+    });
+    mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cache_read_input_tokens: cacheReadTokens,
+        cache_creation_input_tokens: cacheCreationTokens,
+      },
+    });
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    expect(result.cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
+    const model = 'claude-fable-5';
+    provider = new VertexChatProvider(model, {
+      config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    const request = mockRequest.mock.calls[0][0];
+    const sentBody = request.data as Record<string, unknown>;
+    expect(request.url).toContain(`/publishers/anthropic/models/${model}:rawPredict`);
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
+    expect(result.cost).toBeCloseTo(0.00011, 8);
+  });
+
+  it('uses base Claude 5 pricing for Fable on the global Vertex region', async () => {
+    const model = 'claude-fable-5';
+    provider = new VertexChatProvider(model, {
+      config: { region: 'global', max_tokens: 32 },
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    const request = mockRequest.mock.calls[0][0];
+    expect(request.url).toContain('/locations/global/');
+    // Global region bills at the base Claude 5 rate (no 10% regional premium):
+    // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
+    expect(result.cost).toBeCloseTo(0.0001, 8);
+  });
+
+  it('does not stack the Vertex regional premium on a user-provided cost override for Fable', async () => {
+    const model = 'claude-fable-5';
+    provider = new VertexChatProvider(model, {
+      config: { max_tokens: 32, cost: 20 / 1e6 },
+    });
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    // The user-supplied cost applies to both input and output tokens and the
+    // 10% regional premium must NOT stack on top of it:
+    // (5 + 1) tokens * $20/MTok = $0.00012
+    expect(result.cost).toBeCloseTo(0.00012, 8);
   });
 
   it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
@@ -2775,6 +3152,98 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 10000 });
       // max_tokens should accommodate config budget_tokens
       expect(requestData.max_tokens).toBe(11024);
+    });
+
+    it('should convert manual thinking to adaptive for Claude Opus 4.8', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().thinking).toEqual({ type: 'adaptive' });
+    });
+
+    it('should keep manual thinking enabled and bump max_tokens for non-deprecated Claude models', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      // Non-deprecated models keep manual thinking verbatim (NOT converted to adaptive)
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+      // max_tokens guard still fires for type 'enabled': bumped to budget_tokens + 1024
+      expect(requestData.max_tokens).toBe(6024);
+    });
+
+    it('should not bump max_tokens when adaptive conversion drops budget_tokens for Claude Opus 4.8', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      // Manual thinking is converted to adaptive (no budget_tokens)
+      expect(requestData.thinking).toEqual({ type: 'adaptive' });
+      // The max_tokens guard only fires for type 'enabled', so adaptive does not
+      // force max_tokens to budget + 1024; it stays at the thinking-enabled default
+      expect(requestData.max_tokens).toBe(2048);
+    });
+
+    it('should pass through disabled thinking for Claude Opus 4.8 and treat it as not-enabled', async () => {
+      provider = new VertexChatProvider('claude-opus-4-8', {
+        config: {
+          thinking: { type: 'disabled' },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      // 'disabled' is not 'enabled', so it passes through unchanged (not adaptive)
+      expect(requestData.thinking).toEqual({ type: 'disabled' });
+      // Disabled thinking is treated as not-enabled, so the default max_tokens is 512
+      expect(requestData.max_tokens).toBe(512);
+    });
+
+    it('should omit disabled thinking and preserve always-on adaptive defaults for Fable 5', async () => {
+      const model = 'claude-fable-5';
+      provider = new VertexChatProvider(model, {
+        config: { thinking: { type: 'disabled' } },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.thinking).toBeUndefined();
+      expect(requestData.max_tokens).toBe(2048);
+      expect(requestData.temperature).toBeUndefined();
+    });
+
+    it('should preserve thinking display when converting enabled thinking to adaptive for Fable 5', async () => {
+      provider = new VertexChatProvider('claude-fable-5', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000, display: 'summarized' } },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      // The enabled→adaptive conversion drops budget_tokens but must keep display
+      expect(getRequestData().thinking).toEqual({ type: 'adaptive', display: 'summarized' });
     });
 
     it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {

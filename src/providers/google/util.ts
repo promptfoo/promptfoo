@@ -12,6 +12,7 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
+  clampCachedTokens,
   type ProviderConfig,
   parseChatPrompt,
   transformToolChoice,
@@ -182,10 +183,19 @@ export function mergeGoogleCompletionOptions(
   return mergedConfig;
 }
 
-export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
-  return tools.flatMap(({ functionDeclarations, ...tool }) =>
-    functionDeclarations && Object.keys(tool).length === 0 ? [] : [tool as Tool],
-  );
+export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
+  const toolList = Array.isArray(tools) ? tools : [tools];
+  return toolList.flatMap((rawTool) => {
+    if (!rawTool || typeof rawTool !== 'object' || Array.isArray(rawTool)) {
+      return [];
+    }
+    const { functionDeclarations, function_declarations, ...tool } = rawTool as Tool & {
+      function_declarations?: unknown;
+    };
+    return (functionDeclarations || function_declarations) && Object.keys(tool).length === 0
+      ? []
+      : [tool as Tool];
+  });
 }
 
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
@@ -223,6 +233,13 @@ export function stripExecutableToolFileReferences(
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
+ * @param audioPromptTokens - Number of audio tokens included in the prompt token count
+ * @param audioCompletionTokens - Number of audio tokens included in the completion token count
+ * @param videoCompletionTokens - Number of video tokens included in the completion token count
+ * @param imagePromptTokens - Number of image tokens included in the prompt token count
+ * @param cachedPromptTokens - Number of cached tokens included in the prompt token count
+ * @param cachedAudioPromptTokens - Number of cached audio tokens included in the prompt token count
+ * @param cachedImagePromptTokens - Number of cached image tokens included in the prompt token count
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -231,27 +248,207 @@ export function calculateGoogleCost(
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
+  audioPromptTokens?: number,
+  audioCompletionTokens?: number,
+  videoCompletionTokens?: number,
+  imagePromptTokens?: number,
+  cachedPromptTokens?: number,
+  cachedAudioPromptTokens?: number,
+  cachedImagePromptTokens?: number,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
-  // Check for tiered pricing (higher rates above token threshold)
-  if (promptTokens != null && completionTokens != null) {
-    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
+  if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
+    return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  }
 
-    // Use Vertex-specific pricing when available
-    if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
+  const modelCost =
+    model?.tieredCost && promptTokens > model.tieredCost.threshold
+      ? model.tieredCost.above
+      : isVertexMode && model?.vertexCost
+        ? model.vertexCost
+        : model?.cost;
+  if (!modelCost) {
+    return undefined;
+  }
+
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
+  const imageInputTokens = clampCachedTokens(
+    imagePromptTokens,
+    Math.max(promptTokens - audioInputTokens, 0),
+  );
+  const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
+  const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
+  let cachedAudioTokens = clampCachedTokens(
+    cachedAudioPromptTokens,
+    Math.min(cachedTokens, audioInputTokens),
+  );
+  let cachedImageTokens = clampCachedTokens(
+    cachedImagePromptTokens,
+    Math.min(Math.max(cachedTokens - cachedAudioTokens, 0), imageInputTokens),
+  );
+  if (cachedAudioTokens === 0 && cachedImageTokens === 0) {
+    const cachedNonTextTokens = Math.max(cachedTokens - textInputTokens, 0);
+    if (imageInputTokens === 0) {
+      cachedAudioTokens = Math.min(cachedNonTextTokens, audioInputTokens);
+    } else if (audioInputTokens === 0) {
+      cachedImageTokens = Math.min(cachedNonTextTokens, imageInputTokens);
+    }
+  }
+  const cachedTextTokens = Math.min(
+    Math.max(cachedTokens - cachedAudioTokens - cachedImageTokens, 0),
+    textInputTokens,
+  );
+  const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const videoOutputTokens = clampCachedTokens(
+    videoCompletionTokens,
+    Math.max(completionTokens - audioOutputTokens, 0),
+  );
+  const audioInputCost =
+    config.audioInputCost ??
+    config.audioCost ??
+    config.inputCost ??
+    config.cost ??
+    modelCost.audioInput ??
+    inputCost;
+  const audioOutputCost =
+    config.audioOutputCost ??
+    config.audioCost ??
+    config.outputCost ??
+    config.cost ??
+    modelCost.audioOutput ??
+    outputCost;
+  const videoOutputCost =
+    config.videoOutputCost ??
+    config.outputCost ??
+    config.cost ??
+    modelCost.videoOutput ??
+    outputCost;
+  const imageInputCost =
+    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
+  const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
+  const cachedAudioInputCost =
+    config.audioInputCost ??
+    config.audioCost ??
+    config.inputCost ??
+    config.cost ??
+    modelCost.cacheReadAudio ??
+    modelCost.cacheRead ??
+    audioInputCost;
+  const cachedImageInputCost =
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    modelCost.cacheRead ??
+    imageInputCost;
+  const serviceTier =
+    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
+      ?.service_tier ??
+    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
+    config.service_tier;
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+  // A modality/base cost override on the request takes precedence over the
+  // catalog's tier-specific audio rate.
+  const hasAudioInputOverride =
+    config.audioInputCost !== undefined ||
+    config.audioCost !== undefined ||
+    config.inputCost !== undefined ||
+    config.cost !== undefined;
+  let serviceTierAudioInputCost = audioInputCost;
+  if (!hasAudioInputOverride) {
+    if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
+      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
+    } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
+      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
     }
   }
 
-  // Use standard calculation for non-tiered pricing
-  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  return (
+    ((textInputTokens - cachedTextTokens) * inputCost +
+      cachedTextTokens * cachedInputCost +
+      (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
+      cachedAudioTokens * cachedAudioInputCost +
+      (imageInputTokens - cachedImageTokens) * imageInputCost +
+      cachedImageTokens * cachedImageInputCost +
+      (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
+      audioOutputTokens * audioOutputCost +
+      videoOutputTokens * videoOutputCost) *
+    serviceTierMultiplier
+  );
+}
+
+const getGoogleModalityTokenCount = (details: unknown, modalities: string[]): number => {
+  if (!Array.isArray(details)) {
+    return 0;
+  }
+  return details.reduce((total, detail) => {
+    const tokenCount = detail?.tokenCount ?? detail?.token_count;
+    return modalities.includes(detail?.modality) &&
+      typeof tokenCount === 'number' &&
+      Number.isFinite(tokenCount)
+      ? total + Math.max(tokenCount, 0)
+      : total;
+  }, 0);
+};
+
+export function calculateGoogleCostFromUsage(
+  modelName: string,
+  config: ProviderConfig,
+  promptTokens: number | undefined,
+  completionTokens: number | undefined,
+  isVertexMode: boolean,
+  usageMetadata: any,
+): number | undefined {
+  const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
+  const toolPromptDetails =
+    usageMetadata?.toolUsePromptTokensDetails ?? usageMetadata?.tool_use_prompt_tokens_details;
+  const responseDetails =
+    usageMetadata?.candidatesTokensDetails ??
+    usageMetadata?.responseTokensDetails ??
+    usageMetadata?.candidates_tokens_details ??
+    usageMetadata?.response_tokens_details;
+  const cacheDetails = usageMetadata?.cacheTokensDetails ?? usageMetadata?.cache_tokens_details;
+  const toolPromptTokens =
+    usageMetadata?.toolUsePromptTokenCount ?? usageMetadata?.tool_use_prompt_token_count ?? 0;
+  const promptTokensForCost =
+    typeof promptTokens === 'number' &&
+    typeof toolPromptTokens === 'number' &&
+    Number.isFinite(toolPromptTokens)
+      ? promptTokens + Math.max(toolPromptTokens, 0)
+      : promptTokens;
+  const audioPromptTokens =
+    getGoogleModalityTokenCount(promptDetails, ['AUDIO']) +
+    getGoogleModalityTokenCount(toolPromptDetails, ['AUDIO']);
+  const imagePromptTokens =
+    getGoogleModalityTokenCount(promptDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']) +
+    getGoogleModalityTokenCount(toolPromptDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']);
+
+  return calculateGoogleCost(
+    modelName,
+    config,
+    promptTokensForCost,
+    completionTokens,
+    isVertexMode,
+    audioPromptTokens,
+    getGoogleModalityTokenCount(responseDetails, ['AUDIO']),
+    getGoogleModalityTokenCount(responseDetails, ['VIDEO']),
+    imagePromptTokens,
+    usageMetadata?.cachedContentTokenCount ?? usageMetadata?.cached_content_token_count,
+    getGoogleModalityTokenCount(cacheDetails, ['AUDIO']),
+    getGoogleModalityTokenCount(cacheDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']),
+  );
 }
 
 const ajv = getAjv();
@@ -297,6 +494,13 @@ interface GeminiUsageMetadata {
   candidatesTokenCount?: number;
   totalTokenCount: number;
   thoughtsTokenCount?: number;
+  cachedContentTokenCount?: number;
+  toolUsePromptTokenCount?: number;
+  promptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  toolUsePromptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  candidatesTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  responseTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  cacheTokensDetails?: Array<{ modality: string; tokenCount: number }>;
 }
 
 export interface GeminiErrorResponse {
@@ -595,7 +799,7 @@ export async function getGoogleAccessToken(credentials?: string): Promise<string
   }
 }
 
-export function getCandidate(data: GeminiResponseData) {
+export function getCandidate(data: GeminiResponseData): Candidate {
   if (!data || !data.candidates || data.candidates.length < 1) {
     // Check if the prompt was blocked
     let errorDetails = 'No candidates returned in API response.';
@@ -629,7 +833,108 @@ export function getCandidate(data: GeminiResponseData) {
     );
   }
   const candidate = data.candidates[0];
+  if (!candidate) {
+    throw new Error(
+      `No candidates returned in API response.\n\nGot response: ${JSON.stringify(data)}`,
+    );
+  }
   return candidate;
+}
+
+export function isNonCandidateStreamChunk(datum: GeminiResponseData): boolean {
+  return (
+    !datum.candidates?.length &&
+    ((Boolean(datum.usageMetadata) && !datum.promptFeedback) ||
+      (Boolean(datum.promptFeedback?.safetyRatings) && !datum.promptFeedback?.blockReason))
+  );
+}
+
+export function getLastPromptSafetyRatings(
+  data: GeminiResponseData[],
+): NonNullable<GeminiResponseData['promptFeedback']>['safetyRatings'] | undefined {
+  let safetyRatings: NonNullable<GeminiResponseData['promptFeedback']>['safetyRatings'] | undefined;
+
+  for (const datum of data) {
+    if (datum.promptFeedback?.safetyRatings) {
+      safetyRatings = datum.promptFeedback.safetyRatings;
+    }
+  }
+
+  return safetyRatings;
+}
+
+export interface CollectedGroundingMetadata {
+  groundingMetadata?: Record<string, any>;
+  groundingChunks?: Record<string, any>[];
+  groundingSupports?: Record<string, any>[];
+  webSearchQueries?: string[];
+}
+
+// Aggregate grounding signals across every candidate-bearing chunk. Gemini's
+// streaming contract distributes grounding state across chunks: groundingChunks
+// only carries new references not in previous responses, groundingSupports
+// indices span the whole stream, and webSearchQueries can arrive on a chunk
+// distinct from the one that carries searchEntryPoint. Concatenating preserves
+// the full citation graph; for the nested groundingMetadata object we keep
+// last-wins for scalar/object fields (e.g. searchEntryPoint, retrievalMetadata)
+// since those are typically refined as the stream progresses.
+// https://ai.google.dev/api/generate-content#v1beta.Candidate
+export function collectGroundingMetadata(data: GeminiResponseData[]): CollectedGroundingMetadata {
+  const candidates = data.filter((d) => d.candidates?.length).map((d) => getCandidate(d));
+
+  const flatChunks = candidates.flatMap((c) => c.groundingChunks ?? []);
+  const flatSupports = candidates.flatMap((c) => c.groundingSupports ?? []);
+  const flatQueries = candidates.flatMap((c) => c.webSearchQueries ?? []);
+
+  const metas = candidates
+    .map((c) => c.groundingMetadata)
+    .filter((m): m is Record<string, any> => Boolean(m));
+
+  let groundingMetadata: Record<string, any> | undefined;
+  if (metas.length === 1) {
+    groundingMetadata = metas[0];
+  } else if (metas.length > 1) {
+    const merged: Record<string, any> = {};
+    // Last-wins for scalar/object fields like searchEntryPoint, retrievalMetadata.
+    for (const m of metas) {
+      for (const [key, value] of Object.entries(m)) {
+        if (
+          key === 'groundingChunks' ||
+          key === 'groundingSupports' ||
+          key === 'webSearchQueries'
+        ) {
+          continue;
+        }
+        if (value !== undefined) {
+          merged[key] = value;
+        }
+      }
+    }
+    const innerChunks = metas.flatMap(
+      (m) => (m.groundingChunks as Record<string, any>[] | undefined) ?? [],
+    );
+    const innerSupports = metas.flatMap(
+      (m) => (m.groundingSupports as Record<string, any>[] | undefined) ?? [],
+    );
+    const innerQueries = metas.flatMap((m) => (m.webSearchQueries as string[] | undefined) ?? []);
+    if (innerChunks.length) {
+      merged.groundingChunks = innerChunks;
+    }
+    if (innerSupports.length) {
+      merged.groundingSupports = innerSupports;
+    }
+    if (innerQueries.length) {
+      merged.webSearchQueries = innerQueries;
+    }
+    groundingMetadata = merged;
+  }
+
+  return {
+    ...(groundingMetadata && { groundingMetadata }),
+    ...(flatChunks.length > 0 && { groundingChunks: flatChunks }),
+    ...(flatSupports.length > 0 && { groundingSupports: flatSupports }),
+    ...(flatQueries.length > 0 && { webSearchQueries: flatQueries }),
+  };
 }
 
 export function formatCandidateContents(candidate: Candidate) {
@@ -687,7 +992,8 @@ export function formatCandidateContents(candidate: Candidate) {
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
   if (parts1 === undefined) {
-    return parts2;
+    // Detach the accumulator from the raw multipart response before appending later chunks.
+    return typeof parts2 === 'string' ? parts2 : [...parts2];
   }
 
   if (typeof parts1 === 'string' && typeof parts2 === 'string') {
@@ -701,6 +1007,51 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
   array1.push(...array2);
 
   return array1;
+}
+
+export function normalizeGeminiAudio(output: Part[] | string | undefined) {
+  if (!Array.isArray(output)) {
+    return undefined;
+  }
+
+  const audioParts = output.filter((part) => part.inlineData?.mimeType?.startsWith('audio/'));
+  if (audioParts.length === 0) {
+    return undefined;
+  }
+
+  const mimeType = audioParts[0].inlineData!.mimeType;
+  const audioData = Buffer.concat(
+    audioParts.map((part) => Buffer.from(part.inlineData!.data, 'base64')),
+  );
+  if (!/^audio\/(?:L16|pcm)(?:;|$)/i.test(mimeType)) {
+    return {
+      data: audioData.toString('base64'),
+      format: mimeType.split(/[;/]/)[1],
+    };
+  }
+
+  const sampleRate = Number(mimeType.match(/(?:^|;)\s*rate=(\d+)/i)?.[1] ?? 24_000);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + audioData.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(audioData.length, 40);
+
+  return {
+    data: Buffer.concat([header, audioData]).toString('base64'),
+    format: 'wav',
+    sampleRate,
+    channels: 1,
+  };
 }
 
 /**

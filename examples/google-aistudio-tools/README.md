@@ -42,7 +42,7 @@ The search grounding configuration (`promptfooconfig.search.yaml`) demonstrates:
 
 - Using Gemini 2.5 Flash with Google Search as a tool
 - Using Gemini 2.5 Pro with thinking capabilities and Search grounding
-- Using Gemini 1.5 Flash with dynamic retrieval configuration
+- Using Gemini 2.5 Flash-Lite with Google Search grounding
 - Testing queries that benefit from real-time web information
 - Verifying responses include relevant information
 
@@ -115,13 +115,10 @@ This example demonstrates three approaches to search:
      - googleSearch: {}
    ```
 
-3. **Dynamic retrieval** (Gemini 1.5): Controls when to use search with threshold settings
+3. **Search on Flash-Lite** (Gemini 2.5): Uses the lower-cost Flash-Lite model with the same search tool
    ```yaml
    tools:
-     - googleSearchRetrieval:
-         dynamicRetrievalConfig:
-           mode: 'MODE_DYNAMIC'
-           dynamicThreshold: 0 # 0 = always use search, 1 = never use search
+     - googleSearch: {}
    ```
 
 ## Further Resources

@@ -13,17 +13,22 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import { loadYaml } from '../../util/yamlLoad';
 import {
+  applyClaudeRegionalPremium,
   calculateAnthropicCost,
   getTokenUsage,
-  isClaudeOpus47Model,
+  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isSamplingParamsDeprecatedClaudeModel,
+  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
-  calculateGoogleCost,
+  calculateGoogleCostFromUsage,
+  collectGroundingMetadata,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -31,6 +36,7 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
+  normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
   removeGoogleFunctionDeclarations,
@@ -65,6 +71,47 @@ import type {
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
 
+// Vertex retains the Sonnet 4.5 1M preview and its >200K pricing tier. Native Anthropic and
+// Bedrock Sonnet 4.5 requests are capped at 200K, so only this provider opts into these rates.
+const VERTEX_CLAUDE_SONNET_4_5_MODELS = new Set([
+  'claude-sonnet-4-5',
+  'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-5-latest',
+]);
+const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
+  threshold: 200_000,
+  input: 6 / 1e6,
+  output: 22.5 / 1e6,
+};
+
+function applyVertexClaudeLongContextPricing(
+  modelName: string,
+  config: GoogleProviderConfig,
+  inputTokens?: number,
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
+): GoogleProviderConfig {
+  const effectiveInputTokens =
+    (inputTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
+  if (
+    !VERTEX_CLAUDE_SONNET_4_5_MODELS.has(modelName) ||
+    effectiveInputTokens <= VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.threshold
+  ) {
+    return config;
+  }
+
+  // `cost` already supplies both rates and intentionally overrides tier-specific pricing.
+  if (config.cost != null) {
+    return config;
+  }
+
+  return {
+    ...config,
+    inputCost: config.inputCost ?? VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.input,
+    outputCost: config.outputCost ?? VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING.output,
+  };
+}
+
 type VertexEmbeddingPredictResponse = {
   predictions?: Array<{
     embeddings?: {
@@ -93,10 +140,12 @@ function getVertexApiHost(
   );
 }
 
-function getVertexBodyCacheKey(prefix: string, body: unknown): string {
+function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): string {
   const serialized = typeof body === 'string' ? body : JSON.stringify(body);
   return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
-    .update(serialized ?? String(body))
+    .update(apiHost)
+    .update('\0')
+    .update(serialized)
     .digest('hex')}`;
 }
 
@@ -260,8 +309,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
       try {
-        const yaml = await import('js-yaml');
-        const parsed = yaml.default.load(prompt);
+        const parsed = loadYaml(prompt);
         normalizedPrompt = JSON.stringify(parsed);
       } catch (err) {
         return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
@@ -288,9 +336,18 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
     }
 
-    const thinkingConfig: ClaudeThinkingConfig | undefined =
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
+    const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
-    const isThinkingEnabled = thinkingConfig?.type === 'enabled';
+    const thinkingConfig: ClaudeThinkingConfig | undefined = normalizeClaudeThinkingConfig(
+      this.modelName,
+      requestedThinkingConfig,
+    );
+    const isThinkingEnabled =
+      alwaysOnAdaptiveThinking ||
+      thinkingConfig?.type === 'enabled' ||
+      thinkingConfig?.type === 'adaptive';
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
@@ -298,20 +355,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     // Claude requires max_tokens >= budget_tokens when thinking is enabled
     if (
-      isThinkingEnabled &&
-      thinkingConfig?.budget_tokens &&
+      thinkingConfig?.type === 'enabled' &&
+      thinkingConfig.budget_tokens &&
       maxTokens < thinkingConfig.budget_tokens
     ) {
       maxTokens = thinkingConfig.budget_tokens + 1024;
     }
 
-    // Claude Opus 4.7 deprecates `temperature` at the model level — the
-    // underlying Anthropic API returns 400 for any request that includes it.
-    // Vertex forwards the request body verbatim to rawPredict, so suppress
-    // the field here too.
-    const resolvedTemperature = isClaudeOpus47Model(this.modelName)
+    // Newer Claude models deprecate manual sampling controls at the model
+    // level — the underlying Anthropic API returns 400 for any request that
+    // pins `temperature`, `top_p`, or `top_k`. Vertex forwards the request body
+    // verbatim to rawPredict, so suppress all three here too.
+    const resolvedTemperature = samplingParamsDeprecated ? undefined : this.config.temperature;
+    const resolvedTopP = samplingParamsDeprecated
       ? undefined
-      : this.config.temperature;
+      : this.config.top_p || this.config.topP;
+    const resolvedTopK = samplingParamsDeprecated
+      ? undefined
+      : this.config.top_k || this.config.topK;
 
     const body: ClaudeRequest = {
       anthropic_version:
@@ -319,8 +380,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       stream: false,
       max_tokens: maxTokens,
       temperature: resolvedTemperature,
-      top_p: this.config.top_p || this.config.topP,
-      top_k: this.config.top_k || this.config.topK,
+      top_p: resolvedTopP,
+      top_k: resolvedTopK,
       ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
@@ -329,9 +390,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const showThinking = this.config.showThinking ?? isThinkingEnabled;
 
     const cache = await getCache();
+    const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(
       `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
       body,
+      apiHost,
     );
 
     let cachedResponse;
@@ -355,7 +418,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
-      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
+      const url = `https://${apiHost}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
         url,
@@ -399,15 +462,30 @@ export class VertexChatProvider extends GoogleGenericProvider {
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
+      // Regional and multi-region Vertex endpoints bill Claude 4.5+ models at a premium
+      // over the global endpoint (see isClaudeRegionalPremiumModel).
+      const pricingConfig =
+        this.getRegion() === 'global'
+          ? this.config
+          : applyClaudeRegionalPremium(normalizedModelName, this.config);
+      const effectivePricingConfig = applyVertexClaudeLongContextPricing(
+        normalizedModelName,
+        pricingConfig,
+        data.usage?.input_tokens,
+        data.usage?.cache_read_input_tokens,
+        data.usage?.cache_creation_input_tokens,
+      );
       const response = {
         cached: false,
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
           normalizedModelName,
-          this.config,
+          effectivePricingConfig,
           data.usage?.input_tokens,
           data.usage?.output_tokens,
+          data.usage?.cache_read_input_tokens,
+          data.usage?.cache_creation_input_tokens,
         ),
       };
 
@@ -477,6 +555,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
       skipExecutableToolFiles: toolsDisabled,
     });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
+    const {
+      service_tier: passthroughServiceTier,
+      tools: passthroughTools,
+      ...passthrough
+    } = config.passthrough || {};
+    const requestPassthroughTools =
+      toolsDisabled && passthroughTools !== undefined
+        ? removeGoogleFunctionDeclarations(passthroughTools)
+        : passthroughTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -489,6 +576,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
         topP: config.topP,
         topK: config.topK,
         ...config.generationConfig,
+        ...(this.modelName.includes('-tts') && {
+          response_modalities: undefined,
+          responseModalities: config.generationConfig?.responseModalities ??
+            config.generationConfig?.response_modalities?.map((modality) =>
+              modality.toUpperCase(),
+            ) ?? ['AUDIO'],
+          speechConfig: config.generationConfig?.speechConfig ?? {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+          },
+        }),
       },
       ...(config.safetySettings
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
@@ -496,6 +593,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
+      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...passthrough,
+      // Normalize a single-object passthrough `tools` value to a one-element array and
+      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
+      // stays the array shape the Gemini API requires.
+      ...(requestPassthroughTools === undefined
+        ? {}
+        : {
+            tools: [
+              ...requestTools,
+              ...(Array.isArray(requestPassthroughTools)
+                ? requestPassthroughTools
+                : [requestPassthroughTools]),
+            ],
+          }),
+      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
       ...(config.modelArmor &&
@@ -539,7 +652,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body);
+    const apiHost = this.getApiHost();
+    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
 
     let response;
     let cachedResponse;
@@ -570,7 +684,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         // Check if we should use express mode (API key without OAuth)
         if (this.isExpressMode()) {
           // Express mode: use simplified endpoint with API key in header
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+          const url = `https://${apiHost}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
           const res = await fetchWithProxy(url, {
             method: 'POST',
@@ -592,7 +706,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           // Standard mode: use OAuth and full endpoint
           const client = await this.getClientWithCredentials();
           const projectId = await this.getProjectId();
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+          const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
           const res = await client.request({
@@ -744,8 +858,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: promptTokenCount || 0,
+          prompt: (promptTokenCount || 0) + (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
           completion: completionTokenCount || 0,
+          ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
+            cached: lastData.usageMetadata.cachedContentTokenCount,
+          }),
           ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
               reasoning: thoughtsTokenCount,
@@ -759,48 +876,28 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionTokenCount == null
             ? undefined
             : completionTokenCount + (thoughtsTokenCount ?? 0);
-        const cost = calculateGoogleCost(
+        const cost = calculateGoogleCostFromUsage(
           this.modelName,
           config,
           promptTokenCount,
           completionForCost,
           true,
+          lastData.usageMetadata,
         );
+        const audio = normalizeGeminiAudio(output);
 
         response = {
           cached: false,
           output,
+          ...(audio && { audio }),
           tokenUsage,
           cost,
           metadata: {},
         };
 
-        // Extract search grounding metadata from candidates
-        const candidateWithMetadata = dataWithResponse
-          .map((datum) => getCandidate(datum))
-          .find(
-            (candidate) =>
-              candidate.groundingMetadata ||
-              candidate.groundingChunks ||
-              candidate.groundingSupports ||
-              candidate.webSearchQueries,
-          );
-
-        if (candidateWithMetadata) {
-          response.metadata = {
-            ...(candidateWithMetadata.groundingMetadata && {
-              groundingMetadata: candidateWithMetadata.groundingMetadata,
-            }),
-            ...(candidateWithMetadata.groundingChunks && {
-              groundingChunks: candidateWithMetadata.groundingChunks,
-            }),
-            ...(candidateWithMetadata.groundingSupports && {
-              groundingSupports: candidateWithMetadata.groundingSupports,
-            }),
-            ...(candidateWithMetadata.webSearchQueries && {
-              webSearchQueries: candidateWithMetadata.webSearchQueries,
-            }),
-          };
+        const grounding = collectGroundingMetadata(dataWithResponse);
+        if (Object.keys(grounding).length > 0) {
+          response.metadata = { ...grounding };
         }
 
         if (isCacheEnabled()) {
@@ -878,7 +975,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     };
 
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body);
+    const apiHost = this.getApiHost();
+    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body, apiHost);
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -901,7 +999,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
-      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+      const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
       const res = await client.request({
@@ -1008,7 +1106,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     };
 
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body);
+    const apiHost = this.getApiHost();
+    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,
       region: this.getRegion(),
@@ -1058,7 +1157,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
       // Llama models use a different endpoint format
-      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
+      const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
       const res = await client.request({
         url,
@@ -1236,7 +1335,9 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-const DEFAULT_VERTEX_MODEL = 'gemini-2.5-pro';
+// Gemini 3.1 Pro preview is available through Vertex AI's global endpoint.
+const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const DEFAULT_VERTEX_REGION = 'global';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
 
 export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
@@ -1244,7 +1345,10 @@ export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
 }
 
 export function getGoogleVertexProviders(env?: EnvOverrides) {
-  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, { env });
+  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, {
+    env,
+    config: { region: DEFAULT_VERTEX_REGION },
+  });
   return {
     embeddingProvider: getGoogleVertexEmbeddingProvider(env),
     gradingJsonProvider: gradingProvider,

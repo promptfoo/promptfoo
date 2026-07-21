@@ -4,16 +4,18 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
+import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  closeTurnSpan,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
+  openTurnSpan,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { renderVarsInObject } from '../../util/render';
@@ -22,6 +24,12 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
+import {
+  buildCodexSkillMetadata,
+  getCodexSkillMetadataFields,
+  getCodexSkillRootPrefixes,
+} from './codexSkillMetadata';
 import type { Usage as CodexSdkUsage } from '@openai/codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
@@ -30,7 +38,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-  SkillCallEntry,
 } from '../../types/index';
 
 export type CodexAppServerSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
@@ -55,10 +62,26 @@ export type CodexAppServerReasoningEffort =
   | 'low'
   | 'medium'
   | 'high'
-  | 'xhigh';
+  | 'xhigh'
+  | 'max'
+  | 'ultra';
 export type CodexAppServerReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
 export type CodexAppServerServiceTier = 'fast' | 'flex';
 export type CodexAppServerPersonality = 'none' | 'friendly' | 'pragmatic';
+
+function redactAppServerText(value: string): string {
+  return value
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
+    .replace(
+      /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
+      REDACTED,
+    )
+    .replace(
+      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
+      (_match, key, separator, spacing, quote) =>
+        `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
+    );
+}
 
 export interface CodexAppServerCollaborationMode {
   mode: 'plan' | 'default';
@@ -105,6 +128,7 @@ type CodexAppServerMcpElicitationPolicy =
 type JsonRpcId = string | number;
 
 const MAX_BUFFERED_JSON_RPC_CHARS = 5_000_000;
+const MAX_BUFFERED_TURN_EVENT_CHARS = 10_000_000;
 
 type CodexAppServerPromptInputItem =
   | {
@@ -279,6 +303,7 @@ interface ServerRequestRecord {
 }
 
 interface CodexAppServerTurnState {
+  connection: CodexAppServerConnection;
   connectionKey: string;
   connectionInstanceId: string;
   threadId: string;
@@ -290,6 +315,7 @@ interface CodexAppServerTurnState {
   itemStarts: any[];
   notifications: JsonRpcMessage[];
   notificationCount: number;
+  bufferedEventChars: number;
   serverRequests: ServerRequestRecord[];
   agentMessageDeltas: string[];
   agentMessageDeltasByItemId: Map<string, string>;
@@ -302,6 +328,17 @@ interface CodexAppServerTurnState {
   activeSpans: Map<string, Span>;
   itemStartTimes: Map<string, number>;
   lastEventTime: number;
+  /**
+   * Count of `turn/started` notifications received. Each represents an
+   * app-server protocol turn; it does not expose model-internal rounds hidden
+   * inside that turn. We emit a `gen_ai.turn N` marker span between
+   * `turn/started` and `turn/completed` for correlation and usage visibility.
+   */
+  turnCount: number;
+  /** Active `gen_ai.turn` span, opened on `turn/started`. */
+  activeTurnSpan?: Span;
+  /** 1-based index of the currently open turn, stamped on item spans. */
+  activeTurnIndex: number;
 }
 
 interface ThreadHandle {
@@ -357,6 +394,8 @@ const CodexAppServerReasoningEffortSchema = z.enum([
   'medium',
   'high',
   'xhigh',
+  'max',
+  'ultra',
 ]);
 
 const CodexAppServerGranularApprovalPolicySchema = z
@@ -514,7 +553,7 @@ const CodexAppServerConfigShape = {
   server_request_policy: ServerRequestPolicySchema.optional(),
 } as const;
 
-const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
+export const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
 const CodexAppServerMergedPromptConfigSchema = z.object(CodexAppServerConfigShape).strip();
 
 function createDeferred<T>(): Deferred<T> {
@@ -878,19 +917,22 @@ class CodexAppServerConnection {
     const candidateLines =
       this.bufferedJsonRpcLines.length > 0 ? [...this.bufferedJsonRpcLines, line] : [trimmed];
     const candidate = candidateLines.join('\\n');
+    if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
+      this.bufferedJsonRpcLines = [];
+      this.handleProcessFailure(
+        new Error(
+          `codex app-server JSON-RPC message exceeded ${MAX_BUFFERED_JSON_RPC_CHARS} characters`,
+        ),
+      );
+      void this.close();
+      return;
+    }
     let message: JsonRpcMessage;
     try {
       message = JSON.parse(candidate) as JsonRpcMessage;
     } catch (error) {
       if (this.shouldBufferJsonRpcLine(error, trimmed)) {
         this.bufferedJsonRpcLines = candidateLines;
-        if (candidate.length > MAX_BUFFERED_JSON_RPC_CHARS) {
-          logger.warn('[CodexAppServer] Dropping oversized partial JSON-RPC message', {
-            error,
-            bufferedChars: candidate.length,
-          });
-          this.bufferedJsonRpcLines = [];
-        }
         return;
       }
 
@@ -995,7 +1037,9 @@ class CodexAppServerConnection {
       this.stderrChunks = [truncated];
       this.stderrTotalLength = truncated.length;
     }
-    logger.debug('[CodexAppServer] stderr', { text });
+    logger.debug('[CodexAppServer] stderr', {
+      text: redactAppServerText(sanitizeObject(text, { context: 'Codex app-server stderr' })),
+    });
   }
 
   private handleProcessFailure(error: Error): void {
@@ -1003,12 +1047,20 @@ class CodexAppServerConnection {
       return;
     }
     this.closed = true;
-    this.rejectPending(error);
+    const stderr = this.getStderr().trim();
+    const sanitizedStderr = stderr
+      ? redactAppServerText(sanitizeObject(stderr, { context: 'Codex app-server stderr' }))
+      : undefined;
+    const failure =
+      typeof sanitizedStderr === 'string' && sanitizedStderr
+        ? new Error(`${error.message}: ${sanitizedStderr}`)
+        : error;
+    this.rejectPending(failure);
     logger.error('[CodexAppServer] Process failure', {
-      error: error.message,
-      stderr: this.getStderr(),
+      error: failure.message,
+      stderr: sanitizedStderr,
     });
-    this.options.onClose(error);
+    this.options.onClose(failure);
   }
 
   private closeAfterRequestTimeout(method: string, error: Error): void {
@@ -1150,6 +1202,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as CodexAppServerConfig | undefined,
     );
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as CodexAppServerConfig;
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -1286,6 +1342,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return await this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
           turnStarted = true;
           const state = this.createTurnState(
+            connection,
             connectionKey,
             connection.instanceId,
             threadHandle.threadId,
@@ -1417,10 +1474,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     }
 
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     if (config.base_url) {
       sortedEnv.OPENAI_BASE_URL = config.base_url;
@@ -1538,7 +1592,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     try {
       await connection.initialize(config);
       const apiKey = this.getApiKey(config);
-      if (apiKey) {
+      // Don't log in with an ambient OpenAI/Codex key when routing to a custom model_provider
+      // (e.g. amazon-bedrock) — it's unrelated to the backend. Gate it like the env injection.
+      if (shouldInjectApiKey(config, apiKey)) {
         try {
           await connection.request(
             'account/login/start',
@@ -2123,6 +2179,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   }
 
   private createTurnState(
+    connection: CodexAppServerConnection,
     connectionKey: string,
     connectionInstanceId: string,
     threadId: string,
@@ -2131,6 +2188,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     appServerEnv: Record<string, string>,
   ): CodexAppServerTurnState {
     return {
+      connection,
       connectionKey,
       connectionInstanceId,
       threadId,
@@ -2141,6 +2199,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       itemStarts: [],
       notifications: [],
       notificationCount: 0,
+      bufferedEventChars: 0,
       serverRequests: [],
       agentMessageDeltas: [],
       agentMessageDeltasByItemId: new Map(),
@@ -2149,6 +2208,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       activeSpans: new Map(),
       itemStartTimes: new Map(),
       lastEventTime: Date.now(),
+      turnCount: 0,
+      activeTurnSpan: undefined,
+      activeTurnIndex: 0,
     };
   }
 
@@ -2215,6 +2277,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return;
     }
 
+    if (!this.reserveTurnEvent(state, message)) {
+      return;
+    }
+
     state.notificationCount += 1;
     if (state.config.include_raw_events) {
       state.notifications.push(message);
@@ -2226,11 +2292,21 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         if (typeof params.turn?.id === 'string') {
           this.updateTurnStateId(state, params.turn.id);
         }
+        this.startTurnSpan(state, eventTime, true);
         break;
       case 'item/started':
+        if (!state.activeTurnSpan) {
+          // App-server flows that ack `turn/start` as a request response (vs.
+          // sending `turn/started` as a notification) reach the items first.
+          // Lazily open a turn span so they still get a `gen_ai.turn.index`.
+          this.startTurnSpan(state, eventTime);
+        }
         this.handleItemStarted(state, params.item, eventTime);
         break;
       case 'item/completed':
+        if (!state.activeTurnSpan) {
+          this.startTurnSpan(state, eventTime);
+        }
         this.handleItemCompleted(state, params.item, eventTime);
         break;
       case 'item/agentMessage/delta':
@@ -2248,6 +2324,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         if (params.turn?.status === 'failed') {
           state.error = params.turn?.error?.message ?? 'Codex app-server turn failed';
         }
+        if (!state.activeTurnSpan) {
+          // Stream lacked any `turn/started`/`item.*` events with a usable
+          // event time; synthesize a turn span from `lastEventTime`.
+          this.startTurnSpan(state, state.lastEventTime);
+        }
+        this.endTurnSpan(state, eventTime, state.error);
         state.completed.resolve();
         break;
       case 'error':
@@ -2260,6 +2342,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           break;
         }
         state.error = params.error?.message ?? 'Codex app-server error';
+        if (!state.activeTurnSpan) {
+          // An error before any `turn/started`/item event should still surface
+          // an errored turn span, mirroring the `turn/completed` lazy-open path.
+          this.startTurnSpan(state, state.lastEventTime);
+        }
+        this.endTurnSpan(state, eventTime, state.error);
         state.completed.resolve();
         break;
     }
@@ -2277,7 +2365,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     const itemId = String(item.id);
-    const span = this.startItemSpan(item, itemId);
+    const span = this.startItemSpan(
+      item,
+      itemId,
+      undefined,
+      state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+    );
     state.activeSpans.set(itemId, span);
     state.itemStartTimes.set(itemId, eventTime);
   }
@@ -2308,7 +2401,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();
     const span =
       state.activeSpans.get(itemId) ??
-      this.startItemSpan(completedItem, itemId, state.lastEventTime);
+      this.startItemSpan(
+        completedItem,
+        itemId,
+        state.lastEventTime,
+        state.activeTurnIndex > 0 ? state.activeTurnIndex : undefined,
+      );
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
     this.applyItemCompletionAttributes(span, completedItem, eventTime, startTime);
     span.end();
@@ -2377,6 +2475,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): Promise<unknown> {
     const params = message.params ?? {};
     const state = this.getTurnState(params.threadId ?? params.conversationId, params.turnId);
+    if (state && !this.reserveTurnEvent(state, message)) {
+      throw new Error(state.error ?? 'Codex app-server turn event limit exceeded');
+    }
     const record: ServerRequestRecord = {
       id: message.id as JsonRpcId,
       method: message.method ?? 'unknown',
@@ -2394,6 +2495,18 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state?.serverRequests.push(record);
       throw error;
     }
+  }
+
+  private reserveTurnEvent(state: CodexAppServerTurnState, message: JsonRpcMessage): boolean {
+    state.bufferedEventChars += JSON.stringify(message).length;
+    if (state.bufferedEventChars <= MAX_BUFFERED_TURN_EVENT_CHARS) {
+      return true;
+    }
+
+    state.error = `codex app-server turn events exceeded ${MAX_BUFFERED_TURN_EVENT_CHARS} characters`;
+    state.completed.resolve();
+    void state.connection.close();
+    return false;
   }
 
   private buildServerRequestResponse(
@@ -2786,11 +2899,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         serverRequests: state.serverRequests,
         notificationCount: state.notificationCount,
       },
-      ...(skillMetadata?.skillCalls.length ? { skillCalls: skillMetadata.skillCalls } : {}),
-      ...(skillMetadata &&
-      skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
-        ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
-        : {}),
+      ...getCodexSkillMetadataFields(skillMetadata),
     };
   }
 
@@ -3095,16 +3204,64 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.deepTracingWarningShown = true;
   }
 
-  private startItemSpan(item: any, itemId: string, startTime?: number): Span {
+  private startItemSpan(item: any, itemId: string, startTime?: number, turnIndex?: number): Span {
     return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
       attributes: {
         'codex.app_server.item.id': itemId,
         'codex.app_server.item.type': item?.type ?? 'unknown',
+        ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
       },
     });
+  }
+
+  private startTurnSpan(
+    state: CodexAppServerTurnState,
+    eventTime: number,
+    clearPreviousUsage = false,
+  ): void {
+    if (clearPreviousUsage && state.turnCount > 0) {
+      // Usage is associated with the active protocol turn. Do not attribute the
+      // previous turn's most recent update when an explicit later turn starts.
+      // Lazy-open paths may run after usage for their current turn arrived.
+      //
+      // Guard on a prior turn existing (turnCount > 0): on the very first
+      // `turn/started`, usage from an earlier `thread/tokenUsage/updated` belongs
+      // to THIS turn, so clearing it would drop token counts and cost from the
+      // final response.
+      state.rawTokenUsage = undefined;
+      state.tokenUsage = undefined;
+    }
+    openTurnSpan(state, {
+      tracer: trace.getTracer('promptfoo.codex-app-server'),
+      eventTime,
+      system: 'openai',
+      logLabel: 'CodexAppServer',
+    });
+  }
+
+  private endTurnSpan(
+    state: CodexAppServerTurnState,
+    eventTime: number,
+    errorMessage?: string,
+  ): void {
+    // Codex app-server typically delivers usage under `last`/`total`; reuse
+    // the shared resolver so we honor both nested and flat shapes.
+    const usage = this.resolveRawUsage(state.rawTokenUsage);
+    const attributes: Attributes = {};
+    if (usage) {
+      attributes['gen_ai.usage.input_tokens'] = usage.input;
+      attributes['gen_ai.usage.output_tokens'] = usage.output;
+      if (usage.cached) {
+        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
+      }
+      if (usage.reasoning) {
+        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
+      }
+    }
+    closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });
   }
 
   private applyItemCompletionAttributes(
@@ -3132,6 +3289,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
     state.activeSpans.clear();
     state.itemStartTimes.clear();
+    if (state.activeTurnSpan) {
+      logger.warn('[CodexAppServer] Turn span not properly closed');
+      closeTurnSpan(state, {
+        errorMessage: 'Turn span not properly closed',
+        logLabel: 'CodexAppServer',
+      });
+    }
   }
 
   private getSpanNameForItem(item: any): string {
@@ -3231,81 +3395,28 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     config: CodexAppServerConfig,
     appServerEnv: Record<string, string>,
   ): string[] {
-    const prefixes = new Set<string>();
-    const addPrefix = (candidate?: string) => {
-      if (!candidate) {
-        return;
-      }
-      const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/g, '');
-      if (normalized) {
-        prefixes.add(normalized);
-      }
-    };
+    const resolvedWorkingDir = config.working_dir
+      ? path.resolve(config.working_dir).replace(/\\/g, '/')
+      : undefined;
 
-    addPrefix(appServerEnv.CODEX_HOME);
-    addPrefix('/etc/codex');
-    if (config.working_dir) {
-      const resolvedWorkingDir = path.resolve(config.working_dir).replace(/\\/g, '/');
-      addPrefix(path.posix.join(resolvedWorkingDir, '.agents'));
-      const gitRoot = this.findGitRepositoryRoot(resolvedWorkingDir);
-      if (gitRoot) {
-        addPrefix(path.posix.join(gitRoot.replace(/\\/g, '/'), '.agents'));
-      }
-    }
-    const homeDir = appServerEnv.HOME || appServerEnv.USERPROFILE;
-    if (homeDir) {
-      addPrefix(path.posix.join(homeDir.replace(/\\/g, '/'), '.codex'));
-    }
-    return Array.from(prefixes);
-  }
-
-  private buildSkillMetadata(
-    items: any[],
-    skillRootPrefixes: readonly string[],
-  ): { attemptedSkillCalls: SkillCallEntry[]; skillCalls: SkillCallEntry[] } | undefined {
-    if (!Array.isArray(items) || items.length === 0) {
-      return undefined;
-    }
-
-    const attemptedSkillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes);
-    const skillCalls = this.extractSkillCallsFromItems(items, skillRootPrefixes, {
-      requireSuccessfulCommand: true,
+    return getCodexSkillRootPrefixes({
+      codexHome: appServerEnv.CODEX_HOME,
+      gitRepositoryRoot: resolvedWorkingDir
+        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        : undefined,
+      homeDir: appServerEnv.HOME || appServerEnv.USERPROFILE,
+      workingDir: resolvedWorkingDir,
     });
-
-    if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
-      return undefined;
-    }
-
-    return { attemptedSkillCalls, skillCalls };
   }
 
-  private extractSkillCallsFromItems(
-    items: any[],
-    skillRootPrefixes: readonly string[],
-    options: { requireSuccessfulCommand?: boolean } = {},
-  ): SkillCallEntry[] {
-    const skillCalls = new Map<string, { name: string; path: string }>();
-    for (const item of items) {
-      if (item?.type !== 'commandExecution') {
-        continue;
-      }
-      if (options.requireSuccessfulCommand && !this.isSuccessfulCommandExecution(item)) {
-        continue;
-      }
-      if (typeof item.command !== 'string' || !item.command.trim()) {
-        continue;
-      }
-
-      for (const skillPath of this.extractSkillPathCandidates(item.command, skillRootPrefixes)) {
-        skillCalls.set(skillPath.path, skillPath);
-      }
-    }
-
-    return Array.from(skillCalls.values()).map((skillCall) => ({
-      name: skillCall.name,
-      path: skillCall.path,
-      source: 'heuristic',
-    }));
+  private buildSkillMetadata(items: any[], skillRootPrefixes: readonly string[]) {
+    return buildCodexSkillMetadata(items, skillRootPrefixes, {
+      getCommand: (item: any) =>
+        item?.type === 'commandExecution' && typeof item.command === 'string' && item.command.trim()
+          ? item.command
+          : undefined,
+      isSuccessfulCommand: (item: any) => this.isSuccessfulCommandExecution(item),
+    });
   }
 
   private isSuccessfulCommandExecution(item: any): boolean {
@@ -3319,44 +3430,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return false;
     }
     return true;
-  }
-
-  private extractSkillPathCandidates(
-    text: string,
-    skillRootPrefixes: readonly string[] = [],
-  ): Array<{ name: string; path: string }> {
-    const matches = new Map<string, { name: string; path: string }>();
-    for (const rawToken of text.split(/\s+/)) {
-      const token = rawToken.replace(/^[`"'([{<]+|[`"',;:)\]}>]+$/g, '').trim();
-      if (!token) {
-        continue;
-      }
-
-      const normalizedPath = token.replace(/\\/g, '/');
-      const repoMatch = normalizedPath.match(/^\.agents\/skills\/([^/\s]+)\/SKILL\.md$/);
-      if (repoMatch && this.isValidSkillName(repoMatch[1])) {
-        matches.set(normalizedPath, { name: repoMatch[1], path: normalizedPath });
-        continue;
-      }
-
-      const matchingRoot = skillRootPrefixes.find((prefix) =>
-        normalizedPath.startsWith(`${prefix}/skills/`),
-      );
-      if (!matchingRoot) {
-        continue;
-      }
-
-      const relativeSkillPath = normalizedPath.slice(matchingRoot.length + 1);
-      const customRootMatch = relativeSkillPath.match(/^skills\/([^/\s]+)\/SKILL\.md$/);
-      if (customRootMatch && this.isValidSkillName(customRootMatch[1])) {
-        matches.set(normalizedPath, { name: customRootMatch[1], path: normalizedPath });
-      }
-    }
-    return Array.from(matches.values());
-  }
-
-  private isValidSkillName(name: string): boolean {
-    return /^[A-Za-z0-9._:-]+$/.test(name);
   }
 
   private sanitizeTraceText(value: string, context: string): string | undefined {
@@ -3381,17 +3454,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private redactTracePii(value: unknown): unknown {
     if (typeof value === 'string') {
-      return value
-        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
-        .replace(
-          /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|Bearer\s+[A-Za-z0-9._~+/-]{20,}|Basic\s+[A-Za-z0-9+/=]{20,})\b/g,
-          REDACTED,
-        )
-        .replace(
-          /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])(\s*)(["']?)[^\s"'`]+(\4)/gi,
-          (_match, key, separator, spacing, quote) =>
-            `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
-        );
+      return redactAppServerText(value);
     }
 
     if (Array.isArray(value)) {
