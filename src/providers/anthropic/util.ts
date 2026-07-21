@@ -53,9 +53,11 @@ export const ANTHROPIC_MODELS = [
     },
   })),
   // Claude 4.7 models
-  // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
-  // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
-  // canonical ID here.
+  // NOTE: Anthropic publishes a single dateless ID for Opus 4.7 — the Models API
+  // returns 404 for `claude-opus-4-7-latest` and for dated snapshots such as
+  // `claude-opus-4-7-20260416` (verified live 2026-07-17), so we intentionally only
+  // register the canonical ID here. (Azure AI Foundry's dated Claude deployment
+  // names are a separate namespace, priced in azure/defaults.ts.)
   ...['claude-opus-4-7'].map((model) => ({
     id: model,
     cost: {

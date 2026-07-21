@@ -256,10 +256,15 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       this.assistantConfig.headers,
       OPENAI_ORGANIZATION_HEADER,
     );
+    const apiUrl = new URL(this.getApiUrl());
+    const defaultQuery = Object.fromEntries(apiUrl.searchParams.entries());
+    apiUrl.search = '';
+    apiUrl.hash = '';
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
       organization: orgHeaderOverridden ? undefined : this.getOrganization(),
-      baseURL: this.getApiUrl(),
+      baseURL: apiUrl.toString(),
+      defaultQuery,
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
       defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),
