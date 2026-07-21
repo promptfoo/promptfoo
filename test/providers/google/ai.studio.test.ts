@@ -1333,6 +1333,98 @@ describe('AIStudioChatProvider', () => {
       expect(body.generationConfig).toEqual({ maxOutputTokens: 200 });
     });
 
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('should forward Maps retrieval config for %s', async (modelId) => {
+      provider = new AIStudioChatProvider(modelId, {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ googleMaps: { enableWidget: true } }],
+          toolConfig: {
+            retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+            includeServerSideToolInvocations: true,
+          },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text: 'response text' }] } }] },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
+      expect(body.toolConfig).toEqual({
+        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+        includeServerSideToolInvocations: true,
+      });
+    });
+
+    it('should execute callbacks from a fresh Gemini function-call response', async () => {
+      const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'call-1',
+                      name: 'get_weather',
+                      args: { location: 'Boston' },
+                    },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
+      expect(response.output).toBe('Sunny, 25°C');
+    });
+
     it('should handle API version selection', async () => {
       const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
         config: { apiKey: 'test-key' },

@@ -67,44 +67,71 @@ function normalizeGoogleToolMode(
 function normalizeExplicitGoogleToolConfig(
   config: CompletionOptions,
 ): GoogleToolConfig | undefined {
-  if (config.toolConfig?.functionCallingConfig) {
-    const {
-      mode: rawMode,
-      allowedFunctionNames,
-      ...restFunctionCallingConfig
-    } = config.toolConfig.functionCallingConfig;
-    const mode = normalizeGoogleToolMode(rawMode);
-    const functionCallingConfig = {
-      ...restFunctionCallingConfig,
-      ...(mode ? { mode } : {}),
-      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
-    };
-    if (Object.keys(functionCallingConfig).length === 0) {
-      return undefined;
+  if (config.toolConfig) {
+    const { functionCallingConfig: rawFunctionCallingConfig, ...restToolConfig } =
+      config.toolConfig;
+    const normalizedToolConfig: GoogleToolConfig = { ...restToolConfig };
+
+    if (rawFunctionCallingConfig) {
+      const {
+        mode: rawMode,
+        allowedFunctionNames,
+        ...restFunctionCallingConfig
+      } = rawFunctionCallingConfig;
+      const mode = normalizeGoogleToolMode(rawMode);
+      const functionCallingConfig = {
+        ...restFunctionCallingConfig,
+        ...(mode ? { mode } : {}),
+        ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+      };
+      if (Object.keys(functionCallingConfig).length > 0) {
+        normalizedToolConfig.functionCallingConfig = functionCallingConfig;
+      }
     }
-    return {
-      functionCallingConfig,
-    };
+
+    return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
   }
 
-  if (config.tool_config?.function_calling_config) {
+  if (config.tool_config) {
     const {
-      mode: rawMode,
-      allowed_function_names: allowedFunctionNames,
-      stream_function_call_arguments: streamFunctionCallArguments,
-    } = config.tool_config.function_calling_config;
-    const mode = normalizeGoogleToolMode(rawMode);
-    const functionCallingConfig = {
-      ...(mode ? { mode } : {}),
-      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
-      ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
+      function_calling_config: rawFunctionCallingConfig,
+      retrieval_config: retrievalConfig,
+      include_server_side_tool_invocations: includeServerSideToolInvocations,
+    } = config.tool_config;
+    const normalizedToolConfig: GoogleToolConfig = {
+      ...(retrievalConfig
+        ? {
+            retrievalConfig: {
+              ...(retrievalConfig.lat_lng ? { latLng: retrievalConfig.lat_lng } : {}),
+              ...(retrievalConfig.language_code
+                ? { languageCode: retrievalConfig.language_code }
+                : {}),
+            },
+          }
+        : {}),
+      ...(includeServerSideToolInvocations === undefined
+        ? {}
+        : { includeServerSideToolInvocations }),
     };
-    if (Object.keys(functionCallingConfig).length === 0) {
-      return undefined;
+
+    if (rawFunctionCallingConfig) {
+      const {
+        mode: rawMode,
+        allowed_function_names: allowedFunctionNames,
+        stream_function_call_arguments: streamFunctionCallArguments,
+      } = rawFunctionCallingConfig;
+      const mode = normalizeGoogleToolMode(rawMode);
+      const functionCallingConfig = {
+        ...(mode ? { mode } : {}),
+        ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+        ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
+      };
+      if (Object.keys(functionCallingConfig).length > 0) {
+        normalizedToolConfig.functionCallingConfig = functionCallingConfig;
+      }
     }
-    return {
-      functionCallingConfig,
-    };
+
+    return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
   }
 
   return undefined;
@@ -132,14 +159,19 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
     toolChoiceMode === 'NONE'
   ) {
     return {
-      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolConfig: { ...explicitConfig, functionCallingConfig: { mode: 'NONE' } },
       toolsDisabled: true,
     };
   }
 
   return {
     ...(explicitConfig
-      ? { toolConfig: explicitConfig }
+      ? {
+          toolConfig: {
+            ...toolChoiceConfig,
+            ...explicitConfig,
+          },
+        }
       : toolChoiceConfig
         ? { toolConfig: toolChoiceConfig }
         : {}),
@@ -311,8 +343,26 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const serviceTier =
+    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
+      ?.service_tier ??
+    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
+    config.service_tier;
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+
+  const region = (config as { region?: unknown }).region;
+  const vertexRegionalMultiplier =
+    isVertexMode && typeof region === 'string' && region !== 'global'
+      ? (model?.vertexRegionalMultiplier ?? 1)
+      : 1;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * vertexRegionalMultiplier;
+  const outputCost =
+    config.outputCost ?? config.cost ?? modelCost.output * vertexRegionalMultiplier;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(
     imagePromptTokens,
@@ -350,56 +400,68 @@ export function calculateGoogleCost(
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.audioInput ??
+    (modelCost.audioInput === undefined
+      ? undefined
+      : modelCost.audioInput * vertexRegionalMultiplier) ??
     inputCost;
   const audioOutputCost =
     config.audioOutputCost ??
     config.audioCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.audioOutput ??
+    (modelCost.audioOutput === undefined
+      ? undefined
+      : modelCost.audioOutput * vertexRegionalMultiplier) ??
     outputCost;
   const videoOutputCost =
     config.videoOutputCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.videoOutput ??
+    (modelCost.videoOutput === undefined
+      ? undefined
+      : modelCost.videoOutput * vertexRegionalMultiplier) ??
     outputCost;
   const imageInputCost =
-    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
-  const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    (modelCost.imageInput === undefined
+      ? undefined
+      : modelCost.imageInput * vertexRegionalMultiplier) ??
+    inputCost;
+  const serviceTierCacheRead =
+    serviceTier === 'priority' && modelCost.priorityCacheRead !== undefined
+      ? modelCost.priorityCacheRead / serviceTierMultiplier
+      : serviceTier === 'flex' && modelCost.flexCacheRead !== undefined
+        ? modelCost.flexCacheRead / serviceTierMultiplier
+        : modelCost.cacheRead;
+  const cachedInputCost =
+    config.inputCost ??
+    config.cost ??
+    (serviceTierCacheRead === undefined
+      ? undefined
+      : serviceTierCacheRead * vertexRegionalMultiplier) ??
+    inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheReadAudio ??
-    modelCost.cacheRead ??
+    (modelCost.cacheReadAudio === undefined
+      ? undefined
+      : modelCost.cacheReadAudio * vertexRegionalMultiplier) ??
+    (serviceTierCacheRead === undefined
+      ? undefined
+      : serviceTierCacheRead * vertexRegionalMultiplier) ??
     audioInputCost;
   const cachedImageInputCost =
     config.imageInputCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheRead ??
+    (serviceTierCacheRead === undefined
+      ? undefined
+      : serviceTierCacheRead * vertexRegionalMultiplier) ??
     imageInputCost;
-  const serviceTier =
-    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
-      ?.service_tier ??
-    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
-    config.service_tier;
-  let serviceTierMultiplier = 1;
-  if (serviceTier === 'priority') {
-    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
-  } else if (serviceTier === 'flex') {
-    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
-  }
-  const region = (config as { region?: unknown }).region;
-  const hasCostOverride =
-    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
-  const vertexRegionalMultiplier =
-    isVertexMode && typeof region === 'string' && region !== 'global' && !hasCostOverride
-      ? (model?.vertexRegionalMultiplier ?? 1)
-      : 1;
   // A modality/base cost override on the request takes precedence over the
   // catalog's tier-specific audio rate.
   const hasAudioInputOverride =
@@ -410,9 +472,11 @@ export function calculateGoogleCost(
   let serviceTierAudioInputCost = audioInputCost;
   if (!hasAudioInputOverride) {
     if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
+      serviceTierAudioInputCost =
+        (modelCost.priorityAudioInput / serviceTierMultiplier) * vertexRegionalMultiplier;
     } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
+      serviceTierAudioInputCost =
+        (modelCost.flexAudioInput / serviceTierMultiplier) * vertexRegionalMultiplier;
     }
   }
 
@@ -426,8 +490,7 @@ export function calculateGoogleCost(
       (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
       audioOutputTokens * audioOutputCost +
       videoOutputTokens * videoOutputCost) *
-    serviceTierMultiplier *
-    vertexRegionalMultiplier
+    serviceTierMultiplier
   );
 }
 
@@ -601,15 +664,17 @@ export interface Palm2ApiResponse {
   ];
 }
 
-const PartSchema = z.object({
-  text: z.string().optional(),
-  inline_data: z
-    .object({
-      mime_type: z.string(),
-      data: z.string(),
-    })
-    .optional(),
-});
+const PartSchema = z
+  .object({
+    text: z.string().optional(),
+    inline_data: z
+      .object({
+        mime_type: z.string(),
+        data: z.string(),
+      })
+      .optional(),
+  })
+  .passthrough();
 
 const ContentSchema = z.object({
   role: z.enum(['user', 'model']).optional(),
@@ -618,7 +683,7 @@ const ContentSchema = z.object({
 
 const GeminiFormatSchema = z.array(ContentSchema);
 
-export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
+export type GeminiFormat = { role?: 'user' | 'model'; parts: Part[] }[];
 
 export function maybeCoerceToGeminiFormat(
   contents: any,
@@ -1164,64 +1229,63 @@ export function loadFile(
   return fileContents;
 }
 
-function isValidBase64Image(data: string): boolean {
-  // Handle both data URLs and raw base64
-  const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
+function getMimeTypeFromBase64(data: string): string | undefined {
+  const parsed = parseDataUrl(data);
+  const base64Data = parsed ? parsed.base64Data : data;
 
-  // Minimum length check: smallest valid GIF is ~35 chars
-  // Set threshold to 20 to allow small images (1x1 pixels, icons, test fixtures)
-  if (!base64Data || base64Data.length < 20) {
-    return false;
+  if (!base64Data || base64Data.length < 20 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64Data)) {
+    return undefined;
   }
 
-  try {
-    // Verify it's valid base64
-    Buffer.from(base64Data, 'base64');
-
-    // Check for known image format headers (magic numbers)
-    return (
-      base64Data.startsWith('/9j/') || // JPEG
-      base64Data.startsWith('iVBORw0KGgo') || // PNG
-      base64Data.startsWith('R0lGODlh') || // GIF89a
-      base64Data.startsWith('R0lGODdh') || // GIF87a
-      base64Data.startsWith('UklGR') || // WebP (RIFF)
-      base64Data.startsWith('Qk0') || // BMP
-      base64Data.startsWith('Qk1') || // BMP (alternate)
-      base64Data.startsWith('SUkq') || // TIFF (little-endian)
-      base64Data.startsWith('TU0A') || // TIFF (big-endian)
-      base64Data.startsWith('AAABAA') // ICO
-    );
-  } catch {
-    return false;
-  }
-}
-
-function getMimeTypeFromBase64(base64DataOrUrl: string): string {
-  // Try to extract MIME type from data URL first
-  const parsed = parseDataUrl(base64DataOrUrl);
-  if (parsed) {
+  if (
+    parsed &&
+    (/^(image|audio|video)\//.test(parsed.mimeType) || parsed.mimeType === 'application/pdf')
+  ) {
     return parsed.mimeType;
   }
 
-  // Fallback to magic number detection for raw base64
-  const base64Data = extractBase64FromDataUrl(base64DataOrUrl);
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
   } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
     return 'image/gif';
-  } else if (base64Data.startsWith('UklGR')) {
-    return 'image/webp';
   } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
     return 'image/bmp';
   } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
     return 'image/tiff';
   } else if (base64Data.startsWith('AAABAA')) {
     return 'image/x-icon';
+  } else if (base64Data.startsWith('JVBER')) {
+    return 'application/pdf';
   }
-  // Default to jpeg for unknown formats
-  return 'image/jpeg';
+
+  const bytes = Buffer.from(base64Data, 'base64');
+  const riffType = bytes.subarray(8, 12).toString('ascii');
+  if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
+    if (riffType === 'WEBP') {
+      return 'image/webp';
+    } else if (riffType === 'WAVE') {
+      return 'audio/wav';
+    } else if (riffType === 'AVI ') {
+      return 'video/avi';
+    }
+  } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
+    return 'video/mp4';
+  } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
+    return 'video/webm';
+  } else if (
+    bytes.subarray(0, 3).toString('ascii') === 'ID3' ||
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+  ) {
+    return 'audio/mpeg';
+  } else if (bytes.subarray(0, 4).toString('ascii') === 'fLaC') {
+    return 'audio/flac';
+  } else if (bytes.subarray(0, 4).toString('ascii') === 'OggS') {
+    return 'audio/ogg';
+  }
+
+  return undefined;
 }
 
 function processImagesInContents(
@@ -1242,11 +1306,14 @@ function processImagesInContents(
     return [];
   }
 
-  const base64ToVarName = new Map<string, string>();
+  const base64ToMimeType = new Map<string, string>();
 
-  for (const [varName, value] of Object.entries(contextVars)) {
-    if (typeof value === 'string' && isValidBase64Image(value)) {
-      base64ToVarName.set(value, varName);
+  for (const value of Object.values(contextVars)) {
+    if (typeof value === 'string') {
+      const mimeType = getMimeTypeFromBase64(value);
+      if (mimeType) {
+        base64ToMimeType.set(value, mimeType);
+      }
     }
   }
 
@@ -1257,17 +1324,17 @@ function processImagesInContents(
       for (const part of content.parts) {
         if (part.text) {
           const lines = part.text.split('\n');
-          let foundValidImage = false;
+          let foundValidMedia = false;
           let currentTextBlock = '';
           const processedParts: Part[] = [];
 
-          // First pass: check if any line is a valid base64 image from context variables
+          // First pass: check if any line is valid base64 media from context variables
           for (const line of lines) {
             const trimmedLine = line.trim();
 
-            // Check if this line is a base64 image that was loaded from a variable
-            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
-              foundValidImage = true;
+            const mimeType = base64ToMimeType.get(trimmedLine);
+            if (mimeType) {
+              foundValidMedia = true;
 
               // Add any accumulated text as a text part
               if (currentTextBlock.length > 0) {
@@ -1277,8 +1344,6 @@ function processImagesInContents(
                 currentTextBlock = '';
               }
 
-              // Add the image part
-              const mimeType = getMimeTypeFromBase64(trimmedLine);
               // Extract raw base64 data (Google expects raw base64, not data URLs)
               const base64Data = isDataUrl(trimmedLine)
                 ? extractBase64FromDataUrl(trimmedLine)
@@ -1305,8 +1370,8 @@ function processImagesInContents(
             });
           }
 
-          // If we found valid images, use the processed parts; otherwise, keep the original part
-          if (foundValidImage) {
+          // If we found valid media, use the processed parts; otherwise, keep the original part
+          if (foundValidMedia) {
             newParts.push(...processedParts);
           } else {
             newParts.push(part);

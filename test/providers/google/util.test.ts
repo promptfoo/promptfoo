@@ -666,6 +666,43 @@ describe('util', () => {
       });
     });
 
+    it('should preserve native Gemini tool history and thought signatures', () => {
+      const input = [
+        { role: 'user', parts: [{ text: 'What is the weather in Boston?' }] },
+        {
+          role: 'model',
+          parts: [
+            {
+              functionCall: {
+                id: 'call-1',
+                name: 'get_weather',
+                args: { location: 'Boston' },
+              },
+              thoughtSignature: 'signed-thought',
+            },
+          ],
+        },
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                id: 'call-1',
+                name: 'get_weather',
+                response: { result: 'Sunny' },
+              },
+            },
+          ],
+        },
+      ];
+
+      expect(maybeCoerceToGeminiFormat(input)).toEqual({
+        contents: input,
+        coerced: false,
+        systemInstruction: undefined,
+      });
+    });
+
     it('should coerce OpenAI chat format to GeminiFormat', () => {
       const input = [
         { role: 'user', content: 'Hello' },
@@ -1679,6 +1716,35 @@ describe('util', () => {
       });
 
       describe('data URL support', () => {
+        it.each([
+          ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
+        ])('should convert %s data URLs to Gemini inline data', (mimeType, base64Data) => {
+          const dataUrl = `data:${mimeType};base64,${base64Data}`;
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
+
+          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
+        it.each([
+          ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
+        ])('should infer %s for raw base64 media loaded from a file', (mimeType, base64Data) => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
         it('should handle JPEG data URLs and extract base64', () => {
           const base64Data = validBase64Image;
           const dataUrl = `data:image/jpeg;base64,${base64Data}`;
@@ -2762,11 +2828,11 @@ describe('util', () => {
     });
 
     it.each([
-      ['gemini-3.6-flash', 'priority', 1.5, 7.5, 1.8],
-      ['gemini-3.6-flash', 'flex', 1.5, 7.5, 0.5],
-      ['gemini-3.5-flash-lite', 'priority', 0.3, 2.5, 1.8],
-      ['gemini-3.5-flash-lite', 'flex', 0.3, 2.5, 0.5],
-    ])('should apply cached multimodal pricing for %s at %s tier', (modelId, serviceTier, input, output, multiplier) => {
+      ['gemini-3.6-flash', 'priority', 1.5, 7.5, 1.8, 0.27],
+      ['gemini-3.6-flash', 'flex', 1.5, 7.5, 0.5, 0.075],
+      ['gemini-3.5-flash-lite', 'priority', 0.3, 2.5, 1.8, 0.05],
+      ['gemini-3.5-flash-lite', 'flex', 0.3, 2.5, 0.5, 0.02],
+    ])('should apply AI Studio cached multimodal pricing for %s at %s tier', (modelId, serviceTier, input, output, multiplier, cachedInput) => {
       const cost = calculateGoogleCost(
         modelId,
         { passthrough: { service_tier: serviceTier } },
@@ -2782,7 +2848,31 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo(
-        (multiplier * (500 * input + 500 * (input / 10) + 500 * output)) / 1e6,
+        (multiplier * (500 * input + 500 * output) + 500 * cachedInput) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      ['priority', 1.8, 0.054],
+      ['flex', 0.5, 0.015],
+    ])('should keep Vertex Flash-Lite cached pricing at the %s tier', (serviceTier, multiplier, cachedInput) => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global', service_tier: serviceTier } as any,
+        1_000,
+        500,
+        true,
+        400,
+        0,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo(
+        (multiplier * (500 * 0.3 + 500 * 2.5) + 500 * cachedInput) / 1e6,
         12,
       );
     });
@@ -2797,7 +2887,7 @@ describe('util', () => {
       );
       const regionalCost = calculateGoogleCost(
         'gemini-3.5-flash-lite',
-        { region: 'us-central1' } as any,
+        { region: 'us' } as any,
         1_000,
         500,
         true,
@@ -2810,13 +2900,55 @@ describe('util', () => {
     it('should not stack the Gemini Vertex regional premium on a cost override', () => {
       const regionalCost = calculateGoogleCost(
         'gemini-3.5-flash-lite',
-        { region: 'us-central1', cost: 1 / 1e6 } as any,
+        { region: 'us', cost: 1 / 1e6 } as any,
         1_000,
         500,
         true,
       );
 
       expect(regionalCost).toBeCloseTo(0.0015, 12);
+    });
+
+    it('should apply the Vertex regional premium only to non-overridden input and output rates', () => {
+      const inputOverrideCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', inputCost: 2 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+      const outputOverrideCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', outputCost: 4 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(inputOverrideCost).toBeCloseTo(0.003375, 12);
+      expect(outputOverrideCost).toBeCloseTo(0.00233, 12);
+    });
+
+    it('should not apply the Vertex regional premium to overridden modality rates', () => {
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        {
+          region: 'us',
+          audioInputCost: 2 / 1e6,
+          audioOutputCost: 3 / 1e6,
+          imageInputCost: 4 / 1e6,
+          videoOutputCost: 5 / 1e6,
+        } as any,
+        1_000,
+        500,
+        true,
+        200,
+        100,
+        150,
+        300,
+      );
+
+      expect(regionalCost).toBeCloseTo(0.0035025, 12);
     });
 
     it.each([
@@ -3364,6 +3496,54 @@ describe('util', () => {
       expect(result).toEqual({
         toolConfig: { functionCallingConfig: { mode: 'ANY' } },
         toolsDisabled: false,
+      });
+    });
+
+    it('preserves Maps retrieval config without a function-calling policy', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('normalizes snake_case Maps retrieval config and preserves it when functions are disabled', () => {
+      const result = resolveGoogleToolConfig({
+        tool_config: {
+          retrieval_config: {
+            lat_lng: { latitude: 42.36, longitude: -71.06 },
+            language_code: 'en-US',
+          },
+          include_server_side_tool_invocations: true,
+        },
+        tool_choice: 'none',
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: true,
       });
     });
   });

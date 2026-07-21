@@ -18,11 +18,11 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 **Gemini 3.6:**
 
-- `vertex:gemini-3.6-flash` - Latest frontier Flash model for agentic, coding, and multimodal tasks ($1.50/1M input, $7.50/1M output)
+- `vertex:gemini-3.6-flash` - Latest frontier Flash model for agentic, coding, and multimodal tasks; available on the `global` endpoint ($1.50/1M input, $7.50/1M output)
 
 **Gemini 3.5:**
 
-- `vertex:gemini-3.5-flash-lite` - High-throughput, low-latency Flash-Lite model for agentic and document-processing tasks ($0.30/1M input, $2.50/1M output on the global endpoint; non-global endpoints carry a 10% premium)
+- `vertex:gemini-3.5-flash-lite` - High-throughput, low-latency Flash-Lite model for agentic and document-processing tasks; available on `global`, `us`, and `eu` ($0.30/1M input, $2.50/1M output on the global endpoint; non-global endpoints carry a 10% premium)
 - `vertex:gemini-3.5-flash` - Gemini 3.5 Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 
 **Gemini 3.1:**
@@ -40,6 +40,10 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 1M context
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
+
+:::note
+Gemini 3.5 Flash Cyber is limited to Google's CodeMender pilot for governments and trusted partners and does not have a publicly documented Vertex model ID. See the [Gemini model announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/).
+:::
 
 ### Claude Models
 
@@ -229,8 +233,34 @@ providers:
 Current Gemini models on Vertex AI (2.5 and 3.x):
 
 - Input context: up to 1M tokens
+- Output context: up to 65K tokens for Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
 - Supports: Text, code, images, audio, video, and PDF inputs
-- Features: System instructions, structured JSON output, function calling, thinking, and grounding with Google Search
+- Features: System instructions, structured JSON output, function calling, thinking, code execution, URL context, and grounding with Google Search or Google Maps
+
+Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support standard, Flex, Priority, and Batch inference plus context caching. Computer Use is not currently supported for these models on Vertex AI.
+
+Native Gemini prompts can reference multimodal content stored in Google Cloud Storage. For example, to evaluate a PDF:
+
+```yaml
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "parts": [
+          {"fileData": {"mimeType": "application/pdf", "fileUri": "gs://my-bucket/example.pdf"}},
+          {"text": "Summarize this document."}
+        ]
+      }
+    ]
+
+providers:
+  - id: vertex:gemini-3.6-flash
+    config:
+      region: global
+```
+
+Audio and video variables loaded with `file://` are converted to Gemini inline data when their format can be detected; images can also be supplied as described in the [Google AI Studio multimodal example](/docs/providers/google).
 
 ### Language Support
 
@@ -444,12 +474,16 @@ The following environment variables can be used to configure the Vertex AI provi
 
 Different models are available in different regions. Common regions include:
 
+- `global` - Required for Gemini 3.6 Flash and supported by Gemini 3.5 Flash-Lite
+- `us`, `eu` - Multi-region endpoints supported by Gemini 3.5 Flash-Lite (10% pricing premium)
 - `us-central1` - Default, most models available
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
 - `europe-west4` - EU region
 - `asia-southeast1` - Asia region, Claude models available
+
+Promptfoo maps the `us` and `eu` multi-region locations to `aiplatform.us.rep.googleapis.com` and `aiplatform.eu.rep.googleapis.com`, respectively; regional locations such as `us-central1` continue to use `<region>-aiplatform.googleapis.com`.
 
 Example configuration with specific region:
 
@@ -693,6 +727,7 @@ defaultTest:
 | `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
 | `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
 | `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
+| `service_tier`                     | Gemini inference tier: `standard`, `flex`, or `priority`           | `standard`                           |
 | `examples`                         | Few-shot examples                                                  | None                                 |
 | `safetySettings`                   | Content filtering                                                  | None                                 |
 | `generationConfig.temperature`     | Randomness control                                                 | None                                 |
@@ -984,12 +1019,14 @@ providers:
 
 Thinking levels for Gemini 3 Flash:
 
-| Level   | Description                                                  |
-| ------- | ------------------------------------------------------------ |
-| MINIMAL | Fewest tokens for thinking. Best for low-complexity tasks.   |
-| LOW     | Fewer tokens. Suitable for simpler tasks, high-throughput.   |
-| MEDIUM  | Balanced approach for moderate complexity.                   |
-| HIGH    | More tokens for deep reasoning. Default for complex prompts. |
+| Level   | Description                                                |
+| ------- | ---------------------------------------------------------- |
+| MINIMAL | Fewest tokens for thinking. Best for low-complexity tasks. |
+| LOW     | Fewer tokens. Suitable for simpler tasks, high-throughput. |
+| MEDIUM  | Balanced approach for moderate complexity.                 |
+| HIGH    | More tokens for deep reasoning.                            |
+
+Gemini 3.6 Flash defaults to `MEDIUM`; Gemini 3.5 Flash-Lite defaults to `MINIMAL`. Use `MEDIUM` or `HIGH` for Flash-Lite tool-heavy, multi-step tasks. Both models ignore `temperature`, `topP`, and `topK`, and Promptfoo omits those fields and `candidateCount`. Prompts must not end with a prefilled `model` turn; preserve matching function names, function-call IDs when returned, and thought signatures when evaluating multi-turn tool use. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
 
 Thinking levels for Gemini 3 Pro:
 
@@ -997,6 +1034,46 @@ Thinking levels for Gemini 3 Pro:
 | ----- | ----------------------------------------- |
 | LOW   | Minimizes latency and cost. Simple tasks. |
 | HIGH  | Maximizes reasoning depth. Default.       |
+
+#### Inference tiers and cached-token pricing
+
+Promptfoo forwards `service_tier` and includes cached-input and reasoning tokens in cost estimates. Gemini 3.6 Flash is global-only; Gemini 3.5 Flash-Lite has a 10% premium on the `us` and `eu` multi-region endpoints.
+
+```yaml
+providers:
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
+      region: global # global, us, or eu
+      service_tier: flex # standard, flex, or priority
+      generationConfig:
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: MINIMAL
+```
+
+| Model                 | Tier       | Input / 1M | Output and reasoning / 1M | Cached input / 1M |
+| --------------------- | ---------- | ---------: | ------------------------: | ----------------: |
+| Gemini 3.6 Flash      | Standard   |      $1.50 |                     $7.50 |             $0.15 |
+| Gemini 3.6 Flash      | Flex/Batch |      $0.75 |                     $3.75 |            $0.075 |
+| Gemini 3.6 Flash      | Priority   |      $2.70 |                    $13.50 |             $0.27 |
+| Gemini 3.5 Flash-Lite | Standard   |      $0.30 |                     $2.50 |             $0.03 |
+| Gemini 3.5 Flash-Lite | Flex/Batch |      $0.15 |                     $1.25 |            $0.015 |
+| Gemini 3.5 Flash-Lite | Priority   |      $0.54 |                     $4.50 |            $0.054 |
+
+The Flash-Lite rates above are for `global`; multiply them by 1.1 for `us` or `eu`. Cache-storage and grounding-query charges are separate. See [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
+
+Promptfoo can reference an existing explicit Vertex cache with `passthrough`; cache creation and lifecycle management remain outside the provider:
+
+```yaml
+providers:
+  - id: vertex:gemini-3.6-flash
+    config:
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
+      region: global
+      passthrough:
+        cachedContent: projects/my-project/locations/global/cachedContents/example-cache
+```
 
 #### Gemini 2.5 Models (thinkingBudget)
 
@@ -1085,6 +1162,27 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 
 For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Maps Grounding
+
+Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support Google Maps grounding for location-aware, text-only queries. Optional coordinates and language can be supplied through `toolConfig.retrievalConfig`:
+
+```yaml
+providers:
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      region: global
+      tools:
+        - googleMaps: {}
+      toolConfig:
+        retrievalConfig:
+          latLng:
+            latitude: 42.3601
+            longitude: -71.0589
+          languageCode: en-US
+```
+
+Maps queries can incur separate charges and applications must display the returned Maps sources and attribution. See [Grounding with Google Maps](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/grounding-with-google-maps).
 
 ### Code Execution
 
@@ -1190,20 +1288,21 @@ For more details, see:
 
 The Vertex AI provider supports core functionality for LLM evaluation:
 
-| Feature                  | Supported | Notes                                  |
-| ------------------------ | --------- | -------------------------------------- |
-| Chat completions         | ✅        | Full support for Gemini, Claude, Llama |
-| Embeddings               | ✅        | All embedding models                   |
-| Function calling / Tools | ✅        | Including MCP tools                    |
-| Search grounding         | ✅        | Google Search integration              |
-| Safety settings          | ✅        | Full configuration                     |
-| Structured output        | ✅        | JSON schema support                    |
-| Streaming                | ✅        | Optional via `streaming: true`         |
-| Files API                | ❌        | Upload/manage files not supported      |
-| Caching API              | ❌        | Context caching not supported          |
-| Live/Realtime API        | ❌        | WebSocket-based live API not supported |
-| Video generation         | ✅        | Use `vertex:video:` provider           |
-| Image generation         | ⚠️        | Use `google:image:` provider instead   |
+| Feature                  | Supported | Notes                                                                                     |
+| ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
+| Chat completions         | ✅        | Full support for Gemini, Claude, Llama                                                    |
+| Embeddings               | ✅        | All embedding models                                                                      |
+| Function calling / Tools | ✅        | Including MCP tools                                                                       |
+| Search grounding         | ✅        | Google Search integration                                                                 |
+| Safety settings          | ✅        | Full configuration                                                                        |
+| Structured output        | ✅        | JSON schema support                                                                       |
+| Streaming                | ✅        | Optional via `streaming: true`                                                            |
+| Files API                | ❌        | Upload/manage files not supported                                                         |
+| Caching API              | ⚠️        | Reference existing caches with `passthrough.cachedContent`; creation/manage not supported |
+| Implicit cache usage     | ✅        | Cached tokens and their cost are tracked                                                  |
+| Live/Realtime API        | ❌        | WebSocket-based live API not supported                                                    |
+| Video generation         | ✅        | Use `vertex:video:` provider                                                              |
+| Image generation         | ⚠️        | Use `google:image:` provider instead                                                      |
 
 For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.
 

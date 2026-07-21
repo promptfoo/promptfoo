@@ -54,6 +54,7 @@ export interface Part {
   inlineData?: Blob;
   functionCall?: FunctionCall;
   functionResponse?: FunctionResponse;
+  thoughtSignature?: string;
   fileData?: FileData;
 }
 
@@ -107,6 +108,18 @@ export interface Tool {
   googleSearchRetrieval?: GoogleSearchRetrieval;
   codeExecution?: object;
   googleSearch?: object;
+  googleMaps?: { enableWidget?: boolean };
+  urlContext?: object;
+  fileSearch?: {
+    fileSearchStoreNames: string[];
+    metadataFilter?: string;
+  };
+  computerUse?: {
+    environment: 'ENVIRONMENT_BROWSER' | 'ENVIRONMENT_MOBILE' | 'ENVIRONMENT_DESKTOP';
+    enablePromptInjectionDetection?: boolean;
+    excludedPredefinedFunctions?: string[];
+    disabledSafetyPolicies?: string[];
+  };
 
   // Note: These snake_case properties are supported but should be accessed with type assertions
   // Type definitions included for documentation purposes only
@@ -292,6 +305,11 @@ export interface CompletionOptions {
       allowedFunctionNames?: string[];
       streamFunctionCallArguments?: boolean;
     };
+    retrievalConfig?: {
+      latLng?: { latitude: number; longitude: number };
+      languageCode?: string;
+    };
+    includeServerSideToolInvocations?: boolean;
   };
 
   tool_config?: {
@@ -309,6 +327,11 @@ export interface CompletionOptions {
       allowed_function_names?: string[];
       stream_function_call_arguments?: boolean;
     };
+    retrieval_config?: {
+      lat_lng?: { latitude: number; longitude: number };
+      language_code?: string;
+    };
+    include_server_side_tool_invocations?: boolean;
   };
 
   tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };

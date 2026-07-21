@@ -383,6 +383,55 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   }
 
   /**
+   * Execute configured callbacks for native Gemini function-call parts.
+   * Gemini returns an array of parts for fresh responses, while older cached
+   * responses can contain a JSON-encoded functionCall envelope.
+   */
+  protected async executeFunctionToolCallbacks(
+    output: ProviderResponse['output'],
+    config: CompletionOptions,
+    toolsDisabled: boolean,
+  ): Promise<ProviderResponse['output']> {
+    if (toolsDisabled || !config.functionToolCallbacks) {
+      return output;
+    }
+
+    let parsedOutput: any = output;
+    if (typeof output === 'string') {
+      try {
+        parsedOutput = JSON.parse(output);
+      } catch {
+        return output;
+      }
+    }
+
+    const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
+    const functionCalls = parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
+    const results = [];
+
+    for (const functionCall of functionCalls) {
+      const functionName = functionCall.name;
+      if (!config.functionToolCallbacks[functionName]) {
+        continue;
+      }
+      try {
+        const args =
+          typeof functionCall.args === 'string'
+            ? JSON.parse(functionCall.args)
+            : (functionCall.args ?? {});
+        results.push(
+          await this.executeFunctionCallback(functionName, JSON.stringify(args), config),
+        );
+      } catch {
+        // executeFunctionCallback already logs the callback error. Preserve the
+        // original model output when a callback cannot be executed.
+      }
+    }
+
+    return results.length > 0 ? results.join('\n') : output;
+  }
+
+  /**
    * Clean up resources (MCP client, etc.).
    * Should be called when the provider is no longer needed.
    */

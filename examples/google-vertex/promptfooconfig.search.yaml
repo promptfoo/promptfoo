@@ -6,21 +6,21 @@ prompts:
   - '{{query}}'
 
 providers:
-  - id: vertex:gemini-2.5-flash
-    label: gemini-2.5-flash-search
+  - id: vertex:gemini-3.6-flash
+    label: gemini-3.6-flash-search
     config:
-      temperature: 0.2
+      region: global
       maxOutputTokens: 1024
       tools:
         - googleSearch: {}
-  - id: vertex:gemini-2.5-flash
-    label: gemini-2.5-flash-search-thinking
+  - id: vertex:gemini-3.5-flash-lite
+    label: gemini-3.5-flash-lite-search-thinking
     config:
-      temperature: 0.2
+      region: global
       maxOutputTokens: 1024
       generationConfig:
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingLevel: MEDIUM
       tools:
         - googleSearch: {}
 

@@ -12,7 +12,6 @@ import {
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
-import { isValidJson } from '../../util/json';
 import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
@@ -26,6 +25,7 @@ import {
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
@@ -137,7 +137,7 @@ function getVertexApiHost(
     configApiHost ||
     envOverrides?.VERTEX_API_HOST ||
     getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+    getVertexApiHostForRegion(region)
   );
 }
 
@@ -170,13 +170,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    * Public for use by integrations like Adaline Gateway.
    */
   getApiHost(): string {
-    const region = this.getRegion();
-    return (
-      this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
-      getEnvString('VERTEX_API_HOST') ||
-      (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
-    );
+    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
   }
 
   /**
@@ -915,42 +909,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
       }
     }
-    try {
-      // Handle function tool callbacks
-      if (!toolsDisabled && config.functionToolCallbacks && isValidJson(response.output)) {
-        const structured_output = JSON.parse(response.output);
-        if (structured_output.functionCall) {
-          const results = [];
-          const functionName = structured_output.functionCall.name;
-          if (config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                JSON.stringify(
-                  typeof structured_output.functionCall.args === 'string'
-                    ? JSON.parse(structured_output.functionCall.args)
-                    : structured_output.functionCall.args,
-                ),
-                config,
-              );
-              results.push(functionResult);
-            } catch (error) {
-              logger.error(`Error executing function ${functionName}: ${error}`);
-            }
-          }
-          if (results.length > 0) {
-            response = {
-              ...response,
-              output: results.join('\n'),
-            };
-          }
-        }
-      }
-    } catch (err) {
-      return {
-        error: `Tool callback error: ${String(err)}.`,
-      };
-    }
+    response.output = await this.executeFunctionToolCallbacks(
+      response.output,
+      config,
+      toolsDisabled,
+    );
     return response;
   }
 

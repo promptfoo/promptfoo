@@ -22,6 +22,7 @@ import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
@@ -133,7 +134,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         this.config.apiHost ||
         this.env?.VERTEX_API_HOST ||
         getEnvString('VERTEX_API_HOST') ||
-        (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+        getVertexApiHostForRegion(region)
       );
     } else {
       // AI Studio mode
@@ -719,29 +720,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         metadata: { ...grounding },
       };
 
-      // Handle function tool callbacks
-      if (!toolsDisabled && config.functionToolCallbacks && typeof output === 'string') {
-        try {
-          const parsed = JSON.parse(output);
-          if (parsed.functionCall) {
-            const functionName = parsed.functionCall.name;
-            if (config.functionToolCallbacks[functionName]) {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                JSON.stringify(
-                  typeof parsed.functionCall.args === 'string'
-                    ? JSON.parse(parsed.functionCall.args)
-                    : parsed.functionCall.args,
-                ),
-                config,
-              );
-              response.output = functionResult;
-            }
-          }
-        } catch {
-          // Not JSON or no function call, ignore
-        }
-      }
+      response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
 
       return response;
     } catch (err) {

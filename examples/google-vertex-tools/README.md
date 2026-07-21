@@ -13,7 +13,7 @@ cd google-vertex-tools
 
 This example demonstrates how to use [Vertex AI models](https://www.promptfoo.dev/docs/providers/vertex/) with:
 
-- Function calling and tool declarations
+- Function calling and tool declarations with Gemini 3.6 Flash
 - Function callback execution with local implementations
 - Different configuration approaches (YAML vs JavaScript)
 

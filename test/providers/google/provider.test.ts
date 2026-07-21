@@ -407,6 +407,17 @@ describe('GoogleProvider', () => {
         expect(globalProvider.getApiHost()).toBe('aiplatform.googleapis.com');
       });
 
+      it.each([
+        ['us', 'aiplatform.us.rep.googleapis.com'],
+        ['eu', 'aiplatform.eu.rep.googleapis.com'],
+      ])('should use the Vertex multi-region endpoint for %s', (region, expectedHost) => {
+        const multiRegionProvider = new GoogleProvider('gemini-3.5-flash-lite', {
+          config: { vertexai: true, apiKey: 'vertex-api-key', region },
+        });
+
+        expect(multiRegionProvider.getApiHost()).toBe(expectedHost);
+      });
+
       it('should call API using Google client for OAuth mode', async () => {
         const getProjectIdSpy = vi
           .spyOn(provider as any, 'getProjectId')
@@ -957,7 +968,7 @@ describe('GoogleProvider', () => {
 
     it('should apply Gemini 3.5 Flash-Lite regional pricing in Vertex mode', async () => {
       const provider = new GoogleProvider('gemini-3.5-flash-lite', {
-        config: { vertexai: true, apiKey: 'test-vertex-key', region: 'us-central1' },
+        config: { vertexai: true, apiKey: 'test-vertex-key', region: 'us' },
       });
       vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
         ok: true,
@@ -1021,6 +1032,95 @@ describe('GoogleProvider', () => {
         vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
       );
       expect(requestBody.generationConfig).toEqual({ maxOutputTokens: 200 });
+    });
+
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('should forward Maps retrieval config for %s', async (modelId) => {
+      const provider = new GoogleProvider(modelId, {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ googleMaps: { enableWidget: true } }],
+          toolConfig: {
+            retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+            includeServerSideToolInvocations: true,
+          },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
+      expect(body.toolConfig).toEqual({
+        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+        includeServerSideToolInvocations: true,
+      });
+    });
+
+    it('should execute callbacks from a fresh Gemini function-call response', async () => {
+      const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'call-1',
+                      name: 'get_weather',
+                      args: { location: 'Boston' },
+                    },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
+      expect(response.output).toBe('Sunny, 25°C');
     });
 
     it('should return undefined cost for cached responses', async () => {

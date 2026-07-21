@@ -114,6 +114,41 @@ providers:
                     enum: ['restaurant', 'hotel', 'attraction']
                 required: ['query']
 
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      region: global # Also available on the us and eu multi-region endpoints
+      generationConfig:
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: MEDIUM # Use MEDIUM for tool-heavy, multi-step tasks
+      toolConfig:
+        functionCallingConfig:
+          mode: 'AUTO'
+      tools:
+        - functionDeclarations:
+            - name: 'get_weather'
+              description: 'Get weather information for a location'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  location:
+                    type: 'STRING'
+                    description: 'City name'
+                required: ['location']
+            - name: 'search_places'
+              description: 'Search for places of interest'
+              parameters:
+                type: 'OBJECT'
+                properties:
+                  query:
+                    type: 'STRING'
+                    description: 'Search query'
+                  type:
+                    type: 'STRING'
+                    description: 'Type of place'
+                    enum: ['restaurant', 'hotel', 'attraction']
+                required: ['query']
+
   - id: vertex:gemini-2.5-flash-lite
     config:
       generationConfig:

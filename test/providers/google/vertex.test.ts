@@ -898,7 +898,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
   it.each([
     ['gemini-3.6-flash', 'global', 0.00225],
     ['gemini-3.5-flash-lite', 'global', 0.00055],
-    ['gemini-3.5-flash-lite', 'us-central1', 0.000605],
+    ['gemini-3.5-flash-lite', 'us', 0.000605],
   ])('should call and price %s on Vertex %s', async (modelId, region, expectedCost) => {
     const geminiProvider = new VertexChatProvider(modelId, { config: { region } });
     const mockRequest = mockVertexRequest([
@@ -957,6 +957,84 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockRequest.mock.calls[0]?.[0]?.data.generationConfig).toEqual({
       maxOutputTokens: 200,
     });
+  });
+
+  it.each([
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+  ])('should forward Maps retrieval config for %s', async (modelId) => {
+    const geminiProvider = new VertexChatProvider(modelId, {
+      config: {
+        region: 'global',
+        tools: [{ googleMaps: { enableWidget: true } }],
+        toolConfig: {
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        },
+      },
+    });
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+      },
+    ]);
+
+    await geminiProvider.callGeminiApi('test prompt');
+
+    expect(mockRequest.mock.calls[0]?.[0]?.data.tools).toEqual([
+      { googleMaps: { enableWidget: true } },
+    ]);
+    expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
+      retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+      includeServerSideToolInvocations: true,
+    });
+  });
+
+  it('should execute callbacks from a fresh Gemini function-call response', async () => {
+    const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+    const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
+      config: {
+        region: 'global',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'get_weather',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: { location: { type: 'STRING' } },
+                  required: ['location'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: { get_weather: callback },
+      },
+    });
+    mockVertexRequest([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  functionCall: { id: 'call-1', name: 'get_weather', args: { location: 'Boston' } },
+                  thoughtSignature: 'signed-thought',
+                },
+              ],
+            },
+          },
+        ],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+      },
+    ]);
+
+    const response = await geminiProvider.callGeminiApi('test prompt');
+
+    expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
+    expect(response.output).toBe('Sunny, 25°C');
   });
 
   it('should normalize Gemini priority service tier for Vertex requests', async () => {
@@ -3857,6 +3935,15 @@ describe('VertexChatProvider.callClaudeApi', () => {
     it('should return regional endpoint for non-global regions', () => {
       const provider = new VertexChatProvider('gemini-pro', { config: { region: 'us-central1' } });
       expect(provider.getApiHost()).toBe('us-central1-aiplatform.googleapis.com');
+    });
+
+    it.each([
+      ['us', 'aiplatform.us.rep.googleapis.com'],
+      ['eu', 'aiplatform.eu.rep.googleapis.com'],
+    ])('should return the Vertex multi-region endpoint for %s', (region, expectedHost) => {
+      const provider = new VertexChatProvider('gemini-3.5-flash-lite', { config: { region } });
+
+      expect(provider.getApiHost()).toBe(expectedHost);
     });
 
     it('should use custom apiHost over default', () => {

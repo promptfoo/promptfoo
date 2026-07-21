@@ -5,9 +5,9 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: vertex:gemini-3.5-flash-lite
     config:
-      region: us-central1
+      region: global
       responseSchema: file://response-schema.json
 
 tests:

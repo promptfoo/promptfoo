@@ -14,8 +14,10 @@ export interface GoogleModelCost {
   videoOutput?: number;
   priorityMultiplier?: number;
   priorityAudioInput?: number;
+  priorityCacheRead?: number;
   flexMultiplier?: number;
   flexAudioInput?: number;
+  flexCacheRead?: number;
 }
 
 export interface GoogleModelTieredCost {
@@ -31,6 +33,16 @@ export interface GoogleModel {
   vertexCost?: GoogleModelCost;
   /** Multiplier for non-global Vertex AI endpoints. */
   vertexRegionalMultiplier?: number;
+}
+
+export function getVertexApiHostForRegion(region: string): string {
+  if (region === 'global') {
+    return 'aiplatform.googleapis.com';
+  }
+  if (region === 'us' || region === 'eu') {
+    return `aiplatform.${region}.rep.googleapis.com`;
+  }
+  return `${region}-aiplatform.googleapis.com`;
 }
 
 const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6, cacheRead: 0.2 / 1e6 };
@@ -78,6 +90,15 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   {
     id: 'gemini-3.5-flash-lite',
     cost: {
+      input: 0.3 / 1e6,
+      output: 2.5 / 1e6,
+      cacheRead: 0.03 / 1e6,
+      priorityMultiplier: 1.8,
+      priorityCacheRead: 0.05 / 1e6,
+      flexMultiplier: 0.5,
+      flexCacheRead: 0.02 / 1e6,
+    },
+    vertexCost: {
       input: 0.3 / 1e6,
       output: 2.5 / 1e6,
       cacheRead: 0.03 / 1e6,
