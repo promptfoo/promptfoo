@@ -240,10 +240,11 @@ export class WebSocketProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     };
+    const url = nunjucks.renderString(this.url, vars);
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
     const streamResponse = this.streamResponse == null ? undefined : await this.streamResponse;
 
-    logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
+    logger.debug(`Sending WebSocket message to ${url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
@@ -253,8 +254,8 @@ export class WebSocketProvider implements ApiProvider {
       }
       const ws =
         protocols.length > 0
-          ? new WebSocket(this.url, protocols, wsOptions)
-          : new WebSocket(this.url, wsOptions);
+          ? new WebSocket(url, protocols, wsOptions)
+          : new WebSocket(url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
         logger.error(`[WebSocket Provider] Request timed out`);

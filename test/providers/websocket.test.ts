@@ -127,6 +127,36 @@ describe('WebSocketProvider', () => {
     expect(WebSocket).toHaveBeenCalledWith('ws://test.com', { headers });
   });
 
+  it('should render the URL template for each WebSocket connection', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://test.com/sessions/{{ sessionId }}',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'first' }) },
+    );
+    await provider.callApi('first prompt', {
+      prompt: { raw: 'first prompt', label: 'first prompt' },
+      vars: { sessionId: 'session-1' },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'second' }) },
+    );
+    await provider.callApi('second prompt', {
+      prompt: { raw: 'second prompt', label: 'second prompt' },
+      vars: { sessionId: 'session-2' },
+    });
+
+    expect(WebSocket).toHaveBeenNthCalledWith(1, 'ws://test.com/sessions/session-1', {});
+    expect(WebSocket).toHaveBeenNthCalledWith(2, 'ws://test.com/sessions/session-2', {});
+  });
+
   it('should pass configured protocols to WebSocket connection', async () => {
     provider = new WebSocketProvider('ws://test.com', {
       config: {
