@@ -42,6 +42,7 @@ import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { isUuid } from '../../util/uuid';
 import { loadYaml } from '../../util/yamlLoad';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -64,6 +65,7 @@ import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
   PolicyObject,
@@ -668,6 +670,13 @@ async function doGenerateRedteamInternal(
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
 
   if (contexts && contexts.length > 0) {
     // Multi-context mode: generate tests for each context
@@ -713,6 +722,7 @@ async function doGenerateRedteamInternal(
       if (contextResult.failedPlugins.length > 0) {
         allFailedPlugins.push(...contextResult.failedPlugins);
       }
+      accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
       firstContextPurpose ??= contextResult.purpose;
 
       // Tag each test with context metadata and merge context vars
@@ -780,6 +790,7 @@ async function doGenerateRedteamInternal(
     entities = result.entities;
     finalInjectVar = result.injectVar;
     failedPlugins = result.failedPlugins;
+    accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
   }
 
   /**
@@ -828,6 +839,22 @@ async function doGenerateRedteamInternal(
       sharing: config.sharing,
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
+    const generationRequestCount = generationTokenUsage.numRequests ?? 0;
+    if (generationRequestCount > 0) {
+      const hasReportedGenerationTokens =
+        (generationTokenUsage.total ?? 0) > 0 ||
+        (generationTokenUsage.prompt ?? 0) > 0 ||
+        (generationTokenUsage.completion ?? 0) > 0 ||
+        (generationTokenUsage.cached ?? 0) > 0;
+      logger.info(
+        hasReportedGenerationTokens
+          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
+              `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
+              `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
+              `${generationRequestCount.toLocaleString()} request(s)`
+          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
+      );
+    }
 
     let ret: Partial<UnifiedConfig> | undefined;
     if (options.output && options.output.endsWith('.burp')) {
@@ -854,6 +881,8 @@ async function doGenerateRedteamInternal(
         : {};
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
+      const existingMetadata = { ...(existingYaml.metadata || {}) };
+      delete existingMetadata.generationTokenUsage;
       const updatedYaml: Partial<UnifiedConfig> = {
         ...existingYaml,
         ...(options.description ? { description: options.description } : {}),
@@ -868,10 +897,11 @@ async function doGenerateRedteamInternal(
         tests: redteamTests,
         redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
         metadata: {
-          ...(existingYaml.metadata || {}),
+          ...existingMetadata,
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
+          ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -932,10 +962,13 @@ async function doGenerateRedteamInternal(
       }
       existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+      const existingMetadata = { ...(existingConfig.metadata || {}) };
+      delete existingMetadata.generationTokenUsage;
       // Add the config hash to metadata
       existingConfig.metadata = {
-        ...(existingConfig.metadata || {}),
+        ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
+        ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -976,6 +1009,9 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
+          ...((generationTokenUsage.numRequests ?? 0) > 0
+            ? { metadata: { generationTokenUsage } }
+            : {}),
           tests: redteamTests,
         },
         'redteam.yaml',

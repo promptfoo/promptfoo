@@ -201,14 +201,3 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     }
   }
 }
-
-/**
- * Custom error class for target permission-related failures.
- * Thrown when users lack necessary permissions to access or create targets.
- */
-export class TargetPermissionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TargetPermissionError';
-  }
-}

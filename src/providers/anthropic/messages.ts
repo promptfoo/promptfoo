@@ -284,18 +284,24 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
 
+  // Subclasses that serve non-Anthropic model catalogs over the Messages wire
+  // format (e.g. Meta's Anthropic-compatible endpoint) set this to false so
+  // their model ids don't trigger the unknown-Anthropic-model warning.
+  static readonly WARNS_ON_UNKNOWN_MODEL: boolean = true;
+
   constructor(
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
+    super(modelName, options);
     if (
+      (this.constructor as typeof AnthropicMessagesProvider).WARNS_ON_UNKNOWN_MODEL &&
       !AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(
         normalizeAnthropicModelName(modelName),
       )
     ) {
       logger.warn(`Using unknown Anthropic model: ${modelName}`);
     }
-    super(modelName, options);
     const { id } = options;
     this.id = id ? () => id : this.id;
 
@@ -469,6 +475,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
+  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // through the Anthropic wire format override this so traces attribute to the
+  // actual provider system.
+  protected getGenAISystem(): string {
+    return 'anthropic';
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -503,7 +516,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'anthropic',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),

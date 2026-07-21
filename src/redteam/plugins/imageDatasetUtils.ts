@@ -112,72 +112,10 @@ export function fisherYatesShuffle<T>(array: T[]): T[] {
 }
 
 /**
- * Type guard for object with src property
- */
-export function hasStringSrc(obj: unknown): obj is { src: string } {
-  return (
-    typeof obj === 'object' && obj !== null && 'src' in obj && typeof (obj as any).src === 'string'
-  );
-}
-
-/**
- * Type guard for object with bytes property
- */
-export function hasBytes(obj: unknown): obj is { bytes: unknown } {
-  return typeof obj === 'object' && obj !== null && 'bytes' in obj;
-}
-
-/**
  * Safe string field getter with default value
  */
 export function getStringField(field: unknown, defaultValue: string = ''): string {
   return typeof field === 'string' ? field : defaultValue;
-}
-
-/**
- * Process image data from various formats to base64
- * @param imageData - The image data (URL, base64, object with src, or bytes)
- * @param pluginId - The plugin ID for logging purposes
- * @returns Base64 encoded image with data URI prefix, or null on failure
- */
-export async function processImageData(
-  imageData: unknown,
-  pluginId: string,
-): Promise<string | null> {
-  if (typeof imageData === 'string') {
-    if (imageData.startsWith('http')) {
-      // It's a URL, download and convert to base64
-      return await fetchImageAsBase64(imageData, pluginId);
-    } else {
-      // It's already a suitable string (base64 or data URI)
-      return imageData;
-    }
-  } else if (hasStringSrc(imageData)) {
-    // It's an object with an image URL
-    logger.debug(`[${pluginId}] Found image URL from src property`);
-    return await fetchImageAsBase64(imageData.src, pluginId);
-  } else if (hasBytes(imageData)) {
-    // Handle bytes format (common in Hugging Face datasets)
-    const bytes = imageData.bytes;
-    let base64Image: string;
-    if (typeof bytes === 'string') {
-      // If bytes is already a base64 string - decode it to detect format
-      const buffer = Buffer.from(bytes, 'base64');
-      const mimeType = detectImageFormat(buffer);
-      base64Image = `data:${mimeType};base64,${bytes}`;
-    } else if (bytes instanceof Buffer) {
-      // If bytes is a Buffer - detect format from buffer
-      const mimeType = detectImageFormat(bytes);
-      base64Image = `data:${mimeType};base64,${bytes.toString('base64')}`;
-    } else {
-      logger.warn(`[${pluginId}] Unsupported bytes format for image`);
-      return null;
-    }
-    return base64Image;
-  } else {
-    logger.warn(`[${pluginId}] Invalid image format`);
-    return null;
-  }
 }
 
 /**
