@@ -673,6 +673,36 @@ describe('GoogleGenericProvider', () => {
       expect(({} as { polluted?: string }).polluted).toBeUndefined();
     });
 
+    it.each([
+      '$.items[10001].name',
+      '$.items[4294967294].name',
+      '$.items[9007199254740992].name',
+    ])('should reject an unsafe streamed array index in %s', async (jsonPath) => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const originalCalls = [
+        {
+          functionCall: {
+            name: 'test_function',
+            partialArgs: [{ jsonPath, stringValue: 'value' }],
+          },
+        },
+      ];
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('should preserve all original calls when a parallel callback fails', async () => {
       const originalCalls = [
         { functionCall: { name: 'succeed', args: { city: 'Boston' } } },

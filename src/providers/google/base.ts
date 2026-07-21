@@ -57,6 +57,8 @@ interface PendingFunctionCall {
   argsText: string;
 }
 
+const MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX = 10_000;
+
 function setPartialFunctionArg(
   args: Record<string, unknown>,
   partialArg: StreamedPartialArg,
@@ -70,7 +72,12 @@ function setPartialFunctionArg(
     match[1] === undefined ? Number(match[2]) : match[1],
   );
   if (
-    segments.some((segment) => ['__proto__', 'prototype', 'constructor'].includes(String(segment)))
+    segments.some(
+      (segment) =>
+        ['__proto__', 'prototype', 'constructor'].includes(String(segment)) ||
+        (typeof segment === 'number' &&
+          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX)),
+    )
   ) {
     return false;
   }

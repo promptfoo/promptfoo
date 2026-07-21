@@ -1270,6 +1270,8 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
     return 'audio/aiff';
   } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
     return getMimeTypeFromFtypBrand(bytes.subarray(8, 12).toString('ascii'));
+  } else if (['moov', 'mdat', 'wide'].includes(bytes.subarray(4, 8).toString('ascii'))) {
+    return 'video/mov';
   } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
     return 'video/webm';
   } else if (['000001ba', '000001b3'].includes(bytes.subarray(0, 4).toString('hex'))) {
