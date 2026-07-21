@@ -137,7 +137,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           requestConfig,
           usage?.prompt_tokens ?? usage?.input_tokens,
           usage?.completion_tokens ?? usage?.output_tokens,
-        ) ?? 0,
+          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
+          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
+          usage?.completion_tokens_details?.audio_tokens ??
+            usage?.output_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
+          usage?.completion_tokens_details?.image_tokens ??
+            usage?.output_tokens_details?.image_tokens,
+        ),
     });
 
     if (this.assistantConfig.functionToolCallbacks) {
@@ -503,6 +514,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     effectiveConfig: EffectiveFoundryConfig,
   ): Promise<ProviderResponse> {
     const result = await this.processor.processResponseOutput(response, effectiveConfig, false);
+    const cachedInputTokens = response.usage?.input_tokens_details?.cached_tokens;
+    if (result.tokenUsage && cachedInputTokens !== undefined) {
+      result.tokenUsage.cached = cachedInputTokens;
+    }
     if (!result.error) {
       return result;
     }
