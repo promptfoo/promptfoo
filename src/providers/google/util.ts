@@ -1237,6 +1237,22 @@ export function loadFile(
   return fileContents;
 }
 
+function getMimeTypeFromFtypBrand(brand: string): string {
+  if (['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand)) {
+    return 'audio/mp4';
+  } else if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) {
+    return 'image/heic';
+  } else if (['mif1', 'msf1'].includes(brand)) {
+    return 'image/heif';
+  } else if (brand === 'qt  ') {
+    return 'video/mov';
+  } else if (brand.startsWith('3g')) {
+    return 'video/3gpp';
+  }
+
+  return 'video/mp4';
+}
+
 function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   const riffType = bytes.subarray(8, 12).toString('ascii');
   if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
@@ -1253,10 +1269,15 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   ) {
     return 'audio/aiff';
   } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
-    const brand = bytes.subarray(8, 12).toString('ascii');
-    return ['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand) ? 'audio/mp4' : 'video/mp4';
+    return getMimeTypeFromFtypBrand(bytes.subarray(8, 12).toString('ascii'));
   } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
     return 'video/webm';
+  } else if (['000001ba', '000001b3'].includes(bytes.subarray(0, 4).toString('hex'))) {
+    return 'video/mpeg';
+  } else if (bytes.subarray(0, 3).toString('ascii') === 'FLV') {
+    return 'video/x-flv';
+  } else if (bytes.subarray(0, 16).toString('hex') === '3026b2758e66cf11a6d900aa0062ce6c') {
+    return 'video/wmv';
   } else if (bytes[0] === 0xff && (bytes[1] === 0xf1 || bytes[1] === 0xf9)) {
     return 'audio/aac';
   } else if (
@@ -1267,7 +1288,9 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   } else if (bytes.subarray(0, 4).toString('ascii') === 'fLaC') {
     return 'audio/flac';
   } else if (bytes.subarray(0, 4).toString('ascii') === 'OggS') {
-    return 'audio/ogg';
+    return bytes.subarray(0, 65_536).includes(Buffer.from('theora', 'ascii'))
+      ? 'video/ogg'
+      : 'audio/ogg';
   }
 
   return undefined;

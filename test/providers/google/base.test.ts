@@ -573,6 +573,36 @@ describe('GoogleGenericProvider', () => {
       expect(result).toBe('streamed');
     });
 
+    it('should preserve buffered fragments when a later fragment is valid JSON on its own', async () => {
+      const callback = vi.fn().mockResolvedValue('streamed');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          {
+            functionCall: {
+              id: 'call-1',
+              name: 'test_function',
+              args: '{"filter":',
+              willContinue: true,
+            },
+          },
+          { functionCall: { id: 'call-1', args: '{}', willContinue: true } },
+          { functionCall: { id: 'call-1', args: '}' } },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith('{"filter":{}}');
+      expect(result).toBe('streamed');
+    });
+
     it('should assemble sequential parallel calls and all partial-argument value types', async () => {
       const callback = vi.fn().mockResolvedValueOnce('first').mockResolvedValueOnce('second');
       const provider = new TestGoogleProvider('gemini-3.6-flash');

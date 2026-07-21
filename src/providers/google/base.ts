@@ -114,6 +114,11 @@ function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown):
     return;
   }
 
+  if (pending.argsText && !args.startsWith(pending.argsText)) {
+    pending.argsText += args;
+    return;
+  }
+
   try {
     const parsed = JSON.parse(args);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {

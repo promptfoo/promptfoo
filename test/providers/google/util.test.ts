@@ -1732,8 +1732,21 @@ describe('util', () => {
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
+          ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/mov', Buffer.from('....ftypqt  ........').toString('base64')],
+          ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
+          ['video/mpeg', Buffer.from('000001ba000000000000000000000000', 'hex').toString('base64')],
+          ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
+          ['video/wmv', Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex').toString('base64')],
           ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
+          [
+            'video/ogg',
+            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
+              'base64',
+            ),
+          ],
         ])('should convert %s data URLs to Gemini inline data', (mimeType, base64Data) => {
           const dataUrl = `data:${mimeType};base64,${base64Data}`;
           const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
@@ -1750,8 +1763,21 @@ describe('util', () => {
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
+          ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/mov', Buffer.from('....ftypqt  ........').toString('base64')],
+          ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
+          ['video/mpeg', Buffer.from('000001b3000000000000000000000000', 'hex').toString('base64')],
+          ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
+          ['video/wmv', Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex').toString('base64')],
           ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
+          [
+            'video/ogg',
+            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
+              'base64',
+            ),
+          ],
         ])('should infer %s for raw base64 media loaded from a file', (mimeType, base64Data) => {
           const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
 

@@ -260,7 +260,11 @@ providers:
       region: global
 ```
 
-Audio and video variables loaded with `file://` are converted to Gemini inline data when their format can be detected; images can also be supplied as described in the [Google AI Studio multimodal example](/docs/providers/google).
+Image, audio, and video variables loaded with `file://` are converted to Gemini inline data. Supported image inputs include PNG, JPEG, WEBP, HEIC, and HEIF; audio includes WAV, MP3, AIFF/AIFC, AAC, OGG, FLAC, and M4A; video includes MP4, MPEG/MPG, MOV, AVI, FLV, WEBM, WMV, and 3GPP. See the [Google AI Studio multimodal example](/docs/providers/google) for a runnable configuration.
+
+:::note
+Ogg/Theora video is detected as video, but is not in Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats). Convert it to a supported container such as MP4 or WEBM before evaluation; OGG audio is supported.
+:::
 
 ### Language Support
 

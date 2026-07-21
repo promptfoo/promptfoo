@@ -669,7 +669,14 @@ For multimodal inputs, the provider supports:
 
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)
 - Videos: MP4, MPEG, MOV, AVI, FLV, MPG, WEBM, WMV, 3GPP formats (up to ~1 hour)
-- Audio and PDF: use a native Gemini `inlineData` or `fileData` part; audio and video loaded with `file://` are also converted to inline data when their format can be detected
+- Audio: WAV, MP3, AIFF/AIFC, AAC, OGG, FLAC, and M4A formats
+- PDF: use a native Gemini `inlineData` or `fileData` part
+
+Image, audio, and video inputs loaded with `file://` are converted to Gemini inline data. For large inputs, use a native `fileData` part instead.
+
+:::note
+Ogg/Theora video is detected as video, but is not in Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats). Convert it to a supported container such as MP4 or WEBM before evaluation; OGG audio is supported.
+:::
 
 When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
 
