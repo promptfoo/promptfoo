@@ -632,9 +632,16 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       return results[0];
     }
     return results
-      .map((result) =>
-        typeof result === 'string' ? result : (JSON.stringify(result) ?? String(result)),
-      )
+      .map((result) => {
+        if (typeof result === 'string') {
+          return result;
+        }
+        try {
+          return JSON.stringify(result) ?? String(result);
+        } catch {
+          return String(result);
+        }
+      })
       .join('\n');
   }
 

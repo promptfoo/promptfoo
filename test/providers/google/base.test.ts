@@ -520,6 +520,25 @@ describe('GoogleGenericProvider', () => {
       expect(result).toBe('{"status":"first"}\n["second"]');
     });
 
+    it('should preserve multiple callback results that cannot be JSON-stringified', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      const callback = vi.fn().mockResolvedValueOnce(circular).mockResolvedValueOnce(1n);
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { name: 'test_function', args: { index: 1 } } },
+          { functionCall: { name: 'test_function', args: { index: 2 } } },
+        ],
+        { functionToolCallbacks: { test_function: callback } },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledTimes(2);
+      expect(result).toBe('[object Object]\n1');
+    });
+
     it('should assemble streamed partial function-call arguments before invoking once', async () => {
       const callback = vi.fn().mockResolvedValue('streamed');
       const provider = new TestGoogleProvider('gemini-3.6-flash');
