@@ -241,6 +241,9 @@ type EnvVars = {
 
   AIML_API_KEY?: string;
 
+  // Alibaba Cloud (DashScope)
+  DASHSCOPE_API_KEY?: string;
+
   NOVITA_API_KEY?: string;
 
   // Anthropic
@@ -306,6 +309,9 @@ type EnvVars = {
 
   // CDP
   CDP_DOMAIN?: string;
+
+  // DeepSeek
+  DEEPSEEK_API_KEY?: string;
 
   // ElevenLabs
   ELEVENLABS_API_KEY?: string;

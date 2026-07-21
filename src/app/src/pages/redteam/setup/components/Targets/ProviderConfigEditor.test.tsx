@@ -810,6 +810,23 @@ describe('ProviderConfigEditor', () => {
     expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
   });
 
+  it.each([
+    ['alibaba', 'alibaba:qwen3.7-plus'],
+    ['moonshot', 'moonshot:kimi-k3'],
+    ['minimax', 'minimax:MiniMax-M3'],
+  ])('renders %s with the foundation model configuration', (providerType, id) => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id, config: {} }}
+        setProvider={vi.fn()}
+        providerType={providerType}
+      />,
+    );
+
+    expect(screen.getByTestId('fm-config')).toBeInTheDocument();
+    expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
+  });
+
   it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
     const mockSetProvider = vi.fn();
 
