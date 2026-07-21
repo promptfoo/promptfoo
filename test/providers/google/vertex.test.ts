@@ -895,6 +895,70 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
+  it.each([
+    ['gemini-3.6-flash', 'global', 0.00225],
+    ['gemini-3.5-flash-lite', 'global', 0.00055],
+    ['gemini-3.5-flash-lite', 'us-central1', 0.000605],
+  ])('should call and price %s on Vertex %s', async (modelId, region, expectedCost) => {
+    const geminiProvider = new VertexChatProvider(modelId, { config: { region } });
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        usageMetadata: {
+          promptTokenCount: 1_000,
+          candidatesTokenCount: 100,
+          totalTokenCount: 1_100,
+        },
+      },
+    ]);
+
+    const response = await geminiProvider.callGeminiApi('test prompt');
+
+    expect(mockRequest.mock.calls[0]?.[0]?.url).toContain(
+      `/locations/${region}/publishers/google/models/${modelId}:generateContent`,
+    );
+    expect(response.cost).toBeCloseTo(expectedCost, 12);
+  });
+
+  it.each([
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+  ])('should omit deprecated Vertex sampling parameters for %s', async (modelId) => {
+    const geminiProvider = new VertexChatProvider(modelId, {
+      config: {
+        region: 'global',
+        temperature: 0.2,
+        topP: 0.3,
+        topK: 10,
+        generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+        passthrough: {
+          generationConfig: {
+            temperature: 0.6,
+            topP: 0.7,
+            topK: 30,
+            top_p: 0.8,
+            top_k: 40,
+            candidateCount: 2,
+            candidate_count: 3,
+            maxOutputTokens: 200,
+          },
+        },
+      },
+    });
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 },
+      },
+    ]);
+
+    await geminiProvider.callGeminiApi('test prompt');
+
+    expect(mockRequest.mock.calls[0]?.[0]?.data.generationConfig).toEqual({
+      maxOutputTokens: 200,
+    });
+  });
+
   it('should normalize Gemini priority service tier for Vertex requests', async () => {
     const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
       config: { passthrough: { service_tier: 'priority' } },

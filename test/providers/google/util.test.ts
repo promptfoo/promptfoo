@@ -2663,6 +2663,13 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it.each([
+      ['gemini-3.6-flash', 0.00525],
+      ['gemini-3.5-flash-lite', 0.00155],
+    ])('should calculate cost for %s', (modelId, expectedCost) => {
+      expect(calculateGoogleCost(modelId, {}, 1_000, 500)).toBeCloseTo(expectedCost, 10);
+    });
+
     it('should calculate cost for gemini-omni-flash-preview', () => {
       const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.006, 10);
@@ -2752,6 +2759,64 @@ describe('util', () => {
         (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
+    });
+
+    it.each([
+      ['gemini-3.6-flash', 'priority', 1.5, 7.5, 1.8],
+      ['gemini-3.6-flash', 'flex', 1.5, 7.5, 0.5],
+      ['gemini-3.5-flash-lite', 'priority', 0.3, 2.5, 1.8],
+      ['gemini-3.5-flash-lite', 'flex', 0.3, 2.5, 0.5],
+    ])('should apply cached multimodal pricing for %s at %s tier', (modelId, serviceTier, input, output, multiplier) => {
+      const cost = calculateGoogleCost(
+        modelId,
+        { passthrough: { service_tier: serviceTier } },
+        1_000,
+        500,
+        false,
+        400,
+        0,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo(
+        (multiplier * (500 * input + 500 * (input / 10) + 500 * output)) / 1e6,
+        12,
+      );
+    });
+
+    it('should apply the Vertex regional premium to Gemini 3.5 Flash-Lite', () => {
+      const globalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global' } as any,
+        1_000,
+        500,
+        true,
+      );
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us-central1' } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(globalCost).toBeCloseTo(0.00155, 12);
+      expect(regionalCost).toBeCloseTo(0.001705, 12);
+    });
+
+    it('should not stack the Gemini Vertex regional premium on a cost override', () => {
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us-central1', cost: 1 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(regionalCost).toBeCloseTo(0.0015, 12);
     });
 
     it.each([

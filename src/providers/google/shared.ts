@@ -29,6 +29,8 @@ export interface GoogleModel {
   tieredCost?: GoogleModelTieredCost;
   /** Override pricing for Vertex AI when it differs from AI Studio. */
   vertexCost?: GoogleModelCost;
+  /** Multiplier for non-global Vertex AI endpoints. */
+  vertexRegionalMultiplier?: number;
 }
 
 const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6, cacheRead: 0.2 / 1e6 };
@@ -50,6 +52,18 @@ const GEMINI_2_5_PRO_TIERED_COST = {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini 3.6 models.
+  {
+    id: 'gemini-3.6-flash',
+    cost: {
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+  },
+
   // Gemini 3.5 models.
   ...['gemini-3.5-flash', 'gemini-flash-latest'].map((id) => ({
     id,
@@ -61,6 +75,17 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       priorityMultiplier: 1.8,
     },
   })),
+  {
+    id: 'gemini-3.5-flash-lite',
+    cost: {
+      input: 0.3 / 1e6,
+      output: 2.5 / 1e6,
+      cacheRead: 0.03 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    vertexRegionalMultiplier: 1.1,
+  },
   {
     id: 'gemini-omni-flash-preview',
     cost: {

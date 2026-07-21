@@ -39,6 +39,7 @@ import {
   normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -623,6 +624,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -876,9 +881,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionTokenCount == null
             ? undefined
             : completionTokenCount + (thoughtsTokenCount ?? 0);
+        const pricingConfig = { ...config, region: this.getRegion() };
         const cost = calculateGoogleCostFromUsage(
           this.modelName,
-          config,
+          pricingConfig,
           promptTokenCount,
           completionForCost,
           true,

@@ -140,7 +140,8 @@ providers:
   - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-3.5-flash
+  - google:gemini-3.6-flash
+  - google:gemini-3.5-flash-lite
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -277,7 +278,9 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.6-flash` - Latest frontier Flash model for agentic, coding, and multimodal tasks ($1.50/1M input, $7.50/1M output)
+- `google:gemini-3.5-flash-lite` - High-throughput, low-latency Flash-Lite model for agentic and document-processing tasks ($0.30/1M input, $2.50/1M output)
+- `google:gemini-3.5-flash` - Gemini 3.5 Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
@@ -292,6 +295,10 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
 - `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
+
+:::note
+Gemini 3.5 Flash Cyber is currently available only through Google's limited-access CodeMender pilot and does not have a publicly documented Gemini API model ID. See the [Gemini model announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/).
+:::
 
 ### Embedding Models
 
@@ -726,9 +733,39 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ## Model Examples
 
+### Gemini 3.6 Flash
+
+The latest frontier Flash model, tuned for agentic and coding workloads with a 1M-token context window:
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM (default), or HIGH
+```
+
+### Gemini 3.5 Flash-Lite
+
+A high-throughput model for lower-latency agentic tasks and document processing:
+
+```yaml
+providers:
+  - id: google:gemini-3.5-flash-lite
+    config:
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MINIMAL # MINIMAL (default), LOW, MEDIUM, or HIGH
+```
+
+Both models ignore `temperature`, `topP`, and `topK`; Promptfoo omits those fields and `candidateCount` when sending requests. Gemini 3.5 Flash-Lite defaults to `MINIMAL`; use `MEDIUM` or `HIGH` for multi-step tool use. Prompts must not end with a prefilled `model` turn, and function responses should preserve the matching function-call `id` and `name`. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
+
 ### Gemini 3.5 Flash
 
-The latest frontier Flash model, tuned for agentic and coding workloads:
+Gemini 3.5 Flash remains available for agentic and coding workloads:
 
 ```yaml
 providers:

@@ -198,6 +198,40 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
   });
 }
 
+/**
+ * Gemini 3.6 Flash and Gemini 3.5 Flash-Lite ignore sampling parameters and
+ * reject candidate counts. Remove both typed and raw passthrough spellings.
+ */
+export function removeDeprecatedGeminiGenerationParams<T>(
+  modelName: string,
+  generationConfig: T,
+): T {
+  if (!modelName.startsWith('gemini-3.6-flash') && !modelName.startsWith('gemini-3.5-flash-lite')) {
+    return generationConfig;
+  }
+  if (
+    !generationConfig ||
+    typeof generationConfig !== 'object' ||
+    Array.isArray(generationConfig)
+  ) {
+    return generationConfig;
+  }
+
+  const sanitized = { ...generationConfig } as Record<string, unknown>;
+  for (const field of [
+    'temperature',
+    'topP',
+    'top_p',
+    'topK',
+    'top_k',
+    'candidateCount',
+    'candidate_count',
+  ]) {
+    delete sanitized[field];
+  }
+  return sanitized as T;
+}
+
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
   if (typeof tools === 'string' && tools.startsWith('file://')) {
     const { filePath } = parseFileUrl(tools);
@@ -359,6 +393,13 @@ export function calculateGoogleCost(
   } else if (serviceTier === 'flex') {
     serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
   }
+  const region = (config as { region?: unknown }).region;
+  const hasCostOverride =
+    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
+  const vertexRegionalMultiplier =
+    isVertexMode && typeof region === 'string' && region !== 'global' && !hasCostOverride
+      ? (model?.vertexRegionalMultiplier ?? 1)
+      : 1;
   // A modality/base cost override on the request takes precedence over the
   // catalog's tier-specific audio rate.
   const hasAudioInputOverride =
@@ -385,7 +426,8 @@ export function calculateGoogleCost(
       (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
       audioOutputTokens * audioOutputCost +
       videoOutputTokens * videoOutputCost) *
-    serviceTierMultiplier
+    serviceTierMultiplier *
+    vertexRegionalMultiplier
   );
 }
 

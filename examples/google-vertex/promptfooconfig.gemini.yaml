@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: 'Evaluation of Gemini 2.5 models with function calling capabilities'
+description: 'Evaluation of Gemini models with function calling capabilities'
 
 prompts:
   - label: 'Direct Question'
@@ -47,12 +47,11 @@ providers:
                     enum: ['restaurant', 'hotel', 'attraction']
                 required: ['query']
 
-  - id: vertex:gemini-3.5-flash
+  - id: vertex:gemini-3.6-flash
     config:
-      region: global # Gemini 3.5 Flash is served on Vertex AI's global endpoint
+      region: global # Gemini 3.6 Flash is served on Vertex AI's global endpoint
       apiHost: aiplatform.googleapis.com
       generationConfig:
-        temperature: 0.7
         maxOutputTokens: 2048
       toolConfig:
         functionCallingConfig:

@@ -37,6 +37,7 @@ import {
   mergeParts,
   normalizeGeminiAudio,
   normalizeSafetySettings,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -408,6 +409,10 @@ export class GoogleProvider extends GoogleGenericProvider {
           }),
       ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     // Handle response schema
     if (config.responseSchema) {
@@ -690,11 +695,12 @@ export class GoogleProvider extends GoogleGenericProvider {
         tokenUsage.completion == null
           ? undefined
           : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
+      const pricingConfig = this.isVertexMode ? { ...config, region: this.getRegion() } : config;
       const cost = cached
         ? undefined
         : calculateGoogleCostFromUsage(
             this.modelName,
-            config,
+            pricingConfig,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             this.isVertexMode,

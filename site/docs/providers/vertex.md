@@ -16,9 +16,14 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ### Gemini Models
 
+**Gemini 3.6:**
+
+- `vertex:gemini-3.6-flash` - Latest frontier Flash model for agentic, coding, and multimodal tasks ($1.50/1M input, $7.50/1M output)
+
 **Gemini 3.5:**
 
-- `vertex:gemini-3.5-flash` - Latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash-lite` - High-throughput, low-latency Flash-Lite model for agentic and document-processing tasks ($0.30/1M input, $2.50/1M output on the global endpoint; non-global endpoints carry a 10% premium)
+- `vertex:gemini-3.5-flash` - Gemini 3.5 Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 
 **Gemini 3.1:**
 
@@ -953,12 +958,21 @@ Gemini 3 models use `thinkingLevel` instead of `thinkingBudget`:
 
 ```yaml
 providers:
-  # Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
-  - id: vertex:gemini-3-flash-preview
+  # Gemini 3.6 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
+  - id: vertex:gemini-3.6-flash
     config:
+      region: global
       generationConfig:
         thinkingConfig:
           thinkingLevel: MEDIUM # Balanced approach for moderate complexity
+
+  # Gemini 3.5 Flash-Lite supports: MINIMAL, LOW, MEDIUM, HIGH
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      region: global
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MINIMAL # Default for low-latency agentic tasks
 
   # Gemini 3.1 Pro supports: LOW, HIGH
   - id: vertex:gemini-3.1-pro-preview

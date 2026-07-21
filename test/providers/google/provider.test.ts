@@ -955,6 +955,74 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.00045, 10);
     });
 
+    it('should apply Gemini 3.5 Flash-Lite regional pricing in Vertex mode', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, apiKey: 'test-vertex-key', region: 'us-central1' },
+      });
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(0.000605, 12);
+    });
+
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('should omit deprecated sampling parameters for %s', async (modelId) => {
+      const provider = new GoogleProvider(modelId, {
+        config: {
+          apiKey: 'test-key',
+          temperature: 0.2,
+          topP: 0.3,
+          topK: 10,
+          generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+          passthrough: {
+            generationConfig: {
+              temperature: 0.6,
+              topP: 0.7,
+              topK: 30,
+              top_p: 0.8,
+              top_k: 40,
+              candidateCount: 2,
+              candidate_count: 3,
+              maxOutputTokens: 200,
+            },
+          },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 10,
+            totalTokenCount: 20,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+
+      const requestBody = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(requestBody.generationConfig).toEqual({ maxOutputTokens: 200 });
+    });
+
     it('should return undefined cost for cached responses', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: { apiKey: 'test-key' },

@@ -29,11 +29,13 @@ interface Blob {
 }
 
 export interface FunctionCall {
+  id?: string;
   name: string;
   args?: { [key: string]: any };
 }
 
 interface FunctionResponse {
+  id?: string;
   name: string;
   response: { [key: string]: any };
 }

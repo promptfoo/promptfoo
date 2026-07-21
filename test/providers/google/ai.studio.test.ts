@@ -1008,10 +1008,14 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should use v1beta API for Gemini 3 models', async () => {
+    it.each([
+      'gemini-3-flash-preview',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('should use v1beta API for %s', async (modelId) => {
       // Regression: all Gemini 3.x models use v1beta, including dash-named
       // gemini-3-* preview IDs that were previously forced onto v1alpha.
-      provider = new AIStudioChatProvider('gemini-3-flash-preview', {
+      provider = new AIStudioChatProvider(modelId, {
         config: { apiKey: 'test-key' },
       });
       const mockResponse = {
@@ -1033,7 +1037,7 @@ describe('AIStudioChatProvider', () => {
       await provider.callGemini('test prompt');
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('v1beta/models/gemini-3-flash-preview:generateContent'),
+        expect.stringContaining(`v1beta/models/${modelId}:generateContent`),
         expect.any(Object),
         expect.any(Number),
         'json',
@@ -1284,6 +1288,49 @@ describe('AIStudioChatProvider', () => {
         'json',
         false,
       );
+    });
+
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('should omit deprecated sampling parameters for %s', async (modelId) => {
+      provider = new AIStudioChatProvider(modelId, {
+        config: {
+          apiKey: 'test-key',
+          temperature: 0.2,
+          topP: 0.3,
+          topK: 10,
+          generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+          passthrough: {
+            generationConfig: {
+              temperature: 0.6,
+              topP: 0.7,
+              topK: 30,
+              top_p: 0.8,
+              top_k: 40,
+              candidateCount: 2,
+              candidate_count: 3,
+              maxOutputTokens: 200,
+            },
+          },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: { candidates: [{ content: { parts: [{ text: 'response text' }] } }] },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      await provider.callGemini('test prompt');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.generationConfig).toEqual({ maxOutputTokens: 200 });
     });
 
     it('should handle API version selection', async () => {
