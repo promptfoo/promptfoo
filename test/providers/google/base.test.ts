@@ -444,6 +444,30 @@ describe('GoogleGenericProvider', () => {
       ).rejects.toThrow("No callback found for function 'missing_function'");
     });
 
+    it.each([
+      'toString',
+      'constructor',
+      'valueOf',
+    ])('should not execute inherited callback property %s', async (functionName) => {
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      await expect(
+        provider['executeFunctionCallback'](functionName, '{}', { functionToolCallbacks: {} }),
+      ).rejects.toThrow(`No callback found for function '${functionName}'`);
+    });
+
+    it('should execute an explicitly configured callback with an Object property name', async () => {
+      const callback = vi.fn().mockResolvedValue('configured');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionCallback']('toString', '{}', {
+        functionToolCallbacks: { toString: callback },
+      });
+
+      expect(callback).toHaveBeenCalledWith('{}');
+      expect(result).toBe('configured');
+    });
+
     it('should honor callback replacements for the same function name', async () => {
       const firstCallback = vi.fn().mockResolvedValue('first');
       const secondCallback = vi.fn().mockResolvedValue('second');
@@ -548,6 +572,14 @@ describe('GoogleGenericProvider', () => {
             functionCall: {
               id: 'call-1',
               name: 'test_function',
+              args: '{"city":"B',
+              willContinue: true,
+            },
+          },
+          {
+            functionCall: {
+              id: 'call-1',
+              name: 'test_function',
               args: '{"city":"Bo',
               willContinue: true,
             },
@@ -646,6 +678,38 @@ describe('GoogleGenericProvider', () => {
       expect(result).toBe('first\nsecond');
     });
 
+    it('should assemble streamed arguments with non-identifier JSONPath properties', async () => {
+      const callback = vi.fn().mockResolvedValue('streamed');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          {
+            functionCall: {
+              name: 'test_function',
+              partialArgs: [
+                { jsonPath: '$.postal-code', stringValue: '02108' },
+                { jsonPath: '$.first name', stringValue: 'Ada' },
+                { jsonPath: '$[\'1st-stop\'][0]["city name"]', stringValue: 'Boston' },
+                { jsonPath: "$['quoted-key']", stringValue: 'quoted' },
+              ],
+            },
+          },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledWith(
+        '{"postal-code":"02108","first name":"Ada","1st-stop":[{"city name":"Boston"}],"quoted-key":"quoted"}',
+      );
+      expect(result).toBe('streamed');
+    });
+
     it('should preserve streamed output and skip callbacks for unsafe JSON paths', async () => {
       const callback = vi.fn();
       const provider = new TestGoogleProvider('gemini-3.6-flash');
@@ -655,6 +719,33 @@ describe('GoogleGenericProvider', () => {
             name: 'test_function',
             partialArgs: [{ jsonPath: '$.__proto__.polluted', stringValue: 'yes' }],
           },
+        },
+      ];
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+      expect(callback).not.toHaveBeenCalled();
+      expect(({} as { polluted?: string }).polluted).toBeUndefined();
+    });
+
+    it.each([
+      "$['__proto__'].polluted",
+      '$["constructor"]["prototype"].polluted',
+    ])('should reject unsafe quoted JSONPath %s', async (jsonPath) => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const originalCalls = [
+        {
+          functionCall: { name: 'test_function', partialArgs: [{ jsonPath, stringValue: 'yes' }] },
         },
       ];
 
@@ -718,6 +809,23 @@ describe('GoogleGenericProvider', () => {
             fail: vi.fn().mockRejectedValue(new Error('callback failed')),
           },
         },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+    });
+
+    it.each([
+      'toString',
+      'constructor',
+      'valueOf',
+    ])('should preserve an undeclared inherited function call named %s', async (functionName) => {
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const originalCalls = [{ functionCall: { name: functionName, args: {} } }];
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        { functionToolCallbacks: {} },
         false,
       );
 

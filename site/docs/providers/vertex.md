@@ -857,6 +857,8 @@ providers:
           streamFunctionCallArguments: true
 ```
 
+Function parameters containing spaces or hyphens are supported. Vertex can emit these paths as `$.first name` or `$.postal-code` during streaming; promptfoo reconstructs them alongside quoted JSONPath properties and nested array values.
+
 For a subsequent model turn, preserve the returned `thoughtSignature` and provide the matching `functionResponse`. Gemini 3 and later also support multimodal function responses, such as an image referenced from Cloud Storage:
 
 ```yaml

@@ -64,12 +64,13 @@ function setPartialFunctionArg(
   partialArg: StreamedPartialArg,
 ): boolean {
   const path = partialArg.jsonPath;
-  if (!path || !/^\$(?:\.[A-Za-z_$][\w$]*|\[\d+\])+$/.test(path)) {
+  if (!path || !/^\$(?:\.[\w$ -]+|\[\d+\]|\['[^'\\\]]*'\]|\["[^"\\\]]*"\])+$/.test(path)) {
     return false;
   }
 
-  const segments = Array.from(path.matchAll(/\.([A-Za-z_$][\w$]*)|\[(\d+)\]/g), (match) =>
-    match[1] === undefined ? Number(match[2]) : match[1],
+  const segments = Array.from(
+    path.matchAll(/\.([\w$ -]+)|\[(\d+)\]|\['([^'\\\]]*)'\]|\["([^"\\\]]*)"\]/g),
+    (match) => (match[2] === undefined ? (match[1] ?? match[3] ?? match[4]) : Number(match[2])),
   );
   if (
     segments.some(
@@ -136,7 +137,7 @@ function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown):
   } catch {
     // Some streaming integrations expose cumulative or fragmented JSON strings.
   }
-  pending.argsText += args;
+  pending.argsText = args;
 }
 
 function finalizeStreamedFunctionCall(
@@ -498,8 +499,17 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     config: CompletionOptions,
   ): Promise<any> {
     try {
-      const callbackRef = config.functionToolCallbacks?.[functionName];
-      let callback: Function | undefined = this.loadedFunctionCallbacks[functionName];
+      const callbacks = config.functionToolCallbacks;
+      const callbackRef =
+        callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
+          ? callbacks[functionName]
+          : undefined;
+      let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
+        this.loadedFunctionCallbacks,
+        functionName,
+      )
+        ? this.loadedFunctionCallbacks[functionName]
+        : undefined;
 
       if (this.loadedFunctionCallbackRefs[functionName] !== callbackRef) {
         callback = undefined;
@@ -596,7 +606,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
-      if (!config.functionToolCallbacks[functionName]) {
+      if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
         callbackFailed = true;
         continue;
       }

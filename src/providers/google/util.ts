@@ -1280,7 +1280,7 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
     return 'video/x-flv';
   } else if (bytes.subarray(0, 16).toString('hex') === '3026b2758e66cf11a6d900aa0062ce6c') {
     return 'video/wmv';
-  } else if (bytes[0] === 0xff && (bytes[1] === 0xf1 || bytes[1] === 0xf9)) {
+  } else if (bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0) {
     return 'audio/aac';
   } else if (
     bytes.subarray(0, 3).toString('ascii') === 'ID3' ||
