@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
-import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
@@ -24,8 +23,10 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
+import { loadYaml } from '../../src/util/yamlLoad';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
 
+import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
@@ -258,6 +259,91 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should aggregate token usage and count unmetered generation provider calls', async () => {
+      mockProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first',
+          tokenUsage: { completion: 5, numRequests: 1, prompt: 10, total: 15 },
+        })
+        .mockResolvedValueOnce({
+          output: 'second',
+          tokenUsage: { completion: 3, numRequests: 1, prompt: 7, total: 10 },
+        })
+        .mockResolvedValueOnce({ output: 'third' });
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        await provider.callApi('first prompt');
+        await provider.callApi('second prompt');
+        await provider.callApi('third prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'token-plugin' });
+
+      const result = await synthesize({
+        entities: [],
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'token-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      findSpy.mockRestore();
+      expect(result.generationTokenUsage).toEqual({
+        cached: 0,
+        completion: 8,
+        numRequests: 3,
+        prompt: 17,
+        total: 25,
+      });
+    });
+
+    it('should preserve custom provider receivers while tracking generation usage', async () => {
+      class PrivateFieldProvider implements ApiProvider {
+        #providerId = 'private-generation-provider';
+
+        id() {
+          return this.#providerId;
+        }
+
+        async callApi() {
+          return { output: 'Prompt: generated test case' };
+        }
+      }
+
+      const provider = new PrivateFieldProvider();
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        expect(trackedProvider.id()).toBe('private-generation-provider');
+        await trackedProvider.callApi('generation prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'private-provider-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'private-provider-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage?.numRequests).toBe(1);
+      } finally {
+        findSpy.mockRestore();
+      }
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
@@ -1971,7 +2057,7 @@ describe('synthesize', () => {
 });
 
 vi.mock('fs');
-vi.mock('js-yaml');
+vi.mock('../../src/util/yamlLoad');
 
 describe('resolvePluginConfig', () => {
   beforeEach(() => {
@@ -2012,7 +2098,7 @@ describe('resolvePluginConfig', () => {
     const yamlContent = { nested: 'value' };
     vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     vi.spyOn(fs, 'readFileSync').mockReturnValue('yaml content');
-    vi.mocked(yaml.load).mockImplementation(function () {
+    vi.mocked(loadYaml).mockImplementation(function () {
       return yamlContent;
     });
 
@@ -2021,7 +2107,7 @@ describe('resolvePluginConfig', () => {
     expect(result).toEqual({ key: yamlContent });
     expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
     expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
-    expect(yaml.load).toHaveBeenCalledWith('yaml content');
+    expect(loadYaml).toHaveBeenCalledWith('yaml content');
   });
 
   it('should resolve JSON file references', () => {
@@ -2072,7 +2158,7 @@ describe('resolvePluginConfig', () => {
       .mockReturnValueOnce('yaml content')
       .mockReturnValueOnce(JSON.stringify(jsonContent))
       .mockReturnValueOnce(txtContent);
-    vi.mocked(yaml.load).mockImplementation(function () {
+    vi.mocked(loadYaml).mockImplementation(function () {
       return yamlContent;
     });
 

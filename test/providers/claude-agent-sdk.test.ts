@@ -1349,6 +1349,38 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
       });
+
+      // Regression for the Meta Model API recipe: a suite-level
+      // ANTHROPIC_BASE_URL (e.g. an Anthropic gateway) must not out-rank the
+      // recipe's provider-level pin — otherwise the explicitly supplied Meta
+      // credential would be sent to that gateway URL.
+      it('keeps a provider-level ANTHROPIC_BASE_URL pin ahead of suite-level env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+        const { loadApiProvider } = await import('../../src/providers/index');
+
+        const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+          options: {
+            config: {
+              apiKey: 'meta-model-api-key',
+              env: {
+                ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+                ANTHROPIC_CUSTOM_HEADERS: '',
+              },
+            },
+            env: {
+              ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+              ANTHROPIC_CUSTOM_HEADERS: '',
+            } as EnvOverrides,
+          },
+          env: { ANTHROPIC_BASE_URL: 'https://anthropic-gateway.example' } as EnvOverrides,
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.ANTHROPIC_BASE_URL).toBe('https://api.meta.ai');
+        expect(callArgs.options.env.ANTHROPIC_CUSTOM_HEADERS).toBe('');
+        expect(callArgs.options.env.ANTHROPIC_API_KEY).toBe('meta-model-api-key');
+      });
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
@@ -2214,6 +2246,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
           const provider = new ClaudeCodeSDKProvider({
             config: {
+              append_allowed_tools: ['AskUserQuestion', 'Read'],
               ask_user_question: { behavior: 'first_option' },
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -2240,8 +2273,10 @@ describe('ClaudeCodeSDKProvider', () => {
                 },
               ],
             },
-            { signal: new AbortController().signal, toolUseID: 'test-id' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
           );
+
+          expect(callArgs.options.allowedTools).toEqual(['Read']);
 
           expect(result).toEqual({
             behavior: 'allow',
@@ -2295,13 +2330,42 @@ describe('ClaudeCodeSDKProvider', () => {
           await callArgs.options.canUseTool(
             'Read',
             { file_path: '/tmp/test.txt' },
-            { signal: new AbortController().signal, toolUseID: 'test-id' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
           );
 
           expect(canUseTool).toHaveBeenCalledWith(
             'Read',
             { file_path: '/tmp/test.txt' },
-            { signal: expect.any(AbortSignal), toolUseID: 'test-id' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id', requestId: 'request-id' },
+          );
+        });
+
+        it('preserves out-of-band can_use_tool responses for non-question tools', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async () => null);
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+              // @ts-ignore Intentionally exercise an out-of-band null permission response across SDK versions.
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          const result = await callArgs.options.canUseTool(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
+          );
+
+          expect(result).toBeNull();
+          expect(canUseTool).toHaveBeenCalledWith(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id', requestId: 'request-id' },
           );
         });
 

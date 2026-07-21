@@ -26,6 +26,7 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
@@ -283,18 +284,24 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   static ANTHROPIC_MODELS_NAMES = ANTHROPIC_MODELS.map((model) => model.id);
 
+  // Subclasses that serve non-Anthropic model catalogs over the Messages wire
+  // format (e.g. Meta's Anthropic-compatible endpoint) set this to false so
+  // their model ids don't trigger the unknown-Anthropic-model warning.
+  static readonly WARNS_ON_UNKNOWN_MODEL: boolean = true;
+
   constructor(
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
   ) {
+    super(modelName, options);
     if (
+      (this.constructor as typeof AnthropicMessagesProvider).WARNS_ON_UNKNOWN_MODEL &&
       !AnthropicMessagesProvider.ANTHROPIC_MODELS_NAMES.includes(
         normalizeAnthropicModelName(modelName),
       )
     ) {
       logger.warn(`Using unknown Anthropic model: ${modelName}`);
     }
-    super(modelName, options);
     const { id } = options;
     this.id = id ? () => id : this.id;
 
@@ -468,6 +475,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
+  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // through the Anthropic wire format override this so traces attribute to the
+  // actual provider system.
+  protected getGenAISystem(): string {
+    return 'anthropic';
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -502,7 +516,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
-      system: 'anthropic',
+      system: this.getGenAISystem(),
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
@@ -598,6 +612,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // controls reasoning depth on these models.
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
+    const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
     if (
       samplingParamsDeprecated &&
@@ -607,7 +622,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.warn(
         alwaysOnAdaptiveThinking
           ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
-          : 'Manual extended thinking (thinking.type "enabled") is not supported on Claude Opus 4.7 and 4.8 and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.',
+          : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
       );
       this.manualThinkingConversionWarned = true;
     }
@@ -707,7 +722,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.warn(
         alwaysOnAdaptiveThinking
           ? 'temperature, top_p, and top_k are not supported on Claude Fable 5 or Claude Mythos 5 and will be omitted. Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.'
-          : 'temperature is deprecated on Claude Opus 4.7 and 4.8 and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+          : `temperature is deprecated on ${modelWarningName} and will be omitted (along with top_p and top_k). Remove these sampling parameters from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.`,
       );
       this.samplingParamsDeprecationWarned = true;
     }

@@ -3,7 +3,7 @@ import path from 'path';
 
 import Ajv from 'ajv';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -24,7 +24,7 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type { ScoringFunction, TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -260,6 +260,29 @@ describe('TestCaseSchema assertScoringFunction', () => {
       vars: { input: 'test' },
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
+  });
+
+  it('should expose cached tokens and request counts to typed scoring functions', async () => {
+    const scoringFunction: ScoringFunction = (_scores, context) => ({
+      pass: (context?.tokensUsed?.numRequests ?? 0) > 0,
+      score: context?.tokensUsed?.cached ?? 0,
+      reason: 'Used the documented token accounting fields',
+    });
+
+    const result = await scoringFunction(
+      {},
+      {
+        tokensUsed: {
+          total: 3,
+          prompt: 2,
+          completion: 1,
+          cached: 1,
+          numRequests: 1,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
   });
 
   it('should validate test case with missing assertScoringFunction', () => {

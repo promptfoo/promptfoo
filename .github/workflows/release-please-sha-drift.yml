@@ -40,7 +40,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout (full history)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           # Need full history to measure the distance from last-release-sha to HEAD.
           fetch-depth: 0
@@ -51,6 +51,10 @@ jobs:
           # commits in the #9517 incident; 144 still scanned fine). 250 leaves
           # margin to bump the pin without a fire drill.
           MAX_DRIFT: '250'
+          # pull_request checkouts use a synthetic merge commit. Count the
+          # proposed branch tip instead so the merge wrapper does not consume
+          # one commit of drift headroom.
+          DRIFT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
 
@@ -65,8 +69,8 @@ jobs:
             exit 1
           fi
 
-          behind="$(git rev-list --count "${sha}..HEAD")"
-          echo "last-release-sha ${sha} is ${behind} commits behind HEAD (threshold ${MAX_DRIFT})"
+          behind="$(git rev-list --count "${sha}..${DRIFT_HEAD_SHA}")"
+          echo "last-release-sha ${sha} is ${behind} commits behind ${DRIFT_HEAD_SHA} (threshold ${MAX_DRIFT})"
 
           if (( behind > MAX_DRIFT )); then
             echo "::error file=release-please-config.json::release-please last-release-sha is ${behind} commits behind HEAD (> ${MAX_DRIFT}). The release-please merge-commit scan will eventually time out (see PR #9517). Advance last-release-sha to the OLDEST current package release commit — never newer than any package's last release, or that package loses its unreleased commits."

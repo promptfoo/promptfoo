@@ -223,6 +223,24 @@ describe('OpenAICodexAppServerProvider', () => {
         }),
     ).not.toThrow();
 
+    for (const [model, effort] of [
+      ['gpt-5.6-sol', 'max'],
+      ['gpt-5.6-sol', 'ultra'],
+      ['gpt-5.6-terra', 'max'],
+      ['gpt-5.6-terra', 'ultra'],
+      ['gpt-5.6-luna', 'max'],
+    ] as const) {
+      expect(
+        () =>
+          new OpenAICodexAppServerProvider({
+            config: {
+              model,
+              model_reasoning_effort: effort,
+            },
+          }),
+      ).not.toThrow();
+    }
+
     expect(
       () =>
         new OpenAICodexAppServerProvider({
@@ -3524,6 +3542,12 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
+    const attachedProviderId = vi.fn(() => 'attached-provider');
+    const attachedProvider: Record<string, unknown> = {
+      id: attachedProviderId,
+    };
+    attachedProvider.self = attachedProvider;
+
     const provider = new OpenAICodexAppServerProvider({
       config: {
         thread_cleanup: 'none',
@@ -3541,6 +3565,7 @@ describe('OpenAICodexAppServerProvider', () => {
         config: {
           working_dir: '{{ workspaceDir }}',
           model: '{{ modelName }}',
+          provider: attachedProvider,
           cli_config: {
             rendered_config: '{{ envValue }}',
           },
@@ -3598,6 +3623,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     await expect(resultPromise).resolves.toMatchObject({ output: 'Rendered config done' });
+    expect(attachedProviderId).not.toHaveBeenCalled();
   });
 
   it('applies prompt-level server request policy for each turn on a reused connection', async () => {
@@ -4572,6 +4598,61 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(result.raw).not.toContain('large-delta-payload');
     expect(result.metadata?.codexAppServer.notificationCount).toBe(3);
     expect(result.output).toBe('Done');
+  });
+
+  it.each([
+    ['reusable', true],
+    ['non-reusable', false],
+  ])('closes the active %s connection immediately when buffered turn events overflow', async (_label, reuseServer) => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
+    });
+
+    const resultPromise = provider.callApi('overflow');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
+    });
+
+    for (let index = 0; index < 2; index++) {
+      server.send({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_overflow',
+          turnId: 'turn_overflow',
+          itemId: 'stream',
+          delta: 'x'.repeat(4_000_000),
+        },
+      });
+    }
+    server.send({
+      id: 700,
+      method: 'item/commandExecution/requestApproval',
+      params: {
+        threadId: 'thr_overflow',
+        turnId: 'turn_overflow',
+        itemId: 'command',
+        command: 'x'.repeat(4_000_000),
+      },
+    });
+
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
+      false,
+    );
+    await expect(resultPromise).resolves.toMatchObject({
+      error: expect.stringContaining('codex app-server turn events exceeded'),
+    });
   });
 
   it('sanitizes sensitive command metadata', async () => {
