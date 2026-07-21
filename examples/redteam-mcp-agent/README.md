@@ -20,7 +20,7 @@ The example includes:
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
 - Python 3.8+ (for the Python MCP server example)
 - OpenAI API key
 
@@ -216,9 +216,9 @@ Update the model in the provider configuration:
 
 ```yaml
 config:
-  model: "gpt-4o-mini"  # More cost-effective option
+  model: 'gpt-4o-mini' # More cost-effective option
   # or
-  model: "openai:chat:gpt-5.4"      # Latest OpenAI model
+  model: 'openai:chat:gpt-5.4' # Latest OpenAI model
 ```
 
 ## Security Considerations

@@ -85,7 +85,7 @@ const mcpMocks = vi.hoisted(() => {
   };
 });
 
-const { mockClient, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
+const { mockClient, mockSSETransport, mockStdioTransport, mockStreamableHTTPTransport } = mcpMocks;
 
 // Mock the modules before importing them
 vi.mock('@modelcontextprotocol/sdk/client/index.js', async (importOriginal) => {
@@ -146,6 +146,27 @@ describe('MCPClient', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockClient.registerCapabilities.mockReset();
+    mockClient.assertCapability.mockReset();
+    mockClient.connect.mockReset();
+    mockClient.ping.mockReset().mockResolvedValue({});
+    mockClient.listTools.mockReset().mockResolvedValue({
+      tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+    });
+    mockClient.callTool.mockReset();
+    mockClient.close.mockReset().mockResolvedValue(undefined);
+    mockStdioTransport.close.mockReset().mockResolvedValue(undefined);
+    mockStdioTransport.connect.mockReset();
+    mockStdioTransport.start.mockReset();
+    mockStdioTransport.send.mockReset();
+    mockStreamableHTTPTransport.close.mockReset().mockResolvedValue(undefined);
+    mockStreamableHTTPTransport.connect.mockReset();
+    mockStreamableHTTPTransport.start.mockReset();
+    mockStreamableHTTPTransport.send.mockReset();
+    mockSSETransport.close.mockReset().mockResolvedValue(undefined);
+    mockSSETransport.connect.mockReset();
+    mockSSETransport.start.mockReset();
+    mockSSETransport.send.mockReset();
     mockGetEnvInt.mockReset();
     mockGetEnvInt.mockReturnValue(undefined);
     // Reset the OAuth token mock to return a valid token by default
@@ -782,6 +803,39 @@ describe('MCPClient', () => {
       expect(result).toEqual({
         content: '',
         error: 'Tool error',
+      });
+    });
+
+    it('should surface MCP tool error results', async () => {
+      // Reset mocks for this test
+      const errorContent = [{ type: 'text', text: 'Invalid arguments' }];
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({
+        content: errorContent,
+        isError: true,
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({
+        content: JSON.stringify(errorContent),
+        isError: true,
+        raw: {
+          content: errorContent,
+          isError: true,
+        },
       });
     });
 

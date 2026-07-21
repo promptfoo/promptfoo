@@ -349,6 +349,12 @@ describe('PluginsTab', () => {
     vi.clearAllMocks();
   });
 
+  test('labels the plugin search input', () => {
+    renderComponent();
+
+    expect(screen.getByRole('searchbox', { name: 'Search plugins' })).toBeInTheDocument();
+  });
+
   test('Component renders', () => {
     renderComponent();
 

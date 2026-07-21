@@ -54,12 +54,19 @@ describe('mathPrompt', () => {
       };
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse as any);
-      const result = await generateMathPrompt(mockTestCases as any, 'prompt', {});
+      const result = await generateMathPrompt(mockTestCases as any, 'prompt', {
+        targetId: 'cloud-target-123',
+      });
 
       expect(result).toEqual(mockResult);
       expect(mockProgressBar.start).toHaveBeenCalledWith(1, 0);
       expect(mockProgressBar.increment).toHaveBeenCalledWith(1);
       expect(mockProgressBar.stop).toHaveBeenCalledWith();
+      const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+      expect(requestBody).toBeTypeOf('string');
+      expect(JSON.parse(requestBody as string)).toMatchObject({
+        targetId: 'cloud-target-123',
+      });
     });
 
     it('should handle errors gracefully', async () => {
@@ -140,6 +147,34 @@ describe('mathPrompt', () => {
       });
 
       expect(result).toHaveLength(customConcepts.length);
+    });
+
+    it('routes locally loaded providers through the generation usage wrapper', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      const loadedProvider = createMockProvider({
+        id: 'loaded',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'untracked' }),
+        }),
+      });
+      const trackedProvider = createMockProvider({
+        id: 'tracked',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'tracked' }),
+        }),
+      });
+      const wrapGenerationProvider = vi.fn().mockReturnValue(trackedProvider);
+
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(loadedProvider);
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+        __wrapGenerationProvider: wrapGenerationProvider,
+      });
+
+      expect(wrapGenerationProvider).toHaveBeenCalledWith(loadedProvider);
+      expect(trackedProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(String(result[0]?.vars?.prompt)).toContain('tracked');
     });
 
     it('should validate mathConcepts config', async () => {

@@ -2,7 +2,7 @@ import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai
 
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback } from '../openai/types';
+import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -30,6 +30,8 @@ export interface AzureCompletionOptions {
   /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
   o1?: boolean;
   isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
+  /** Treat a custom-named deployment as Claude Opus 4.7 or 4.8 for sampling compatibility. */
+  isClaudeOpus47OrLater?: boolean;
   max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
   // Azure cognitive services params
@@ -68,7 +70,12 @@ export interface AzureCompletionOptions {
       parameters: any;
     };
   }[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tool_choice?:
+    | 'none'
+    | 'auto'
+    | 'required'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'function'; name: string };
   response_format?:
     | { type: 'json_object' }
     | {
@@ -87,7 +94,7 @@ export interface AzureCompletionOptions {
       };
   stop?: string[];
   seed?: number;
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: GPT5ReasoningEffort;
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -119,6 +126,20 @@ export interface AzureModelCost {
   cost: {
     input: number;
     output: number;
+    cacheRead?: number;
+    cacheReadAudio?: number;
+    cacheReadImage?: number;
+    audioInput?: number;
+    audioOutput?: number;
+    imageInput?: number;
+    imageOutput?: number;
+    priorityMultiplier?: number;
+    longContext?: {
+      threshold: number;
+      input: number;
+      output: number;
+      cacheRead?: number;
+    };
   };
 }
 
@@ -168,6 +189,39 @@ export interface AzureAssistantProviderOptions {
   id?: string;
   env?: EnvOverrides;
   /** Azure AI Project URL for Foundry agent provider */
+}
+
+// =============================================================================
+// Azure MAI Image Generation Types
+// =============================================================================
+
+/**
+ * Configuration options for Microsoft MAI image generation models served from
+ * the Foundry `/mai/v1/images/generations` route (e.g. `MAI-Image-2.5`).
+ *
+ * @see https://learn.microsoft.com/azure/foundry/foundry-models/how-to/use-foundry-models-mai
+ */
+export interface AzureImageOptions extends AzureCompletionOptions {
+  /**
+   * Output image width in pixels. Minimum 768; `width * height` must not exceed
+   * 1,048,576 (1024x1024). Defaults to 1024.
+   */
+  width?: number;
+  /**
+   * Output image height in pixels. Minimum 768; `width * height` must not exceed
+   * 1,048,576 (1024x1024). Defaults to 1024.
+   */
+  height?: number;
+  /**
+   * MAI model id used only for cost reporting (e.g. `MAI-Image-2.5`). Azure
+   * deployment names can't contain the dots in model ids, so set this when your
+   * deployment name differs from the model id. Defaults to the deployment name.
+   */
+  model?: string;
+  /**
+   * Override the request path. Defaults to `/mai/v1/images/generations`.
+   */
+  apiPath?: string;
 }
 
 // =============================================================================
@@ -271,13 +325,4 @@ export interface AzureVideoJob {
   width: number;
   inpaint_items: AzureVideoInpaintItem[] | null;
   failure_reason: string | null;
-}
-
-/**
- * Azure video provider options
- */
-export interface AzureVideoProviderOptions {
-  config?: AzureVideoOptions;
-  id?: string;
-  env?: EnvOverrides;
 }

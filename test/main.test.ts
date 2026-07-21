@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
+const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
@@ -34,7 +35,11 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: mockTelemetryRecord, shutdown: mockTelemetryShutdown },
+  default: {
+    initialize: mockTelemetryInitialize,
+    record: mockTelemetryRecord,
+    shutdown: mockTelemetryShutdown,
+  },
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -72,30 +77,35 @@ describe('setupEnvFilesFromArgv', () => {
   beforeEach(async () => {
     await loadMainModule();
     mockSetupEnv.mockReset();
+    mockTelemetryInitialize.mockReset();
   });
 
   it('should load env files before command actions run', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local', { refreshConfigDirectory: true });
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should support repeated and comma-separated env file args', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '.env.one', '--env-path=.env.two,.env.three']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three'], {
+      refreshConfigDirectory: true,
+    });
   });
 
   it('should ignore flags after --', () => {
     setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+    expect(mockTelemetryInitialize).toHaveBeenCalledOnce();
   });
 
   it('should recognize the --env-path alias', () => {
     setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
 
-    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging');
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging', { refreshConfigDirectory: true });
   });
 
   it('should be a no-op when no env flags are present', () => {
@@ -301,6 +311,33 @@ describe('addCommonOptionsRecursively', () => {
     preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
+  });
+
+  it('keeps structured code-scan output muted even when --verbose is present', () => {
+    const mockHookRegister = vi.fn();
+    (program as any).hook = mockHookRegister;
+
+    addCommonOptionsRecursively(program);
+
+    const preActionFn = mockHookRegister.mock.calls[0][1];
+    const originalArgv = process.argv;
+
+    process.argv = ['node', 'promptfoo', 'code-scans', 'run', '.', '--json', '--verbose'];
+
+    try {
+      preActionFn({
+        opts: () => ({ verbose: true }),
+        name: () => 'run',
+        parent: {
+          name: () => 'code-scans',
+          parent: null,
+        },
+      });
+    } finally {
+      process.argv = originalArgv;
+    }
+
+    expect(mockSetLogLevel).not.toHaveBeenCalledWith('debug');
   });
 
   it('should parse --env-file without consuming positional subcommand arguments', async () => {

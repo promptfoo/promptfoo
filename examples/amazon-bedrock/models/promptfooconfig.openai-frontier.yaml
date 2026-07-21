@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenAI GPT-5.6 Sol, Terra, and Luna via Amazon Bedrock'
+
+# Frontier models are served through Bedrock's OpenAI-compatible Responses API and
+# authenticate with an Amazon Bedrock API key. Export it before running (promptfoo reads it
+# automatically — no apiKey field needed):
+#   export AWS_BEARER_TOKEN_BEDROCK="..."
+
+prompts:
+  - |
+    [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Answer the user's question concisely and accurately.",
+            "prompt_cache_breakpoint": { "mode": "explicit" }
+          }
+        ]
+      },
+      { "role": "user", "content": [{ "type": "input_text", "text": "{{question}}" }] }
+    ]
+
+providers:
+  # Sol is available in us-east-1 and us-east-2. Promptfoo routes the bare Bedrock ID to
+  # https://bedrock-mantle.<region>.api.aws/openai/v1/responses.
+  - id: bedrock:openai.gpt-5.6-sol
+    label: GPT-5.6 Sol (max reasoning)
+    config:
+      region: us-east-2
+      reasoning_effort: max
+      verbosity: low
+      max_output_tokens: 2048
+      store: false
+      prompt_cache_key: bedrock-frontier-example-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+  # Terra is available in us-east-1, us-east-2, and us-west-2.
+  - id: bedrock:openai.gpt-5.6-terra
+    label: GPT-5.6 Terra (medium reasoning)
+    config:
+      region: us-west-2
+      reasoning_effort: medium
+      max_output_tokens: 1024
+      store: false
+      prompt_cache_key: bedrock-frontier-example-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+  # Luna is available in us-east-1, us-east-2, and us-west-2.
+  - id: bedrock:openai.gpt-5.6-luna
+    label: GPT-5.6 Luna (low reasoning, streaming)
+    config:
+      region: us-east-1
+      reasoning_effort: low
+      max_output_tokens: 1024
+      store: false
+      stream: true
+      prompt_cache_key: bedrock-frontier-example-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+
+tests:
+  - vars:
+      question: What is the capital of France? Reply with only the city name.
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      question: 'If a train travels 120 miles in 2 hours, what is its average speed in mph? Reply with just the number and unit.'
+    assert:
+      - type: contains
+        value: '60'
+      - type: icontains-any
+        value: ['mph', 'miles per hour']
+  - vars:
+      question: 'Explain the concept of machine learning in two sentences.'
+    assert:
+      # Deterministic assertions keep this example runnable with only a Bedrock API key.
+      # (A model-graded assertion like `llm-rubric` would require a separate grader provider
+      # with its own credentials — see https://promptfoo.dev/docs/configuration/expected-outputs/model-graded/)
+      - type: icontains-any
+        value: ['data', 'model', 'train', 'learn', 'pattern']

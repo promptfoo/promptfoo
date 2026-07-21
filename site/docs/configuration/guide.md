@@ -166,7 +166,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-cases#csv-format), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-cases#csv-format), and TypeScript/JavaScript. Promptfoo also supports external datasets from [Google Sheets](/docs/integrations/google-sheets) and [Azure Blob Storage](/docs/configuration/test-cases#azure-blob-storage).
 :::
 
 ## Import vars from separate files
@@ -899,3 +899,12 @@ tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsK
 Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-sheets).
 
 See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.
+
+Promptfoo can also load test sets from Azure Blob Storage:
+
+```yaml
+// highlight-next-line
+tests: az://myaccount/evals/tests.json
+```
+
+See [Azure Blob Storage test sets](/docs/configuration/test-cases#azure-blob-storage) for supported file types and authentication options.

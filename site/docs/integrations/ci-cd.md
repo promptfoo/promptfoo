@@ -66,6 +66,20 @@ npx promptfoo@latest redteam run
 
 See our [red team quickstart](/docs/red-team/quickstart) for security testing details.
 
+#### Attach CI/CD Context with Tags
+
+Use repeatable `--tag key=value` flags to attach pipeline context to an evaluation
+without modifying `promptfooconfig.yaml` or a red team scan template. Tags are saved
+with the eval and included when results are shared.
+
+```bash
+npx promptfoo@latest eval --tag ci.run-id="$CI_PIPELINE_ID" --tag git.sha="$CI_COMMIT_SHA"
+npx promptfoo@latest redteam run --tag ci.run-id="$CI_PIPELINE_ID" --tag git.sha="$CI_COMMIT_SHA"
+```
+
+`promptfoo redteam eval` accepts the same `--tag` option when running previously
+generated probes from `redteam.yaml`.
+
 ### 2. Output Formats
 
 Promptfoo supports multiple output formats for different CI/CD needs:
@@ -203,7 +217,7 @@ See also: [Standalone GitHub Action example](https://github.com/promptfoo/prompt
 See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 
 ```yaml title=".gitlab-ci.yml"
-image: node:20
+image: node:24
 
 evaluate:
   script:
@@ -286,7 +300,7 @@ pipeline {
 Create a custom Docker image with promptfoo pre-installed:
 
 ```dockerfile title="Dockerfile"
-FROM node:20-slim
+FROM node:24-slim
 WORKDIR /app
 COPY . .
 CMD ["npx", "promptfoo@latest", "eval"]
@@ -300,7 +314,7 @@ Test multiple models or configurations in parallel:
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-4, gpt-3.5-turbo, claude-3-opus]
+    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
 steps:
   - name: Test ${{ matrix.model }}
     run: |
@@ -327,7 +341,7 @@ jobs:
         run: |
           npx promptfoo@latest redteam generate \
             --plugins harmful,pii,contracts \
-            --strategies jailbreak,prompt-injection
+            --strategies jailbreak,jailbreak-templates
           npx promptfoo@latest redteam run
 ```
 
@@ -372,43 +386,53 @@ The output JSON follows this schema:
 
 ```typescript
 interface OutputFile {
-  evalId?: string;
+  evalId: string | null;
   results: {
+    version: 3;
+    timestamp: string;
     stats: {
       successes: number;
       failures: number;
       errors: number;
     };
-    outputs: Array<{
-      pass: boolean;
+    prompts: Array<unknown>;
+    results: Array<{
+      success: boolean;
       score: number;
       error?: string;
       // ... other fields
     }>;
   };
-  config: UnifiedConfig;
+  config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 ```
+
+`promptfoo eval -o results.json` and `promptfoo export eval <evalId>` use the
+same eval output envelope. Portable exports created with
+`promptfoo export eval <evalId> --include-media` may add embedded `blobAssets`.
 
 Example processing script:
 
 ```javascript title="process-results.js"
 const fs = require('fs');
-const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+const evalOutput = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+const { stats, results: evalResults } = evalOutput.results;
 
 // Calculate metrics
-const passRate =
-  (results.results.stats.successes /
-    (results.results.stats.successes + results.results.stats.failures)) *
-  100;
+const passRate = (stats.successes / (stats.successes + stats.failures)) * 100;
 
 console.log(`Pass rate: ${passRate.toFixed(2)}%`);
-console.log(`Shareable URL: ${results.shareableUrl}`);
+console.log(`Shareable URL: ${evalOutput.shareableUrl}`);
 
 // Check for specific failures
-const criticalFailures = results.results.outputs.filter(
-  (o) => o.error?.includes('security') || o.error?.includes('injection'),
+const criticalFailures = evalResults.filter(
+  (result) => result.error?.includes('security') || result.error?.includes('injection'),
 );
 
 if (criticalFailures.length > 0) {
@@ -436,7 +460,8 @@ gh pr comment --body "
 
 ## Caching Strategies
 
-Optimize CI/CD performance with proper caching [[memory:3455374]]:
+<!-- prettier-ignore -->
+Optimize CI/CD performance with proper caching:
 
 ```yaml
 # Set cache location

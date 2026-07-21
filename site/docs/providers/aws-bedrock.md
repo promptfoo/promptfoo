@@ -34,7 +34,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-opus-4-7-v1:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-6
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -43,7 +43,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
 
    ```yaml
    providers:
-     - id: bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0
+     - id: bedrock:us.anthropic.claude-sonnet-4-6
        config:
          accessKeyId: YOUR_ACCESS_KEY_ID
          secretAccessKey: YOUR_SECRET_ACCESS_KEY
@@ -89,8 +89,14 @@ The `inferenceModelType` config option supports the following values:
 - `ai21` - For AI21 models
 - `titan` - For Amazon Titan models
 - `deepseek` - For DeepSeek models
-- `openai` - For OpenAI models
+- `openai` - For OpenAI open-weight (gpt-oss) models
 - `qwen` - For Alibaba Qwen models
+- `zai` - For Z.AI GLM models
+- `minimax` - For MiniMax models
+- `moonshot` - For Moonshot Kimi models
+- `nvidia` - For NVIDIA Nemotron models
+- `writer` - For Writer Palmyra models
+- `gemma` - For Google Gemma models
 
 ### Example: Multi-Region Inference Profile
 
@@ -178,6 +184,7 @@ The `thinking` configuration controls Claude's reasoning behavior:
 
 - `type: enabled` - Activates extended thinking
 - `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
+- For Claude Opus 4.7 and 4.8, promptfoo converts `type: enabled` to adaptive thinking because manual thinking is not accepted by those models.
 
 Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
 
@@ -187,19 +194,19 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 
 ### Configuration Options
 
-| Option                | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `maxTokens`           | Maximum output tokens                           |
-| `temperature`         | Sampling temperature (0-1)                      |
-| `topP`                | Nucleus sampling parameter                      |
-| `stopSequences`       | Array of stop sequences                         |
-| `thinking`            | Extended thinking configuration (Claude models) |
-| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
-| `showThinking`        | Include thinking in output (default: false)     |
-| `performanceConfig`   | Performance settings (`latency: optimized`)     |
-| `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
-| `guardrailIdentifier` | Guardrail ID for content filtering              |
-| `guardrailVersion`    | Guardrail version (default: DRAFT)              |
+| Option                | Description                                               |
+| --------------------- | --------------------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                                     |
+| `temperature`         | Sampling temperature (0-1)                                |
+| `topP`                | Nucleus sampling parameter                                |
+| `stopSequences`       | Array of stop sequences                                   |
+| `thinking`            | Extended thinking configuration (Claude models)           |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)            |
+| `showThinking`        | Include thinking in output (default: true)                |
+| `performanceConfig`   | Performance settings (`latency: optimized`)               |
+| `serviceTier`         | Service tier object (`type: priority \| default \| flex`) |
+| `guardrailIdentifier` | Guardrail ID for content filtering                        |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)                        |
 
 ### Performance Configuration
 
@@ -447,7 +454,7 @@ export AWS_DEFAULT_REGION="us-east-1"
 
 ## Example
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, and Titan model usage.
+See [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock) for full examples of Claude, Nova, AI21, Llama 3.3, Grok, Mantle Chat Completions, and OpenAI-compatible Bedrock model usage.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -504,11 +511,17 @@ providers:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
-  - id: bedrock:us.anthropic.claude-3-opus-20240229-v1:0
+  - id: bedrock:us.anthropic.claude-opus-4-8
     config:
       region: 'us-east-1'
       temperature: 0.7
       max_tokens: 256
+  - id: bedrock:openai.gpt-5.6-sol # frontier: Responses API, needs a Bedrock API key
+    config:
+      region: 'us-east-2'
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+      reasoning_effort: 'medium'
+      max_output_tokens: 256
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
       region: 'us-west-2'
@@ -548,7 +561,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `nova2`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. See [Supported Model Types](#supported-model-types) for the full list of values.
 
 ### Amazon Nova Models
 
@@ -802,9 +815,49 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.7 (`anthropic.claude-opus-4-7`) is available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions (US East/N. Virginia, Europe/Ireland, Europe/Stockholm, Asia Pacific/Tokyo). Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, and Sonnet 5.
+
+**Note**: Claude Sonnet 5 (`anthropic.claude-sonnet-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-sonnet-5`); use the `global.` profile for dynamic routing. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $3/$15 rate and regional/geo profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
+
+#### Claude Fable and Mythos models
+
+[Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
+supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
+inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID
+returns a `ValidationException`, and the `us.`/`eu.` geo profiles listed on the
+model card may not be provisioned in every region. Fable 5 also supports
+Bedrock's Anthropic-compatible Messages endpoint through the explicit
+`bedrock:messages:anthropic.claude-fable-5` provider ID in `us-east-1` and
+`eu-north-1` (this route may additionally require account enablement from AWS).
+
+[Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
+is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.
+Promptfoo routes the bare `bedrock:anthropic.claude-mythos-5` ID to that endpoint.
+Set a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK` or `config.apiKey`:
+
+```yaml
+providers:
+  - id: bedrock:anthropic.claude-mythos-5
+    config:
+      region: us-east-1
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
+```
+
+AWS requires provider data sharing to be enabled for Fable 5 and Mythos 5 — without
+it every request fails with `data retention mode 'default' is not available for this
+model`. Opt in per region via the Data Retention API:
+
+```bash
+aws bedrock put-account-data-retention --mode provider_data_share --region us-east-1
+```
+
+Both models use always-on adaptive thinking, so promptfoo omits sampling controls,
+converts manual thinking budgets (`thinking: { type: 'enabled', budget_tokens: N }`)
+to adaptive thinking, and omits `thinking: { type: 'disabled' }`. Regional and geo
+endpoints cost 10% more than the global endpoint; Promptfoo applies that premium when
+calculating costs.
 
 ```yaml
 config:
@@ -841,7 +894,15 @@ This is useful when you want to use thinking for better reasoning but don't want
 
 ### Titan Models
 
-For Titan models (e.g., `amazon.titan-text-express-v1`), you can use the following configuration options:
+:::warning Retired
+
+Amazon **Titan text** models (`amazon.titan-text-express/lite/premier`) have been retired on
+Bedrock and are no longer available in any Region. Use [Amazon Nova](#amazon-nova-models)
+instead. Titan **embeddings** models remain available (see [Embeddings](#embeddings)).
+
+:::
+
+For the (legacy) Titan text models, you can use the following configuration options:
 
 ```yaml
 config:
@@ -919,7 +980,7 @@ The Converse API uses the same prompt format shown above for [Nova Vision](#nova
 
 ### Cohere Models
 
-For Cohere models (e.g., `cohere.command-text-v14`), you can use the following configuration options:
+For Cohere models (e.g., `cohere.command-r-v1:0`), you can use the following configuration options:
 
 ```yaml
 config:
@@ -972,58 +1033,211 @@ requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-OpenAI models on Bedrock use OpenAI-style request parameters. Available model IDs
-include:
+Amazon Bedrock hosts two families of OpenAI models, and they are served by **different
+APIs**. promptfoo routes each `bedrock:openai.*` id to the correct one automatically.
+
+#### Frontier models (GPT-5.x)
+
+- **`openai.gpt-5.6-sol`**: Flagship reasoning tier (`us-east-1`, `us-east-2`)
+- **`openai.gpt-5.6-terra`**: Balanced tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.6-luna`**: Fast, cost-efficient tier (`us-east-1`, `us-east-2`, `us-west-2`)
+- **`openai.gpt-5.5`**: Earlier flagship frontier model (`us-east-1`, `us-east-2`)
+- **`openai.gpt-5.4`**: Earlier frontier model (`us-east-1`, `us-east-2`, `us-west-2`)
+
+The frontier models are served only through Bedrock's **OpenAI-compatible Responses API**
+on the regional mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`) —
+not the native `InvokeModel` or `Converse` APIs. Promptfoo routes the bare
+`bedrock:openai.gpt-5.x` IDs to its OpenAI Responses provider, preserves the Bedrock request
+model ID, and returns the clean final answer. `us-east-2` is the default when no Region is
+configured; GPT-5.6 region availability is checked before a request is made.
+
+Authentication uses an **Amazon Bedrock API key**, not the AWS SDK credential chain. Set
+`AWS_BEARER_TOKEN_BEDROCK` (or `config.apiKey`):
+
+```yaml
+providers:
+  - id: bedrock:openai.gpt-5.6-sol
+    config:
+      region: us-east-2
+      reasoning_effort: max
+      verbosity: low
+      max_output_tokens: 2048
+      store: false
+
+  - id: bedrock:openai.gpt-5.6-terra
+    config:
+      region: us-west-2
+      reasoning_effort: medium
+      store: false
+      prompt_cache_key: support-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+
+  - id: bedrock:openai.gpt-5.6-luna
+    config:
+      region: us-east-1
+      reasoning_effort: low
+      store: false
+```
+
+Prefer the `bedrock:openai.gpt-5.6-sol` form above. It wraps the OpenAI Responses provider,
+points it at the mantle endpoint, and normalizes the `openai.`-prefixed id for GPT-5
+capability detection (reasoning effort, verbosity) and billing. Using
+`openai:responses:openai.gpt-5.6-sol` directly is **not** equivalent — the base provider does
+not recognize the `openai.` prefix as a GPT-5 model, so reasoning/verbosity controls would
+be dropped. An explicit `config.apiBaseUrl` can target a proxy or local Responses fixture;
+it takes precedence over ambient `OPENAI_API_HOST`/`OPENAI_BASE_URL`, preventing an unrelated
+OpenAI endpoint from receiving a Bedrock bearer token.
+
+The Responses API stores conversation state by default. Set `store: false` on every request
+when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
+days in the source Region and allows follow-up requests with `previous_response_id`.
+
+GPT-5.6 pricing on Bedrock matches first-party OpenAI rates: Sol is $5 input / $30 output,
+Terra $2.50 / $15, and Luna $1 / $6 per million tokens. Cache reads receive a 90% discount,
+cache writes cost 1.25x the uncached input rate, and cached prefixes remain available for at
+least 30 minutes. Place `prompt_cache_breakpoint: { mode: explicit }` on a stable
+`input_text`, `input_image`, or `input_file` content block and set a stable
+`prompt_cache_key` when using explicit caching. Promptfoo records returned cache-read and
+cache-write usage and leaves GPT-5.6 `cost` unset when cache-write usage is missing instead
+of underestimating cost. Requests above 272,000 input tokens use 2x input and 1.5x output
+pricing for the full request. Do not assume first-party Flex, Priority, or regional-processing
+options are available on Bedrock; use the service behavior documented for the selected model.
+
+#### Open-weight models (GPT OSS)
 
 - **`openai.gpt-oss-120b-1:0`**: 120 billion parameter general-purpose model
 - **`openai.gpt-oss-20b-1:0`**: 20 billion parameter general-purpose model
 - **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
 - **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
 
-```yaml
-config:
-  max_completion_tokens: 1024 # Maximum tokens for response (OpenAI-style parameter)
-  temperature: 0.7 # Controls randomness (0.0 to 1.0)
-  top_p: 0.9 # Nucleus sampling parameter
-  frequency_penalty: 0.1 # Reduces repetition of frequent tokens
-  presence_penalty: 0.1 # Reduces repetition of any tokens
-  stop: ['END', 'STOP'] # Stop sequences
-  reasoning_effort: 'medium' # Controls reasoning depth: 'low', 'medium', 'high'
-```
-
-#### Reasoning Effort
-
-General-purpose GPT OSS models support adjustable reasoning effort through the `reasoning_effort` parameter:
-
-- **`low`**: Faster responses with basic reasoning
-- **`medium`**: Balanced performance and reasoning depth
-- **`high`**: Thorough reasoning, slower but more accurate responses
-
-The reasoning effort is implemented via system prompt instructions, allowing the model to adjust its cognitive processing depth.
-
-#### Usage Example
+The open-weight models are served through Bedrock's native `InvokeModel` API and use the
+standard AWS SDK credential chain, with OpenAI-style request parameters:
 
 ```yaml
 providers:
   - id: bedrock:openai.gpt-oss-120b-1:0
     config:
-      region: 'us-west-2'
-      max_completion_tokens: 2048
-      temperature: 0.3
-      top_p: 0.95
-      reasoning_effort: 'high'
-  - id: bedrock:openai.gpt-oss-20b-1:0
+      region: us-west-2
+      max_completion_tokens: 1024 # OpenAI-style parameter (not max_tokens)
+      temperature: 0.7
+      top_p: 0.9
+      frequency_penalty: 0.1
+      presence_penalty: 0.1
+      stop: ['END', 'STOP']
+      reasoning_effort: medium # low | medium | high
+      showThinking: false # strip the <reasoning> block from output (see below)
+```
+
+#### Reasoning Effort
+
+Both families accept the `reasoning_effort` provider option. Promptfoo forwards it as the
+native request field for GPT OSS and as `reasoning.effort` for the Responses API, allowing the
+selected model to validate the value:
+
+- **GPT OSS** (`openai.gpt-oss-*`): `low`, `medium`, `high`
+- **GPT-5.6 frontier**: `none`, `low`, `medium`, `high`, `xhigh`, `max`
+- **GPT-5.5 / GPT-5.4 frontier**: `none`, `low`, `medium`, `high`, `xhigh`
+
+Note that `minimal` is **not** a valid value for these Bedrock models (the API rejects it).
+Higher effort produces more thorough reasoning at the cost of latency and output tokens.
+
+#### Reasoning Output and `showThinking` (GPT OSS only)
+
+When invoked through `InvokeModel`, the open-weight models prepend their chain-of-thought
+wrapped in `<reasoning>...</reasoning>` before the final answer. This differs from OpenAI's
+first-party API, which hides chain-of-thought.
+
+By default promptfoo returns this output **verbatim**, so the reasoning stays visible to your
+assertions and red-team graders — an eval framework should not hide model-returned content by
+default. Use `showThinking` to transform it:
+
+- **`showThinking: false`** — strip the reasoning block so `output` is the clean final answer,
+  matching the [`openai:` providers](/docs/providers/openai/) (which hide chain-of-thought).
+- **`showThinking: true`** — surface the reasoning in the `Thinking: <reasoning>\n\n<answer>`
+  format the OpenAI chat provider uses.
+
+The frontier models return clean output already, so this option does not apply to them.
+
+:::note Codex on Bedrock
+
+OpenAI's [Codex](https://developers.openai.com/codex/) coding agent uses these same
+frontier model IDs (`openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, `openai.gpt-5.6-luna`,
+`openai.gpt-5.5`, `openai.gpt-5.4`). To run the full coding agent
+against Bedrock, use `openai:codex-sdk` with `model_provider: amazon-bedrock` — see
+[Run on Amazon Bedrock](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock)
+in the Codex SDK docs. For direct (non-agentic) inference, use `bedrock:openai.gpt-5.6-sol`
+as shown above.
+
+:::
+
+### xAI Grok Models
+
+xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine as the OpenAI
+frontier models and is served through the **OpenAI-compatible Responses API** on the regional
+mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
+`Converse`. It is offered in **`us-west-2`** (check the Bedrock model card for current regional
+availability) and authenticates with an **Amazon Bedrock API key** (set
+`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
+
+```yaml
+providers:
+  - id: bedrock:xai.grok-4.3
     config:
-      region: 'us-west-2'
-      max_completion_tokens: 1024
-      temperature: 0.5
-      reasoning_effort: 'medium'
-      stop: ['END', 'FINAL']
+      region: us-west-2 # Grok 4.3 is only available in us-west-2
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
+      reasoning_effort: low # Grok is reasoning-first: none | low | medium | high
+      max_output_tokens: 4096
 ```
 
 :::note
 
-OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bedrock models. This aligns with OpenAI's API specification and allows for more precise control over response length.
+- Grok 4.3 is **reasoning-first**: reasoning is always active and the effort is configurable
+  (`none` | `low` | `medium` | `high`). promptfoo forwards `reasoning_effort` (or
+  `reasoning: { effort }`) and surfaces reasoning token counts in `tokenUsage`.
+- Grok accepts an explicit `temperature`. When you omit it, promptfoo does not inject the OpenAI
+  provider default, so Bedrock uses Grok's model default instead.
+- **Cost is not reported** for Grok (`cost` is left undefined). The Responses
+  billing tables are keyed on OpenAI model names; refer to the
+  [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for Grok rates.
+
+:::
+
+### Mantle Chat Completions (`bedrock:mantle:`) {#mantle-chat-completions}
+
+The Bedrock **Mantle** engine also exposes an OpenAI-compatible **Chat Completions** API. Most
+mantle chat models use `https://bedrock-mantle.<region>.api.aws/v1/chat/completions`; xAI and
+Gemma 4 chat models use the `/openai/v1/chat/completions` variant. Use the
+**`bedrock:mantle:<id>`** prefix to talk to it. This is the only way to reach mantle-served chat models that the native
+`InvokeModel`/`Converse` APIs don't serve — so they don't appear in
+`aws bedrock list-foundation-models` — for example `zai.glm-4.6`, `deepseek.v3.1`,
+`google.gemma-4-*`, and the mantle-namespaced Qwen `*-instruct` IDs.
+
+Like the other mantle paths, it authenticates with an **Amazon Bedrock API key**
+(`AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`):
+
+```yaml
+providers:
+  - id: bedrock:mantle:zai.glm-4.6
+    config:
+      region: us-west-2
+      apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
+      max_tokens: 1024
+```
+
+:::note
+
+- **The mantle catalog is regional.** List the models available in a Region with
+  `GET https://bedrock-mantle.<region>.api.aws/v1/models`, and set `region` accordingly —
+  the default is `us-east-1`.
+- Use the bare `bedrock:openai.gpt-5.6-sol` / `bedrock:xai.grok-4.3` forms (above) for the OpenAI
+  frontier and Grok models: those go through the **Responses API** and surface reasoning
+  tokens. `bedrock:mantle:` is the **Chat Completions** path for mantle chat models such as
+  `zai.glm-4.6`, `deepseek.v3.1`, `google.gemma-4-*`, and supported xAI chat ids.
+- Models that the native APIs do serve (Claude, Nova, Llama, Qwen, the
+  [OpenAI-compatible families](#openai-compatible-models) above, etc.) are usually better
+  reached via `bedrock:<id>` or `bedrock:converse:<id>`.
 
 :::
 
@@ -1118,9 +1332,65 @@ providers:
       tool_choice: auto
 ```
 
+### OpenAI-compatible Models (GLM, MiniMax, Kimi, Nemotron, Gemma, Palmyra) {#openai-compatible-models}
+
+Several Bedrock families speak the OpenAI Chat Completions schema over `InvokeModel`
+(`{ messages, max_tokens, ... }` → `{ choices: [{ message: { content } }] }`), so they share
+one handler and the same configuration options. They also work through the [Converse API](#converse-api)
+(`bedrock:converse:<id>`).
+
+| Family          | Example model IDs                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Z.AI GLM        | `zai.glm-5`, `zai.glm-4.7`, `zai.glm-4.7-flash`                                                                           |
+| MiniMax         | `minimax.minimax-m2`, `minimax.minimax-m2.1`, `minimax.minimax-m2.5`                                                      |
+| Moonshot Kimi   | `moonshotai.kimi-k2.5`, `moonshot.kimi-k2-thinking`                                                                       |
+| NVIDIA Nemotron | `nvidia.nemotron-nano-9b-v2`, `nvidia.nemotron-nano-12b-v2`, `nvidia.nemotron-nano-3-30b`, `nvidia.nemotron-super-3-120b` |
+| Google Gemma 3  | `google.gemma-3-4b-it`, `google.gemma-3-12b-it`, `google.gemma-3-27b-it`                                                  |
+| Writer Palmyra  | `us.writer.palmyra-x5-v1:0`, `us.writer.palmyra-x4-v1:0`, `writer.palmyra-vision-7b`                                      |
+
+```yaml
+providers:
+  - id: bedrock:zai.glm-5
+    config:
+      region: us-east-1
+      max_tokens: 1024 # Maximum number of tokens to generate
+      temperature: 0.7 # Optional — omit to use the model's own default
+      top_p: 0.9 # Optional nucleus sampling
+      stop: ['END'] # Optional stop sequences
+      reasoning_effort: high # Optional, reasoning models only ('low' | 'medium' | 'high')
+      showThinking: false # Strip <think>/<reasoning> blocks from the output (default: keep)
+      tools: [...] # Optional OpenAI-format tool definitions
+      tool_choice: 'auto' # Optional tool selection strategy
+```
+
+:::note
+
+- **Writer Palmyra** is served for on-demand throughput only through its `us.` inference
+  profile (`bedrock:us.writer.palmyra-x5-v1:0`); the bare `writer.palmyra-x*` IDs reject
+  on-demand `InvokeModel`.
+- **Reasoning models** (MiniMax M2, Kimi K2 Thinking) emit a `<think>` or `<reasoning>`
+  block. By default it is returned verbatim; set `showThinking: false` to return only the
+  final answer. Give reasoning models a larger `max_tokens` budget so the answer is not
+  truncated by the reasoning.
+- **NVIDIA Nemotron** reasons in-line without tags, so `showThinking` cannot strip it.
+  Disable its reasoning with NVIDIA's `/no_think` system directive instead (add a
+  `system` message of `/no_think` to your prompt) for a direct answer.
+- This handler does not force a `temperature`/`top_p` default, so each model uses its
+  provider-recommended sampling unless you set them explicitly.
+
+:::
+
+**Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home)
+or AWS model cards to confirm which of these models are enabled in your target region. Use
+`aws bedrock list-foundation-models` for direct foundation model IDs and
+`aws bedrock list-inference-profiles` for inference profiles such as Writer Palmyra's `us.`
+route — availability varies by model and region. TwelveLabs Pegasus
+(`twelvelabs.pegasus-1-2-v1:0`, video understanding) is also available through the Converse
+API, and TwelveLabs Marengo (`twelvelabs.marengo-embed-*`) is an [embeddings](#embeddings) model.
+
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use an OpenAI grader and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
 You can use either regular model IDs or application inference profiles for grading:
 
@@ -1244,9 +1514,9 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 ]
 ```
 
-See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+See [GitHub](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
-When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
+When loading image files as variables, promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 
 - jpg/jpeg
 - png
@@ -1334,6 +1604,13 @@ Error: Unable to locate credentials. You can configure credentials by running "a
 2. **Model access**: Enable model access in the AWS Bedrock console
 3. **Region mismatch**: Verify the region in your config matches where you enabled model access
 
+#### "Your subscription to the model is being set up" (HTTP 401)
+
+The first request an account makes to a mantle-served model (OpenAI frontier, Grok,
+`bedrock:mantle:` ids) can trigger an automatic AWS Marketplace subscription. While it
+provisions, the endpoint returns HTTP 401 with this message and promptfoo aborts the run.
+Provisioning typically completes within a minute or two — re-run the eval once it does.
+
 #### SSO-Specific Issues
 
 **"SSO session has expired":**
@@ -1365,7 +1642,7 @@ This will show detailed AWS SDK logs including credential resolution.
 If you see this error when using an inference profile ARN:
 
 ```text
-Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen
+Error: Inference profile requires inferenceModelType to be specified in config. Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen, zai, minimax, moonshot, nvidia, writer, gemma
 ```
 
 This means you're using an application inference profile ARN but haven't specified which model family it's configured for. Add the `inferenceModelType` to your configuration:
@@ -1508,11 +1785,11 @@ tests:
 
 ### Citations
 
-The Knowledge Base provider returns both the generated response and citations from the source documents. These citations are included in the evaluation results and can be used to verify the accuracy of the responses.
+The Knowledge Base provider returns both the generated response and citations from the source documents. These citations are included in the eval results and can be used to verify the accuracy of the responses.
 
 :::info
 
-When viewing evaluation results in the UI, citations appear in a separate section within the details view of each response. You can click on the source links to visit the original documents or copy citation content for reference.
+When viewing eval results in the UI, citations appear in a separate section within the details view of each response. You can click on the source links to visit the original documents or copy citation content for reference.
 
 :::
 
@@ -1568,7 +1845,7 @@ Quick example:
 
 ```yaml
 providers:
-  - bedrock-agent:YOUR_AGENT_ID
+  - id: bedrock-agent:YOUR_AGENT_ID
     config:
       agentAliasId: PROD_ALIAS
       region: us-east-1

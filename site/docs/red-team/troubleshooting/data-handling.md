@@ -28,6 +28,7 @@ Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses host
 
 - Application purpose (from your config's `purpose` field)
 - Plugin configuration and settings
+- Complete document contents and the requested goal when using `promptfoo redteam poison` — this command always uses hosted generation, even when your own API key is configured
 - Red team target/provider setup details, including request examples, target URLs, and auth headers entered into setup or test forms
 - Your email (for usage tracking)
 
@@ -78,7 +79,7 @@ Remote-only plugins include:
 - Security plugins: `ssrf`, `bola`, `bfla`, `indirect-prompt-injection`, `ascii-smuggling`
 - Others: `competitors`, `hijacking`, `off-topic`, `system-prompt-override`
 
-Remote-only strategies include: `audio`, `citation`, `gcg`, `goat`, `jailbreak:composite`, `jailbreak:hydra`, `jailbreak:likert`, `jailbreak:meta`
+Remote-only strategies include: `audio`, `citation`, `gcg`, `goat`, `jailbreak:composite`, `jailbreak:goblin`, `jailbreak:hydra`, `jailbreak:likert`, `jailbreak:meta`
 
 ## Disabling Remote Generation
 

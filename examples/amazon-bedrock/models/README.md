@@ -38,12 +38,15 @@ This directory contains several example configurations for different Bedrock mod
 
 - [`promptfooconfig.claude.yaml`](promptfooconfig.claude.yaml) - Claude 4.6 Opus, Claude 4.1 Opus, Claude 4 Opus/Sonnet, Claude Haiku 4.5
 - [`promptfooconfig.openai.yaml`](promptfooconfig.openai.yaml) - OpenAI GPT-OSS models (120B and 20B) with reasoning effort
+- [`promptfooconfig.openai-frontier.yaml`](promptfooconfig.openai-frontier.yaml) - OpenAI GPT-5.6 Sol, Terra, and Luna with reasoning, explicit prompt caching, and streaming
+- [`promptfooconfig.grok.yaml`](promptfooconfig.grok.yaml) - xAI Grok 4.3 on the Bedrock Mantle endpoint (requires `AWS_BEARER_TOKEN_BEDROCK`)
+- [`promptfooconfig.mantle.yaml`](promptfooconfig.mantle.yaml) - `bedrock:mantle:` Chat Completions endpoint for mantle-only models like GLM 4.6 and DeepSeek V3.1 (requires `AWS_BEARER_TOKEN_BEDROCK`)
 - [`promptfooconfig.llama.yaml`](promptfooconfig.llama.yaml) - Llama3
 - [`promptfooconfig.mistral.yaml`](promptfooconfig.mistral.yaml) - Mistral
+- [`promptfooconfig.openai-compatible.yaml`](promptfooconfig.openai-compatible.yaml) - OpenAI-compatible families: Z.AI GLM, MiniMax, Moonshot Kimi, NVIDIA Nemotron, Google Gemma, Writer Palmyra
 - [`promptfooconfig.nova.yaml`](promptfooconfig.nova.yaml) - Amazon's Nova models
 - [`promptfooconfig.nova.tool.yaml`](promptfooconfig.nova.tool.yaml) - Nova with tool usage examples
 - [`promptfooconfig.nova.multimodal.yaml`](promptfooconfig.nova.multimodal.yaml) - Nova with multimodal capabilities
-- [`promptfooconfig.titan-text.yaml`](promptfooconfig.titan-text.yaml) - Titan text generation examples
 - [`promptfooconfig.kb.yaml`](promptfooconfig.kb.yaml) - Knowledge Base RAG example with citations and contextTransform
 - [`promptfooconfig.inference-profiles.yaml`](promptfooconfig.inference-profiles.yaml) - Comprehensive Application Inference Profiles example with multiple model types
 - [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
@@ -193,6 +196,12 @@ providers:
 - `titan` - Amazon Titan models
 - `deepseek` - DeepSeek models (with thinking capability)
 - `openai` - OpenAI GPT-OSS models
+- `zai` - Z.AI GLM models
+- `minimax` - MiniMax models
+- `moonshot` - Moonshot Kimi models
+- `nvidia` - NVIDIA Nemotron models
+- `writer` - Writer Palmyra models
+- `gemma` - Google Gemma models
 
 ### Running the Examples
 
@@ -239,6 +248,35 @@ Run the OpenAI example with:
 
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai.yaml
+```
+
+## OpenAI Frontier Models Example
+
+The frontier example (`promptfooconfig.openai-frontier.yaml`) demonstrates OpenAI's GPT-5.x frontier models on Bedrock:
+
+- **openai.gpt-5.6-sol** - Flagship reasoning tier (available in `us-east-1` and `us-east-2`)
+- **openai.gpt-5.6-terra** - Balanced tier (available in `us-east-1`, `us-east-2`, and `us-west-2`)
+- **openai.gpt-5.6-luna** - Fast, cost-efficient tier (available in `us-east-1`, `us-east-2`, and `us-west-2`)
+
+### Key Features
+
+- **Responses API**: Frontier models are served through Bedrock's OpenAI-compatible Responses API (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), not `InvokeModel` or `Converse`. Promptfoo routes `bedrock:openai.gpt-5.x` there automatically and preserves the Bedrock model ID.
+- **Bedrock API key auth**: Unlike the gpt-oss models (AWS SDK credentials), the frontier models authenticate with an Amazon Bedrock API key. Export it first:
+
+  ```bash
+  export AWS_BEARER_TOKEN_BEDROCK="your_bedrock_api_key"
+  ```
+
+- **Native Reasoning Effort**: GPT-5.6 supports `none`, `low`, `medium`, `high`, `xhigh`, and `max` (`minimal` is not supported by these Bedrock models).
+- **Prompt caching and streaming**: The example marks its stable system instructions with an explicit cache breakpoint, uses a stable `prompt_cache_key`, and enables streaming for Luna. Cache reads receive a 90% discount; cache writes cost 1.25x the uncached input rate.
+- **Region-gated**: Request model access in a supported region before running.
+
+These are the same model IDs that back OpenAI's [Codex](https://developers.openai.com/codex/) coding agent when it is configured with the `amazon-bedrock` provider.
+
+Run the frontier example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.openai-frontier.yaml --no-cache
 ```
 
 ## New Converse API Features (SDK 3.943+)

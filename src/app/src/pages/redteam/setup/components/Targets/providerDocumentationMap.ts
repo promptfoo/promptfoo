@@ -10,6 +10,7 @@ const BASE_DOCS_URL = 'https://www.promptfoo.dev/docs/providers';
  */
 export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   // API Endpoints
+  a2a: `${BASE_DOCS_URL}/a2a`,
   http: `${BASE_DOCS_URL}/http`,
   websocket: `${BASE_DOCS_URL}/websocket`,
 
@@ -24,6 +25,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Agent Frameworks
   'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  openinterpreter: `${BASE_DOCS_URL}/openinterpreter`,
   'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
   'bedrock-agent': `${BASE_DOCS_URL}/bedrock-agents`,
   langchain: `${BASE_DOCS_URL}/python`,
@@ -122,19 +124,4 @@ export function hasSpecificDocumentation(providerType?: string): boolean {
   }
 
   return providerType in PROVIDER_DOCUMENTATION_MAP;
-}
-
-/**
- * Gets a help text for a provider with documentation link
- * @param providerType The provider type
- * @returns Formatted help text with documentation link
- */
-export function getProviderHelpText(providerType?: string): string {
-  const hasSpecific = hasSpecificDocumentation(providerType);
-
-  if (hasSpecific && providerType) {
-    return `Learn how to configure ${providerType} in our documentation.`;
-  }
-
-  return 'Learn how to configure providers in our documentation.';
 }

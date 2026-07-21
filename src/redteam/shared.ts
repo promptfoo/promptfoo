@@ -3,9 +3,9 @@ import * as os from 'os';
 import * as path from 'path';
 
 import chalk from 'chalk';
-import yaml from 'js-yaml';
-import { doEval } from '../commands/eval';
+import * as yaml from 'js-yaml';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
+import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
@@ -87,7 +87,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     // Generate new test cases
     logger.info('Generating test cases...');
-    const { maxConcurrency, ...passThroughOptions } = options;
+    // Strip run-specific tags from the generation options so they do not leak into the
+    // reusable generated redteam.yaml (which feeds `doGenerateRedteam`). The tags still reach
+    // the eval below via `evalOptions`, which is destructured from the untouched `options`
+    // object (see the `doEval` call), where they are persisted onto the eval result.
+    const { maxConcurrency, tags: _runtimeTags, ...passThroughOptions } = options;
 
     let redteamConfig;
     const generationStartTime = Date.now();
@@ -195,16 +199,5 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
     }
-  }
-}
-
-/**
- * Custom error class for target permission-related failures.
- * Thrown when users lack necessary permissions to access or create targets.
- */
-export class TargetPermissionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TargetPermissionError';
   }
 }

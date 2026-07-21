@@ -3,9 +3,10 @@ import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { isAbortError } from '../../util/fetch/errors';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { OPENAI_TRANSCRIPTION_MODELS } from './util';
+import { appendOpenAiApiPath, getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -13,19 +14,33 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { OpenAiSharedOptions } from './types';
 
-export interface OpenAiTranscriptionOptions {
-  apiKey?: string;
-  apiKeyEnvar?: string;
-  apiBaseUrl?: string;
-  organization?: string;
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;
   prompt?: string;
   temperature?: number;
   timestamp_granularities?: ('word' | 'segment')[];
-  // Diarization options (for gpt-4o-transcribe-diarize)
-  num_speakers?: number;
-  speaker_labels?: string[];
+  chunking_strategy?:
+    | 'auto'
+    | {
+        type: 'server_vad';
+        threshold?: number;
+        prefix_padding_ms?: number;
+        silence_duration_ms?: number;
+      };
+  known_speaker_names?: string[];
+  known_speaker_references?: string[];
 }
 
 export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
@@ -52,9 +67,44 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     return `[OpenAI Transcription Provider ${this.modelName}]`;
   }
 
-  private calculateTranscriptionCost(durationSeconds: number | undefined): number | undefined {
+  private calculateTranscriptionCost(
+    durationSeconds: number | undefined,
+    usage:
+      | {
+          type?: string;
+          input_tokens?: number;
+          input_token_details?: { text_tokens?: number; audio_tokens?: number };
+          output_tokens?: number;
+        }
+      | undefined,
+  ): number | undefined {
     const model = OPENAI_TRANSCRIPTION_MODELS.find((m) => m.id === this.modelName);
-    if (!model || !model.cost || durationSeconds === undefined) {
+    if (!model?.cost) {
+      return undefined;
+    }
+
+    // Transcription input is mostly audio tokens, billed at a higher rate than text
+    // tokens, so token-based billing requires the text/audio split from the API.
+    const inputTokenDetails = usage?.input_token_details;
+    if (
+      usage?.type === 'tokens' &&
+      typeof inputTokenDetails?.text_tokens === 'number' &&
+      typeof inputTokenDetails?.audio_tokens === 'number' &&
+      typeof usage.output_tokens === 'number' &&
+      model.cost.input !== undefined &&
+      model.cost.audioInput !== undefined &&
+      model.cost.output !== undefined
+    ) {
+      return (
+        inputTokenDetails.text_tokens * model.cost.input +
+        inputTokenDetails.audio_tokens * model.cost.audioInput +
+        usage.output_tokens * model.cost.output
+      );
+    }
+
+    // Without the audio/text split, duration-based billing is more accurate than
+    // pricing all input tokens at the text rate.
+    if (durationSeconds === undefined) {
       return undefined;
     }
     const durationMinutes = durationSeconds / 60;
@@ -64,9 +114,14 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
+    const abortSignal = callApiOptions?.abortSignal;
+    if (abortSignal?.aborted) {
+      throw getAbortError(abortSignal);
+    }
+    const apiKey = this.getApiKey();
+    if (!apiKey && this.requiresApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
@@ -102,25 +157,39 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       if (config.language) {
         formData.append('language', config.language);
       }
-      if (config.prompt) {
+      if (config.prompt && !this.modelName.includes('diarize')) {
         formData.append('prompt', config.prompt);
       }
       if (config.temperature !== undefined) {
         formData.append('temperature', config.temperature.toString());
       }
-      if (config.timestamp_granularities && config.timestamp_granularities.length > 0) {
-        formData.append('timestamp_granularities', JSON.stringify(config.timestamp_granularities));
+      if (this.modelName === 'whisper-1' && config.timestamp_granularities) {
+        for (const granularity of config.timestamp_granularities) {
+          formData.append('timestamp_granularities[]', granularity);
+        }
+      }
+
+      const isDiarizationModel = this.modelName.includes('diarize');
+      const chunkingStrategy =
+        config.chunking_strategy ?? (isDiarizationModel ? 'auto' : undefined);
+      if (typeof chunkingStrategy === 'string') {
+        formData.append('chunking_strategy', chunkingStrategy);
+      } else if (chunkingStrategy) {
+        for (const [key, value] of Object.entries(chunkingStrategy)) {
+          if (value !== undefined) {
+            formData.append(`chunking_strategy[${key}]`, String(value));
+          }
+        }
       }
 
       // Diarization-specific options (for gpt-4o-transcribe-diarize)
-      if (this.modelName.includes('diarize')) {
+      if (isDiarizationModel) {
         formData.append('response_format', 'diarized_json');
-
-        if (config.num_speakers !== undefined) {
-          formData.append('num_speakers', config.num_speakers.toString());
+        for (const name of config.known_speaker_names || []) {
+          formData.append('known_speaker_names[]', name);
         }
-        if (config.speaker_labels && config.speaker_labels.length > 0) {
-          formData.append('speaker_labels', JSON.stringify(config.speaker_labels));
+        for (const reference of config.known_speaker_references || []) {
+          formData.append('known_speaker_references[]', reference);
         }
       } else {
         // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
@@ -128,25 +197,36 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         formData.append('response_format', responseFormat);
       }
 
-      const headers = {
-        Authorization: `Bearer ${this.getApiKey()}`,
-        ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+      const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+      const hasAuthorizationOverride = Object.keys(customHeaders).some(
+        (header) => header.toLowerCase() === 'authorization',
+      );
+      const headers: Record<string, string> = {
+        ...(apiKey && !hasAuthorizationOverride ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...customHeaders,
       };
+      for (const header of Object.keys(headers)) {
+        if (header.toLowerCase() === 'content-type') {
+          delete headers[header];
+        }
+      }
 
       let data: any, status: number, statusText: string;
       let cached = false;
 
       try {
         ({ data, cached, status, statusText } = await fetchWithCache(
-          `${this.getApiUrl()}/audio/transcriptions`,
+          appendOpenAiApiPath(this.getApiUrl(), 'audio/transcriptions'),
           {
             method: 'POST',
             headers,
             body: formData,
+            ...(abortSignal ? { signal: abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          config.maxRetries,
         ));
 
         if (status < 200 || status >= 300) {
@@ -155,6 +235,12 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           };
         }
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
+        if (isAbortError(err)) {
+          throw err;
+        }
         logger.error('API call error', { error: err });
         return {
           error: `API call error: ${String(err)}`,
@@ -167,9 +253,27 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         };
       }
 
-      // Calculate cost based on audio duration
-      const durationSeconds = typeof data.duration === 'number' ? data.duration : undefined;
-      const cost = cached ? 0 : this.calculateTranscriptionCost(durationSeconds);
+      // Prefer the billed duration ledger when the API returns both values.
+      const durationSeconds =
+        data.usage?.type === 'duration' && typeof data.usage.seconds === 'number'
+          ? data.usage.seconds
+          : typeof data.duration === 'number'
+            ? data.duration
+            : undefined;
+      const cost = cached ? 0 : this.calculateTranscriptionCost(durationSeconds, data.usage);
+      const tokenUsage =
+        data.usage?.type === 'tokens'
+          ? getTokenUsage(
+              {
+                usage: {
+                  total_tokens: data.usage.total_tokens,
+                  prompt_tokens: data.usage.input_tokens,
+                  completion_tokens: data.usage.output_tokens,
+                },
+              },
+              cached,
+            )
+          : undefined;
 
       // Calculate average quality metrics from segments
       const segments = data.segments || [];
@@ -224,7 +328,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             return `[${start}s - ${end}s] ${speaker}: ${text}`;
           })
           .join('\n');
-      } else if (data.text) {
+      } else if (typeof data.text === 'string') {
         // Standard transcription
         output = data.text;
       } else {
@@ -237,6 +341,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         output,
         cached,
         cost,
+        ...(tokenUsage ? { tokenUsage } : {}),
         metadata: {
           task: data.task,
           ...(durationSeconds === undefined ? {} : { duration: durationSeconds }),
@@ -251,6 +356,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       logger.error('Transcription error', { error: err });
       return {
         error: `Transcription error: ${String(err)}`,

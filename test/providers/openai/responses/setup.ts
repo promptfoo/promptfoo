@@ -21,6 +21,13 @@ vi.mock('../../../../src/cache', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../../src/util/fetch/index', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithRetries: vi.fn(),
+  };
+});
+
 vi.mock('../../../../src/logger', () => ({
   __esModule: true,
   default: {
@@ -45,6 +52,8 @@ const ENV_KEYS_TO_CLEAR = [
   'OPENAI_API_BASE_URL',
   'OPENAI_BASE_URL',
   'OPENAI_API_HOST',
+  'REQUEST_TIMEOUT_MS',
+  'PROMPTFOO_EVAL_TIMEOUT_MS',
 ] as const;
 
 type OpenAiEnvKey = (typeof ENV_KEYS_TO_CLEAR)[number];

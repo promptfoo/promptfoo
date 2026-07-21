@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 
 import chalk from 'chalk';
 import { InvalidArgumentError } from 'commander';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { synthesizeFromTestSuite } from '../../assertions/synthesis';
 import { disableCache } from '../../cache';
 import logger from '../../logger';
@@ -11,6 +11,7 @@ import { type TestSuite, type UnifiedConfig } from '../../types/index';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import { loadYaml } from '../../util/yamlLoad';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
@@ -89,7 +90,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
 
   printBorder();
   if (options.write && configPath) {
-    const existingConfig = yaml.load(
+    const existingConfig = loadYaml(
       await fs.readFile(configPath, 'utf8'),
     ) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)

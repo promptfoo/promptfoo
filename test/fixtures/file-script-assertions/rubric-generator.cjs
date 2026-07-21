@@ -17,7 +17,10 @@ module.exports.rubricObject = () => ({
 });
 
 // Returns a number for contains assertion
-module.exports.numericValue = () => 42;
+module.exports.numericValue = () => 0;
+
+// Returns an invalid numeric result for contains assertion
+module.exports.nanValue = () => Number.NaN;
 
 // Returns an array for bleu/gleu assertions
 module.exports.referenceArray = () => ['reference one', 'reference two'];

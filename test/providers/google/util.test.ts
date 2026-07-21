@@ -16,11 +16,14 @@ import logger from '../../../src/logger';
 import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
+  calculateGoogleCostFromUsage,
   clearCachedAuth,
+  collectGroundingMetadata,
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
@@ -2647,6 +2650,357 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.001, 10);
     });
 
+    it('should calculate cost for gemini-3.1-flash-lite (GA)', () => {
+      // gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
+      const cost = calculateGoogleCost('gemini-3.1-flash-lite', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.001, 10);
+    });
+
+    it('should calculate cost for gemini-3.5-flash', () => {
+      // gemini-3.5-flash: input=1.5/1M, output=9.0/1M
+      const cost = calculateGoogleCost('gemini-3.5-flash', {}, 1000, 500);
+      // Expected: (1000 * 1.5 + 500 * 9.0) / 1M = (1500 + 4500) / 1M = 0.006
+      expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should calculate cost for gemini-omni-flash-preview', () => {
+      const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should use the video-output rate for gemini-omni-flash-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-omni-flash-preview',
+        {},
+        1_000,
+        600,
+        false,
+        undefined,
+        undefined,
+        500,
+      );
+      expect(cost).toBeCloseTo((1_000 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6, 12);
+    });
+
+    it('should calculate cost for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost('gemini-3.1-flash-live-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.003, 10);
+    });
+
+    it('should calculate mixed text and audio cost for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-flash-live-preview',
+        {},
+        1_000,
+        500,
+        false,
+        200,
+        100,
+      );
+      expect(cost).toBeCloseTo((800 * 0.75 + 200 * 3 + 400 * 4.5 + 100 * 12) / 1e6, 12);
+    });
+
+    it.each([
+      ['gemini-live-2.5-flash-preview-native-audio-09-2025', 0.3, 2.0, 3.0, 12.0],
+      ['gemini-2.5-flash-native-audio-latest', 0.5, 2.0, 3.0, 12.0],
+      ['gemini-2.5-flash-native-audio-preview-09-2025', 0.3, 2.5, 1.0, 2.5],
+      ['gemini-2.5-flash-native-audio-preview-12-2025', 0.5, 2.0, 3.0, 12.0],
+    ])('should calculate mixed text and audio cost for %s', (id, input, output, audioInput, audioOutput) => {
+      expect(calculateGoogleCost(id, {}, 1_000, 500, false, 200, 100)).toBeCloseTo(
+        (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
+        12,
+      );
+    });
+
+    it('should apply the Gemini Live cached-input rate across cached modalities', () => {
+      const cost = calculateGoogleCost(
+        'gemini-live-2.5-flash-preview-native-audio-09-2025',
+        {},
+        1_000,
+        500,
+        false,
+        400,
+        500,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
+    });
+
+    it.each([
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
+    ])('should apply cached, audio, and priority pricing for %s', (modelId) => {
+      const cost = calculateGoogleCost(
+        modelId,
+        { passthrough: { service_tier: 'priority' } },
+        1_000,
+        500,
+        false,
+        400,
+        0,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      'gemini-3.1-pro-preview',
+      'gemini-pro-latest',
+    ])('should apply long-context cached and priority pricing for %s', (modelId) => {
+      const cost = calculateGoogleCost(
+        modelId,
+        { service_tier: 'priority' } as any,
+        250_001,
+        1_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000,
+      );
+
+      expect(cost).toBeCloseTo((1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6, 12);
+    });
+
+    it('should apply standard and long-context priority pricing for Gemini 3.1 Pro custom tools', () => {
+      const standardCost = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        { passthrough: { serviceTier: 'priority' } },
+        1_000,
+        100,
+      );
+      const longContextCost = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        { passthrough: { service_tier: 'priority' } },
+        250_001,
+        1_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000,
+      );
+
+      expect(standardCost).toBeCloseTo((1.8 * (1_000 * 2 + 100 * 12)) / 1e6, 12);
+      expect(longContextCost).toBeCloseTo(
+        (1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      'gemini-3.1-flash-lite',
+      'gemini-flash-lite-latest',
+    ])('should preserve the %s audio-input rate at priority tier', (modelId) => {
+      const cost = calculateGoogleCost(
+        modelId,
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        false,
+        200,
+        0,
+        undefined,
+        0,
+        500,
+        100,
+      );
+
+      expect(cost).toBeCloseTo(
+        (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.09 + 100 * 2.7) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      'gemini-3.1-flash-lite',
+      'gemini-flash-lite-latest',
+    ])('should apply %s flex pricing with passthrough precedence', (modelId) => {
+      const flexCost = calculateGoogleCost(
+        modelId,
+        { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
+        1_000_000,
+        100_000,
+        false,
+        200_000,
+        0,
+        undefined,
+        0,
+        500_000,
+        100_000,
+      );
+
+      expect(flexCost).toBeCloseTo(
+        (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.025 + 100_000 * 0.75) /
+          1e6,
+        12,
+      );
+    });
+
+    it.each([
+      ['gemini-flash-latest', 1.5, 0.15, 0.15, 1, 9],
+      ['gemini-flash-lite-latest', 0.25, 0.025, 0.05, 0.5, 1.5],
+      ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
+    ])('uses AI Studio cached and audio rates for %s', (id, input, cached, cachedAudio, audioInput, output) => {
+      expect(
+        calculateGoogleCost(id, {}, 1_000, 100, false, 200, 0, undefined, 0, 400, 100),
+      ).toBeCloseTo(
+        (500 * input + 300 * cached + 100 * audioInput + 100 * cachedAudio + 100 * output) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      ['gemini-2.5-flash', 0.1],
+      ['gemini-2.5-flash-lite', 0.03],
+      ['gemini-3-flash-preview', 0.1],
+      ['gemini-3.1-flash-lite', 0.05],
+      ['gemini-2.0-flash-001', 0.175],
+    ])('uses the published cached-audio rate for %s', (id, cachedAudio) => {
+      expect(
+        calculateGoogleCost(
+          id,
+          {},
+          1_000_000,
+          0,
+          false,
+          1_000_000,
+          0,
+          undefined,
+          0,
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBeCloseTo(cachedAudio, 12);
+    });
+
+    it.each([
+      ['gemini-2.5-pro-preview-tts', 1, 20],
+      ['gemini-2.5-flash-preview-tts', 0.5, 10],
+    ])('prices %s using the published TTS rates without context tiering', (id, input, output) => {
+      expect(calculateGoogleCost(id, {}, 1_000, 100, false, 0, 100)).toBeCloseTo(
+        (1_000 * input + 100 * output) / 1e6,
+        12,
+      );
+      expect(calculateGoogleCost(id, {}, 250_001, 1_000, false, 0, 1_000)).toBeCloseTo(
+        (250_001 * input + 1_000 * output) / 1e6,
+        12,
+      );
+    });
+
+    it('should forward standard Gemini usage metadata into modality-aware billing', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash',
+        { passthrough: { service_tier: 'priority' } },
+        1_000,
+        500,
+        false,
+        {
+          promptTokensDetails: [
+            { modality: 'TEXT', tokenCount: 600 },
+            { modality: 'AUDIO', tokenCount: 400 },
+          ],
+          cacheTokensDetails: [
+            { modality: 'TEXT', tokenCount: 200 },
+            { modality: 'AUDIO', tokenCount: 300 },
+          ],
+          cachedContentTokenCount: 500,
+          candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 500 }],
+        },
+      );
+
+      expect(cost).toBeCloseTo(
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        12,
+      );
+    });
+
+    it('should infer cached Gemini audio and image tokens without cache modality details', () => {
+      const model = 'gemini-live-2.5-flash-preview-native-audio-09-2025';
+      const calculateCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
+        calculateGoogleCostFromUsage(model, {}, 1_000, 0, false, {
+          promptTokensDetails: [{ modality, tokenCount: 1_000 }],
+          cachedContentTokenCount: 1_000,
+        });
+
+      expect(calculateCachedCost('AUDIO')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+      expect(calculateCachedCost('IMAGE')).toBeCloseTo((1_000 * 0.075) / 1e6, 12);
+
+      const calculateMixedCachedCost = (modality: 'AUDIO' | 'IMAGE') =>
+        calculateGoogleCostFromUsage(model, {}, 1_000, 0, false, {
+          promptTokensDetails: [
+            { modality: 'TEXT', tokenCount: 200 },
+            { modality, tokenCount: 800 },
+          ],
+          cachedContentTokenCount: 500,
+        });
+      expect(calculateMixedCachedCost('AUDIO')).toBeCloseTo(
+        (200 * 0.075 + 500 * 3 + 300 * 0.075) / 1e6,
+        12,
+      );
+      expect(calculateMixedCachedCost('IMAGE')).toBeCloseTo(
+        (200 * 0.075 + 500 * 0.3 + 300 * 0.075) / 1e6,
+        12,
+      );
+    });
+
+    it('should use the image-input rate for gemini-3.1-flash-live-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.1-flash-live-preview',
+        {},
+        1_000,
+        0,
+        false,
+        0,
+        0,
+        undefined,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(1_000 / 1e6, 12);
+    });
+
+    it('should not apply long-context tiered pricing to gemini-3.5-flash', () => {
+      // gemini-3.5-flash is flat-rate: prompts above 200k tokens bill at the
+      // standard rate (unlike the tiered gemini-3.1-pro-preview).
+      const cost = calculateGoogleCost('gemini-3.5-flash', {}, 250000, 50000);
+      // Expected: (250000 * 1.5 + 50000 * 9.0) / 1M = (375000 + 450000) / 1M = 0.825
+      expect(cost).toBeCloseTo(0.825, 10);
+    });
+
+    it('should calculate cost for gemini-embedding-2', () => {
+      // gemini-embedding-2: input=0.2/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-2', {}, 10000, 0);
+      // Expected: (10000 * 0.2) / 1M = 0.002
+      expect(cost).toBeCloseTo(0.002, 10);
+    });
+
+    it('should calculate cost for gemini-embedding-2-preview (tracks gemini-embedding-2)', () => {
+      // gemini-embedding-2-preview: input=0.2/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-2-preview', {}, 10000, 0);
+      expect(cost).toBeCloseTo(0.002, 10);
+    });
+
+    it('should apply resolved-model tiered pricing for the gemini-pro-latest alias', () => {
+      const costBelowThreshold = calculateGoogleCost('gemini-pro-latest', {}, 100000, 50000);
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-pro-latest', {}, 250000, 50000);
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2708,16 +3062,14 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
-    it('should calculate cost for gemini-flash-latest using flash pricing', () => {
-      // gemini-flash-latest aliases the current Flash snapshot: input=0.3/1M, output=2.5/1M
+    it('should calculate resolved-model cost for gemini-flash-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.00155, 10);
+      expect(cost).toBeCloseTo(0.006, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using flash-lite alias pricing', () => {
-      // gemini-flash-lite-latest tracks the current Flash-Lite tier: input=0.1/1M, output=0.4/1M
+    it('should calculate resolved-model cost for gemini-flash-lite-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0003, 10);
+      expect(cost).toBeCloseTo(0.001, 10);
     });
 
     it('should return undefined for shutdown models', () => {
@@ -2730,6 +3082,7 @@ describe('util', () => {
         'gemini-2.5-flash-preview-05-20',
         'gemini-2.5-flash-preview-09-2025',
         'gemini-2.5-flash-lite-preview-09-2025',
+        'gemini-2.5-flash-lite-preview-06-17',
         'gemini-2.0-pro',
         'gemini-2.0-flash-exp',
         'gemini-2.0-flash-thinking-exp',
@@ -2768,6 +3121,71 @@ describe('util', () => {
       const config = { cost: 0.02, inputCost: 0.001, outputCost: 0.003 };
       const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
       expect(cost).toBeCloseTo(2.5, 10);
+    });
+
+    it('should apply generic and modality-specific cost overrides to multimodal tokens', () => {
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { cost: 0.01 },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(5, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { inputCost: 0.02, outputCost: 0.03 },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(13, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          {
+            inputCost: 0.02,
+            outputCost: 0.03,
+            audioInputCost: 0.04,
+            audioOutputCost: 0.05,
+            imageInputCost: 0.06,
+            videoOutputCost: 0.07,
+          },
+          200,
+          300,
+          false,
+          100,
+          100,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(25, 10);
+      expect(
+        calculateGoogleCost(
+          'gemini-2.5-flash',
+          { inputCost: 0.02 },
+          200,
+          0,
+          false,
+          100,
+          0,
+          0,
+          100,
+          200,
+          100,
+          100,
+        ),
+      ).toBeCloseTo(4, 10);
     });
 
     it('should respect separate custom costs for tiered pricing', () => {
@@ -2896,6 +3314,11 @@ describe('util', () => {
       expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
     });
 
+    it('drops documented snake_case function_declarations entries', () => {
+      const tools = [{ function_declarations: [{ name: 'foo' }] }] as unknown as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
+    });
+
     it('strips functionDeclarations from mixed-capability tool entries', () => {
       const tools = [
         {
@@ -2904,6 +3327,14 @@ describe('util', () => {
         },
       ] as Tool[];
       expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('strips snake_case function declarations from a single mixed-capability tool', () => {
+      const tool = {
+        function_declarations: [{ name: 'foo' }],
+        googleSearch: {},
+      } as unknown as Tool;
+      expect(removeGoogleFunctionDeclarations(tool)).toEqual([{ googleSearch: {} }]);
     });
 
     it('passes through non-function tools unchanged', () => {
@@ -2935,6 +3366,25 @@ describe('util', () => {
     });
   });
 
+  describe('mergeParts', () => {
+    it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
+      const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
+      const secondChunk = [{ text: 'done' }];
+
+      const accumulator = mergeParts(undefined, firstChunk);
+      if (!Array.isArray(accumulator)) {
+        throw new Error('Expected multipart output');
+      }
+
+      expect(accumulator).not.toBe(firstChunk);
+      expect(mergeParts(accumulator, secondChunk)).toBe(accumulator);
+      expect(accumulator).toEqual([...firstChunk, ...secondChunk]);
+      expect(firstChunk).toEqual([
+        { functionCall: { name: 'look_up', args: { query: 'weather' } } },
+      ]);
+    });
+  });
+
   describe('mergeGoogleCompletionOptions', () => {
     it('treats prompt-level undefined as "not set" and preserves base policy', () => {
       const merged = mergeGoogleCompletionOptions(
@@ -2958,6 +3408,95 @@ describe('util', () => {
       expect(merged.tool_choice).toBe('none');
       expect(merged.toolConfig).toBeUndefined();
       expect(merged.tool_config).toBeUndefined();
+    });
+  });
+
+  describe('collectGroundingMetadata', () => {
+    it('returns empty object when no candidates carry grounding signals', () => {
+      const result = collectGroundingMetadata([
+        { candidates: [{ content: { parts: [{ text: 'plain' }] } }] } as any,
+      ]);
+      expect(result).toEqual({});
+    });
+
+    it('returns the single candidate metadata as-is', () => {
+      const groundingMetadata = {
+        webSearchQueries: ['q'],
+        groundingChunks: [{ web: { uri: 'https://x' } }],
+      };
+      const result = collectGroundingMetadata([
+        {
+          candidates: [{ content: { parts: [{ text: 't' }] }, groundingMetadata }],
+        } as any,
+      ]);
+      expect(result.groundingMetadata).toEqual(groundingMetadata);
+    });
+
+    it('concatenates array fields across nested groundingMetadata chunks and keeps the last refinement', () => {
+      const result = collectGroundingMetadata([
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'a' }] },
+              groundingMetadata: {
+                webSearchQueries: ['q1'],
+                groundingChunks: [{ web: { uri: 'https://1' } }],
+                searchEntryPoint: { renderedContent: 'old' },
+              },
+            },
+          ],
+        } as any,
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'b' }] },
+              groundingMetadata: {
+                webSearchQueries: ['q2'],
+                groundingChunks: [{ web: { uri: 'https://2' } }],
+                groundingSupports: [{ segment: { startIndex: 0, endIndex: 1 } }],
+                searchEntryPoint: { renderedContent: 'new' },
+                retrievalMetadata: { dynamicRetrievalScore: 0.9 },
+              },
+            },
+          ],
+        } as any,
+      ]);
+      const merged = result.groundingMetadata as Record<string, any>;
+      expect(merged.webSearchQueries).toEqual(['q1', 'q2']);
+      expect(merged.groundingChunks).toEqual([
+        { web: { uri: 'https://1' } },
+        { web: { uri: 'https://2' } },
+      ]);
+      expect(merged.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 1 } }]);
+      expect(merged.searchEntryPoint).toEqual({ renderedContent: 'new' });
+      expect(merged.retrievalMetadata).toEqual({ dynamicRetrievalScore: 0.9 });
+    });
+
+    it('concatenates flat grounding fields when candidates carry them directly', () => {
+      const result = collectGroundingMetadata([
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'a' }] },
+              webSearchQueries: ['x'],
+              groundingChunks: [{ web: { uri: 'https://x' } }],
+            },
+          ],
+        } as any,
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: 'b' }] },
+              webSearchQueries: ['y'],
+              groundingSupports: [{ segment: { startIndex: 0, endIndex: 1 } }],
+            },
+          ],
+        } as any,
+      ]);
+      expect(result.webSearchQueries).toEqual(['x', 'y']);
+      expect(result.groundingChunks).toEqual([{ web: { uri: 'https://x' } }]);
+      expect(result.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 1 } }]);
+      expect(result.groundingMetadata).toBeUndefined();
     });
   });
 });

@@ -141,7 +141,7 @@ prompts:
 | `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
-| `fallback_model`                     | string           | Fallback model if primary fails                                                                              | Claude Agent SDK default |
+| `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
 | `max_turns`                          | number           | Maximum conversation turns                                                                                   | Claude Agent SDK default |
 | `max_thinking_tokens`                | number           | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number           | Maximum cost budget in USD for the agent execution                                                           | None                     |
@@ -324,7 +324,8 @@ providers:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      custom_allowed_tools: ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
+      custom_allowed_tools:
+        ['Read', 'Grep', 'Glob', 'Write', 'Edit', 'MultiEdit', 'Bash', 'WebFetch', 'WebSearch']
 
 # Block specific tools
 providers:
@@ -739,25 +740,43 @@ providers:
 
 Available sandbox options:
 
-| Option                        | Type     | Description                                          |
-| ----------------------------- | -------- | ---------------------------------------------------- |
-| `enabled`                     | boolean  | Enable sandboxed execution                           |
-| `autoAllowBashIfSandboxed`    | boolean  | Auto-allow bash commands when sandboxed              |
-| `allowUnsandboxedCommands`    | boolean  | Allow commands that can't be sandboxed               |
-| `enableWeakerNestedSandbox`   | boolean  | Enable weaker sandbox for nested environments        |
-| `excludedCommands`            | string[] | Commands to exclude from sandboxing                  |
-| `failIfUnavailable`           | boolean  | Fail closed when sandbox dependencies are missing    |
-| `ignoreViolations`            | object   | Map of command patterns to violation types to ignore |
-| `network.allowedDomains`      | string[] | Domains allowed for network access                   |
-| `network.allowLocalBinding`   | boolean  | Allow binding to localhost                           |
-| `network.allowUnixSockets`    | string[] | Specific Unix sockets to allow                       |
-| `network.allowAllUnixSockets` | boolean  | Allow all Unix socket connections                    |
-| `network.httpProxyPort`       | number   | HTTP proxy port for network access                   |
-| `network.socksProxyPort`      | number   | SOCKS proxy port for network access                  |
-| `ripgrep.command`             | string   | Path to custom ripgrep executable                    |
-| `ripgrep.args`                | string[] | Additional arguments for ripgrep                     |
+| Option                             | Type     | Description                                          |
+| ---------------------------------- | -------- | ---------------------------------------------------- |
+| `enabled`                          | boolean  | Enable sandboxed execution                           |
+| `autoAllowBashIfSandboxed`         | boolean  | Auto-allow bash commands when sandboxed              |
+| `allowUnsandboxedCommands`         | boolean  | Allow commands that can't be sandboxed               |
+| `enableWeakerNestedSandbox`        | boolean  | Enable weaker sandbox for nested environments        |
+| `excludedCommands`                 | string[] | Commands to exclude from sandboxing                  |
+| `failIfUnavailable`                | boolean  | Fail closed when sandbox dependencies are missing    |
+| `ignoreViolations`                 | object   | Map of command patterns to violation types to ignore |
+| `network.allowedDomains`           | string[] | Domains allowed for network access                   |
+| `network.allowLocalBinding`        | boolean  | Allow binding to localhost                           |
+| `network.allowUnixSockets`         | string[] | Specific Unix sockets to allow                       |
+| `network.allowAllUnixSockets`      | boolean  | Allow all Unix socket connections                    |
+| `network.httpProxyPort`            | number   | HTTP proxy port for network access                   |
+| `network.socksProxyPort`           | number   | SOCKS proxy port for network access                  |
+| `credentials.envVars`              | object[] | Environment variables to deny or mask in the sandbox |
+| `credentials.allowPlaintextInject` | boolean  | Allow masked credentials over plain HTTP (unsafe)    |
+| `ripgrep.command`                  | string   | Path to custom ripgrep executable                    |
+| `ripgrep.args`                     | string[] | Additional arguments for ripgrep                     |
 
 When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
+
+Use `credentials.envVars` with `mode: mask` to keep a credential out of sandboxed commands while allowing the proxy to inject it only for selected hosts. Each `injectHosts` entry must also be present in `network.allowedDomains`:
+
+```yaml
+sandbox:
+  enabled: true
+  network:
+    allowedDomains: ['api.example.com']
+  credentials:
+    envVars:
+      - name: EXAMPLE_API_KEY
+        mode: mask
+        injectHosts: ['api.example.com']
+```
+
+Leave `credentials.allowPlaintextInject` disabled unless the target is a trusted-network test fixture; plain HTTP cannot verify the upstream identity or protect the credential in transit.
 
 See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
 
@@ -914,7 +933,6 @@ The simplest approach is to use the `ask_user_question` configuration:
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      append_allowed_tools: ['AskUserQuestion']
       ask_user_question:
         behavior: first_option
 ```
@@ -937,7 +955,6 @@ import { loadApiProvider } from 'promptfoo';
 const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
   options: {
     config: {
-      append_allowed_tools: ['AskUserQuestion'],
       can_use_tool: async (toolName, input) => {
         if (toolName !== 'AskUserQuestion') {
           return { behavior: 'allow', updatedInput: input };
@@ -956,7 +973,7 @@ const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
 });
 ```
 
-The `canUseTool` callback receives the tool name and input, and returns an answer:
+The `canUseTool` callback receives the tool name, input, and request options, and returns an answer. Do not add a bare tool name to `append_allowed_tools` or `custom_allowed_tools` when the callback must handle it: allowed tools are auto-approved before the callback runs. The `ask_user_question` convenience option removes `AskUserQuestion` from the allow list automatically.
 
 ```typescript
 async function canUseTool(toolName, input, options) {
@@ -980,6 +997,8 @@ async function canUseTool(toolName, input, options) {
   };
 }
 ```
+
+For hosts that send the permission response out-of-band, `options.requestId` identifies the request and the callback can return `null` after the response is sent. Do not return `null` otherwise; the tool will remain blocked.
 
 See the [Claude Agent SDK permissions documentation](https://platform.claude.com/docs/en/agent-sdk/permissions) for more details on `canUseTool`.
 
@@ -1077,9 +1096,40 @@ providers:
       forward_subagent_text: true
 ```
 
+## Error Diagnostics
+
+When the SDK reports a model-call failure, the provider surfaces it in two places so assertions can branch on the underlying cause instead of the generic terminal subtype:
+
+- `metadata.assistantErrors` — array of `{ error, uuid, parentToolUseId, request_id?, subagent_type?, task_description? }` entries collected from `SDKAssistantMessage.error`. The `error` field uses the SDK's discriminated codes (`'model_not_found'`, `'rate_limit'`, `'overloaded'`, `'authentication_failed'`, `'billing_error'`, `'oauth_org_not_allowed'`, `'server_error'`, `'invalid_request'`, `'max_output_tokens'`, `'unknown'`). The `model_not_found` code requires `@anthropic-ai/claude-agent-sdk` 0.3.144 or newer (older SDKs collapse it into `'invalid_request'`), and `overloaded` requires 0.3.161 or newer.
+- `metadata.apiErrorStatus` — HTTP status code reported on successful result messages when an upstream API call hit a transient error (e.g., `529` during overload). Only present when the SDK populates it.
+
+When a run ends in a non-success subtype and the stream included an assistant error, the provider appends the code to the error string: `Claude Agent SDK call failed: error_during_execution (model_not_found)`. Example assertion:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const errors = context.providerResponse?.metadata?.assistantErrors || [];
+      // Treat model unavailability as a skip rather than a real failure
+      return !errors.some(e => e.error === 'model_not_found');
+```
+
 ## Tracing
 
 When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+
+The provider also emits a `gen_ai.turn N` marker span per LLM round-trip (one per `assistant` message from the SDK stream). Each tool span is tagged with the `gen_ai.turn.index` of the assistant message that emitted it. This lets you assert on agent batching with [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count):
+
+```yaml
+assert:
+  # Agent finished within at most 3 LLM round-trips.
+  - type: trace-span-count
+    value:
+      pattern: 'gen_ai.turn *'
+      max: 3
+```
+
+Turn spans include `gen_ai.turn.index`, `gen_ai.system`, `gen_ai.response.model`, and token usage attributes when available. Subagent turns also carry `gen_ai.turn.is_subagent`, `gen_ai.turn.parent_tool_use_id`, and `gen_ai.turn.subagent_type`.
 
 The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
 

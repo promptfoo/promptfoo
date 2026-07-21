@@ -191,6 +191,9 @@
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
+        "AWS_BEARER_TOKEN_BEDROCK": {
+          "type": "string"
+        },
         "AWS_BEDROCK_REGION": {
           "type": "string"
         },
@@ -248,6 +251,9 @@
         "CLAUDE_CODE_USE_VERTEX": {
           "type": "string"
         },
+        "CLAUDE_CONFIG_DIR": {
+          "type": "string"
+        },
         "CLOUDFLARE_ACCOUNT_ID": {
           "type": "string"
         },
@@ -285,6 +291,12 @@
           "type": "string"
         },
         "FAL_KEY": {
+          "type": "string"
+        },
+        "FIREWORKS_API_BASE_URL": {
+          "type": "string"
+        },
+        "FIREWORKS_API_KEY": {
           "type": "string"
         },
         "GITHUB_TOKEN": {
@@ -359,13 +371,40 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MINIMAX_API_KEY": {
+          "type": "string"
+        },
+        "MOONSHOT_API_KEY": {
+          "type": "string"
+        },
+        "MLFLOW_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "MLFLOW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "MODEL_API_KEY": {
+          "type": "string"
+        },
         "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
+        "N8N_API_KEY": {
           "type": "string"
         },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
         "NSCALE_API_KEY": {
+          "type": "string"
+        },
+        "NOVITA_API_KEY": {
+          "type": "string"
+        },
+        "NVIDIA_API_BASE_URL": {
+          "type": "string"
+        },
+        "NVIDIA_API_KEY": {
           "type": "string"
         },
         "OLLAMA_API_KEY": {
@@ -414,6 +453,9 @@
           "type": "string"
         },
         "OPENCLAW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "ORCAROUTER_API_KEY": {
           "type": "string"
         },
         "PALM_API_HOST": {
@@ -863,6 +905,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -933,6 +976,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -1149,6 +1193,11 @@
         },
         "runSerially": {
           "type": "boolean"
+        },
+        "repeat": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": {}
@@ -1616,6 +1665,9 @@
                     "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
+                    "AWS_BEARER_TOKEN_BEDROCK": {
+                      "type": "string"
+                    },
                     "AWS_BEDROCK_REGION": {
                       "type": "string"
                     },
@@ -1673,6 +1725,9 @@
                     "CLAUDE_CODE_USE_VERTEX": {
                       "type": "string"
                     },
+                    "CLAUDE_CONFIG_DIR": {
+                      "type": "string"
+                    },
                     "CLOUDFLARE_ACCOUNT_ID": {
                       "type": "string"
                     },
@@ -1710,6 +1765,12 @@
                       "type": "string"
                     },
                     "FAL_KEY": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "FIREWORKS_API_KEY": {
                       "type": "string"
                     },
                     "GITHUB_TOKEN": {
@@ -1784,13 +1845,40 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MINIMAX_API_KEY": {
+                      "type": "string"
+                    },
+                    "MOONSHOT_API_KEY": {
+                      "type": "string"
+                    },
+                    "MLFLOW_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "MLFLOW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "MODEL_API_KEY": {
+                      "type": "string"
+                    },
                     "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
+                    "N8N_API_KEY": {
                       "type": "string"
                     },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
                     "NSCALE_API_KEY": {
+                      "type": "string"
+                    },
+                    "NOVITA_API_KEY": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "NVIDIA_API_KEY": {
                       "type": "string"
                     },
                     "OLLAMA_API_KEY": {
@@ -1839,6 +1927,9 @@
                       "type": "string"
                     },
                     "OPENCLAW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "ORCAROUTER_API_KEY": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {
@@ -2739,7 +2830,7 @@
                     "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
-                "required": ["id", "numTests"],
+                "required": ["id"],
                 "additionalProperties": false
               }
             ]
@@ -2747,6 +2838,7 @@
           "description": "Plugins to use for redteam generation"
         },
         "strategies": {
+          "default": ["default"],
           "type": "array",
           "items": {
             "anyOf": [
@@ -2775,6 +2867,7 @@
                       "jailbreak",
                       "jailbreak-templates",
                       "jailbreak:composite",
+                      "jailbreak:goblin",
                       "jailbreak:hydra",
                       "jailbreak:likert",
                       "jailbreak:meta",
@@ -2829,6 +2922,7 @@
                           "jailbreak",
                           "jailbreak-templates",
                           "jailbreak:composite",
+                          "jailbreak:goblin",
                           "jailbreak:hydra",
                           "jailbreak:likert",
                           "jailbreak:meta",
@@ -2869,7 +2963,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",
@@ -2999,6 +3093,15 @@
         "enabled": {
           "type": "boolean"
         },
+        "failOnReceiverStartFailure": {
+          "type": "boolean"
+        },
+        "commandToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "otlp": {
           "type": "object",
           "properties": {
@@ -3019,6 +3122,12 @@
                   "items": {
                     "type": "string",
                     "enum": ["protobuf", "json"]
+                  }
+                },
+                "redactAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
                 }
               },
@@ -3269,10 +3378,24 @@
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
         },
+        "filterSampleSeed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
         "filterTargets": {
           "type": "string"
         },
         "var": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tags": {
           "type": "object",
           "propertyNames": {
             "type": "string"

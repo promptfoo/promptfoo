@@ -34,6 +34,17 @@ describe('OpenAI Provider', () => {
       severity: 'info',
     };
 
+    it('should reject a Codex-only completion passthrough model override before dispatch', async () => {
+      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+        config: { apiKey: 'test-key', passthrough: { model: 'gpt-5.3-codex-spark' } },
+      });
+
+      await expect(provider.callApi('Test prompt')).rejects.toThrow(
+        'only available through openai:codex-sdk',
+      );
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should call API successfully with text completion', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
@@ -43,6 +54,28 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
+    });
+
+    it.each([
+      ['babbage-002', 0.4, 0.4],
+      ['davinci-002', 2, 2],
+      ['ft:babbage-002:company::model', 1.6, 1.6],
+      ['ft:davinci-002:company::model', 12, 12],
+    ])('should call and price supported Completions model %s', async (model, inputRate, outputRate) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: { total_tokens: 3_000, prompt_tokens: 2_000, completion_tokens: 1_000 },
+        },
+      });
+
+      const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+
+      expect(request[0]).toContain('/completions');
+      expect(JSON.parse(request[1].body)).toMatchObject({ model, prompt: 'Test prompt' });
+      expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
     });
 
     it('should handle API errors', async () => {
@@ -195,6 +228,7 @@ describe('OpenAI Provider', () => {
         expect.objectContaining({
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
+            'X-OpenAI-Originator': 'promptfoo',
             'X-Test-Header': 'test-value',
           }),
         }),

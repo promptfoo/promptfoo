@@ -3,7 +3,7 @@ import path from 'path';
 
 import Ajv from 'ajv';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -24,7 +24,7 @@ import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
+import type { ScoringFunction, TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -262,6 +262,29 @@ describe('TestCaseSchema assertScoringFunction', () => {
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow('Invalid test case schema');
   });
 
+  it('should expose cached tokens and request counts to typed scoring functions', async () => {
+    const scoringFunction: ScoringFunction = (_scores, context) => ({
+      pass: (context?.tokensUsed?.numRequests ?? 0) > 0,
+      score: context?.tokensUsed?.cached ?? 0,
+      reason: 'Used the documented token accounting fields',
+    });
+
+    const result = await scoringFunction(
+      {},
+      {
+        tokensUsed: {
+          total: 3,
+          prompt: 2,
+          completion: 1,
+          cached: 1,
+          numRequests: 1,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
+  });
+
   it('should validate test case with missing assertScoringFunction', () => {
     const testCase = {
       description: 'No scoring function',
@@ -358,10 +381,22 @@ describe('TestCaseSchema options (merged schema properties)', () => {
       options: {
         disableVarExpansion: true,
         disableConversationVar: true,
+        repeat: 3,
         runSerially: true,
       },
     };
     expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])('should reject invalid per-test repeat %s', (repeat) => {
+    expect(TestCaseSchema.safeParse({ options: { repeat } }).success).toBe(false);
   });
 
   it('should validate options combining properties from ALL merged schemas', () => {
@@ -604,6 +639,23 @@ describe('CommandLineOptionsSchema', () => {
     );
   });
 
+  it('should validate runtime tags', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      tags: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    };
+    expect(CommandLineOptionsSchema.parse(options)).toMatchObject({
+      tags: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    });
+  });
+
   it('should validate options without filterErrorsOnly', () => {
     const options = {
       providers: ['provider1'],
@@ -685,11 +737,44 @@ describe('CommandLineOptionsSchema', () => {
       filterProviders: 'provider1',
       filterRange: '1:3',
       filterSample: 5,
+      filterSampleSeed: 42,
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+
+  it('should coerce numeric filter sample seed arguments to numbers', () => {
+    expect(
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: '42',
+      }),
+    ).toMatchObject({
+      filterSampleSeed: 42,
+    });
+  });
+
+  it('should reject nonnumeric filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: 'repeatable-run',
+      }),
+    ).toThrow();
+  });
+
+  it('should reject unsafe integer filter sample seeds', () => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({
+        providers: ['provider1'],
+        output: ['output1'],
+        filterSampleSeed: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow();
   });
 
   it('should reject invalid filterRange values', () => {
@@ -834,6 +919,23 @@ describe('TestSuiteConfigSchema', () => {
         : { id: 'test-provider', config: { someConfig: true } };
 
       expect(Object.keys(testProvider)).toContain('env');
+    });
+  });
+
+  describe('tracing property', () => {
+    it('defaults the OTLP HTTP receiver to loopback', () => {
+      const result = TestSuiteConfigSchema.parse({
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {},
+          },
+        },
+      });
+
+      expect(result.tracing?.otlp?.http?.host).toBe('127.0.0.1');
     });
   });
 
