@@ -170,6 +170,14 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
           toolConfig: {
             ...toolChoiceConfig,
             ...explicitConfig,
+            ...(toolChoiceConfig?.functionCallingConfig || explicitConfig.functionCallingConfig
+              ? {
+                  functionCallingConfig: {
+                    ...toolChoiceConfig?.functionCallingConfig,
+                    ...explicitConfig.functionCallingConfig,
+                  },
+                }
+              : {}),
           },
         }
       : toolChoiceConfig
@@ -1239,6 +1247,11 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
     } else if (riffType === 'AVI ') {
       return 'video/avi';
     }
+  } else if (
+    bytes.subarray(0, 4).toString('ascii') === 'FORM' &&
+    ['AIFF', 'AIFC'].includes(riffType)
+  ) {
+    return 'audio/aiff';
   } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
     const brand = bytes.subarray(8, 12).toString('ascii');
     return ['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand) ? 'audio/mp4' : 'video/mp4';

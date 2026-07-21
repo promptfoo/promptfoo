@@ -1046,8 +1046,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       config: {
         region: 'global',
         streaming: true,
+        tool_choice: { type: 'function', function: { name: 'lookup_status' } },
         toolConfig: {
-          functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+          functionCallingConfig: { streamFunctionCallArguments: true },
         },
         tools: [
           {
@@ -1102,7 +1103,11 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(mockRequest.mock.calls[0]?.[0]?.url).toContain(':streamGenerateContent');
     expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
-      functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+      functionCallingConfig: {
+        mode: 'ANY',
+        allowedFunctionNames: ['lookup_status'],
+        streamFunctionCallArguments: true,
+      },
     });
     expect(callback).toHaveBeenCalledOnce();
     expect(callback).toHaveBeenCalledWith('{"region":"Seattle","ticket":"PF-3621"}');

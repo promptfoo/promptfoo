@@ -1728,6 +1728,7 @@ describe('util', () => {
         it.each([
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/aiff', Buffer.from('FORM....AIFFCOMM........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
@@ -1745,6 +1746,7 @@ describe('util', () => {
         it.each([
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/aiff', Buffer.from('FORM....AIFCCOMM........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
@@ -3508,6 +3510,42 @@ describe('util', () => {
       });
       expect(result).toEqual({
         toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
+      });
+    });
+
+    it('merges a required tool choice with streamed function-call arguments', () => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: 'required',
+        toolConfig: {
+          functionCallingConfig: { streamFunctionCallArguments: true },
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('merges a named tool choice with snake_case streamed function-call arguments', () => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        tool_config: {
+          function_calling_config: { stream_function_call_arguments: true },
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'ANY',
+            allowedFunctionNames: ['get_weather'],
+            streamFunctionCallArguments: true,
+          },
+        },
         toolsDisabled: false,
       });
     });
