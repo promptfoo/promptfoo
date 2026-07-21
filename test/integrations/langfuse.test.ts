@@ -5,13 +5,13 @@ const mocks = vi.hoisted(() => {
   const mockGetPrompt = vi.fn();
   const constructorCalls: any[] = [];
 
-  // Create a proper class mock for Langfuse
-  class MockLangfuse {
-    getPrompt: typeof mockGetPrompt;
+  // Create a proper class mock for the Langfuse v5 client.
+  class MockLangfuseClient {
+    prompt: { get: typeof mockGetPrompt };
 
     constructor(params: any) {
       constructorCalls.push(params);
-      this.getPrompt = mockGetPrompt;
+      this.prompt = { get: mockGetPrompt };
     }
   }
 
@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     mockGetPrompt,
-    MockLangfuse,
+    MockLangfuseClient,
     constructorCalls,
     mockGetEnvString,
   };
@@ -41,9 +41,8 @@ vi.mock('../../src/envars', () => ({
   getEnvString: mocks.mockGetEnvString,
 }));
 
-// Mock langfuse module with the class
-vi.mock('langfuse', () => ({
-  Langfuse: mocks.MockLangfuse,
+vi.mock('@langfuse/client', () => ({
+  LangfuseClient: mocks.MockLangfuseClient,
 }));
 
 describe('langfuse integration', () => {
@@ -69,7 +68,10 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, 'text', 2);
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', 2, { type: 'text' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', {
+        version: 2,
+        type: 'text',
+      });
       expect(mockPrompt.compile).toHaveBeenCalledWith({ name: 'test' });
       expect(result).toBe('Hello, world!');
     });
@@ -89,7 +91,8 @@ describe('langfuse integration', () => {
         'production',
       );
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', {
+        version: undefined,
         label: 'production',
         type: 'text',
       });
@@ -110,7 +113,10 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('chat-prompt', { name: 'test' }, 'chat', 1);
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('chat-prompt', 1, { type: 'chat' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('chat-prompt', {
+        version: 1,
+        type: 'chat',
+      });
       expect(mockPrompt.compile).toHaveBeenCalledWith({ name: 'test' });
       expect(result).toBe(JSON.stringify(mockChatMessages));
     });
@@ -128,7 +134,8 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('chat-prompt', { name: 'test' }, 'chat', undefined, 'latest');
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('chat-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('chat-prompt', {
+        version: undefined,
         label: 'latest',
         type: 'chat',
       });
@@ -145,7 +152,10 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, undefined, 3);
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', 3, { type: 'text' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', {
+        version: 3,
+        type: 'text',
+      });
       expect(result).toBe('Default text prompt');
     });
 
@@ -158,7 +168,10 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', { name: 'test' }, 'text', 1);
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', 1, { type: 'text' });
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', {
+        version: 1,
+        type: 'text',
+      });
       expect(result).toBe('Test prompt');
     });
 
@@ -252,7 +265,8 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', {}, 'text', undefined, 'latest');
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', {
+        version: undefined,
         label: 'latest',
         type: 'text',
       });
@@ -268,7 +282,8 @@ describe('langfuse integration', () => {
       const { getPrompt } = await import('../../src/integrations/langfuse');
       const result = await getPrompt('test-prompt', {}, 'text', undefined, 'staging');
 
-      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', undefined, {
+      expect(mocks.mockGetPrompt).toHaveBeenCalledWith('test-prompt', {
+        version: undefined,
         label: 'staging',
         type: 'text',
       });

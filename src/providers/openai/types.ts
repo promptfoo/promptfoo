@@ -226,17 +226,33 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
 /**
  * Supported Sora video models
  */
-export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
+export type OpenAiVideoModel =
+  | 'sora-2'
+  | 'sora-2-2025-10-06'
+  | 'sora-2-2025-12-08'
+  | 'sora-2-pro'
+  | 'sora-2-pro-2025-10-06';
 
 /**
  * Supported video sizes (aspect ratios)
  */
-export type OpenAiVideoSize = '1280x720' | '720x1280' | '1792x1024' | '1024x1792';
+export type OpenAiVideoSize =
+  | '1280x720'
+  | '720x1280'
+  | '1792x1024'
+  | '1024x1792'
+  | '1920x1080'
+  | '1080x1920';
+
+/**
+ * Sizes accepted when creating a new Sora video.
+ */
+export type OpenAiVideoCreateSize = OpenAiVideoSize;
 
 /**
  * Valid video duration in seconds (Sora API only accepts these values)
  */
-export type OpenAiVideoDuration = 4 | 8 | 12;
+export type OpenAiVideoDuration = 4 | 8 | 12 | 16 | 20;
 
 /**
  * Video generation job status
@@ -256,11 +272,12 @@ export interface OpenAiVideoOptions extends OpenAiSharedOptions {
   model?: OpenAiVideoModel;
 
   // Video parameters
-  size?: OpenAiVideoSize;
+  size?: OpenAiVideoCreateSize;
   seconds?: OpenAiVideoDuration;
+  characters?: Array<{ id: string }>;
 
-  // Image-to-video: base64 image data or file path (file://path)
-  input_reference?: string;
+  // Image-to-video: URL, base64 image data, file path, or an uploaded file ID
+  input_reference?: string | { file_id: string } | { image_url: string };
 
   // Remix mode: ID of previous video to modify
   remix_video_id?: string;

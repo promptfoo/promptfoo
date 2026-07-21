@@ -2,7 +2,7 @@ import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai
 
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback } from '../openai/types';
+import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -70,7 +70,12 @@ export interface AzureCompletionOptions {
       parameters: any;
     };
   }[];
-  tool_choice?: 'none' | 'auto' | { type: 'function'; function?: { name: string } };
+  tool_choice?:
+    | 'none'
+    | 'auto'
+    | 'required'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'function'; name: string };
   response_format?:
     | { type: 'json_object' }
     | {
@@ -89,7 +94,7 @@ export interface AzureCompletionOptions {
       };
   stop?: string[];
   seed?: number;
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: GPT5ReasoningEffort;
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -121,10 +126,19 @@ export interface AzureModelCost {
   cost: {
     input: number;
     output: number;
+    cacheRead?: number;
+    cacheReadAudio?: number;
+    cacheReadImage?: number;
+    audioInput?: number;
+    audioOutput?: number;
+    imageInput?: number;
+    imageOutput?: number;
+    priorityMultiplier?: number;
     longContext?: {
       threshold: number;
       input: number;
       output: number;
+      cacheRead?: number;
     };
   };
 }

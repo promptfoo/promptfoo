@@ -196,6 +196,40 @@ describe('OpenAI Provider', () => {
       expect(sdkArgs.defaultHeaders).not.toHaveProperty('OpenAI-Organization');
     });
 
+    it('passes custom gateway query credentials through the SDK default query', async () => {
+      const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: { type: 'message_creation', message_creation: { message_id: 'msg_1' } },
+          },
+        ],
+      };
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue({
+        role: 'assistant',
+        content: [{ type: 'text', text: { value: 'Test response' } }],
+      });
+      const gatewayProvider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret&region=west',
+        },
+      });
+
+      await gatewayProvider.callApi('Test prompt');
+
+      expect(OpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          baseURL: 'https://gateway.example/v1',
+          defaultQuery: { api_key: 'tenant-secret', region: 'west' },
+        }),
+      );
+    });
+
     it('emits a chat <model> span around the assistant run', async () => {
       const spans = installTracerSpy();
       const mockRun = { id: 'run_123', thread_id: 'thread_123', status: 'completed' };
