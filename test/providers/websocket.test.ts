@@ -165,11 +165,11 @@ describe('WebSocketProvider', () => {
     expect(WebSocket).toHaveBeenNthCalledWith(2, 'ws://test.com/sessions/session-2', {});
   });
 
-  it('should redact secrets from rendered URLs in debug logs', async () => {
+  it('should not log rendered URLs that contain template-like runtime values', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
     provider = new WebSocketProvider('ws://test.com', {
       config: {
-        url: 'wss://test.com/ws?token={{ token }}',
+        url: 'wss://test.com/ws/{{ sessionId }}?token={{ token }}',
         messageTemplate: '{{ prompt }}',
         timeoutMs: 1000,
       },
@@ -181,13 +181,64 @@ describe('WebSocketProvider', () => {
     );
     await provider.callApi('test prompt', {
       prompt: { raw: 'test prompt', label: 'test prompt' },
-      vars: { token: 'runtime-secret' },
+      vars: { sessionId: '{{ attacker_controlled }}', token: 'runtime-secret' },
     });
 
-    expect(WebSocket).toHaveBeenCalledWith('wss://test.com/ws?token=runtime-secret', {});
+    expect(WebSocket).toHaveBeenCalledWith(
+      'wss://test.com/ws/{{ attacker_controlled }}?token=runtime-secret',
+      {},
+    );
     const debugLogs = JSON.stringify(debugSpy.mock.calls);
-    expect(debugLogs).toContain('token=%5BREDACTED%5D');
+    expect(debugLogs).not.toContain('wss://test.com/ws');
     expect(debugLogs).not.toContain('runtime-secret');
+  });
+
+  it('should not expose rendered URLs in synchronous constructor errors', async () => {
+    websocketMocks.setFactory(() => {
+      throw new SyntaxError('Invalid URL: wss://[invalid-host/ws?token=runtime-secret');
+    });
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'wss://{{ host }}/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+      },
+    });
+
+    const error = await provider
+      .callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { host: '[invalid-host', token: 'runtime-secret' },
+      })
+      .catch((err: Error) => err);
+
+    expect(error).toEqual(new Error('Failed to create WebSocket connection'));
+    expect((error as Error).message).not.toContain('runtime-secret');
+  });
+
+  it('should use configured Nunjucks filters for URL and message templates', async () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://test.com/sessions/{{ sessionId | slugify }}',
+        messageTemplate: '{{ prompt | slugify }}',
+        timeoutMs: 1000,
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+    await provider.callApi('Test Prompt', {
+      prompt: { raw: 'Test Prompt', label: 'Test Prompt' },
+      vars: { sessionId: 'Conversation A' },
+      filters: {
+        slugify: (value: string) => value.toLowerCase().replaceAll(' ', '-'),
+      },
+    });
+
+    expect(WebSocket).toHaveBeenCalledWith('ws://test.com/sessions/conversation-a', {});
+    expect(mockWs.send).toHaveBeenCalledWith('test-prompt');
   });
 
   it('should pass configured protocols to WebSocket connection', async () => {

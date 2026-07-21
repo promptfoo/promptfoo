@@ -7,7 +7,6 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
-import { sanitizeUrlForLogging } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
@@ -19,8 +18,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-
-const nunjucks = getNunjucksEngine();
 
 export const processResult = normalizeResponseTransformResult;
 
@@ -241,11 +238,12 @@ export class WebSocketProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     };
+    const nunjucks = getNunjucksEngine(context?.filters);
     const url = nunjucks.renderString(this.url, vars);
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
     const streamResponse = this.streamResponse == null ? undefined : await this.streamResponse;
 
-    logger.debug(`Sending WebSocket message to ${sanitizeUrlForLogging(url)}: ${message}`);
+    logger.debug(`Sending WebSocket message: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
@@ -253,10 +251,16 @@ export class WebSocketProvider implements ApiProvider {
       if (this.config.headers) {
         wsOptions.headers = this.config.headers;
       }
-      const ws =
-        protocols.length > 0
-          ? new WebSocket(url, protocols, wsOptions)
-          : new WebSocket(url, wsOptions);
+      let ws: WebSocket;
+      try {
+        ws =
+          protocols.length > 0
+            ? new WebSocket(url, protocols, wsOptions)
+            : new WebSocket(url, wsOptions);
+      } catch {
+        reject(new Error('Failed to create WebSocket connection'));
+        return;
+      }
       const timeout = setTimeout(() => {
         ws.close();
         logger.error(`[WebSocket Provider] Request timed out`);
