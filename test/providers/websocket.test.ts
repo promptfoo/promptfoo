@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
+import logger from '../../src/logger';
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
 
 const websocketMocks = vi.hoisted(() => {
@@ -94,6 +95,7 @@ describe('WebSocketProvider', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -155,6 +157,30 @@ describe('WebSocketProvider', () => {
 
     expect(WebSocket).toHaveBeenNthCalledWith(1, 'ws://test.com/sessions/session-1', {});
     expect(WebSocket).toHaveBeenNthCalledWith(2, 'ws://test.com/sessions/session-2', {});
+  });
+
+  it('should redact secrets from rendered URLs in debug logs', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'wss://test.com/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    emitWebSocketEvents(
+      { type: 'open' },
+      { type: 'message', data: JSON.stringify({ result: 'test' }) },
+    );
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: { token: 'runtime-secret' },
+    });
+
+    expect(WebSocket).toHaveBeenCalledWith('wss://test.com/ws?token=runtime-secret', {});
+    const debugLogs = JSON.stringify(debugSpy.mock.calls);
+    expect(debugLogs).toContain('token=%5BREDACTED%5D');
+    expect(debugLogs).not.toContain('runtime-secret');
   });
 
   it('should pass configured protocols to WebSocket connection', async () => {
