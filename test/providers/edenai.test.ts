@@ -33,6 +33,37 @@ describe('createEdenAiProvider routing', () => {
     expect(asChat(createEdenAiProvider('edenai:chat')).modelName).toBe('openai/gpt-4o-mini');
     expect(asChat(createEdenAiProvider('edenai:chat:')).modelName).toBe('openai/gpt-4o-mini');
   });
+
+  it('fails fast on unsupported non-chat subtypes', () => {
+    expect(() => createEdenAiProvider('edenai:embeddings:openai/text-embedding-3-small')).toThrow(
+      /only supports chat completions/,
+    );
+    expect(() => createEdenAiProvider('edenai:responses:openai/gpt-4o-mini')).toThrow(
+      /only supports chat completions/,
+    );
+  });
+});
+
+describe('EdenAiProvider cost', () => {
+  it('uses the cost returned by Eden AI when present', () => {
+    const provider = createEdenAiProvider('edenai:anthropic/claude-sonnet-4-5') as any;
+    const cost = provider.calculateResponseCost(
+      { cost: 0.0123, usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } },
+      {},
+      false,
+    );
+    expect(cost).toBe(0.0123);
+  });
+
+  it('ignores the Eden AI cost on cache hits', () => {
+    const provider = createEdenAiProvider('edenai:openai/gpt-4o-mini') as any;
+    const cost = provider.calculateResponseCost(
+      { cost: 0.0123, usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } },
+      {},
+      true,
+    );
+    expect(cost).not.toBe(0.0123);
+  });
 });
 
 describe('EdenAiProvider configuration', () => {
