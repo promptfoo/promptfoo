@@ -268,7 +268,7 @@
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
     "tsdown": "0.21.9",
-    "typescript": "^6.0.2",
+    "typescript": "^7.0.0",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0",
     "yaml": "^2.9.0"
