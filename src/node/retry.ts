@@ -251,7 +251,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         const promptResultCount =
           metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount;
         if (result.cost === undefined) {
-          if (result.response && !result.response.error) {
+          if (result.response && !result.response.error && !result.response.cached) {
             metrics.cost = undefined;
           }
         } else if (promptResultCount === 1) {

@@ -1,19 +1,93 @@
 import { randomUUID } from 'node:crypto';
 
 import { eq, inArray } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getShareAuthorizedBlob,
   isBlobAllowedForShare,
   recordBlobReference,
   resetBlobStorageProvider,
   setBlobStorageProvider,
+  storeBlob,
 } from '../../src/blobs';
 import { getDb } from '../../src/database';
 import { blobAssetsTable, blobReferencesTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 
 import type { BlobStorageProvider } from '../../src/blobs';
+
+describe('abort-aware blob storage', () => {
+  const evalId = `eval-${randomUUID()}`;
+  const hash = 'f'.repeat(64);
+
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  afterEach(async () => {
+    resetBlobStorageProvider();
+    const db = await getDb();
+    await db.delete(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId));
+    await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
+    await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
+  });
+
+  it('deletes a newly stored blob and skips database references when aborted during storage', async () => {
+    const controller = new AbortController();
+    let finishStore: (() => void) | undefined;
+    const deleteByHash = vi.fn().mockResolvedValue(undefined);
+    setBlobStorageProvider({
+      providerId: 'abort-test',
+      store: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          finishStore = resolve;
+        });
+        return {
+          ref: {
+            uri: `blob://${hash}`,
+            hash,
+            mimeType: 'video/mp4',
+            provider: 'abort-test',
+            sizeBytes: 5,
+          },
+          deduplicated: false,
+        };
+      }),
+      getByHash: vi.fn(),
+      exists: vi.fn(),
+      deleteByHash,
+      getUrl: vi.fn(),
+    });
+    const db = await getDb();
+    await db.insert(evalsTable).values({ id: evalId, config: {}, results: {} });
+
+    const pendingStore = storeBlob(Buffer.from('video'), 'video/mp4', {
+      abortSignal: controller.signal,
+      evalId,
+      kind: 'video',
+      location: 'response.video',
+    });
+    controller.abort(new Error('cancelled while storing blob'));
+    finishStore?.();
+
+    await expect(pendingStore).rejects.toThrow('cancelled while storing blob');
+    expect(deleteByHash).toHaveBeenCalledWith(hash);
+    await expect(
+      db
+        .select({ id: blobReferencesTable.id })
+        .from(blobReferencesTable)
+        .where(eq(blobReferencesTable.evalId, evalId))
+        .get(),
+    ).resolves.toBeUndefined();
+    await expect(
+      db
+        .select({ hash: blobAssetsTable.hash })
+        .from(blobAssetsTable)
+        .where(eq(blobAssetsTable.hash, hash))
+        .get(),
+    ).resolves.toBeUndefined();
+  });
+});
 
 describe('blob share authorization', () => {
   const evalId = `eval-${randomUUID()}`;

@@ -324,7 +324,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     } as GoogleProviderConfig;
     if (
       config.vertexai &&
-      (config.previousInteractionId !== undefined ||
+      (Boolean(config.previousInteractionId) ||
         config.passthrough?.previous_interaction_id !== undefined ||
         config.passthrough?.previousInteractionId !== undefined)
     ) {
@@ -710,13 +710,20 @@ export class GoogleInteractionsProvider implements ApiProvider {
       }
       try {
         ({ ref: blobRef } = await storeBlob(videoBuffer, video.mime_type || 'video/mp4', {
+          abortSignal,
           evalId: context?.evaluationId,
           kind: 'video',
           location: 'response.video',
           promptIdx: context?.promptIdx,
           testIdx: context?.testIdx,
         }));
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
         return { error: `Failed to store Gemini interaction video: ${String(err)}` };
       }
     }

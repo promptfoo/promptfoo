@@ -957,6 +957,41 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('treats an empty top-level Vertex previousInteractionId as absent', async () => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(new Headers()),
+      },
+      projectId: 'configured-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        previousInteractionId: '',
+      },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    const body = JSON.parse(String(mockFetchWithCache.mock.calls[0]?.[1]?.body));
+    expect(body).not.toHaveProperty('previous_interaction_id');
+  });
+
   it('rejects unsupported Vertex Omni follow-ups supplied through passthrough', async () => {
     const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
       config: {
@@ -1222,6 +1257,53 @@ describe('GoogleInteractionsProvider', () => {
       expect.any(Number),
     );
     expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
+  it('normalizes cancellation while blob persistence is pending', async () => {
+    const controller = new AbortController();
+    let finishStore: (() => void) | undefined;
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockStoreBlob.mockImplementationOnce(async (_data, _mimeType, context) => {
+      await new Promise<void>((resolve) => {
+        finishStore = resolve;
+      });
+      context?.abortSignal?.throwIfAborted();
+      return {
+        ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
+        deduplicated: false,
+      } as any;
+    });
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const pendingCall = provider.callApi('A city at dusk', { evaluationId: 'eval-1' } as any, {
+      abortSignal: controller.signal,
+    });
+    await vi.waitFor(() => expect(mockStoreBlob).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled during blob persistence'));
+    finishStore?.();
+
+    await expect(pendingCall).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cancelled during blob persistence',
+    });
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      Buffer.from('video'),
+      'video/mp4',
+      expect.objectContaining({ abortSignal: controller.signal, evalId: 'eval-1' }),
+    );
   });
 
   it('normalizes cancellation that wins a Vertex authentication failure race', async () => {

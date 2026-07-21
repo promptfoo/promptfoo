@@ -44,6 +44,7 @@ export async function storeBlob(
   data: Buffer,
   mimeType: string,
   refContext?: {
+    abortSignal?: AbortSignal;
     evalId?: string;
     testIdx?: number;
     promptIdx?: number;
@@ -52,12 +53,17 @@ export async function storeBlob(
   },
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
+  refContext?.abortSignal?.throwIfAborted();
   const result = await provider.store(data, mimeType);
+  const referenceId = refContext?.evalId ? randomUUID() : undefined;
+  let transactionCommitted = false;
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = await getDb();
   try {
+    refContext?.abortSignal?.throwIfAborted();
     await db.transaction(async (tx) => {
+      refContext?.abortSignal?.throwIfAborted();
       await tx
         .insert(blobAssetsTable)
         .values({
@@ -69,11 +75,12 @@ export async function storeBlob(
         .onConflictDoNothing()
         .run();
 
-      if (refContext?.evalId) {
+      refContext?.abortSignal?.throwIfAborted();
+      if (refContext?.evalId && referenceId) {
         await tx
           .insert(blobReferencesTable)
           .values({
-            id: randomUUID(),
+            id: referenceId,
             blobHash: result.ref.hash,
             evalId: refContext.evalId,
             testIdx: refContext.testIdx,
@@ -84,13 +91,43 @@ export async function storeBlob(
           .onConflictDoNothing()
           .run();
       }
+      refContext?.abortSignal?.throwIfAborted();
     });
+    transactionCommitted = true;
+    refContext?.abortSignal?.throwIfAborted();
   } catch (error) {
-    // Roll back filesystem write if DB persistence fails
+    let shouldDeleteBlob = !result.deduplicated || !refContext?.abortSignal?.aborted;
     try {
-      await provider.deleteByHash(result.ref.hash);
+      if (transactionCommitted && refContext?.abortSignal?.aborted) {
+        await db.transaction(async (tx) => {
+          if (referenceId) {
+            await tx
+              .delete(blobReferencesTable)
+              .where(eq(blobReferencesTable.id, referenceId))
+              .run();
+          }
+          if (!result.deduplicated) {
+            const remainingReference = await tx
+              .select({ id: blobReferencesTable.id })
+              .from(blobReferencesTable)
+              .where(eq(blobReferencesTable.blobHash, result.ref.hash))
+              .get();
+            if (remainingReference) {
+              shouldDeleteBlob = false;
+            } else {
+              await tx
+                .delete(blobAssetsTable)
+                .where(eq(blobAssetsTable.hash, result.ref.hash))
+                .run();
+            }
+          }
+        });
+      }
+      if (shouldDeleteBlob) {
+        await provider.deleteByHash(result.ref.hash);
+      }
     } catch (cleanupError) {
-      logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
+      logger.warn('[BlobStorage] Failed to rollback blob after storage error or cancellation', {
         error: cleanupError,
         hash: result.ref.hash,
       });
