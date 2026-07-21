@@ -70,7 +70,13 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+const OpenApiResultRowParamsSchema = z.object({
+  id: z.string().min(1),
+  testIdx: z.number().int().nonnegative(),
+  promptIdx: z.number().int().nonnegative(),
+});
+
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -243,17 +249,37 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'get',
+    path: '/api/results/{id}/rows/{testIdx}/{promptIdx}',
+    operationId: 'getResultRow',
+    tags: ['Results'],
+    summary: 'Get one evaluation result row',
+    request: {
+      params: params('ResultRowParams', OpenApiResultRowParamsSchema),
+      query: query('ResultRowQuery', ServerSchemas.ResultRow.Query),
+    },
+    responses: {
+      200: jsonResponse('ResultRowResponse', ServerSchemas.ResultRow.Response),
+      400: validationError(),
+      404: notFound('Result row not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
     path: '/api/results/{id}',
     operationId: 'getResult',
     tags: ['Results'],
     summary: 'Get one evaluation result',
     request: {
       params: params('ResultParams', ServerSchemas.Result.Params),
+      query: query('ResultQuery', ServerSchemas.Result.Query),
     },
     responses: {
       200: jsonResponse('ResultResponse', ServerSchemas.Result.Response),
       400: validationError(),
       404: notFound('Result not found'),
+      500: serverError(),
     },
   });
 

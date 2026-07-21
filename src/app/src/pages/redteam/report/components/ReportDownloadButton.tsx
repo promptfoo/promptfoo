@@ -11,26 +11,37 @@ import { DownloadIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { downloadBlob } from '@app/hooks/useDownloadEval';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
+import { escapeCsvFormula } from '@app/utils/csv';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
-import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
-import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
+import {
+  getPluginIdFromResult,
+  getReportPrompt,
+  getStrategyIdFromTest,
+} from '../components/shared';
+import type { EvaluateResult, ResultsFile, SharedResults } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
+  evalId: string;
   evalDescription: string;
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
+const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
 
   const { recordEvent } = useTelemetry();
+  const { showToast } = useToast();
 
   const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
   function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const injectVar = evalData.config.redteam?.injectVar ?? 'prompt';
     const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
       let pluginDisplayName = null;
 
@@ -45,6 +56,9 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         }
       }
 
+      const pass = result.success;
+      const score = result.score;
+
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
@@ -53,23 +67,25 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
-        Prompt:
-          result.vars.query?.toString() ||
-          result.vars.prompt?.toString() ||
-          result.prompt.raw ||
-          '',
+        Prompt: getReportPrompt(result, injectVar),
         Response: result.response?.output || '',
-        Pass:
-          result.gradingResult?.pass === true
-            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
-            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
-        Score: result.gradingResult?.score || '',
+        Pass: `${pass ? 'Pass' : 'Fail'}${score === undefined ? '' : ` (${score})`}`,
+        Score: score ?? '',
         Reason: result.gradingResult?.reason || '',
         Timestamp: new Date(evalData.createdAt).toISOString(),
       };
     });
 
-    return stringify(rows, {
+    const escapedRows = rows.map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          typeof value === 'string' ? escapeCsvFormula(value) : value,
+        ]),
+      ),
+    );
+
+    return stringify(escapedRows, {
       header: true,
       quoted: true,
       quoted_string: true,
@@ -86,6 +102,11 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
       : `report.${extension}`;
   };
 
+  const showDownloadError = (format: 'CSV' | 'JSON', error: unknown) => {
+    const message = error instanceof Error && error.message ? error.message : 'Unexpected error';
+    showToast(`Failed to download ${format}: ${message}`, 'error', 5000);
+  };
+
   const handleCsvDownload = () => {
     setIsDownloading(true);
 
@@ -98,23 +119,16 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
     try {
       const csv = convertEvalDataToCsv(evalData);
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', getFilename('csv'));
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      downloadBlob(blob, getFilename('csv'));
     } catch (error) {
       console.error('Error generating CSV:', error);
+      showDownloadError('CSV', error);
     } finally {
       setIsDownloading(false);
     }
   };
 
-  const handleJsonDownload = () => {
+  const handleJsonDownload = async () => {
     setIsDownloading(true);
 
     // Track report export
@@ -124,19 +138,19 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
     });
 
     try {
-      const jsonData = JSON.stringify(evalData, null, 2);
-      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', getFilename('json'));
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+      const response = await callApi(`/results/${encodeURIComponent(evalId)}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to load full evaluation data (${response.status})`);
       }
+      const body = (await response.json()) as SharedResults;
+      const jsonData = JSON.stringify(body.data, null, 2);
+      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+      downloadBlob(blob, getFilename('json'));
     } catch (error) {
       console.error('Error generating JSON:', error);
+      showDownloadError('JSON', error);
     } finally {
       setIsDownloading(false);
     }

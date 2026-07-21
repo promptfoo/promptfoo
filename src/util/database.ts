@@ -16,7 +16,7 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
+import Eval, { createEvalId, type ResultsFileOptions } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
@@ -168,18 +168,17 @@ export async function writeResultsToDatabase(
 
 export async function readResult(
   id: string,
+  options: ResultsFileOptions = {},
 ): Promise<{ id: string; result: ResultsFile; createdAt: Date } | undefined> {
-  try {
-    const eval_ = await Eval.findById(id);
-    invariant(eval_, `Eval with ID ${id} not found.`);
-    return {
-      id,
-      result: await eval_.toResultsFile(),
-      createdAt: new Date(eval_.createdAt),
-    };
-  } catch (err) {
-    logger.error(`Failed to read result with ID ${id} from database:\n${err}`);
+  const eval_ = await Eval.findById(id);
+  if (!eval_) {
+    return undefined;
   }
+  return {
+    id,
+    result: await eval_.toResultsFile(options),
+    createdAt: new Date(eval_.createdAt),
+  };
 }
 
 export async function updateResult(

@@ -1393,6 +1393,8 @@ export interface ResultsFile {
   prompts?: CompletedPrompt[];
   /** Persisted display order for table variable columns. */
   vars?: string[];
+  /** Included by default; omitted when `includeTraces=false`. */
+  traces?: TraceData[];
   // Included by readResult() in util.
   datasetId?: string | null;
 }

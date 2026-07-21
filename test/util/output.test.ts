@@ -448,11 +448,27 @@ describe('writeOutput', () => {
         spans: [
           {
             spanId: 'span-strip-bodies',
-            name: 'provider',
+            name: 'search "trace-search-query-secret"',
             startTime: 1,
+            statusMessage: 'trace-status-secret',
             attributes: {
+              'promptfoo.prompt.label': 'trace-prompt-label-secret',
               'promptfoo.request.body': 'trace-prompt-secret',
               'promptfoo.response.body': 'trace-response-secret',
+              'tool.arguments': 'trace-tool-arguments-secret',
+              'tool.input': 'trace-tool-input-secret',
+              'function.arguments': 'trace-function-arguments-secret',
+              'codex.mcp.input': 'trace-mcp-input-secret',
+              'tool.output': 'trace-tool-output-secret',
+              'tool.result': 'trace-tool-result-secret',
+              'ai.toolCall.result': 'trace-vercel-tool-result-secret',
+              'codex.command': 'trace-command-secret',
+              'codex.search.query': 'trace-search-query-secret',
+              'codex.output': 'trace-command-output-secret',
+              'codex.message': 'trace-message-secret',
+              'codex.reasoning': 'trace-codex-reasoning-secret',
+              'codex.reasoning.summary': 'trace-reasoning-secret',
+              'codex.error': 'trace-error-secret',
               operation: 'provider-call',
             },
           },
@@ -465,9 +481,32 @@ describe('writeOutput', () => {
 
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = JSON.parse(written);
-      expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
+      expect(parsed.traces[0].spans[0]).toMatchObject({
+        name: 'search "[output stripped]"',
+        attributes: {
+          'codex.error': '[error details stripped]',
+          operation: 'provider-call',
+        },
+      });
+      expect(parsed.traces[0].spans[0].statusMessage).toBe('[error details stripped]');
+      expect(written).not.toContain('trace-prompt-label-secret');
       expect(written).not.toContain('trace-prompt-secret');
       expect(written).not.toContain('trace-response-secret');
+      expect(written).not.toContain('trace-tool-arguments-secret');
+      expect(written).not.toContain('trace-tool-input-secret');
+      expect(written).not.toContain('trace-function-arguments-secret');
+      expect(written).not.toContain('trace-mcp-input-secret');
+      expect(written).not.toContain('trace-tool-output-secret');
+      expect(written).not.toContain('trace-tool-result-secret');
+      expect(written).not.toContain('trace-vercel-tool-result-secret');
+      expect(written).not.toContain('trace-command-secret');
+      expect(written).not.toContain('trace-search-query-secret');
+      expect(written).not.toContain('trace-command-output-secret');
+      expect(written).not.toContain('trace-message-secret');
+      expect(written).not.toContain('trace-codex-reasoning-secret');
+      expect(written).not.toContain('trace-reasoning-secret');
+      expect(written).not.toContain('trace-error-secret');
+      expect(written).not.toContain('trace-status-secret');
     } finally {
       traceSpy.mockRestore();
       restoreEnv();

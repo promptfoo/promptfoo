@@ -32,6 +32,8 @@ vi.mock('../../../src/logger', () => ({
 vi.mock('../../../src/models/eval', () => ({
   default: {
     findById: vi.fn(),
+    exists: vi.fn(),
+    getResultByIdAndIndices: vi.fn(),
   },
   getEvalSummaries: vi.fn(),
 }));
@@ -185,6 +187,73 @@ describe('inline server API DTO validation', () => {
     expect(mockedGetEvalSummaries).not.toHaveBeenCalled();
   });
 
+  it('loads one bounded result row by test and prompt index', async () => {
+    mockedEval.exists.mockResolvedValue(true);
+    mockedEval.getResultByIdAndIndices.mockResolvedValue({
+      testIdx: 2,
+      promptIdx: 3,
+      response: { output: 'Selected output' },
+    } as never);
+
+    const response = await api.get('/api/results/eval-1/rows/2/3?resultId=row-1');
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      testIdx: 2,
+      promptIdx: 3,
+      response: { output: 'Selected output' },
+    });
+    expect(mockedEval.getResultByIdAndIndices).toHaveBeenCalledWith('eval-1', 2, 3, 'row-1');
+    expect(mockedEval.findById).not.toHaveBeenCalled();
+    expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid result row indices before loading an eval', async () => {
+    const response = await api.get('/api/results/eval-1/rows/not-a-number/3');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('testIdx');
+    expect(mockedEval.exists).not.toHaveBeenCalled();
+  });
+
+  it('returns a JSON error DTO when a selected result row is missing', async () => {
+    mockedEval.exists.mockResolvedValue(true);
+    mockedEval.getResultByIdAndIndices.mockResolvedValue(undefined);
+
+    const response = await api.get('/api/results/eval-1/rows/2/3');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Result row not found' });
+  });
+
+  it('returns a JSON error DTO when the selected evaluation is missing', async () => {
+    mockedEval.exists.mockResolvedValue(false);
+
+    const response = await api.get('/api/results/missing-eval/rows/2/3');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Result not found' });
+    expect(mockedEval.getResultByIdAndIndices).not.toHaveBeenCalled();
+  });
+
+  it('returns a 500 when bounded result lookup fails', async () => {
+    mockedEval.exists.mockResolvedValue(true);
+    mockedEval.getResultByIdAndIndices.mockRejectedValue(new Error('sqlite: database is locked'));
+
+    const response = await api.get('/api/results/eval-1/rows/2/3');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load result row' });
+  });
+
+  it('rejects empty bounded result IDs', async () => {
+    const response = await api.get('/api/results/eval-1/rows/2/3?resultId=');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('resultId');
+    expect(mockedEval.exists).not.toHaveBeenCalled();
+  });
+
   it('returns JSON error DTOs for missing result files', async () => {
     mockedReadResult.mockResolvedValue(undefined);
 
@@ -192,6 +261,67 @@ describe('inline server API DTO validation', () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: 'Result not found' });
+    expect(mockedReadResult).toHaveBeenCalledWith('missing-eval', {
+      includeTraces: true,
+      resultProjection: 'full',
+    });
+  });
+
+  it('returns a 500 instead of a false 404 when result loading fails', async () => {
+    mockedReadResult.mockRejectedValue(new Error('compact SQL projection failed'));
+
+    const response = await api.get('/api/results/eval-1?resultProjection=redteamReport');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load result' });
+  });
+
+  it('allows result callers to omit traces from the response', async () => {
+    mockedReadResult.mockResolvedValue({
+      id: 'eval-1',
+      createdAt: new Date(),
+      result: { config: {} },
+    } as never);
+
+    const response = await api.get('/api/results/eval-1?includeTraces=false');
+
+    expect(response.status).toBe(200);
+    expect(mockedReadResult).toHaveBeenCalledWith('eval-1', {
+      includeTraces: false,
+      resultProjection: 'full',
+    });
+  });
+
+  it('rejects invalid includeTraces query params', async () => {
+    const response = await api.get('/api/results/eval-1?includeTraces=sometimes');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('includeTraces');
+    expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('allows redteam report callers to request compact result projections', async () => {
+    mockedReadResult.mockResolvedValue({
+      id: 'eval-1',
+      createdAt: new Date(),
+      result: { config: {} },
+    } as never);
+
+    const response = await api.get('/api/results/eval-1?resultProjection=redteamReport');
+
+    expect(response.status).toBe(200);
+    expect(mockedReadResult).toHaveBeenCalledWith('eval-1', {
+      includeTraces: true,
+      resultProjection: 'redteamReport',
+    });
+  });
+
+  it('rejects invalid resultProjection query params', async () => {
+    const response = await api.get('/api/results/eval-1?resultProjection=tiny');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('resultProjection');
+    expect(mockedReadResult).not.toHaveBeenCalled();
   });
 
   it('redacts Azure Blob SAS tokens from result and dataset response DTOs', async () => {

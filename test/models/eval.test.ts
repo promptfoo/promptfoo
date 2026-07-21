@@ -14,16 +14,30 @@ import Eval, {
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
+import { PromptfooAttributes } from '../../src/tracing/genaiTracer';
 import { TraceStore } from '../../src/tracing/store';
-import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
-import { updateResult, writeResultsToDatabase } from '../../src/util/database';
+import {
+  type EvaluateResult,
+  type Prompt,
+  ResultFailureReason,
+  type TraceData,
+} from '../../src/types/index';
+import { readResult, updateResult, writeResultsToDatabase } from '../../src/util/database';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createEvaluateSummaryV2,
+  createEvaluateTable,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -1165,6 +1179,180 @@ describe('evaluator', () => {
     });
   });
 
+  describe('getResult', () => {
+    it('loads only the selected persisted result row', async () => {
+      const eval1 = await EvalFactory.create();
+      const loadResultsSpy = vi.spyOn(eval1, 'loadResults');
+
+      const result = await eval1.getResult(1, 0);
+
+      expect(result).toMatchObject({
+        testIdx: 1,
+        promptIdx: 0,
+        response: { output: 'san francisco' },
+      });
+      expect(loadResultsSpy).not.toHaveBeenCalled();
+      expect(eval1.results).toEqual([]);
+    });
+
+    it('loads selected legacy result rows', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [createEvaluateResult({ testIdx: 4, promptIdx: 2 })],
+      });
+
+      expect(await eval1.getResult(4, 2)).toMatchObject({ testIdx: 4, promptIdx: 2 });
+      expect(await eval1.getResult(5, 2)).toBeUndefined();
+    });
+
+    it('applies output strip flags to selected legacy result rows', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            testIdx: 4,
+            promptIdx: 2,
+            prompt: {
+              raw: 'sensitive legacy detail raw',
+              label: 'sensitive legacy detail label',
+              display: 'sensitive legacy detail display',
+              template: 'sensitive legacy detail template',
+              config: { suffix: 'sensitive legacy detail config' },
+            },
+            vars: { prompt: 'sensitive legacy detail var' },
+            testCase: {
+              vars: { prompt: 'sensitive legacy detail var' },
+              metadata: { purpose: 'sensitive legacy detail metadata' },
+            },
+            response: {
+              output: 'sensitive legacy detail output',
+              prompt: 'sensitive legacy provider prompt',
+              metadata: { redteamFinalPrompt: 'sensitive legacy final prompt' },
+            },
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'sensitive legacy grading reason',
+            },
+            metadata: {
+              debug: 'sensitive legacy result metadata',
+              redteamFinalPrompt: 'sensitive legacy top-level final prompt',
+            },
+          }),
+        ],
+      });
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const result = await eval1.getResult(4, 2);
+
+        expect(result?.prompt).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(result?.prompt).not.toHaveProperty('template');
+        expect(result?.prompt).not.toHaveProperty('config');
+        expect(result?.response).toEqual({ output: '[output stripped]' });
+        expect(result?.vars).toEqual({});
+        expect(result?.testCase.vars).toBeUndefined();
+        expect(result?.testCase).not.toHaveProperty('metadata');
+        expect(result?.gradingResult).toBeNull();
+        expect(result?.metadata).toEqual({});
+        expect(JSON.stringify(result)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('selects duplicate persisted rows by immutable result ID', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          promptIdx: 0,
+          success: false,
+          response: { output: 'stale retry output' },
+        }),
+      );
+      await eval1.addResult(
+        createEvaluateResult({
+          testIdx: 0,
+          promptIdx: 0,
+          success: true,
+          response: { output: 'final retry output' },
+        }),
+      );
+      const db = await getDb();
+      const rows = await db
+        .select({ id: evalResultsTable.id, response: evalResultsTable.response })
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, eval1.id))
+        .all();
+      const finalRow = rows.find((row) => row.response?.output === 'final retry output');
+
+      expect(finalRow).toBeDefined();
+      await expect(
+        Eval.getResultByIdAndIndices(eval1.id, 0, 0, finalRow!.id),
+      ).resolves.toMatchObject({
+        id: finalRow!.id,
+        success: true,
+        response: { output: 'final retry output' },
+      });
+      await expect(
+        Eval.getResultByIdAndIndices(eval1.id, 0, 1, finalRow!.id),
+      ).resolves.toBeUndefined();
+
+      const compact = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      expect(compact.results.results.map((result) => result.id)).toEqual(
+        expect.arrayContaining(rows.map((row) => row.id)),
+      );
+    });
+
+    it('loads and sanitizes one legacy result without hydrating the evaluation', async () => {
+      const legacyResult = createEvaluateResult({
+        id: 'legacy-row-id',
+        testIdx: 4,
+        promptIdx: 2,
+        provider: {
+          id: 'legacy-provider',
+          label: 'Legacy provider',
+          config: { apiKey: 'legacy-provider-secret' },
+        } as EvaluateResult['provider'],
+        response: {
+          output: 'legacy output',
+          metadata: { headers: { authorization: 'Bearer legacy-secret' } },
+        },
+      });
+      const evalId = await writeResultsToDatabase(
+        createEvaluateSummaryV2({ results: [legacyResult] }),
+        {},
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById');
+
+      const result = await Eval.getResultByIdAndIndices(evalId, 4, 2, 'legacy-row-id');
+
+      expect(findByIdSpy).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        id: 'legacy-row-id',
+        provider: { id: 'legacy-provider', label: 'Legacy provider' },
+        response: { output: 'legacy output' },
+      });
+      expect(result?.provider).not.toHaveProperty('config');
+      expect(JSON.stringify(result)).not.toContain('legacy-provider-secret');
+      expect(JSON.stringify(result)).not.toContain('Bearer legacy-secret');
+      await expect(
+        Eval.getResultByIdAndIndices(evalId, 4, 2, 'other-row-id'),
+      ).resolves.toBeUndefined();
+    });
+  });
+
   describe('toResultsFile', () => {
     it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
@@ -1215,6 +1403,2098 @@ describe('evaluator', () => {
       const results = await eval1.toResultsFile();
 
       expect(results.results).toEqual(await eval1.toEvaluateSummary());
+    });
+
+    it('should skip loading traces when includeTraces is false', async () => {
+      const eval1 = await EvalFactory.create();
+      const getTracesSpy = vi.spyOn(eval1, 'getTraces');
+
+      const results = await eval1.toResultsFile({ includeTraces: false });
+
+      expect(getTracesSpy).not.toHaveBeenCalled();
+      expect(results).not.toHaveProperty('traces');
+    });
+
+    it('applies output strip flags to default full prompts, results, and traces', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addPrompts([
+        createCompletedPrompt('V4_PROMPT_RAW', {
+          label: 'V4_PROMPT_LABEL',
+          display: 'V4_PROMPT_DISPLAY',
+          template: 'V4_PROMPT_TEMPLATE',
+          config: { suffix: 'V4_PROMPT_CONFIG' },
+        }),
+      ]);
+      await eval1.addResult(
+        createEvaluateResult({
+          prompt: {
+            raw: 'V4_RESULT_PROMPT_RAW',
+            label: 'V4_RESULT_PROMPT_LABEL',
+            template: 'V4_RESULT_PROMPT_TEMPLATE',
+          },
+          vars: { prompt: 'V4_RESULT_VAR' },
+          response: {
+            output: 'V4_RESULT_OUTPUT',
+            raw: { secret: 'V4_RESPONSE_RAW' },
+            providerTransformedOutput: 'V4_TRANSFORMED_OUTPUT',
+            prompt: 'V4_PROVIDER_PROMPT',
+            audio: { data: 'V4_RESPONSE_AUDIO' },
+            images: [{ data: 'V4_RESPONSE_IMAGE' }],
+            video: { url: 'V4_RESPONSE_VIDEO' },
+            materializedVars: { prompt: 'V4_MATERIALIZED_VAR' },
+            inputMaterialization: { prompt: 'V4_INPUT_MATERIALIZATION' },
+            metadata: { redteamFinalPrompt: 'V4_FINAL_PROMPT' },
+          },
+          testCase: {
+            vars: { prompt: 'V4_TEST_CASE_VAR' },
+            metadata: { purpose: 'V4_TEST_CASE_METADATA' },
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'V4_GRADING_REASON',
+          },
+          metadata: { debug: 'V4_RESULT_METADATA' },
+        }),
+      );
+      const trace = {
+        traceId: 'trace-id',
+        evaluationId: eval1.id,
+        testCaseId: 'test-case-id',
+        metadata: {
+          vars: { prompt: 'V4_TRACE_VAR' },
+          debug: 'V4_TRACE_METADATA',
+        },
+        spans: [
+          {
+            spanId: 'span-id',
+            name: 'search "V4_TRACE_SEARCH_QUERY"',
+            startTime: 0,
+            statusMessage: 'V4_TRACE_STATUS_MESSAGE',
+            status: { code: 'error', message: 'V4_TRACE_RUNTIME_STATUS' },
+            attributes: {
+              [PromptfooAttributes.PROMPT_LABEL]: 'V4_TRACE_PROMPT_LABEL',
+              [PromptfooAttributes.REQUEST_BODY]: 'V4_TRACE_REQUEST',
+              [PromptfooAttributes.RESPONSE_BODY]: 'V4_TRACE_RESPONSE',
+              'tool.arguments': 'V4_TRACE_TOOL_ARGUMENTS',
+              'tool.input': 'V4_TRACE_TOOL_INPUT',
+              'function.arguments': 'V4_TRACE_FUNCTION_ARGUMENTS',
+              'codex.mcp.input': 'V4_TRACE_MCP_INPUT',
+              'tool.output': 'V4_TRACE_TOOL_OUTPUT',
+              'tool.result': 'V4_TRACE_TOOL_RESULT',
+              'ai.toolCall.result': 'V4_TRACE_VERCEL_TOOL_RESULT',
+              'codex.command': 'V4_TRACE_COMMAND',
+              'codex.search.query': 'V4_TRACE_SEARCH_QUERY',
+              'codex.output': 'V4_TRACE_COMMAND_OUTPUT',
+              'codex.message': 'V4_TRACE_MESSAGE',
+              'codex.reasoning': 'V4_TRACE_REASONING',
+              'codex.reasoning.summary': 'V4_TRACE_REASONING_SUMMARY',
+              'codex.error': 'V4_TRACE_ERROR',
+              safe: 'retained',
+            },
+          },
+          {
+            spanId: 'span-without-attributes',
+            name: 'failed provider call',
+            startTime: 1,
+            statusMessage: 'V4_TRACE_STATUS_WITHOUT_ATTRIBUTES',
+          },
+        ],
+      } as unknown as TraceData;
+      vi.spyOn(eval1, 'getTraces').mockResolvedValue([trace]);
+
+      const unstripped = await eval1.toResultsFile();
+      expect(JSON.stringify(unstripped)).toContain('V4_PROMPT_TEMPLATE');
+      expect(JSON.stringify(unstripped)).toContain('V4_RESPONSE_RAW');
+      expect(JSON.stringify(unstripped)).toContain('V4_TRACE_REQUEST');
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile();
+        const serialized = JSON.stringify(projected);
+
+        expect(serialized).not.toContain('V4_');
+        expect(projected.prompts?.[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(projected.prompts?.[0]).not.toHaveProperty('template');
+        expect(projected.prompts?.[0]).not.toHaveProperty('config');
+        expect('prompts' in projected.results && projected.results.prompts[0]).toEqual(
+          projected.prompts?.[0],
+        );
+        expect(projected.results.results[0]).toMatchObject({
+          vars: {},
+          response: { output: '[output stripped]' },
+          gradingResult: null,
+        });
+        expect(projected.traces?.[0]).not.toHaveProperty('metadata');
+        expect(projected.traces?.[0].spans[0]).toMatchObject({
+          name: 'search "[output stripped]"',
+          attributes: {
+            'codex.error': '[error details stripped]',
+            safe: 'retained',
+          },
+        });
+        expect(projected.traces?.[0].spans[0].statusMessage).toBe('[error details stripped]');
+        expect(
+          (projected.traces?.[0].spans[0] as unknown as { status: { message: string } }).status
+            .message,
+        ).toBe('[error details stripped]');
+        expect(projected.traces?.[0].spans[1].statusMessage).toBe('[error details stripped]');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('applies output strip flags to default legacy results and table copies', async () => {
+      const sensitiveMarkers = [
+        'V2_RESULT_PROMPT',
+        'V2_RESULT_VAR',
+        'V2_RESULT_OUTPUT',
+        'V2_PROVIDER_PROMPT',
+        'V2_GRADING_REASON',
+        'V2_RESULT_METADATA',
+        'V2_RESULT_PROVIDER_OUTPUT',
+        'V2_RESULT_PROMPT_PREFIX',
+        'V2_RESULT_PROMPT_SUFFIX',
+        'V2_TABLE_PROMPT',
+        'V2_TABLE_PROMPT_TEMPLATE',
+        'V2_TABLE_PROMPT_CONFIG',
+        'V2_ROW_VAR',
+        'V2_ROW_TEST_VAR',
+        'V2_ROW_TEST_METADATA',
+        'V2_ROW_PROVIDER_OUTPUT',
+        'V2_ROW_PROMPT_PREFIX',
+        'V2_ROW_PROMPT_SUFFIX',
+        'V2_TABLE_OUTPUT_PROMPT',
+        'V2_TABLE_OUTPUT_TEXT',
+        'V2_TABLE_RESPONSE_OUTPUT',
+        'V2_TABLE_RESPONSE_PROMPT',
+        'V2_TABLE_RESPONSE_RAW',
+        'V2_TABLE_TRANSFORMED_OUTPUT',
+        'V2_TABLE_RESPONSE_AUDIO',
+        'V2_TABLE_RESPONSE_IMAGE',
+        'V2_TABLE_RESPONSE_VIDEO',
+        'V2_TABLE_MATERIALIZED_VAR',
+        'V2_TABLE_INPUT_MATERIALIZATION',
+        'V2_TABLE_GRADING_REASON',
+        'V2_TABLE_TEST_CASE_VAR',
+        'V2_TABLE_TEST_CASE_METADATA',
+        'V2_TABLE_PROVIDER_OUTPUT',
+        'V2_TABLE_PROMPT_PREFIX',
+        'V2_TABLE_PROMPT_SUFFIX',
+        'V2_TABLE_METADATA',
+        'V2_TABLE_ERROR',
+      ];
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            prompt: { raw: 'V2_RESULT_PROMPT', label: 'V2_RESULT_PROMPT' },
+            vars: { prompt: 'V2_RESULT_VAR' },
+            response: {
+              output: 'V2_RESULT_OUTPUT',
+              prompt: 'V2_PROVIDER_PROMPT',
+            },
+            gradingResult: { pass: false, score: 0, reason: 'V2_GRADING_REASON' },
+            testCase: {
+              providerOutput: 'V2_RESULT_PROVIDER_OUTPUT',
+              options: {
+                prefix: 'V2_RESULT_PROMPT_PREFIX',
+                suffix: 'V2_RESULT_PROMPT_SUFFIX',
+                repeat: 2,
+              },
+            },
+            metadata: { debug: 'V2_RESULT_METADATA' },
+          }),
+        ],
+        table: createEvaluateTable({
+          head: {
+            prompts: [
+              createCompletedPrompt('V2_TABLE_PROMPT', {
+                template: 'V2_TABLE_PROMPT_TEMPLATE',
+                config: { suffix: 'V2_TABLE_PROMPT_CONFIG' },
+              }),
+            ],
+            vars: ['prompt'],
+          },
+          body: [
+            createEvaluateTableRow({
+              vars: ['V2_ROW_VAR'],
+              test: {
+                vars: { prompt: 'V2_ROW_TEST_VAR' },
+                metadata: { purpose: 'V2_ROW_TEST_METADATA' },
+                providerOutput: 'V2_ROW_PROVIDER_OUTPUT',
+                options: {
+                  prefix: 'V2_ROW_PROMPT_PREFIX',
+                  suffix: 'V2_ROW_PROMPT_SUFFIX',
+                  repeat: 2,
+                },
+              },
+              outputs: [
+                createEvaluateTableOutput({
+                  prompt: 'V2_TABLE_OUTPUT_PROMPT',
+                  text: 'V2_TABLE_OUTPUT_TEXT',
+                  response: {
+                    output: 'V2_TABLE_RESPONSE_OUTPUT',
+                    prompt: 'V2_TABLE_RESPONSE_PROMPT',
+                    raw: { secret: 'V2_TABLE_RESPONSE_RAW' },
+                    providerTransformedOutput: 'V2_TABLE_TRANSFORMED_OUTPUT',
+                    audio: { data: 'V2_TABLE_RESPONSE_AUDIO' },
+                    images: [{ data: 'V2_TABLE_RESPONSE_IMAGE' }],
+                    video: { url: 'V2_TABLE_RESPONSE_VIDEO' },
+                    materializedVars: { prompt: 'V2_TABLE_MATERIALIZED_VAR' },
+                    inputMaterialization: { prompt: 'V2_TABLE_INPUT_MATERIALIZATION' },
+                  },
+                  gradingResult: {
+                    pass: false,
+                    score: 0,
+                    reason: 'V2_TABLE_GRADING_REASON',
+                  },
+                  testCase: {
+                    vars: { prompt: 'V2_TABLE_TEST_CASE_VAR' },
+                    metadata: { purpose: 'V2_TABLE_TEST_CASE_METADATA' },
+                    providerOutput: 'V2_TABLE_PROVIDER_OUTPUT',
+                    options: {
+                      prefix: 'V2_TABLE_PROMPT_PREFIX',
+                      suffix: 'V2_TABLE_PROMPT_SUFFIX',
+                      repeat: 2,
+                    },
+                  },
+                  metadata: { debug: 'V2_TABLE_METADATA' },
+                  error: 'V2_TABLE_ERROR',
+                }),
+              ],
+            }),
+          ],
+        }),
+      });
+
+      const unstripped = await eval1.toResultsFile({ includeTraces: false });
+      const unstrippedSerialized = JSON.stringify(unstripped);
+      for (const marker of sensitiveMarkers) {
+        expect(unstrippedSerialized).toContain(marker);
+      }
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ includeTraces: false });
+        const serialized = JSON.stringify(projected);
+
+        expect(serialized).not.toContain('V2_');
+        expect(projected.results.version).toBe(2);
+        if (projected.results.version !== 2) {
+          throw new Error('Expected a legacy V2 result');
+        }
+        const tableOutput = projected.results.table.body[0].outputs[0];
+        expect(projected.results.results).toHaveLength(1);
+        expect(projected.results.table.body).toHaveLength(1);
+        expect(projected.results.table.head.prompts[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        });
+        expect(projected.results.table.head.prompts[0]).not.toHaveProperty('template');
+        expect(projected.results.table.head.prompts[0]).not.toHaveProperty('config');
+        expect(projected.results.table.body[0].vars).toEqual(['']);
+        expect(tableOutput).toMatchObject({
+          prompt: '[prompt stripped]',
+          text: '[output stripped]',
+          response: { output: '[output stripped]' },
+          gradingResult: null,
+          error: '[error details stripped]',
+        });
+        expect(tableOutput).not.toHaveProperty('metadata');
+        expect(projected.results.results[0].testCase.options).toEqual({ repeat: 2 });
+        expect(projected.results.table.body[0].test.options).toEqual({ repeat: 2 });
+        expect(tableOutput.testCase.options).toEqual({ repeat: 2 });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('projects historical V2 rows that omit result and table-output test cases', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const eval1 = await Eval.findById(stored.id);
+      expect(eval1).toBeDefined();
+
+      const unstripped = await eval1!.toResultsFile({ includeTraces: false });
+      expect(unstripped.results.version).toBe(2);
+      if (unstripped.results.version !== 2) {
+        throw new Error('Expected a legacy V2 result');
+      }
+      expect(unstripped.results.results).toHaveLength(2);
+      expect(unstripped.results.results[0]).not.toHaveProperty('testCase');
+      expect(unstripped.results.table.body[0].outputs).toHaveLength(2);
+      expect(unstripped.results.table.body[0].outputs[0]).not.toHaveProperty('testCase');
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1!.toResultsFile({ includeTraces: false });
+        expect(projected.results.version).toBe(2);
+        if (projected.results.version !== 2) {
+          throw new Error('Expected a legacy V2 result');
+        }
+
+        expect(projected.results.results).toHaveLength(2);
+        expect(projected.results.results[0]).not.toHaveProperty('testCase');
+        expect(projected.results.results[0]).toMatchObject({
+          prompt: { raw: '[prompt stripped]', label: '[prompt stripped]' },
+          response: { output: '[output stripped]' },
+          vars: {},
+          gradingResult: null,
+        });
+        expect(projected.results.table.body[0].outputs).toHaveLength(2);
+        expect(projected.results.table.body[0].outputs[0]).not.toHaveProperty('testCase');
+        expect(projected.results.table.body[0].outputs[0]).toMatchObject({
+          prompt: '[prompt stripped]',
+          text: '[output stripped]',
+          gradingResult: null,
+        });
+        expect(projected.results.table.body[0].vars).toEqual(['', '']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('fails closed on malformed legacy prompts, responses, and table vars', async () => {
+      for (const malformedVars of [
+        null,
+        'MALFORMED_ROW_VARS_STRING',
+        { secret: 'MALFORMED_ROW_VARS_OBJECT' },
+      ]) {
+        const eval1 = new Eval({});
+        eval1.oldResults = createEvaluateSummaryV2({
+          results: [
+            createEvaluateResult({
+              prompt: 'MALFORMED_PROMPT_SECRET',
+              response: 'MALFORMED_RESPONSE_SECRET',
+              testCase: 'MALFORMED_RESULT_TEST_CASE_SECRET',
+            } as unknown as Partial<EvaluateResult>),
+          ],
+          table: createEvaluateTable({
+            body: [
+              createEvaluateTableRow({
+                vars: malformedVars,
+                test: 'MALFORMED_ROW_TEST_CASE_SECRET',
+                outputs: [
+                  createEvaluateTableOutput({
+                    testCase: 'MALFORMED_OUTPUT_TEST_CASE_SECRET',
+                  } as unknown as Parameters<typeof createEvaluateTableOutput>[0]),
+                ],
+              } as unknown as Parameters<typeof createEvaluateTableRow>[0]),
+            ],
+          }),
+        });
+
+        const unstripped = await eval1.toResultsFile({ includeTraces: false });
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_PROMPT_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_RESPONSE_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_RESULT_TEST_CASE_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_ROW_TEST_CASE_SECRET');
+        expect(JSON.stringify(unstripped)).toContain('MALFORMED_OUTPUT_TEST_CASE_SECRET');
+        expect(unstripped.results.version).toBe(2);
+        if (unstripped.results.version !== 2) {
+          throw new Error('Expected a legacy V2 result');
+        }
+        expect(unstripped.results.table.body[0].vars).toBe(malformedVars);
+
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+        });
+
+        try {
+          const projected = await eval1.toResultsFile({ includeTraces: false });
+          expect(projected.results.version).toBe(2);
+          if (projected.results.version !== 2) {
+            throw new Error('Expected a legacy V2 result');
+          }
+
+          expect(JSON.stringify(projected)).not.toContain('MALFORMED_');
+          expect(projected.results.results[0]).toMatchObject({
+            prompt: { raw: '[prompt stripped]', label: '[prompt stripped]' },
+            response: { output: '[output stripped]' },
+          });
+          expect(projected.results.results[0].promptId).toEqual(expect.any(String));
+          expect(projected.results.results[0].testCase).toBeUndefined();
+          expect(projected.results.table.body[0].vars).toEqual([]);
+          expect(projected.results.table.body[0].test).toBeUndefined();
+          expect(projected.results.table.body[0].outputs[0].testCase).toBeUndefined();
+        } finally {
+          restoreEnv();
+        }
+      }
+    });
+
+    it('should remove oversized fields from redteam report result projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      const loadResultsSpy = vi.spyOn(eval1, 'loadResults');
+      const oversizedText = 'x'.repeat(1_000_000);
+      eval1.config = {
+        description: 'Compact report',
+        providers: [
+          {
+            id: 'test-provider',
+            label: 'Test provider',
+            config: {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'search',
+                    description: 'Search safely',
+                    parameters: {
+                      type: 'object',
+                      properties: { api_key: { type: 'string' }, password: { type: 'string' } },
+                    },
+                  },
+                },
+                {
+                  type: 'mcp',
+                  server_label: 'private-server',
+                  server_url: 'https://user:password@example.com?token=tool-secret',
+                  headers: { authorization: 'Bearer tool-secret' },
+                  allowed_tools: ['read'],
+                },
+                { type: 'custom', nested: { apiKey: 'unknown-tool-secret' } },
+              ],
+              apiKey: 'should not be projected',
+            },
+          },
+        ],
+        tests: [{ vars: { prompt: 'duplicate corpus entry' } }],
+        redteam: {
+          injectVar: 'attackInput',
+          frameworks: ['owasp:llm'],
+          plugins: [
+            {
+              id: 'coding-agent:network-egress-bypass',
+              severity: 'high',
+              config: { apiKey: 'plugin-secret', prompt: oversizedText },
+            },
+            { id: 'policy', config: { policy: 'Inline policy text', apiKey: 'policy-secret' } },
+            {
+              id: 'policy',
+              config: {
+                policy: {
+                  id: 'policy-id',
+                  name: 'Named policy',
+                  text: 'Named policy text',
+                  apiKey: 'policy-object-secret',
+                },
+              },
+            },
+          ] as any,
+          purpose: 'should not be projected',
+          strategies: ['jailbreak:meta'],
+        },
+      };
+      await eval1.addPrompts([
+        createCompletedPrompt('target prompt', {
+          template: oversizedText,
+          config: { suffix: oversizedText },
+        }),
+      ]);
+      await eval1.addResult(
+        createEvaluateResult({
+          vars: {
+            attackInput: 'attack',
+            harmCategory: 'Violent Crimes',
+            unusedContext: oversizedText,
+          },
+          metadata: {
+            pluginId: 'coding-agent:network-egress-bypass',
+            storedGraderResult: { large: oversizedText },
+            redteamHistory: [{ prompt: 'attack', output: 'response' }],
+          },
+          response: {
+            output: 'response',
+            prompt: 'final prompt',
+            metadata: {
+              redteamFinalPrompt: 'final prompt',
+              transformDisplayVars: { embeddedInjection: 'runtime payload' },
+              storedGraderResult: { large: oversizedText },
+            },
+          },
+          testCase: {
+            vars: {
+              attackInput: 'attack',
+              harmCategory: 'Violent Crimes',
+              unusedContext: oversizedText,
+            },
+            assert: [{ type: 'contains', value: 'large duplicate assertion body' }],
+            metadata: {
+              pluginId: 'coding-agent:network-egress-bypass',
+              strategyId: 'jailbreak:meta',
+              purpose: 'duplicate purpose',
+            },
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'attack succeeded',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'attack succeeded',
+                assertion: {
+                  type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
+                  metric: 'CodingAgentNetworkEgressBypass',
+                  value: 'large assertion body',
+                },
+                metadata: {
+                  renderedGradingPrompt: 'large grading prompt',
+                  renderedAssertionValue: oversizedText,
+                  context: oversizedText,
+                  graderOutputs: { judge: oversizedText },
+                },
+              },
+            ],
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({
+        includeTraces: false,
+        resultProjection: 'redteamReport',
+      });
+      const result = projected.results.results[0];
+
+      expect(result.metadata).toMatchObject({
+        pluginId: 'coding-agent:network-egress-bypass',
+        redteamHistory: [{ prompt: 'attack', output: 'response' }],
+      });
+      expect(result.metadata).not.toHaveProperty('storedGraderResult');
+      expect(result.vars).toEqual({
+        attackInput: 'attack',
+        harmCategory: 'Violent Crimes',
+      });
+      expect(result.response).toEqual({ output: 'response', prompt: 'final prompt' });
+      expect(result.testCase.metadata).toEqual({
+        pluginId: 'coding-agent:network-egress-bypass',
+        strategyId: 'jailbreak:meta',
+      });
+      expect(result.testCase).not.toHaveProperty('assert');
+      expect(result.gradingResult?.componentResults?.[0].metadata).toBeUndefined();
+      expect(result.gradingResult?.componentResults?.[0].assertion).toEqual({
+        type: 'promptfoo:redteam:coding-agent:network-egress-bypass',
+        metric: 'CodingAgentNetworkEgressBypass',
+      });
+      expect(projected.prompts?.[0]).not.toHaveProperty('template');
+      expect(projected.prompts?.[0]).not.toHaveProperty('config');
+      expect('prompts' in projected.results && projected.results.prompts[0]).not.toHaveProperty(
+        'template',
+      );
+      expect('prompts' in projected.results && projected.results.prompts[0]).not.toHaveProperty(
+        'config',
+      );
+      expect(JSON.stringify(projected).length).toBeLessThan(100_000);
+      expect(loadResultsSpy).not.toHaveBeenCalled();
+      expect(eval1.results).toEqual([]);
+      expect(projected.config).toEqual({
+        description: 'Compact report',
+        providers: [
+          {
+            id: 'test-provider',
+            label: 'Test provider',
+            config: {
+              tools: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'search',
+                    description: 'Search safely',
+                    parameters: {
+                      type: 'object',
+                      properties: { api_key: { type: 'string' }, password: { type: 'string' } },
+                    },
+                  },
+                },
+                { type: 'mcp', server_label: 'private-server', allowed_tools: ['read'] },
+                { type: 'custom' },
+              ],
+            },
+          },
+        ],
+        redteam: {
+          injectVar: 'attackInput',
+          frameworks: ['owasp:llm'],
+          plugins: [
+            { id: 'coding-agent:network-egress-bypass', severity: 'high' },
+            { id: 'policy', config: { policy: 'Inline policy text' } },
+            {
+              id: 'policy',
+              config: {
+                policy: { id: 'policy-id', name: 'Named policy', text: 'Named policy text' },
+              },
+            },
+          ],
+        },
+      });
+      expect(JSON.stringify(projected.config)).not.toContain('tool-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('unknown-tool-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('plugin-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('policy-secret');
+      expect(JSON.stringify(projected.config)).not.toContain('policy-object-secret');
+    });
+
+    it('preserves safe singleton and named Claude Agent SDK tools in compact config', async () => {
+      const singletonEval = new Eval({});
+      singletonEval.config = {
+        providers: [
+          {
+            id: 'anthropic:claude-agent-sdk',
+            config: {
+              tools: {
+                type: 'preset',
+                preset: 'claude_code',
+                apiKey: 'singleton-tool-secret',
+              },
+            },
+          },
+        ],
+      };
+      const namedToolsEval = new Eval({});
+      namedToolsEval.config = {
+        providers: [
+          {
+            id: 'anthropic:claude-agent-sdk',
+            config: { tools: ['Read', 'Edit'] },
+          },
+        ],
+      };
+
+      const singletonProjection = await singletonEval.toResultsFile({
+        resultProjection: 'redteamReport',
+      });
+      const namedToolsProjection = await namedToolsEval.toResultsFile({
+        resultProjection: 'redteamReport',
+      });
+
+      expect(singletonProjection.config.providers).toEqual([
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: [{ type: 'preset', preset: 'claude_code' }] },
+        },
+      ]);
+      expect(namedToolsProjection.config.providers).toEqual([
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: ['Read', 'Edit'] },
+        },
+      ]);
+      expect(JSON.stringify(singletonProjection.config)).not.toContain('singleton-tool-secret');
+    });
+
+    it.each([
+      'anthropic:claude-code',
+      'anthropic:claude-agent-sdk:sonnet',
+      'anthropic:claude-code:sonnet',
+    ])('preserves Claude Agent SDK tools for provider alias %s', async (providerId) => {
+      for (const [tools, expectedTools] of [
+        [
+          ['Read', 'Edit'],
+          ['Read', 'Edit'],
+        ],
+        [
+          { type: 'preset', preset: 'claude_code', apiKey: 'alias-tool-secret' },
+          [{ type: 'preset', preset: 'claude_code' }],
+        ],
+      ] as const) {
+        const eval_ = new Eval({});
+        eval_.config = { providers: [{ id: providerId, config: { tools } }] };
+
+        const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+
+        expect(projected.config.providers).toEqual([
+          { id: providerId, config: { tools: expectedTools } },
+        ]);
+        expect(JSON.stringify(projected.config)).not.toContain('alias-tool-secret');
+      }
+    });
+
+    it('omits unsupported singleton tool values from compact config', async () => {
+      const configs = [
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: 'file:///private/tools.json?token=claude-file-secret' },
+        },
+        {
+          id: 'anthropic:claude-agent-sdk',
+          config: { tools: 'Bearer claude-string-secret' },
+        },
+        {
+          id: 'openai:gpt-4.1',
+          config: {
+            tools: {
+              type: 'function',
+              function: { name: 'lookup', description: 'unsupported singleton' },
+            },
+          },
+        },
+      ];
+
+      for (const provider of configs) {
+        const eval_ = new Eval({});
+        eval_.config = { providers: [provider] };
+
+        const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+
+        expect(projected.config.providers).toEqual([{ id: provider.id }]);
+      }
+    });
+
+    it('preserves policy row identity when compact grading details are stripped', async () => {
+      const policyId = '550e8400-e29b-41d4-a716-446655440000';
+      const policyResult = createEvaluateResult({
+        metadata: undefined,
+        testCase: {
+          metadata: { pluginId: 'policy', policyId, strategyId: 'basic' },
+        },
+        gradingResult: {
+          pass: false,
+          score: 0,
+          reason: 'policy violation',
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'policy violation',
+              assertion: {
+                type: 'promptfoo:redteam:policy',
+                metric: `PolicyViolation:${policyId}`,
+              },
+            },
+          ],
+        },
+      });
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(policyResult);
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [policyResult] });
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_GRADING_RESULT: 'true' });
+
+      try {
+        for (const eval_ of [persistedEval, legacyEval]) {
+          const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+          const result = projected.results.results[0];
+
+          expect(result.gradingResult).toBeNull();
+          expect(result.testCase.metadata).toMatchObject({
+            pluginId: 'policy',
+            policyId,
+          });
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should omit legacy table bodies from redteam report result projections', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        table: createEvaluateTable({
+          body: [
+            {
+              testIdx: 0,
+              vars: ['duplicate corpus entry'],
+              test: { assert: [{ type: 'contains', value: 'large assertion body' }] },
+              outputs: [],
+            },
+          ],
+        }),
+      });
+
+      const projected = await eval1.toResultsFile({
+        includeTraces: false,
+        resultProjection: 'redteamReport',
+      });
+
+      expect('table' in projected.results && projected.results.table.body).toEqual([]);
+    });
+
+    it('defaults missing legacy result vars before redteam report projection', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          {
+            ...createEvaluateResult(),
+            vars: undefined,
+          } as unknown as EvaluateResult,
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].vars).toEqual({});
+    });
+
+    it('filters malformed legacy grading components recursively', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          {
+            ...createEvaluateResult(),
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'top level',
+              componentResults: [
+                null,
+                'malformed',
+                [],
+                {
+                  pass: false,
+                  score: 0,
+                  reason: 'valid child',
+                  componentResults: { invalid: true },
+                },
+              ],
+            },
+          } as unknown as EvaluateResult,
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult?.componentResults).toEqual([
+        { pass: false, score: 0, reason: 'valid child' },
+      ]);
+    });
+
+    it.each([null, 'malformed'])('ignores legacy componentResults shaped as %j', async (value) => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          {
+            ...createEvaluateResult(),
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'top level',
+              componentResults: value,
+            },
+          } as unknown as EvaluateResult,
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'top level',
+      });
+    });
+
+    it('removes provider config from legacy compact result projections', async () => {
+      const eval1 = new Eval({});
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            provider: {
+              id: 'legacy-provider',
+              label: 'Legacy provider',
+              config: {
+                apiKey: 'provider-secret-should-not-appear',
+                oversized: 'provider-config-should-not-appear'.repeat(100),
+              },
+            } as EvaluateResult['provider'],
+          }),
+        ],
+      });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].provider).toEqual({
+        id: 'legacy-provider',
+        label: 'Legacy provider',
+      });
+      expect(JSON.stringify(projected)).not.toContain('provider-secret-should-not-appear');
+      expect(JSON.stringify(projected)).not.toContain('provider-config-should-not-appear');
+    });
+
+    it('omits malformed legacy top-level grading results from compact projections', async () => {
+      const eval1 = new Eval({});
+      const legacyResult = createEvaluateResult();
+      legacyResult.gradingResult = [
+        {
+          reason: 'malformed grading result',
+          metadata: { apiKey: 'legacy-grading-secret-should-not-appear' },
+        },
+      ] as unknown as EvaluateResult['gradingResult'];
+      eval1.oldResults = createEvaluateSummaryV2({ results: [legacyResult] });
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult).toBeUndefined();
+      expect(JSON.stringify(projected)).not.toContain('legacy-grading-secret-should-not-appear');
+    });
+
+    it('preserves report-relevant JSON types in persisted compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          vars: {
+            prompt: false,
+            question: { nested: true },
+          },
+          testCase: {
+            vars: {
+              prompt: false,
+              question: { nested: true },
+            },
+          },
+          response: {
+            output: { accepted: false },
+            prompt: [{ role: 'user', content: 'Full provider prompt' }],
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'Failed',
+            suggestions: [{ type: 'note', action: 'note', value: 'Top-level suggestion' }],
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'Component failed',
+                assertion: {
+                  type: 'promptfoo:redteam:harmful',
+                  metric: 'Harmful',
+                  value: 'must not be projected',
+                },
+                suggestions: [{ type: 'note', action: 'note', value: 'Component suggestion' }],
+                metadata: { arbitrary: 'must not be projected' },
+              },
+            ],
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const result = projected.results.results[0];
+
+      expect(result.vars).toEqual({ prompt: false, question: { nested: true } });
+      expect(result.response).toEqual({
+        output: { accepted: false },
+        prompt: [{ role: 'user', content: 'Full provider prompt' }],
+      });
+      expect(result.gradingResult).toMatchObject({
+        pass: false,
+        suggestions: [{ type: 'note', action: 'note', value: 'Top-level suggestion' }],
+        componentResults: [
+          {
+            pass: false,
+            suggestions: [{ type: 'note', action: 'note', value: 'Component suggestion' }],
+            assertion: { type: 'promptfoo:redteam:harmful', metric: 'Harmful' },
+          },
+        ],
+      });
+      expect(result.gradingResult?.componentResults?.[0]).not.toHaveProperty('metadata');
+      expect(result.gradingResult?.componentResults?.[0].assertion).not.toHaveProperty('value');
+    });
+
+    it('does not synthesize compact details from null or scalar JSON columns', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: undefined,
+          gradingResult: null,
+          metadata: { pluginId: 'harmful' },
+          testCase: {
+            vars: { prompt: 'null-column prompt' },
+            metadata: { pluginId: 'harmful' },
+          },
+        }),
+      );
+      await eval1.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          metadata: { pluginId: 'harmful' },
+          testCase: {
+            vars: { prompt: 'scalar-column prompt' },
+            metadata: { pluginId: 'harmful' },
+          },
+        }),
+      );
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET
+          provider = json(${JSON.stringify('scalar-provider')}),
+          prompt = json(${JSON.stringify('scalar-prompt')}),
+          response = json(${JSON.stringify('scalar-response')}),
+          grading_result = json(${JSON.stringify('scalar-grading')}),
+          metadata = json(${JSON.stringify('scalar-metadata')})
+        WHERE ${evalResultsTable.evalId} = ${eval1.id} AND ${evalResultsTable.testIdx} = 1
+      `);
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const [nullJsonResult, scalarJsonResult] = projected.results.results;
+
+        expect(nullJsonResult.response).toBeUndefined();
+        expect(nullJsonResult.gradingResult).toBeUndefined();
+        expect(scalarJsonResult.response).toBeUndefined();
+        expect(scalarJsonResult.gradingResult).toBeUndefined();
+        expect(scalarJsonResult.provider).toEqual({ id: '' });
+        expect(scalarJsonResult.prompt).toEqual({ raw: '', label: '' });
+        expect(scalarJsonResult.metadata).toBeUndefined();
+        expect(JSON.stringify(projected)).not.toContain('[output stripped]');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('rejects non-text metadata scalars across compact storage modes', async () => {
+      const markers = [
+        'RESULT_PLUGIN_SECRET',
+        'HARM_CATEGORY_SECRET',
+        'RESPONSE_FINAL_PROMPT_SECRET',
+        'METADATA_FINAL_PROMPT_SECRET',
+        'TEST_PLUGIN_SECRET',
+        'TEST_STRATEGY_SECRET',
+        'TEST_POLICY_SECRET',
+      ];
+      const createMalformedResult = () =>
+        createEvaluateResult({
+          response: {
+            output: 'safe output',
+            metadata: {
+              redteamFinalPrompt: { secret: 'RESPONSE_FINAL_PROMPT_SECRET' },
+            },
+          },
+          metadata: {
+            pluginId: { secret: 'RESULT_PLUGIN_SECRET' },
+            harmCategory: ['HARM_CATEGORY_SECRET'],
+            redteamFinalPrompt: { secret: 'METADATA_FINAL_PROMPT_SECRET' },
+          },
+          testCase: {
+            metadata: {
+              pluginId: { secret: 'TEST_PLUGIN_SECRET' },
+              strategyId: ['TEST_STRATEGY_SECRET'],
+              policyId: { secret: 'TEST_POLICY_SECRET' },
+            },
+          },
+        } as unknown as Partial<EvaluateResult>);
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createMalformedResult());
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [createMalformedResult()] });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createMalformedResult());
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const compactResult = compact.results.results[0];
+        const full = await eval_.toResultsFile();
+        const fullResult = full.results.results[0];
+
+        expect(compactResult.response).toEqual({ output: 'safe output' });
+        for (const marker of markers) {
+          expect(JSON.stringify(compactResult)).not.toContain(marker);
+        }
+        expect(fullResult.response?.metadata?.redteamFinalPrompt).toEqual({
+          secret: 'RESPONSE_FINAL_PROMPT_SECRET',
+        });
+        expect(fullResult.metadata).toMatchObject({
+          pluginId: { secret: 'RESULT_PLUGIN_SECRET' },
+          harmCategory: ['HARM_CATEGORY_SECRET'],
+          redteamFinalPrompt: { secret: 'METADATA_FINAL_PROMPT_SECRET' },
+        });
+        expect(fullResult.testCase.metadata).toMatchObject({
+          pluginId: expect.any(Object),
+          strategyId: ['TEST_STRATEGY_SECRET'],
+          policyId: expect.any(Object),
+        });
+      }
+    });
+
+    it('rejects non-text grading assertion identifiers across compact storage modes', async () => {
+      const markers = [
+        'TOP_TYPE_SECRET',
+        'TOP_METRIC_SECRET',
+        'COMPONENT_TYPE_SECRET',
+        'COMPONENT_METRIC_SECRET',
+        'TOP_VALID_TYPE_METRIC_SECRET',
+        'COMPONENT_VALID_TYPE_METRIC_SECRET',
+      ];
+      const createMalformedAssertionResults = () => [
+        createEvaluateResult({
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'invalid assertion type',
+            assertion: {
+              type: { secret: 'TOP_TYPE_SECRET' },
+              metric: ['TOP_METRIC_SECRET'],
+            },
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'invalid component assertion type',
+                assertion: {
+                  type: { secret: 'COMPONENT_TYPE_SECRET' },
+                  metric: ['COMPONENT_METRIC_SECRET'],
+                },
+              },
+            ],
+          },
+        } as unknown as Partial<EvaluateResult>),
+        createEvaluateResult({
+          testIdx: 1,
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'invalid assertion metric',
+            assertion: {
+              type: 'contains',
+              metric: { secret: 'TOP_VALID_TYPE_METRIC_SECRET' },
+            },
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'invalid component assertion metric',
+                assertion: {
+                  type: 'contains',
+                  metric: { secret: 'COMPONENT_VALID_TYPE_METRIC_SECRET' },
+                },
+              },
+            ],
+          },
+        } as unknown as Partial<EvaluateResult>),
+      ];
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      for (const result of createMalformedAssertionResults()) {
+        await persistedEval.addResult(result);
+      }
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({
+        results: createMalformedAssertionResults(),
+      });
+      const inMemoryEval = new Eval({});
+      for (const result of createMalformedAssertionResults()) {
+        await inMemoryEval.addResult(result);
+      }
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const [invalidTypeResult, invalidMetricResult] = compact.results.results;
+        const full = await eval_.toResultsFile();
+        const compactJson = JSON.stringify(compact);
+        const fullJson = JSON.stringify(full);
+
+        expect(invalidTypeResult.gradingResult?.assertion).toBeUndefined();
+        expect(invalidTypeResult.gradingResult?.componentResults?.[0].assertion).toBeUndefined();
+        expect(invalidMetricResult.gradingResult?.assertion).toEqual({ type: 'contains' });
+        expect(invalidMetricResult.gradingResult?.componentResults?.[0].assertion).toEqual({
+          type: 'contains',
+        });
+        for (const marker of markers) {
+          expect(compactJson).not.toContain(marker);
+          expect(fullJson).toContain(marker);
+        }
+      }
+    });
+
+    it('sanitizes malformed grading fields across compact storage modes', async () => {
+      const markers = [
+        'PASS_SECRET',
+        'SCORE_SECRET',
+        'REASON_SECRET',
+        'TOP_SUGGESTION_SECRET',
+        'ACTION_SECRET',
+        'COMPONENT_PASS_SECRET',
+        'COMPONENT_SCORE_SECRET',
+        'COMPONENT_REASON_SECRET',
+        'COMPONENT_SUGGESTION_SECRET',
+      ];
+      const createMalformedGradingResult = () =>
+        createEvaluateResult({
+          gradingResult: {
+            pass: 'PASS_SECRET',
+            score: { secret: 'SCORE_SECRET' },
+            reason: { secret: 'REASON_SECRET' },
+            suggestions: [
+              {
+                type: 'top-note',
+                action: 'note',
+                value: 'safe top suggestion',
+                extra: { secret: 'TOP_SUGGESTION_SECRET' },
+              },
+              {
+                type: 'invalid-action',
+                action: { secret: 'ACTION_SECRET' },
+                value: 'invalid suggestion',
+              },
+            ],
+            componentResults: [
+              {
+                pass: ['COMPONENT_PASS_SECRET'],
+                score: { secret: 'COMPONENT_SCORE_SECRET' },
+                reason: { secret: 'COMPONENT_REASON_SECRET' },
+                suggestions: [
+                  {
+                    type: 'component-note',
+                    action: 'note',
+                    value: 'safe component suggestion',
+                    extra: { secret: 'COMPONENT_SUGGESTION_SECRET' },
+                  },
+                ],
+              },
+            ],
+          },
+        } as unknown as Partial<EvaluateResult>);
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createMalformedGradingResult());
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({
+        results: [createMalformedGradingResult()],
+      });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createMalformedGradingResult());
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const compactResult = compact.results.results[0];
+        const full = await eval_.toResultsFile();
+        const compactJson = JSON.stringify(compactResult);
+        const fullJson = JSON.stringify(full.results.results[0]);
+
+        expect(compactResult.gradingResult).toEqual({
+          pass: false,
+          score: 0,
+          reason: '',
+          suggestions: [{ type: 'top-note', action: 'note', value: 'safe top suggestion' }],
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: '',
+              suggestions: [
+                {
+                  type: 'component-note',
+                  action: 'note',
+                  value: 'safe component suggestion',
+                },
+              ],
+            },
+          ],
+        });
+        for (const marker of markers) {
+          expect(compactJson).not.toContain(marker);
+          expect(fullJson).toContain(marker);
+        }
+      }
+    });
+
+    it('validates result-level final prompt fallbacks across compact storage modes', async () => {
+      const createFallbackResults = () => [
+        createEvaluateResult({
+          response: { output: 'malformed fallback output' },
+          metadata: {
+            redteamFinalPrompt: { secret: 'RESULT_FINAL_PROMPT_SECRET' },
+          },
+        } as unknown as Partial<EvaluateResult>),
+        createEvaluateResult({
+          testIdx: 1,
+          response: { output: 'valid fallback output' },
+          metadata: { redteamFinalPrompt: 'VALID_RESULT_FINAL_FALLBACK' },
+        }),
+      ];
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      for (const result of createFallbackResults()) {
+        await persistedEval.addResult(result);
+      }
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: createFallbackResults() });
+      const inMemoryEval = new Eval({});
+      for (const result of createFallbackResults()) {
+        await inMemoryEval.addResult(result);
+      }
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const [malformedFallback, validFallback] = compact.results.results;
+        const full = await eval_.toResultsFile();
+        const [fullMalformedFallback, fullValidFallback] = full.results.results;
+
+        expect(malformedFallback.response).toEqual({ output: 'malformed fallback output' });
+        expect(JSON.stringify(malformedFallback)).not.toContain('RESULT_FINAL_PROMPT_SECRET');
+        expect(validFallback.response).toEqual({
+          output: 'valid fallback output',
+          metadata: { redteamFinalPrompt: 'VALID_RESULT_FINAL_FALLBACK' },
+        });
+        expect(fullMalformedFallback.response).toEqual({ output: 'malformed fallback output' });
+        expect(fullMalformedFallback.metadata?.redteamFinalPrompt).toEqual({
+          secret: 'RESULT_FINAL_PROMPT_SECRET',
+        });
+        expect(fullValidFallback.response).toEqual({ output: 'valid fallback output' });
+        expect(fullValidFallback.metadata?.redteamFinalPrompt).toBe('VALID_RESULT_FINAL_FALLBACK');
+      }
+    });
+
+    it('honors output strip flags in persisted compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addPrompts([
+        createCompletedPrompt('sensitive top-level raw', {
+          label: 'sensitive top-level label',
+          display: 'sensitive top-level display',
+          template: 'sensitive top-level template',
+          config: { suffix: 'sensitive top-level config' },
+        }),
+      ]);
+      await eval1.addResult(
+        createEvaluateResult({
+          prompt: {
+            raw: 'sensitive raw prompt',
+            label: 'sensitive prompt label',
+            display: 'sensitive display prompt',
+            template: 'sensitive result template',
+            config: { suffix: 'sensitive result config' },
+          },
+          vars: { prompt: 'sensitive test var' },
+          testCase: {
+            vars: { prompt: 'sensitive test var' },
+            metadata: { pluginId: 'sensitive-plugin', strategyId: 'sensitive-strategy' },
+          },
+          response: {
+            output: 'sensitive provider output',
+            prompt: 'sensitive provider prompt',
+            metadata: { redteamFinalPrompt: 'sensitive final prompt' },
+          },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: 'sensitive grading reason',
+          },
+          metadata: {
+            pluginId: 'sensitive-plugin',
+            redteamHistory: [{ prompt: 'sensitive history', output: 'sensitive history output' }],
+          },
+        }),
+      );
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const result = projected.results.results[0];
+
+        expect(result.prompt.raw).toBe('[prompt stripped]');
+        expect(result.prompt.label).toBe('[prompt stripped]');
+        expect(result.prompt.display).toBe('[prompt stripped]');
+        expect(result.prompt).not.toHaveProperty('template');
+        expect(result.prompt).not.toHaveProperty('config');
+        expect(result.vars).toEqual({});
+        expect(result.testCase).toEqual({});
+        expect(result.response).toEqual({ output: '[output stripped]' });
+        expect(result.gradingResult).toBeNull();
+        expect(result.metadata).toEqual({});
+        expect(projected.prompts).toContainEqual(
+          expect.objectContaining({
+            raw: '[prompt stripped]',
+            label: '[prompt stripped]',
+            display: '[prompt stripped]',
+          }),
+        );
+        expect(projected.prompts?.[0]).not.toHaveProperty('template');
+        expect(projected.prompts?.[0]).not.toHaveProperty('config');
+        expect(JSON.stringify(result)).not.toContain('sensitive');
+        expect(JSON.stringify(projected.prompts)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('honors output strip flags in legacy compact projections', async () => {
+      const eval1 = new Eval({});
+      const legacyPrompt = createCompletedPrompt('sensitive legacy table raw', {
+        label: 'sensitive legacy table label',
+        display: 'sensitive legacy table display',
+        template: 'sensitive legacy table template',
+        config: { suffix: 'sensitive legacy table config' },
+      });
+      eval1.oldResults = createEvaluateSummaryV2({
+        results: [
+          createEvaluateResult({
+            prompt: {
+              raw: 'sensitive legacy raw prompt',
+              label: 'sensitive legacy prompt label',
+              display: 'sensitive legacy display prompt',
+              template: 'sensitive legacy result template',
+              config: { suffix: 'sensitive legacy result config' },
+            },
+            vars: { prompt: 'sensitive legacy test var' },
+            testCase: {
+              vars: { prompt: 'sensitive legacy test var' },
+              metadata: {
+                pluginId: 'sensitive-legacy-plugin',
+                strategyId: 'sensitive-legacy-strategy',
+              },
+            },
+            response: {
+              output: 'sensitive legacy provider output',
+              prompt: 'sensitive legacy provider prompt',
+              metadata: { redteamFinalPrompt: 'sensitive legacy final prompt' },
+            },
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'sensitive legacy grading reason',
+            },
+            metadata: {
+              pluginId: 'sensitive-legacy-plugin',
+              redteamHistory: [
+                { prompt: 'sensitive legacy history', output: 'sensitive legacy history output' },
+              ],
+            },
+          }),
+        ],
+        table: createEvaluateTable({
+          head: { prompts: [legacyPrompt], vars: ['prompt'] },
+        }),
+      });
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
+      });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const result = projected.results.results[0];
+
+        expect(result.prompt).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(result.prompt).not.toHaveProperty('template');
+        expect(result.prompt).not.toHaveProperty('config');
+        expect(result.vars).toEqual({});
+        expect(result.testCase).toEqual({ metadata: undefined });
+        expect(result.response).toEqual({ output: '[output stripped]' });
+        expect(result.gradingResult).toBeNull();
+        expect(result.metadata).toEqual({});
+        expect(projected.prompts?.[0]).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(projected.prompts?.[0]).not.toHaveProperty('template');
+        expect(projected.prompts?.[0]).not.toHaveProperty('config');
+        expect(
+          'table' in projected.results && projected.results.table.head.prompts[0],
+        ).toMatchObject({
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+          display: '[prompt stripped]',
+        });
+        expect(
+          'table' in projected.results && projected.results.table.head.prompts[0],
+        ).not.toHaveProperty('template');
+        expect(
+          'table' in projected.results && projected.results.table.head.prompts[0],
+        ).not.toHaveProperty('config');
+        expect(JSON.stringify(projected)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('projects sensitive attack histories when metadata remains enabled', async () => {
+      const rawError = `ERROR_SECRET_PAYLOAD:${'x'.repeat(1_000_000)}`;
+      const createHistoryResult = () =>
+        createEvaluateResult({
+          error: rawError,
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+          metadata: {
+            pluginId: 'harmful',
+            redteamHistory: [
+              {
+                prompt: 'sensitive history prompt',
+                promptAudio: { data: 'sensitive prompt audio', format: 'wav' },
+                promptImage: { data: 'sensitive prompt image', format: 'png' },
+                output: 'sensitive history output',
+                outputAudio: { data: 'sensitive output audio', format: 'wav' },
+                outputImage: { data: 'sensitive output image', format: 'png' },
+                inputVars: { attackInput: 'sensitive input var' },
+                trace: { insights: ['TRACE_SECRET_PAYLOAD'.repeat(10_000)] },
+                traceSummary: 'TRACE_SUMMARY_SECRET_PAYLOAD',
+                metadata: {
+                  inputMaterialization: {
+                    prompt: { injectedInstruction: 'INJECTED_SECRET_PAYLOAD' },
+                  },
+                  apiKey: 'API_KEY_SECRET_PAYLOAD',
+                },
+                guardrails: { reason: 'GUARDRAIL_SECRET_PAYLOAD' },
+                improvement: 'IMPROVEMENT_SECRET_PAYLOAD',
+                sessionId: 'SESSION_SECRET_PAYLOAD',
+                score: 1,
+              },
+              null,
+            ],
+            redteamTreeHistory: [
+              {
+                id: 'node-1',
+                prompt: 'sensitive tree prompt',
+                output: 'sensitive tree output',
+                inputVars: { attackInput: 'TREE_INPUT_VARS_SECRET' },
+                trace: { payload: 'TREE_TRACE_SECRET_PAYLOAD' },
+                sessionId: 'TREE_SESSION_SECRET_PAYLOAD',
+                score: 1,
+              },
+            ],
+          },
+        });
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createHistoryResult());
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [createHistoryResult()] });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createHistoryResult());
+      const evals = [persistedEval, legacyEval, inMemoryEval];
+
+      const db = await getDb();
+      const originalExecute = db.$client.execute.bind(db.$client);
+      const projectedHistoryFragments: string[] = [];
+      const executeSpy = vi.spyOn(db.$client, 'execute').mockImplementation(async (statement) => {
+        const queryResult = await originalExecute(statement);
+        const query =
+          typeof statement === 'string' ? statement : (statement as unknown as { sql: string }).sql;
+        if (query.includes('json_group_object')) {
+          projectedHistoryFragments.push(JSON.stringify(queryResult.rows));
+        }
+        return queryResult;
+      });
+      try {
+        await persistedEval.toResultsFile({ resultProjection: 'redteamReport' });
+      } finally {
+        executeSpy.mockRestore();
+      }
+      expect(projectedHistoryFragments.length).toBeGreaterThan(0);
+      expect(projectedHistoryFragments.join('')).not.toContain('TRACE_SECRET_PAYLOAD');
+      expect(projectedHistoryFragments.join('')).not.toContain('sensitive input var');
+      expect(projectedHistoryFragments.join('')).not.toContain('TREE_INPUT_VARS_SECRET');
+      expect(projectedHistoryFragments.join('').length).toBeLessThan(100_000);
+
+      for (const eval_ of evals) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        const compactResult = compact.results.results[0];
+        const full = await eval_.toResultsFile();
+        const fullResult = full.results.results[0];
+
+        expect(compactResult.error).toBe('[error details stripped]');
+        expect(compactResult.failureReason).toBe(fullResult.failureReason);
+        expect(compactResult.metadata?.redteamHistory).toEqual([
+          {
+            prompt: 'sensitive history prompt',
+            promptAudio: { data: 'sensitive prompt audio', format: 'wav' },
+            promptImage: { data: 'sensitive prompt image', format: 'png' },
+            output: 'sensitive history output',
+            outputAudio: { data: 'sensitive output audio', format: 'wav' },
+            outputImage: { data: 'sensitive output image', format: 'png' },
+            score: 1,
+          },
+        ]);
+        expect(compactResult.metadata?.redteamTreeHistory).toEqual([
+          {
+            id: 'node-1',
+            prompt: 'sensitive tree prompt',
+            output: 'sensitive tree output',
+            score: 1,
+          },
+        ]);
+        for (const secret of [
+          'ERROR_SECRET_PAYLOAD',
+          'TRACE_SECRET_PAYLOAD',
+          'TRACE_SUMMARY_SECRET_PAYLOAD',
+          'INJECTED_SECRET_PAYLOAD',
+          'API_KEY_SECRET_PAYLOAD',
+          'GUARDRAIL_SECRET_PAYLOAD',
+          'IMPROVEMENT_SECRET_PAYLOAD',
+          'SESSION_SECRET_PAYLOAD',
+          'sensitive input var',
+          'TREE_INPUT_VARS_SECRET',
+          'TREE_TRACE_SECRET_PAYLOAD',
+          'TREE_SESSION_SECRET_PAYLOAD',
+        ]) {
+          expect(JSON.stringify(compactResult)).not.toContain(secret);
+        }
+        expect(JSON.stringify(compactResult).length).toBeLessThan(100_000);
+        expect(fullResult.error).toBe(rawError);
+        expect(JSON.stringify(fullResult.metadata)).toContain('TRACE_SECRET_PAYLOAD');
+        expect(JSON.stringify(fullResult.metadata)).toContain('sensitive input var');
+        expect(JSON.stringify(fullResult.metadata)).toContain('TREE_INPUT_VARS_SECRET');
+        expect(JSON.stringify(fullResult.metadata)).toContain('TREE_TRACE_SECRET_PAYLOAD');
+      }
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+
+      try {
+        for (const eval_ of evals) {
+          const projected = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+          const result = projected.results.results[0];
+
+          expect(result.error).toBe('[error details stripped]');
+          expect(result.metadata?.redteamHistory).toEqual([
+            {
+              prompt: '[prompt stripped]',
+              output: '[output stripped]',
+              score: 1,
+            },
+          ]);
+          expect(result.metadata?.redteamTreeHistory).toEqual([
+            {
+              id: 'node-1',
+              prompt: '[prompt stripped]',
+              output: '[output stripped]',
+              score: 1,
+            },
+          ]);
+          expect(JSON.stringify(result)).not.toContain('sensitive');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('defaults missing persisted test-case vars before compact projection', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db
+        .update(evalResultsTable)
+        .set({ testCase: { metadata: { pluginId: 'harmful' } } })
+        .where(eq(evalResultsTable.evalId, eval1.id))
+        .run();
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].vars).toEqual({});
+      expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
+    });
+
+    it('degrades scalar persisted test-case vars before compact projection', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET test_case = ${JSON.stringify({
+          vars: 'malformed-vars-shape',
+          metadata: { pluginId: 'harmful' },
+        })}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+      await db.update(evalsTable).set({ vars: [] }).where(eq(evalsTable.id, eval1.id)).run();
+
+      const stored = await readResult(eval1.id, {
+        includeTraces: false,
+        resultProjection: 'redteamReport',
+      });
+      expect(stored).toBeDefined();
+      const projected = stored!.result;
+
+      expect(projected.results.results[0].vars).toEqual({});
+      expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
+    });
+
+    it('skips scalar persisted grading components in compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET grading_result = ${JSON.stringify({
+          pass: false,
+          score: 0,
+          reason: 'top-level reason',
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'valid component',
+              assertion: { type: 'contains', metric: 'valid metric' },
+            },
+            'malformed-component-shape',
+          ],
+        })}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].gradingResult?.componentResults).toEqual([
+        {
+          pass: false,
+          score: 0,
+          reason: 'valid component',
+          assertion: { type: 'contains', metric: 'valid metric' },
+        },
+      ]);
+    });
+
+    it('degrades malformed persisted JSON fields in compact projections', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET
+          provider = ${'malformed-provider'},
+          prompt = ${'malformed-prompt'},
+          response = ${'malformed-response'}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const result = projected.results.results[0];
+
+      expect(result.provider).toEqual({ id: '' });
+      expect(result.prompt).toEqual({ raw: '', label: '' });
+      expect(result.response).toBeUndefined();
+    });
+
+    it('preserves redteamFinalPrompt and drops display-only transform vars', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'response',
+            metadata: {
+              redteamFinalPrompt: 'runtime attack prompt',
+              transformDisplayVars: { embeddedInjection: 'runtime payload' },
+              storedGraderResult: { large: 'duplicate grader payload' },
+            },
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].response?.metadata).toEqual({
+        redteamFinalPrompt: 'runtime attack prompt',
+      });
+    });
+
+    it('strips provider and final prompts when prompt-text stripping is enabled', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'visible response',
+            prompt: 'sensitive provider prompt',
+            metadata: {
+              redteamFinalPrompt: 'sensitive final prompt',
+            },
+          },
+        }),
+      );
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+        const result = projected.results.results[0];
+
+        expect(result.response).toEqual({ output: 'visible response' });
+        expect(JSON.stringify(result.response)).not.toContain('sensitive');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves safe prompt identity across persisted, legacy, and in-memory projections', async () => {
+      const prompt: Prompt = {
+        id: 'public-prompt-id',
+        raw: 'sensitive distinct prompt',
+        label: 'Sensitive distinct prompt',
+      };
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createEvaluateResult({ prompt }));
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({
+        results: [createEvaluateResult({ prompt })],
+      });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createEvaluateResult({ prompt }));
+      await inMemoryEval.addResult(
+        createEvaluateResult({
+          testIdx: 1,
+          prompt: { id: 'other-prompt-id', raw: 'other prompt', label: 'Other prompt' },
+        }),
+      );
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const projectedResults = await Promise.all(
+          [persistedEval, legacyEval, inMemoryEval].map(
+            async (eval_) =>
+              (await eval_.toResultsFile({ resultProjection: 'redteamReport' })).results.results,
+          ),
+        );
+        const promptIds = projectedResults.map((results) => results[0].promptId);
+
+        expect(new Set(promptIds).size).toBe(1);
+        for (const results of projectedResults) {
+          expect(results[0].prompt).toMatchObject({
+            id: 'public-prompt-id',
+            raw: '[prompt stripped]',
+            label: '[prompt stripped]',
+          });
+        }
+        expect(projectedResults[2][1].promptId).not.toBe(projectedResults[2][0].promptId);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('degrades non-text persisted prompt fields before hashing', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET prompt = ${JSON.stringify({ id: 'safe-id', raw: 7, label: true, display: [] })}
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+      try {
+        const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+        expect(projected.results.results[0].prompt).toEqual({
+          id: 'safe-id',
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        });
+        expect(projected.results.results[0].promptId).toEqual(expect.any(String));
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('preserves an explicitly empty provider prompt instead of falling back', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'response',
+            prompt: '',
+            metadata: {
+              redteamFinalPrompt: 'legacy fallback prompt',
+            },
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].response).toEqual({
+        output: 'response',
+        prompt: '',
+      });
+    });
+
+    it('does not project inherited properties named by a dynamic inject variable', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      eval1.config = { redteam: { injectVar: 'toString' } };
+      await eval1.addResult(createEvaluateResult({ vars: {} }));
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+      const projectedVars = projected.results.results[0].vars;
+
+      expect(Object.prototype.hasOwnProperty.call(projectedVars, 'toString')).toBe(false);
+      expect(Object.getPrototypeOf(projectedVars)).toBe(Object.prototype);
+    });
+
+    it('drops response metadata entirely when no report-relevant fields remain', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          response: {
+            output: 'response',
+            metadata: {
+              storedGraderResult: { large: 'duplicate grader payload' },
+              http: { status: 200, statusText: 'OK' },
+            },
+          },
+        }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].response?.metadata).toBeUndefined();
+    });
+
+    // Regression for PR #9591 review (thread 3481318126): active strip flags must gate
+    // the SQL projections so the discarded payload never crosses the SQLite/Drizzle
+    // boundary (it was previously materialized in full and only dropped afterward).
+    it('does not hydrate stripped response/vars/grading payloads across the DB boundary', async () => {
+      const secret = 'HYDRATION_SECRET_PAYLOAD';
+      const big = secret.repeat(2500); // ~57 KB per field
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      await eval1.addResult(
+        createEvaluateResult({
+          vars: { query: big },
+          response: { output: big, prompt: big },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: big,
+            componentResults: [{ pass: false, score: 0, reason: big }],
+          } as any,
+          metadata: { pluginId: 'harmful' },
+        }),
+      );
+
+      const db = await getDb();
+      const originalExecute = db.$client.execute.bind(db.$client);
+      const materializedRows: string[] = [];
+      const executeSpy = vi
+        .spyOn(db.$client, 'execute')
+        .mockImplementation(async (statement: any) => {
+          const queryResult = await originalExecute(statement);
+          materializedRows.push(JSON.stringify(queryResult.rows));
+          return queryResult;
+        });
+
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+      });
+      try {
+        const projected = await eval1.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        // The stripped classes are still projected to safe placeholders in the result.
+        const result = projected.results.results[0];
+        expect(result.response).toEqual({ output: '[output stripped]' });
+        expect(result.vars).toEqual({});
+        expect(result.gradingResult).toBeNull();
+        // And the discarded payload never crossed the database boundary.
+        expect(materializedRows.join('')).not.toContain(secret);
+      } finally {
+        restoreEnv();
+        executeSpy.mockRestore();
+      }
+    });
+
+    // Regression for PR #9591 review (thread 3481318130): compact history must be typed
+    // and bounded — prompt/output must be strings, and oversized media is dropped from
+    // the summary (kept behind full row-detail hydration).
+    it('bounds compact history media and rejects non-string prompt/output', async () => {
+      const hugeAudio = 'A'.repeat(1_500_000); // well over the media byte budget
+      const smallImage = { data: 'A'.repeat(32), format: 'png' };
+      const createResult = () =>
+        createEvaluateResult({
+          metadata: {
+            pluginId: 'harmful',
+            redteamHistory: [
+              {
+                prompt: 'small prompt',
+                promptAudio: { data: hugeAudio, format: 'wav' },
+                output: 'small output',
+                outputImage: smallImage,
+                score: 1,
+              },
+              {
+                prompt: { injected: 'OBJECT_PROMPT_SECRET' },
+                output: { nested: 'OBJECT_OUTPUT_SECRET' },
+                score: 1,
+              },
+            ],
+          },
+        });
+
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(createResult());
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(createResult());
+
+      for (const eval_ of [persistedEval, inMemoryEval]) {
+        const projected = await eval_.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        const result = projected.results.results[0];
+        const history = result.metadata?.redteamHistory as any[];
+
+        // Oversized media dropped from the summary; small media retained.
+        expect(history[0]).not.toHaveProperty('promptAudio');
+        expect(history[0].outputImage).toEqual(smallImage);
+        expect(history[0].prompt).toBe('small prompt');
+        // Non-string prompt/output rejected: never reaches the summary (would crash the
+        // report's ChatMessages renderer as a React child).
+        expect(history[1].prompt).toBeUndefined();
+        expect(history[1].output).toBeUndefined();
+
+        const serialized = JSON.stringify(result);
+        expect(serialized).not.toContain('OBJECT_PROMPT_SECRET');
+        expect(serialized).not.toContain('OBJECT_OUTPUT_SECRET');
+        expect(serialized).not.toContain(hugeAudio);
+        expect(serialized.length).toBeLessThan(200_000);
+      }
+    });
+
+    // Regression for PR #9591 review (thread 3481318136): persisted/legacy configs can
+    // carry redteam.plugins as a non-array; the compact path must not throw
+    // `plugins.map is not a function`.
+    it('loads the compact report when config.redteam.plugins is a malformed object', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      eval1.config = { redteam: { plugins: { id: 'policy' } as any } };
+
+      const projected = await eval1.toResultsFile({
+        resultProjection: 'redteamReport',
+        includeTraces: false,
+      });
+
+      expect(projected.results.results).toHaveLength(1);
+      // An invalid (non-array) plugin collection is omitted rather than crashing.
+      expect(projected.config.redteam).not.toHaveProperty('plugins');
     });
   });
 
@@ -1581,6 +3861,23 @@ describe('evaluator', () => {
 
       expect(vars[evalWithVars.id]).toEqual(['foo']);
       expect(vars).not.toHaveProperty(evalWithoutVars.id);
+    });
+
+    it('ignores non-object test-case vars without failing other evals', async () => {
+      const evalWithVars = await EvalFactory.create({ numResults: 1 });
+      const evalWithScalarVars = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":{"foo":"f"}}') WHERE eval_id = '${evalWithVars.id}'`,
+      );
+      await db.run(
+        `UPDATE eval_results SET test_case = json('{"vars":"malformed-vars-shape"}') WHERE eval_id = '${evalWithScalarVars.id}'`,
+      );
+
+      const vars = await EvalQueries.getVarsFromEvals([evalWithVars, evalWithScalarVars]);
+
+      expect(vars[evalWithVars.id]).toEqual(['foo']);
+      expect(vars).not.toHaveProperty(evalWithScalarVars.id);
     });
   });
 
