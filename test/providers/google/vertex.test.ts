@@ -1037,6 +1037,78 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response.output).toBe('Sunny, 25°C');
   });
 
+  it.each([
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+  ])('should assemble streamed function-call arguments for %s before executing a callback', async (modelId) => {
+    const callback = vi.fn().mockResolvedValue('ticket found');
+    const geminiProvider = new VertexChatProvider(modelId, {
+      config: {
+        region: 'global',
+        streaming: true,
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+        },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'lookup_status',
+                parameters: {
+                  type: 'OBJECT',
+                  properties: { ticket: { type: 'STRING' }, region: { type: 'STRING' } },
+                  required: ['ticket', 'region'],
+                },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: { lookup_status: callback },
+      },
+    });
+    const functionCalls = [
+      { name: 'lookup_status', willContinue: true },
+      {
+        partialArgs: [{ jsonPath: '$.region', stringValue: 'Seattle' }],
+        willContinue: true,
+      },
+      {
+        partialArgs: [{ jsonPath: '$.ticket', stringValue: 'PF-36', willContinue: true }],
+        willContinue: true,
+      },
+      {
+        partialArgs: [{ jsonPath: '$.ticket', stringValue: '21' }],
+        willContinue: true,
+      },
+      {},
+    ];
+    const mockRequest = mockVertexRequest(
+      functionCalls.map((functionCall, index) => ({
+        candidates: [
+          {
+            content: { parts: [{ functionCall }] },
+            ...(index === functionCalls.length - 1 ? { finishReason: 'STOP' } : {}),
+          },
+        ],
+        ...(index === functionCalls.length - 1
+          ? {
+              usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+            }
+          : {}),
+      })),
+    );
+
+    const response = await geminiProvider.callGeminiApi('test prompt');
+
+    expect(mockRequest.mock.calls[0]?.[0]?.url).toContain(':streamGenerateContent');
+    expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
+      functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+    });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(callback).toHaveBeenCalledWith('{"region":"Seattle","ticket":"PF-3621"}');
+    expect(response.output).toBe('ticket found');
+  });
+
   it('should normalize Gemini priority service tier for Vertex requests', async () => {
     const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
       config: { passthrough: { service_tier: 'priority' } },

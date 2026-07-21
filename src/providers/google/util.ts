@@ -1244,6 +1244,8 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
     return ['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand) ? 'audio/mp4' : 'video/mp4';
   } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
     return 'video/webm';
+  } else if (bytes[0] === 0xff && (bytes[1] === 0xf1 || bytes[1] === 0xf9)) {
+    return 'audio/aac';
   } else if (
     bytes.subarray(0, 3).toString('ascii') === 'ID3' ||
     (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)

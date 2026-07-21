@@ -9,6 +9,13 @@ export default /** @type {import('promptfoo').TestSuiteConfig} */ ({
       id: 'vertex:gemini-3.6-flash',
       config: {
         region: 'global',
+        streaming: true,
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'ANY',
+            streamFunctionCallArguments: true,
+          },
+        },
         tools: [
           {
             functionDeclarations: [

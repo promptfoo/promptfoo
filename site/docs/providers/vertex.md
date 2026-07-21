@@ -840,6 +840,31 @@ providers:
       tools: 'file://tools.json' # Supports variable substitution
 ```
 
+Vertex AI also supports [streaming function-call arguments](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling#streaming-function-call-arguments) in preview. Enable both streaming and `streamFunctionCallArguments`; promptfoo assembles the streamed argument parts before invoking a configured callback:
+
+```yaml
+providers:
+  - id: vertex:gemini-3.6-flash
+    config:
+      streaming: true
+      toolConfig:
+        functionCallingConfig:
+          mode: 'ANY'
+          streamFunctionCallArguments: true
+```
+
+For a subsequent model turn, preserve the returned `thoughtSignature` and provide the matching `functionResponse`. Gemini 3 and later also support multimodal function responses, such as an image referenced from Cloud Storage:
+
+```yaml
+prompts:
+  - |
+    [
+      {"role":"user","parts":[{"text":"What is shown in the latest photo?"}]},
+      {"role":"model","parts":[{"functionCall":{"name":"get_photo","args":{"album":"latest"}},"thoughtSignature":"{{signature}}"}]},
+      {"role":"user","parts":[{"functionResponse":{"name":"get_photo","response":{"image_ref":{"$ref":"photo.jpg"}},"parts":[{"fileData":{"mimeType":"image/jpeg","fileUri":"gs://my-bucket/photo.jpg","displayName":"photo.jpg"}}]}}]}
+    ]
+```
+
 For practical examples of function calling with Vertex AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution.
 
 ### System Instructions

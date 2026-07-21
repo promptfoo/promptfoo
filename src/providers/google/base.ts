@@ -30,7 +30,13 @@ import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig, Tool } from './types';
+import type {
+  CompletionOptions,
+  GoogleProviderConfig,
+  StreamedFunctionCall,
+  StreamedPartialArg,
+  Tool,
+} from './types';
 
 /**
  * Options for creating a Google provider instance.
@@ -42,6 +48,156 @@ export interface GoogleProviderOptions {
   id?: string;
   /** Environment variable overrides */
   env?: EnvOverrides;
+}
+
+interface PendingFunctionCall {
+  id?: string;
+  name?: string;
+  args: Record<string, unknown>;
+  argsText: string;
+}
+
+function setPartialFunctionArg(
+  args: Record<string, unknown>,
+  partialArg: StreamedPartialArg,
+): boolean {
+  const path = partialArg.jsonPath;
+  if (!path || !/^\$(?:\.[A-Za-z_$][\w$]*|\[\d+\])+$/.test(path)) {
+    return false;
+  }
+
+  const segments = Array.from(path.matchAll(/\.([A-Za-z_$][\w$]*)|\[(\d+)\]/g), (match) =>
+    match[1] === undefined ? Number(match[2]) : match[1],
+  );
+  if (
+    segments.some((segment) => ['__proto__', 'prototype', 'constructor'].includes(String(segment)))
+  ) {
+    return false;
+  }
+
+  let value: unknown;
+  if ('stringValue' in partialArg) {
+    value = partialArg.stringValue;
+  } else if ('numberValue' in partialArg) {
+    value = partialArg.numberValue;
+  } else if ('boolValue' in partialArg) {
+    value = partialArg.boolValue;
+  } else if ('nullValue' in partialArg) {
+    value = null;
+  } else {
+    return true;
+  }
+
+  let current: Record<string | number, unknown> = args;
+  for (let index = 0; index < segments.length - 1; index++) {
+    const segment = segments[index];
+    const nextSegment = segments[index + 1];
+    const existing = current[segment];
+    if (!existing || typeof existing !== 'object') {
+      current[segment] = typeof nextSegment === 'number' ? [] : {};
+    }
+    current = current[segment] as Record<string | number, unknown>;
+  }
+
+  const lastSegment = segments[segments.length - 1];
+  const existing = current[lastSegment];
+  current[lastSegment] =
+    typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
+  return true;
+}
+
+function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown): void {
+  if (typeof args !== 'string') {
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      pending.args = { ...pending.args, ...args };
+    }
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(args);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      pending.args = { ...pending.args, ...parsed };
+      pending.argsText = '';
+      return;
+    }
+  } catch {
+    // Some streaming integrations expose cumulative or fragmented JSON strings.
+  }
+  pending.argsText += args;
+}
+
+function finalizeStreamedFunctionCall(
+  pending: PendingFunctionCall,
+): StreamedFunctionCall | undefined {
+  if (pending.argsText) {
+    try {
+      const parsed = JSON.parse(pending.argsText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+      pending.args = { ...pending.args, ...parsed };
+    } catch {
+      return undefined;
+    }
+  }
+
+  return pending.name ? { id: pending.id, name: pending.name, args: pending.args } : undefined;
+}
+
+function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | undefined {
+  const completed: StreamedFunctionCall[] = [];
+  const pendingById = new Map<string, PendingFunctionCall>();
+  let pendingUnnamed: PendingFunctionCall | undefined;
+
+  for (const part of parts) {
+    const functionCall = part?.functionCall as StreamedFunctionCall | undefined;
+    if (!functionCall) {
+      continue;
+    }
+
+    const id = functionCall.id;
+    let pending = id ? pendingById.get(id) : pendingUnnamed;
+    if (!pending) {
+      pending = { id, name: functionCall.name, args: {}, argsText: '' };
+      if (id) {
+        pendingById.set(id, pending);
+      } else {
+        pendingUnnamed = pending;
+      }
+    } else if (functionCall.name) {
+      if (pending.name && pending.name !== functionCall.name) {
+        return undefined;
+      }
+      pending.name = functionCall.name;
+    }
+
+    if (functionCall.args !== undefined) {
+      mergeStreamedFunctionArgs(pending, functionCall.args);
+    }
+    for (const partialArg of functionCall.partialArgs ?? []) {
+      if (!setPartialFunctionArg(pending.args, partialArg)) {
+        return undefined;
+      }
+    }
+
+    if (functionCall.willContinue === true) {
+      continue;
+    }
+
+    const complete = finalizeStreamedFunctionCall(pending);
+    if (!complete) {
+      return undefined;
+    }
+    completed.push(complete);
+    if (id) {
+      pendingById.delete(id);
+    } else {
+      pendingUnnamed = undefined;
+    }
+  }
+
+  return pendingById.size === 0 && !pendingUnnamed ? completed : undefined;
 }
 
 /**
@@ -413,12 +569,23 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     }
 
     const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
-    const functionCalls = parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
+    const streamsFunctionCallArguments =
+      config.streaming === true &&
+      (config.toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true ||
+        config.tool_config?.function_calling_config?.stream_function_call_arguments === true);
+    const functionCalls = streamsFunctionCallArguments
+      ? assembleStreamedFunctionCalls(parts)
+      : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
+    if (!functionCalls) {
+      return output;
+    }
     const results = [];
+    let callbackFailed = false;
 
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
       if (!config.functionToolCallbacks[functionName]) {
+        callbackFailed = true;
         continue;
       }
       try {
@@ -432,10 +599,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       } catch {
         // executeFunctionCallback already logs the callback error. Preserve the
         // original model output when a callback cannot be executed.
+        callbackFailed = true;
       }
     }
 
-    if (results.length === 0) {
+    if (results.length === 0 || callbackFailed) {
       return output;
     }
     if (results.length === 1) {

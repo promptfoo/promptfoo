@@ -495,6 +495,174 @@ describe('GoogleGenericProvider', () => {
 
       expect(result).toBe('{"status":"first"}\n["second"]');
     });
+
+    it('should assemble streamed partial function-call arguments before invoking once', async () => {
+      const callback = vi.fn().mockResolvedValue('streamed');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          {
+            functionCall: {
+              name: 'test_function',
+              partialArgs: [{ jsonPath: '$.count', numberValue: 2 }],
+              willContinue: true,
+            },
+          },
+          {
+            functionCall: {
+              partialArgs: [
+                { jsonPath: '$.location.city', stringValue: 'Bos', willContinue: true },
+              ],
+              willContinue: true,
+            },
+          },
+          {
+            functionCall: {
+              partialArgs: [{ jsonPath: '$.location.city', stringValue: 'ton' }],
+              willContinue: true,
+            },
+          },
+          { functionCall: {} },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith('{"count":2,"location":{"city":"Boston"}}');
+      expect(result).toBe('streamed');
+    });
+
+    it('should invoke a cumulative streamed function call only once', async () => {
+      const callback = vi.fn().mockResolvedValue('streamed');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          {
+            functionCall: {
+              id: 'call-1',
+              name: 'test_function',
+              args: '{"city":"Bo',
+              willContinue: true,
+            },
+          },
+          {
+            functionCall: {
+              id: 'call-1',
+              name: 'test_function',
+              args: '{"city":"Boston"}',
+            },
+          },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith('{"city":"Boston"}');
+      expect(result).toBe('streamed');
+    });
+
+    it('should assemble sequential parallel calls and all partial-argument value types', async () => {
+      const callback = vi.fn().mockResolvedValueOnce('first').mockResolvedValueOnce('second');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { name: 'test_function', willContinue: true } },
+          {
+            functionCall: {
+              partialArgs: [
+                { jsonPath: '$.stops[0].city', stringValue: 'Boston' },
+                { jsonPath: '$.enabled', boolValue: false },
+                { jsonPath: '$.optional', nullValue: 'NULL_VALUE' },
+              ],
+              willContinue: true,
+            },
+          },
+          { functionCall: {} },
+          { functionCall: { name: 'test_function', willContinue: true } },
+          {
+            functionCall: {
+              partialArgs: [{ jsonPath: '$.stops[0].city', stringValue: 'Seattle' }],
+              willContinue: true,
+            },
+          },
+          { functionCall: {} },
+        ],
+        {
+          streaming: true,
+          tool_config: { function_calling_config: { stream_function_call_arguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(callback).toHaveBeenNthCalledWith(
+        1,
+        '{"stops":[{"city":"Boston"}],"enabled":false,"optional":null}',
+      );
+      expect(callback).toHaveBeenNthCalledWith(2, '{"stops":[{"city":"Seattle"}]}');
+      expect(result).toBe('first\nsecond');
+    });
+
+    it('should preserve streamed output and skip callbacks for unsafe JSON paths', async () => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const originalCalls = [
+        {
+          functionCall: {
+            name: 'test_function',
+            partialArgs: [{ jsonPath: '$.__proto__.polluted', stringValue: 'yes' }],
+          },
+        },
+      ];
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+      expect(callback).not.toHaveBeenCalled();
+      expect(({} as { polluted?: string }).polluted).toBeUndefined();
+    });
+
+    it('should preserve all original calls when a parallel callback fails', async () => {
+      const originalCalls = [
+        { functionCall: { name: 'succeed', args: { city: 'Boston' } } },
+        { functionCall: { name: 'fail', args: { city: 'Seattle' } } },
+      ];
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        {
+          functionToolCallbacks: {
+            succeed: vi.fn().mockResolvedValue('success'),
+            fail: vi.fn().mockRejectedValue(new Error('callback failed')),
+          },
+        },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+    });
   });
 
   describe('cleanup()', () => {

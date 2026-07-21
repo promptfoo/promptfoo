@@ -14,7 +14,7 @@ cd google-vertex-tools
 This example demonstrates how to use [Vertex AI models](https://www.promptfoo.dev/docs/providers/vertex/) with:
 
 - Function calling and tool declarations with Gemini 3.6 Flash
-- Function callback execution with local implementations
+- Streamed function-call arguments and callback execution with local implementations
 - Different configuration approaches (YAML vs JavaScript)
 
 ## Prerequisites
@@ -62,7 +62,7 @@ Uses external tool definitions and validates function calls without execution:
 
 ### Function Callbacks (`promptfooconfig-callback.mjs`)
 
-Demonstrates actual function execution with local callbacks:
+Demonstrates streamed function-call arguments and actual function execution with local callbacks:
 
 - `promptfooconfig-callback.mjs` - Portable ESM configuration with inline tools and callbacks
 - Includes local function implementation for adding numbers
@@ -90,7 +90,7 @@ Demonstrates actual function execution with local callbacks:
 ## Expected Results
 
 - **Basic example**: Validates that the model correctly calls the weather function with proper parameters
-- **Callback example**: Actually executes the addition function and validates the computed results
+- **Callback example**: Assembles streamed arguments, executes the addition function, and validates the computed results
 
 ## Learn More
 

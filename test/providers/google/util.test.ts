@@ -690,6 +690,15 @@ describe('util', () => {
                 id: 'call-1',
                 name: 'get_weather',
                 response: { result: 'Sunny' },
+                parts: [
+                  {
+                    fileData: {
+                      mimeType: 'image/jpeg',
+                      fileUri: 'gs://test-bucket/weather.jpg',
+                      displayName: 'weather.jpg',
+                    },
+                  },
+                ],
               },
             },
           ],
@@ -1720,6 +1729,7 @@ describe('util', () => {
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
           ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
@@ -1736,6 +1746,7 @@ describe('util', () => {
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
           ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],

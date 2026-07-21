@@ -26,23 +26,45 @@ export interface ModelArmorConfig {
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
+  displayName?: string;
+}
+
+export interface StreamedPartialArg {
+  jsonPath?: string;
+  stringValue?: string;
+  numberValue?: number;
+  boolValue?: boolean;
+  nullValue?: unknown;
+  willContinue?: boolean;
 }
 
 export interface FunctionCall {
   id?: string;
   name: string;
-  args?: { [key: string]: any };
+  args?: { [key: string]: any } | string;
+  partialArgs?: StreamedPartialArg[];
+  willContinue?: boolean;
+}
+
+export interface StreamedFunctionCall {
+  id?: string;
+  name?: string;
+  args?: { [key: string]: any } | string;
+  partialArgs?: StreamedPartialArg[];
+  willContinue?: boolean;
 }
 
 interface FunctionResponse {
   id?: string;
   name: string;
   response: { [key: string]: any };
+  parts?: { inlineData?: Blob; fileData?: FileData }[];
 }
 
 interface FileData {
   mimeType?: string;
   fileUri: string;
+  displayName?: string;
 }
 
 export interface Part {
@@ -52,7 +74,7 @@ export interface Part {
   // thinking tokens rather than per-image output.
   thought?: boolean;
   inlineData?: Blob;
-  functionCall?: FunctionCall;
+  functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
   thoughtSignature?: string;
   fileData?: FileData;
