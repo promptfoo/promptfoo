@@ -4,11 +4,29 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 const EDENAI_API_BASE_URL = 'https://api.edenai.run/v3';
 const EDENAI_API_KEY_ENVAR = 'EDENAI_API_KEY';
 const DEFAULT_EDENAI_MODEL = 'openai/gpt-4o-mini';
+
+// OpenAI-style subtypes that this chat-only provider does not implement. Eden AI
+// is reached through chat completions, so reject these with a clear error instead
+// of silently sending them to /chat/completions (see src/providers/AGENTS.md).
+const UNSUPPORTED_EDENAI_SUBTYPES = new Set([
+  'completion',
+  'embedding',
+  'embeddings',
+  'assistant',
+  'responses',
+  'realtime',
+  'moderation',
+  'image',
+  'audio',
+  'transcription',
+  'speech',
+]);
 
 type EdenAiConfig = OpenAiCompletionOptions;
 
@@ -82,6 +100,25 @@ class EdenAiProvider extends OpenAiChatCompletionProvider {
     );
   }
 
+  // Eden AI returns an authoritative top-level `cost` (USD) on successful
+  // responses. Prefer it over the OpenAI token based estimate, which would be
+  // wrong for non-OpenAI models routed through the gateway (and missing for
+  // vendors promptfoo has no price table for). Cache hits defer to the base,
+  // which returns no cost.
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (!cached) {
+      const edenCost = (data as { cost?: unknown }).cost;
+      if (typeof edenCost === 'number' && Number.isFinite(edenCost)) {
+        return edenCost;
+      }
+    }
+    return super.calculateResponseCost(data, config, cached);
+  }
+
   id(): string {
     return `edenai:${this.modelName}`;
   }
@@ -114,6 +151,12 @@ export function createEdenAiProvider(
   const rest = splits.slice(1);
   if (rest[0] === 'chat') {
     rest.shift();
+  } else if (UNSUPPORTED_EDENAI_SUBTYPES.has(rest[0] ?? '')) {
+    throw new Error(
+      `Eden AI provider only supports chat completions, but got "${providerPath}". ` +
+        `The "${rest[0]}" subtype is not supported. Use "edenai:<vendor/model>" ` +
+        '(for example edenai:openai/gpt-4o-mini) or "edenai:chat:<vendor/model>".',
+    );
   }
   const modelName = rest.join(':') || DEFAULT_EDENAI_MODEL;
   return new EdenAiProvider(modelName, options);

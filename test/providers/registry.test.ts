@@ -382,6 +382,20 @@ describe('Provider Registry', () => {
       expect(config.apiKeyEnvar).toBe('EDENAI_API_KEY');
     });
 
+    it('throws for unsupported edenai subtypes', async () => {
+      const factory = providerMap.find((f) =>
+        f.test('edenai:embeddings:openai/text-embedding-3-small'),
+      );
+      expect(factory).toBeDefined();
+      await expect(
+        factory!.create(
+          'edenai:embeddings:openai/text-embedding-3-small',
+          mockProviderOptions,
+          mockContext,
+        ),
+      ).rejects.toThrow(/only supports chat completions/);
+    });
+
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
       expect(factory).toBeDefined();
