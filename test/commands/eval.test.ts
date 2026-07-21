@@ -554,7 +554,13 @@ describe('evalCommand', () => {
         async (_testSuite, evalRecord) => evalRecord as Eval,
       );
       await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
-      return chokidarMocks.watch.mock.calls.at(-1)?.[0] as string[];
+      // The shared chokidar mock is declared as `vi.fn(() => watcher)`, so its
+      // recorded call args type as an empty tuple. Read the first argument through
+      // `unknown` rather than widening the shared mock's signature.
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as
+        | [string[]]
+        | undefined;
+      return lastCall?.[0] ?? [];
     }
 
     it('watches a scalar tests file reference', async () => {
