@@ -67,6 +67,8 @@ Demonstrates streamed function-call arguments and actual function execution with
 - `promptfooconfig-callback.mjs` - Portable ESM configuration with inline tools and callbacks
 - Includes local function implementation for adding numbers
 
+Callbacks execute as trusted, unsandboxed local code. Isolate runs that use untrusted models or eval content.
+
 ## Running the Examples
 
 1. **Basic tool declaration example:**

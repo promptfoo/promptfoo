@@ -43,6 +43,54 @@ export function normalizeSafetySettings(
 
 type GoogleToolConfig = NonNullable<CompletionOptions['toolConfig']>;
 
+type GoogleServiceTier = 'standard' | 'priority' | 'flex';
+
+/** Normalize the SDK-style tier name or Vertex's protobuf enum for the target API. */
+export function normalizeGoogleServiceTier(
+  serviceTier: unknown,
+  vertexai = false,
+): string | undefined {
+  if (typeof serviceTier !== 'string') {
+    return undefined;
+  }
+
+  const normalized = serviceTier.toLowerCase().replace(/^service_tier_/, '');
+  if (normalized !== 'standard' && normalized !== 'priority' && normalized !== 'flex') {
+    return serviceTier;
+  }
+
+  return vertexai ? `SERVICE_TIER_${normalized.toUpperCase()}` : normalized;
+}
+
+/** Read the actual processing tier before estimating costs for a downgraded request. */
+export function getGoogleResponseServiceTier(
+  headers: unknown,
+  usageMetadata?: unknown,
+): GoogleServiceTier | undefined {
+  let headerValue: unknown;
+  if (headers && typeof headers === 'object') {
+    const headerCollection = headers as {
+      get?: (name: string) => string | null;
+      [key: string]: unknown;
+    };
+    headerValue =
+      typeof headerCollection.get === 'function'
+        ? headerCollection.get('x-gemini-service-tier')
+        : Object.entries(headerCollection).find(
+            ([name]) => name.toLowerCase() === 'x-gemini-service-tier',
+          )?.[1];
+  }
+
+  const metadata = usageMetadata as { serviceTier?: unknown; service_tier?: unknown } | undefined;
+  const normalized = normalizeGoogleServiceTier(
+    headerValue ?? metadata?.serviceTier ?? metadata?.service_tier,
+  );
+
+  return normalized === 'standard' || normalized === 'priority' || normalized === 'flex'
+    ? normalized
+    : undefined;
+}
+
 function normalizeGoogleToolMode(
   mode: unknown,
 ): NonNullable<NonNullable<GoogleToolConfig['functionCallingConfig']>['mode']> | undefined {
@@ -64,77 +112,82 @@ function normalizeGoogleToolMode(
   }
 }
 
+function normalizeCamelCaseGoogleToolConfig(
+  config: GoogleToolConfig,
+): GoogleToolConfig | undefined {
+  const { functionCallingConfig: rawFunctionCallingConfig, ...restToolConfig } = config;
+  const normalizedToolConfig: GoogleToolConfig = { ...restToolConfig };
+
+  if (rawFunctionCallingConfig) {
+    const {
+      mode: rawMode,
+      allowedFunctionNames,
+      ...restFunctionCallingConfig
+    } = rawFunctionCallingConfig;
+    const mode = normalizeGoogleToolMode(rawMode);
+    const functionCallingConfig = {
+      ...restFunctionCallingConfig,
+      ...(mode ? { mode } : {}),
+      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+    };
+    if (Object.keys(functionCallingConfig).length > 0) {
+      normalizedToolConfig.functionCallingConfig = functionCallingConfig;
+    }
+  }
+
+  return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
+}
+
+function normalizeSnakeCaseGoogleToolConfig(
+  config: NonNullable<CompletionOptions['tool_config']>,
+): GoogleToolConfig | undefined {
+  const {
+    function_calling_config: rawFunctionCallingConfig,
+    retrieval_config: retrievalConfig,
+    include_server_side_tool_invocations: includeServerSideToolInvocations,
+  } = config;
+  const normalizedToolConfig: GoogleToolConfig = {
+    ...(retrievalConfig
+      ? {
+          retrievalConfig: {
+            ...(retrievalConfig.lat_lng ? { latLng: retrievalConfig.lat_lng } : {}),
+            ...(retrievalConfig.language_code
+              ? { languageCode: retrievalConfig.language_code }
+              : {}),
+          },
+        }
+      : {}),
+    ...(includeServerSideToolInvocations === undefined ? {} : { includeServerSideToolInvocations }),
+  };
+
+  if (rawFunctionCallingConfig) {
+    const {
+      mode: rawMode,
+      allowed_function_names: allowedFunctionNames,
+      stream_function_call_arguments: streamFunctionCallArguments,
+    } = rawFunctionCallingConfig;
+    const mode = normalizeGoogleToolMode(rawMode);
+    const functionCallingConfig = {
+      ...(mode ? { mode } : {}),
+      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+      ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
+    };
+    if (Object.keys(functionCallingConfig).length > 0) {
+      normalizedToolConfig.functionCallingConfig = functionCallingConfig;
+    }
+  }
+
+  return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
+}
+
 function normalizeExplicitGoogleToolConfig(
   config: CompletionOptions,
 ): GoogleToolConfig | undefined {
   if (config.toolConfig) {
-    const { functionCallingConfig: rawFunctionCallingConfig, ...restToolConfig } =
-      config.toolConfig;
-    const normalizedToolConfig: GoogleToolConfig = { ...restToolConfig };
-
-    if (rawFunctionCallingConfig) {
-      const {
-        mode: rawMode,
-        allowedFunctionNames,
-        ...restFunctionCallingConfig
-      } = rawFunctionCallingConfig;
-      const mode = normalizeGoogleToolMode(rawMode);
-      const functionCallingConfig = {
-        ...restFunctionCallingConfig,
-        ...(mode ? { mode } : {}),
-        ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
-      };
-      if (Object.keys(functionCallingConfig).length > 0) {
-        normalizedToolConfig.functionCallingConfig = functionCallingConfig;
-      }
-    }
-
-    return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
+    return normalizeCamelCaseGoogleToolConfig(config.toolConfig);
   }
 
-  if (config.tool_config) {
-    const {
-      function_calling_config: rawFunctionCallingConfig,
-      retrieval_config: retrievalConfig,
-      include_server_side_tool_invocations: includeServerSideToolInvocations,
-    } = config.tool_config;
-    const normalizedToolConfig: GoogleToolConfig = {
-      ...(retrievalConfig
-        ? {
-            retrievalConfig: {
-              ...(retrievalConfig.lat_lng ? { latLng: retrievalConfig.lat_lng } : {}),
-              ...(retrievalConfig.language_code
-                ? { languageCode: retrievalConfig.language_code }
-                : {}),
-            },
-          }
-        : {}),
-      ...(includeServerSideToolInvocations === undefined
-        ? {}
-        : { includeServerSideToolInvocations }),
-    };
-
-    if (rawFunctionCallingConfig) {
-      const {
-        mode: rawMode,
-        allowed_function_names: allowedFunctionNames,
-        stream_function_call_arguments: streamFunctionCallArguments,
-      } = rawFunctionCallingConfig;
-      const mode = normalizeGoogleToolMode(rawMode);
-      const functionCallingConfig = {
-        ...(mode ? { mode } : {}),
-        ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
-        ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
-      };
-      if (Object.keys(functionCallingConfig).length > 0) {
-        normalizedToolConfig.functionCallingConfig = functionCallingConfig;
-      }
-    }
-
-    return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
-  }
-
-  return undefined;
+  return config.tool_config ? normalizeSnakeCaseGoogleToolConfig(config.tool_config) : undefined;
 }
 
 export function resolveGoogleToolConfig(config: CompletionOptions): {
@@ -147,17 +200,14 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
     transformedToolChoice && typeof transformedToolChoice === 'object'
       ? (transformedToolChoice as GoogleToolConfig)
       : undefined;
-  const explicitMode = normalizeGoogleToolMode(explicitConfig?.functionCallingConfig?.mode);
-  const camelCaseMode = normalizeGoogleToolMode(config.toolConfig?.functionCallingConfig?.mode);
-  const snakeCaseMode = normalizeGoogleToolMode(config.tool_config?.function_calling_config?.mode);
-  const toolChoiceMode = normalizeGoogleToolMode(toolChoiceConfig?.functionCallingConfig?.mode);
+  const toolsDisabled = [
+    explicitConfig?.functionCallingConfig?.mode,
+    config.toolConfig?.functionCallingConfig?.mode,
+    config.tool_config?.function_calling_config?.mode,
+    toolChoiceConfig?.functionCallingConfig?.mode,
+  ].some((mode) => normalizeGoogleToolMode(mode) === 'NONE');
 
-  if (
-    explicitMode === 'NONE' ||
-    camelCaseMode === 'NONE' ||
-    snakeCaseMode === 'NONE' ||
-    toolChoiceMode === 'NONE'
-  ) {
+  if (toolsDisabled) {
     return {
       toolConfig: { ...explicitConfig, functionCallingConfig: { mode: 'NONE' } },
       toolsDisabled: true,
@@ -185,6 +235,21 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
         : {}),
     toolsDisabled: false,
   };
+}
+
+/** Merge configured tools with single-object or array passthrough tools. */
+export function mergeGoogleRequestTools(
+  configuredTools: Tool[],
+  passthroughTools: unknown,
+): unknown[] | undefined {
+  if (passthroughTools === undefined) {
+    return configuredTools.length > 0 ? configuredTools : undefined;
+  }
+
+  return [
+    ...configuredTools,
+    ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]),
+  ];
 }
 
 export function mergeGoogleCompletionOptions(
@@ -240,7 +305,7 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
 
 /**
  * Gemini 3.6 Flash and Gemini 3.5 Flash-Lite ignore sampling parameters and
- * reject candidate counts. Remove both typed and raw passthrough spellings.
+ * reject penalties and candidate counts. Remove typed and passthrough spellings.
  */
 export function removeDeprecatedGeminiGenerationParams<T>(
   modelName: string,
@@ -266,6 +331,10 @@ export function removeDeprecatedGeminiGenerationParams<T>(
     'top_k',
     'candidateCount',
     'candidate_count',
+    'presencePenalty',
+    'presence_penalty',
+    'frequencyPenalty',
+    'frequency_penalty',
   ]) {
     delete sanitized[field];
   }
@@ -329,6 +398,7 @@ export function calculateGoogleCost(
   cachedPromptTokens?: number,
   cachedAudioPromptTokens?: number,
   cachedImagePromptTokens?: number,
+  actualServiceTier?: GoogleServiceTier,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
@@ -351,11 +421,15 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  const serviceTier =
-    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
-      ?.service_tier ??
-    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
-    config.service_tier;
+  const passthrough = config.passthrough as
+    | { service_tier?: unknown; serviceTier?: unknown }
+    | undefined;
+  const serviceTier = normalizeGoogleServiceTier(
+    actualServiceTier ??
+      passthrough?.service_tier ??
+      passthrough?.serviceTier ??
+      config.service_tier,
+  );
   let serviceTierMultiplier = 1;
   if (serviceTier === 'priority') {
     serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
@@ -523,6 +597,7 @@ export function calculateGoogleCostFromUsage(
   completionTokens: number | undefined,
   isVertexMode: boolean,
   usageMetadata: any,
+  responseServiceTier?: unknown,
 ): number | undefined {
   const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
   const toolPromptDetails =
@@ -561,6 +636,10 @@ export function calculateGoogleCostFromUsage(
     usageMetadata?.cachedContentTokenCount ?? usageMetadata?.cached_content_token_count,
     getGoogleModalityTokenCount(cacheDetails, ['AUDIO']),
     getGoogleModalityTokenCount(cacheDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']),
+    getGoogleResponseServiceTier(
+      responseServiceTier ? { 'x-gemini-service-tier': responseServiceTier } : undefined,
+      usageMetadata,
+    ),
   );
 }
 
@@ -614,6 +693,8 @@ interface GeminiUsageMetadata {
   candidatesTokensDetails?: Array<{ modality: string; tokenCount: number }>;
   responseTokensDetails?: Array<{ modality: string; tokenCount: number }>;
   cacheTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  serviceTier?: string;
+  service_tier?: string;
 }
 
 export interface GeminiErrorResponse {
@@ -1253,6 +1334,52 @@ function getMimeTypeFromFtypBrand(brand: string): string {
   return 'video/mp4';
 }
 
+const ASF_HEADER_GUID = Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex');
+const ASF_STREAM_PROPERTIES_GUID = Buffer.from('9107dcb7b7a9cf118ee600c00c205365', 'hex');
+const ASF_AUDIO_STREAM_GUID = Buffer.from('409e69f84d5bcf11a8fd00805f5c442b', 'hex');
+const ASF_VIDEO_STREAM_GUID = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');
+const EBML_DOCTYPE_ID = Buffer.from([0x42, 0x82]);
+const MAX_MEDIA_SNIFF_BYTES = 65_536;
+
+function getAsfMimeType(bytes: Buffer): string | undefined {
+  let streamOffset = bytes.indexOf(ASF_STREAM_PROPERTIES_GUID, ASF_HEADER_GUID.length);
+  let hasAudio = false;
+
+  while (streamOffset !== -1) {
+    const streamTypeOffset = streamOffset + ASF_STREAM_PROPERTIES_GUID.length + 8;
+    const streamType = bytes.subarray(streamTypeOffset, streamTypeOffset + 16);
+    if (streamType.equals(ASF_VIDEO_STREAM_GUID)) {
+      return 'video/wmv';
+    }
+    if (streamType.equals(ASF_AUDIO_STREAM_GUID)) {
+      hasAudio = true;
+    }
+    streamOffset = bytes.indexOf(ASF_STREAM_PROPERTIES_GUID, streamTypeOffset);
+  }
+
+  return hasAudio ? 'audio/x-ms-wma' : undefined;
+}
+
+function getEbmlMimeType(bytes: Buffer): string | undefined {
+  const doctypeOffset = bytes.indexOf(EBML_DOCTYPE_ID, 4);
+  if (doctypeOffset < 0) {
+    return undefined;
+  }
+
+  const encodedLength = bytes[doctypeOffset + EBML_DOCTYPE_ID.length];
+  if (encodedLength === undefined || (encodedLength & 0x80) === 0) {
+    return undefined;
+  }
+
+  const doctypeLength = encodedLength & 0x7f;
+  const doctypeOffsetStart = doctypeOffset + EBML_DOCTYPE_ID.length + 1;
+  const doctype = bytes
+    .subarray(doctypeOffsetStart, doctypeOffsetStart + doctypeLength)
+    .toString('ascii');
+
+  return doctype === 'webm' ? 'video/webm' : undefined;
+}
+
 function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   const riffType = bytes.subarray(8, 12).toString('ascii');
   if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
@@ -1273,13 +1400,13 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   } else if (['moov', 'mdat', 'wide'].includes(bytes.subarray(4, 8).toString('ascii'))) {
     return 'video/mov';
   } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
-    return 'video/webm';
+    return getEbmlMimeType(bytes);
   } else if (['000001ba', '000001b3'].includes(bytes.subarray(0, 4).toString('hex'))) {
     return 'video/mpeg';
   } else if (bytes.subarray(0, 3).toString('ascii') === 'FLV') {
     return 'video/x-flv';
-  } else if (bytes.subarray(0, 16).toString('hex') === '3026b2758e66cf11a6d900aa0062ce6c') {
-    return 'video/wmv';
+  } else if (bytes.subarray(0, ASF_HEADER_GUID.length).equals(ASF_HEADER_GUID)) {
+    return getAsfMimeType(bytes);
   } else if (bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0) {
     return 'audio/aac';
   } else if (
@@ -1329,7 +1456,8 @@ function getMimeTypeFromBase64(data: string): string | undefined {
     return 'application/pdf';
   }
 
-  return getMimeTypeFromMediaBytes(Buffer.from(base64Data, 'base64'));
+  const sniffBase64Length = Math.ceil(MAX_MEDIA_SNIFF_BYTES / 3) * 4;
+  return getMimeTypeFromMediaBytes(Buffer.from(base64Data.slice(0, sniffBase64Length), 'base64'));
 }
 
 function processImagesInContents(

@@ -568,9 +568,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   }
 
   /**
-   * Execute configured callbacks for native Gemini function-call parts.
-   * Gemini returns an array of parts for fresh responses, while older cached
-   * responses can contain a JSON-encoded functionCall envelope.
+   * Execute explicitly configured callbacks from native parts or trusted JSON
+   * function-call envelopes. Local eval configuration and model-output feedback
+   * loops share the trusted execution model documented in SECURITY.md.
    */
   protected async executeFunctionToolCallbacks(
     output: ProviderResponse['output'],

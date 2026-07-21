@@ -488,6 +488,35 @@ describe('GoogleGenericProvider', () => {
   });
 
   describe('executeFunctionToolCallbacks()', () => {
+    it('executes an explicitly configured callback from trusted JSON model output', async () => {
+      const callback = vi.fn().mockResolvedValue('trusted callback result');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        JSON.stringify({ functionCall: { name: 'test_function', args: { value: 1 } } }),
+        { functionToolCallbacks: { test_function: callback } },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledWith('{"value":1}');
+      expect(result).toBe('trusted callback result');
+    });
+
+    it('never executes a configured callback when function calling is disabled', async () => {
+      const callback = vi.fn().mockResolvedValue('should not execute');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const output = JSON.stringify({ functionCall: { name: 'test_function', args: {} } });
+
+      expect(
+        await provider['executeFunctionToolCallbacks'](
+          output,
+          { functionToolCallbacks: { test_function: callback } },
+          true,
+        ),
+      ).toBe(output);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('should preserve a single structured callback result', async () => {
       const callback = vi.fn().mockResolvedValue({ status: 'ok', values: [1, 2] });
       const provider = new TestGoogleProvider('gemini-3.6-flash');

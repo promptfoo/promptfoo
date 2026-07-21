@@ -36,8 +36,8 @@ tests:
   - vars:
       query: What is the current Google stock price?
     assert:
-      - type: contains
-        value: stock
+      - type: icontains-any
+        value: [Alphabet, Google, GOOG, GOOGL]
       - type: contains
         value: '$'
 
@@ -45,16 +45,16 @@ tests:
   - vars:
       query: What are the latest features in TypeScript?
     assert:
-      - type: contains
+      - type: icontains
         value: TypeScript
-      - type: contains
-        value: feature
+      - type: icontains-any
+        value: [feature, support, release, version]
 
   # Test a factual question
   - vars:
       query: Who won the most recent Super Bowl?
     assert:
-      - type: contains
+      - type: icontains
         value: Super Bowl
-      - type: contains
-        value: won
+      - type: icontains-any
+        value: [won, winner, champions, victory, defeated, beat]

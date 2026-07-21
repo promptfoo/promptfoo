@@ -569,6 +569,27 @@ describe('AIStudioChatProvider', () => {
       expect(response.error).toContain('No output found in response');
     });
 
+    it('rejects MAX_TOKENS responses that contain only an empty text part', async () => {
+      const provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: { apiKey: 'test-key' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }],
+          usageMetadata: { promptTokenCount: 7, totalTokenCount: 19, thoughtsTokenCount: 12 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toContain('No output found in response');
+      expect(response.output).toBeUndefined();
+    });
+
     it('should handle responses blocked with promptFeedback', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
@@ -1310,6 +1331,10 @@ describe('AIStudioChatProvider', () => {
               top_k: 40,
               candidateCount: 2,
               candidate_count: 3,
+              presencePenalty: 0.5,
+              presence_penalty: 0.5,
+              frequencyPenalty: 0.5,
+              frequency_penalty: 0.5,
               maxOutputTokens: 200,
             },
           },
@@ -2752,8 +2777,31 @@ describe('AIStudioChatProvider', () => {
         const requestBody = JSON.parse(
           vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
         );
-        expect(requestBody.serviceTier).toBe('priority');
-        expect(requestBody.service_tier).toBeUndefined();
+        expect(requestBody.service_tier).toBe('priority');
+        expect(requestBody.serviceTier).toBeUndefined();
+      });
+
+      it('prices downgraded priority responses at the actual standard tier', async () => {
+        const provider = new AIStudioChatProvider('gemini-3.5-flash-lite', {
+          config: { apiKey: 'test-key', service_tier: 'priority' },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1_000,
+              candidatesTokenCount: 100,
+              totalTokenCount: 1_100,
+            },
+          },
+          cached: false,
+          headers: { 'x-gemini-service-tier': 'standard' },
+        } as any);
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.cost).toBeCloseTo(0.00055, 12);
+        expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
       });
 
       it('should not include thinking tokens in cost when response is cached', async () => {

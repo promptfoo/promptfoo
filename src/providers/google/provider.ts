@@ -31,12 +31,15 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
   normalizeGeminiAudio,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
   removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
@@ -356,13 +359,20 @@ export class GoogleProvider extends GoogleGenericProvider {
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
       service_tier: passthroughServiceTier,
+      serviceTier: camelCasePassthroughServiceTier,
       tools: passthroughTools,
       ...passthrough
     } = config.passthrough || {};
+    const serviceTier = normalizeGoogleServiceTier(
+      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+      this.isVertexMode,
+    );
+    const serviceTierField = this.isVertexMode ? 'serviceTier' : 'service_tier';
     const requestPassthroughTools =
       toolsDisabled && passthroughTools !== undefined
         ? removeGoogleFunctionDeclarations(passthroughTools)
         : passthroughTools;
+    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
     const body: Record<string, any> = {
       contents,
@@ -386,29 +396,15 @@ export class GoogleProvider extends GoogleGenericProvider {
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
+      ...(mergedTools ? { tools: mergedTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
       ...(systemInstruction
         ? this.isVertexMode
           ? { systemInstruction }
           : { system_instruction: systemInstruction }
         : {}),
-      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...(serviceTier ? { [serviceTierField]: serviceTier } : {}),
       ...passthrough,
-      // Normalize a single-object passthrough `tools` value to a one-element array and
-      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
-      // stays the array shape the Gemini API requires.
-      ...(requestPassthroughTools === undefined
-        ? {}
-        : {
-            tools: [
-              ...requestTools,
-              ...(Array.isArray(requestPassthroughTools)
-                ? requestPassthroughTools
-                : [requestPassthroughTools]),
-            ],
-          }),
-      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
     body.generationConfig = removeDeprecatedGeminiGenerationParams(
       this.modelName,
@@ -445,6 +441,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     let data: GeminiApiResponse;
     let cached = false;
+    let responseHeaders: unknown;
 
     try {
       if (this.isVertexMode && !this.isExpressMode()) {
@@ -461,6 +458,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           timeout: getRequestTimeoutMs(),
         });
         data = res.data as GeminiApiResponse;
+        responseHeaders = res.headers;
       } else if (this.isVertexMode && this.isExpressMode()) {
         // Vertex AI express mode (API key)
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
@@ -482,6 +480,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         }
 
         data = (await res.json()) as GeminiApiResponse;
+        responseHeaders = res.headers;
       } else {
         // AI Studio mode
         const endpoint = this.getApiEndpoint('generateContent');
@@ -502,6 +501,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         );
         data = result.data as GeminiApiResponse;
         cached = result.cached;
+        responseHeaders = result.headers;
       }
     } catch (err) {
       const geminiError = err as GaxiosError;
@@ -518,7 +518,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context);
+    return this.parseGeminiResponse(data, cached, config, context, responseHeaders);
   }
 
   /**
@@ -529,6 +529,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     cached: boolean,
     config: CompletionOptions,
     context?: CallApiContextParams,
+    responseHeaders?: unknown,
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
@@ -636,7 +637,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         }
       }
 
-      if (output === undefined) {
+      if (output === undefined || output === '') {
         return {
           error: `No output found in response: ${JSON.stringify(data)}`,
         };
@@ -690,6 +691,10 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const grounding = collectGroundingMetadata(dataWithResponse);
+      const actualServiceTier = getGoogleResponseServiceTier(
+        responseHeaders,
+        lastData.usageMetadata,
+      );
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
@@ -706,6 +711,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             completionForCost,
             this.isVertexMode,
             lastData.usageMetadata,
+            actualServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
 
@@ -717,7 +723,10 @@ export class GoogleProvider extends GoogleGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: { ...grounding },
+        metadata: {
+          ...grounding,
+          ...(actualServiceTier && { serviceTier: actualServiceTier }),
+        },
       };
 
       response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);

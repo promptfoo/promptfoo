@@ -745,6 +745,23 @@ describe('GoogleProvider', () => {
       expect(result.error).toContain('No output found in response');
     });
 
+    it('rejects MAX_TOKENS responses that contain only an empty text part', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }],
+          usageMetadata: { promptTokenCount: 7, totalTokenCount: 19, thoughtsTokenCount: 12 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No output found in response');
+      expect(result.output).toBeUndefined();
+    });
+
     it('should return an error for safety finish reasons outside scorable evaluations', async () => {
       const responseData = {
         candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
@@ -987,6 +1004,37 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.000605, 12);
     });
 
+    it('normalizes Vertex service tiers and respects the returned processing tier', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: {
+          vertexai: true,
+          apiKey: 'test-vertex-key',
+          region: 'global',
+          service_tier: 'priority',
+        },
+      });
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'x-gemini-service-tier': 'standard' }),
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+      const request = vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[1];
+      const body = JSON.parse(request?.body as string);
+
+      expect(body.serviceTier).toBe('SERVICE_TIER_PRIORITY');
+      expect(result.cost).toBeCloseTo(0.00055, 12);
+      expect(result.metadata).toMatchObject({ serviceTier: 'standard' });
+    });
+
     it.each([
       'gemini-3.6-flash',
       'gemini-3.5-flash-lite',
@@ -1007,6 +1055,10 @@ describe('GoogleProvider', () => {
               top_k: 40,
               candidateCount: 2,
               candidate_count: 3,
+              presencePenalty: 0.5,
+              presence_penalty: 0.5,
+              frequencyPenalty: 0.5,
+              frequency_penalty: 0.5,
               maxOutputTokens: 200,
             },
           },
@@ -1282,8 +1334,33 @@ describe('GoogleProvider', () => {
       const requestBody = JSON.parse(
         vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
       );
-      expect(requestBody.serviceTier).toBe('priority');
-      expect(requestBody.service_tier).toBeUndefined();
+      expect(requestBody.service_tier).toBe('priority');
+      expect(requestBody.serviceTier).toBeUndefined();
+    });
+
+    it('prices downgraded priority responses at the actual standard tier', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { apiKey: 'test-key', service_tier: 'priority' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-gemini-service-tier': 'standard' },
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.cost).toBeCloseTo(0.00055, 12);
+      expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
     });
 
     it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {

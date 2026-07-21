@@ -29,8 +29,8 @@ tests:
   - vars:
       query: What is the current Google stock price?
     assert:
-      - type: contains
-        value: stock
+      - type: icontains-any
+        value: [Alphabet, Google, GOOG, GOOGL]
       - type: contains
         value: '$'
 
@@ -38,25 +38,25 @@ tests:
   - vars:
       query: What are the latest features in Python 3.13?
     assert:
-      - type: contains
+      - type: icontains
         value: Python
-      - type: contains
-        value: feature
+      - type: icontains-any
+        value: [feature, support, PEP, experimental, release]
 
   # Test a factual question
   - vars:
       query: Who won the latest Formula 1 Grand Prix?
     assert:
-      - type: contains
-        value: Formula 1
-      - type: contains
-        value: won
+      - type: icontains-any
+        value: [Formula 1, F1, Grand Prix]
+      - type: icontains-any
+        value: [won, winner, victory, first place, 1st]
 
   # Test with weather information
   - vars:
       query: What is the current weather in Tokyo?
     assert:
-      - type: contains
+      - type: icontains
         value: Tokyo
-      - type: contains
-        value: weather
+      - type: icontains-any
+        value: [weather, temperature, forecast, sunny, cloudy, rain, °C, °F]

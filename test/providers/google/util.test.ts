@@ -20,13 +20,17 @@ import {
   clearCachedAuth,
   collectGroundingMetadata,
   geminiFormatAndSystemInstructions,
+  getGoogleResponseServiceTier,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -150,6 +154,87 @@ describe('util', () => {
 
     it('should return undefined as-is', () => {
       expect(parseStringObject(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('Google service tiers', () => {
+    it.each([
+      ['standard', false, 'standard'],
+      ['priority', false, 'priority'],
+      ['flex', false, 'flex'],
+      ['SERVICE_TIER_PRIORITY', false, 'priority'],
+      ['standard', true, 'SERVICE_TIER_STANDARD'],
+      ['priority', true, 'SERVICE_TIER_PRIORITY'],
+      ['flex', true, 'SERVICE_TIER_FLEX'],
+      ['SERVICE_TIER_FLEX', true, 'SERVICE_TIER_FLEX'],
+    ])('normalizes %s for Vertex=%s', (tier, vertexai, expected) => {
+      expect(normalizeGoogleServiceTier(tier, vertexai)).toBe(expected);
+    });
+
+    it('preserves an unknown tier so the API can reject it', () => {
+      expect(normalizeGoogleServiceTier('custom', true)).toBe('custom');
+    });
+
+    it('prefers the actual tier reported in response headers', () => {
+      expect(
+        getGoogleResponseServiceTier(
+          { 'X-Gemini-Service-Tier': 'standard' },
+          { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        ),
+      ).toBe('standard');
+    });
+
+    it('falls back to the actual tier reported in usage metadata', () => {
+      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'SERVICE_TIER_FLEX' })).toBe(
+        'flex',
+      );
+    });
+  });
+
+  describe('removeDeprecatedGeminiGenerationParams', () => {
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('removes unsupported sampling and penalty parameters for %s', (modelName) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams(modelName, {
+          temperature: 0.5,
+          topP: 0.5,
+          top_p: 0.5,
+          topK: 10,
+          top_k: 10,
+          candidateCount: 2,
+          candidate_count: 2,
+          presencePenalty: 0.5,
+          presence_penalty: 0.5,
+          frequencyPenalty: 0.5,
+          frequency_penalty: 0.5,
+          maxOutputTokens: 128,
+        }),
+      ).toEqual({ maxOutputTokens: 128 });
+    });
+
+    it('preserves generation parameters for other Gemini models', () => {
+      const config = { presencePenalty: 0.5, frequencyPenalty: 0.5 };
+
+      expect(removeDeprecatedGeminiGenerationParams('gemini-2.5-flash', config)).toBe(config);
+    });
+  });
+
+  describe('mergeGoogleRequestTools', () => {
+    it('omits tools when no configured or passthrough tools exist', () => {
+      expect(mergeGoogleRequestTools([], undefined)).toBeUndefined();
+    });
+
+    it('merges configured tools with a single passthrough tool', () => {
+      expect(mergeGoogleRequestTools([{ googleSearch: {} }], { codeExecution: {} })).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+    });
+
+    it('preserves explicitly empty passthrough tools', () => {
+      expect(mergeGoogleRequestTools([], [])).toEqual([]);
     });
   });
 
@@ -1725,6 +1810,30 @@ describe('util', () => {
       });
 
       describe('data URL support', () => {
+        const asfHeader = Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex');
+        const asfStreamProperties = Buffer.from('9107dcb7b7a9cf118ee600c00c205365', 'hex');
+        const asfVideoStream = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');
+        const asfAudioStream = Buffer.from('409e69f84d5bcf11a8fd00805f5c442b', 'hex');
+        const wmvBase64 = Buffer.concat([
+          asfHeader,
+          asfStreamProperties,
+          Buffer.alloc(8),
+          asfVideoStream,
+        ]).toString('base64');
+        const wmaBase64 = Buffer.concat([
+          asfHeader,
+          asfStreamProperties,
+          Buffer.alloc(8),
+          asfAudioStream,
+        ]).toString('base64');
+        const webmBase64 = Buffer.from('1a45dfa3a34282847765626d00000000', 'hex').toString(
+          'base64',
+        );
+        const matroskaBase64 = Buffer.from(
+          '1a45dfa3a34282886d6174726f736b6100000000',
+          'hex',
+        ).toString('base64');
+
         it.each([
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
@@ -1739,8 +1848,8 @@ describe('util', () => {
           ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
           ['video/mpeg', Buffer.from('000001ba000000000000000000000000', 'hex').toString('base64')],
           ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
-          ['video/wmv', Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex').toString('base64')],
-          ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
+          ['video/wmv', wmvBase64],
+          ['video/webm', webmBase64],
           [
             'video/ogg',
             Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
@@ -1777,8 +1886,9 @@ describe('util', () => {
           ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
           ['video/mpeg', Buffer.from('000001b3000000000000000000000000', 'hex').toString('base64')],
           ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
-          ['video/wmv', Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex').toString('base64')],
-          ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
+          ['video/wmv', wmvBase64],
+          ['audio/x-ms-wma', wmaBase64],
+          ['video/webm', webmBase64],
           [
             'video/ogg',
             Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
@@ -1791,6 +1901,32 @@ describe('util', () => {
           const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
 
           expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
+        it('does not misclassify Matroska containers as WebM', () => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: matroskaBase64 }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: matroskaBase64 });
+
+          expect(contents[0].parts).toEqual([{ text: matroskaBase64 }]);
+        });
+
+        it('sniffs only the beginning of large base64 media', () => {
+          const bytes = Buffer.concat([Buffer.from('RIFF....WAVEfmt ........'), Buffer.alloc(1e6)]);
+          const base64Data = bytes.toString('base64');
+          const fromSpy = vi.spyOn(Buffer, 'from');
+
+          try {
+            const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+            const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: 'audio/wav', data: base64Data } },
+            ]);
+            expect(fromSpy.mock.calls.some(([value]) => value === base64Data)).toBe(false);
+          } finally {
+            fromSpy.mockRestore();
+          }
         });
 
         it('should handle JPEG data URLs and extract base64', () => {
@@ -3171,6 +3307,33 @@ describe('util', () => {
         (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
+    });
+
+    it('uses the actual response tier instead of the requested priority tier', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        true,
+        { serviceTier: 'SERVICE_TIER_STANDARD' },
+      );
+
+      expect(cost).toBeCloseTo(0.00055, 12);
+    });
+
+    it('prefers the actual response header tier over usage metadata', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        true,
+        { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        'standard',
+      );
+
+      expect(cost).toBeCloseTo(0.00055, 12);
     });
 
     it('should infer cached Gemini audio and image tokens without cache modality details', () => {
