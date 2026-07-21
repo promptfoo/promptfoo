@@ -18,6 +18,7 @@ import type { BlobStorageProvider } from '../../src/blobs';
 
 describe('abort-aware blob storage', () => {
   const evalId = `eval-${randomUUID()}`;
+  const otherEvalId = `eval-${randomUUID()}`;
   const hash = 'f'.repeat(64);
 
   beforeAll(async () => {
@@ -27,9 +28,11 @@ describe('abort-aware blob storage', () => {
   afterEach(async () => {
     resetBlobStorageProvider();
     const db = await getDb();
-    await db.delete(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId));
+    await db
+      .delete(blobReferencesTable)
+      .where(inArray(blobReferencesTable.evalId, [evalId, otherEvalId]));
     await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
-    await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
+    await db.delete(evalsTable).where(inArray(evalsTable.id, [evalId, otherEvalId]));
   });
 
   it('deletes a newly stored blob and skips database references when aborted during storage', async () => {
@@ -86,6 +89,78 @@ describe('abort-aware blob storage', () => {
         .where(eq(blobAssetsTable.hash, hash))
         .get(),
     ).resolves.toBeUndefined();
+  });
+
+  it('keeps a concurrently referenced blob when an original upload is aborted', async () => {
+    const controller = new AbortController();
+    let finishStore: (() => void) | undefined;
+    const deleteByHash = vi.fn().mockResolvedValue(undefined);
+    setBlobStorageProvider({
+      providerId: 'abort-test',
+      store: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          finishStore = resolve;
+        });
+        return {
+          ref: {
+            uri: `blob://${hash}`,
+            hash,
+            mimeType: 'video/mp4',
+            provider: 'abort-test',
+            sizeBytes: 5,
+          },
+          deduplicated: false,
+        };
+      }),
+      getByHash: vi.fn(),
+      exists: vi.fn(),
+      deleteByHash,
+      getUrl: vi.fn(),
+    });
+    const db = await getDb();
+    await db.insert(evalsTable).values([
+      { id: evalId, config: {}, results: {} },
+      { id: otherEvalId, config: {}, results: {} },
+    ]);
+
+    const pendingStore = storeBlob(Buffer.from('video'), 'video/mp4', {
+      abortSignal: controller.signal,
+      evalId,
+      kind: 'video',
+      location: 'response.video',
+    });
+    await db.insert(blobAssetsTable).values({
+      hash,
+      mimeType: 'video/mp4',
+      provider: 'abort-test',
+      sizeBytes: 5,
+    });
+    await db.insert(blobReferencesTable).values({
+      id: randomUUID(),
+      blobHash: hash,
+      evalId: otherEvalId,
+      kind: 'video',
+      location: 'response.video',
+    });
+    controller.abort(new Error('cancelled after a concurrent store'));
+    finishStore?.();
+
+    await expect(pendingStore).rejects.toThrow('cancelled after a concurrent store');
+    expect(deleteByHash).not.toHaveBeenCalled();
+    await expect(
+      db
+        .select({ hash: blobAssetsTable.hash })
+        .from(blobAssetsTable)
+        .where(eq(blobAssetsTable.hash, hash))
+        .get(),
+    ).resolves.toEqual({ hash });
+    await expect(
+      db
+        .select({ evalId: blobReferencesTable.evalId })
+        .from(blobReferencesTable)
+        .where(eq(blobReferencesTable.blobHash, hash))
+        .get(),
+    ).resolves.toEqual({ evalId: otherEvalId });
   });
 });
 

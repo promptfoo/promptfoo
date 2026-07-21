@@ -56,7 +56,6 @@ export async function storeBlob(
   refContext?.abortSignal?.throwIfAborted();
   const result = await provider.store(data, mimeType);
   const referenceId = refContext?.evalId ? randomUUID() : undefined;
-  let transactionCommitted = false;
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = await getDb();
@@ -93,12 +92,11 @@ export async function storeBlob(
       }
       refContext?.abortSignal?.throwIfAborted();
     });
-    transactionCommitted = true;
     refContext?.abortSignal?.throwIfAborted();
   } catch (error) {
     let shouldDeleteBlob = !result.deduplicated || !refContext?.abortSignal?.aborted;
     try {
-      if (transactionCommitted && refContext?.abortSignal?.aborted) {
+      if (refContext?.abortSignal?.aborted) {
         await db.transaction(async (tx) => {
           if (referenceId) {
             await tx

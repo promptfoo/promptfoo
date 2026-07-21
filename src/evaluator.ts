@@ -1559,9 +1559,7 @@ async function runEvalInternal({
     });
 
     // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsagePreservingUnknown(ret.tokenUsage, response);
-    }
+    accumulateResponseTokenUsagePreservingUnknown(ret.tokenUsage, response);
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
       // Save the output in a register for later use
@@ -3304,8 +3302,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (row.response && !row.response.error && !row.response.cached) {
         metrics.cost = undefined;
       }
-    } else if (promptEvalCount === 1) {
-      metrics.cost = row.cost;
     } else if (metrics.cost !== undefined) {
       metrics.cost += row.cost;
     }

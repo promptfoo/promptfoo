@@ -171,6 +171,11 @@ function getTokenUsageLines(
   const hasEvalTokens =
     (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
   const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
+  const hasUnknownEvalTokens =
+    (tokenUsage.numRequests || 0) > 0 &&
+    tokenUsage.total === undefined &&
+    tokenUsage.prompt === undefined &&
+    tokenUsage.completion === undefined;
 
   if (!hasEvalTokens && !hasGradingTokens) {
     return [];
@@ -190,11 +195,13 @@ function getTokenUsageLines(
     },
   };
 
-  const lines = [
-    `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
-      (evalTokens.total + (tokenUsage.assertions?.total || 0)).toLocaleString(),
-    )}`,
-  ];
+  const lines = hasUnknownEvalTokens
+    ? []
+    : [
+        `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
+          (evalTokens.total + (tokenUsage.assertions?.total || 0)).toLocaleString(),
+        )}`,
+      ];
 
   if (isRedteam && tokenUsage.numRequests) {
     lines.push(

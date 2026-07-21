@@ -10,6 +10,31 @@ import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpe
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator token usage', () => {
+  it('counts a successful response with omitted token usage without inventing counts', async () => {
+    const providerWithoutTokenUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-without-token-usage'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Generated output' }),
+    };
+    const results = await runEval({
+      conversations: {},
+      delay: 0,
+      isRedteam: false,
+      prompt: toPrompt('Test prompt'),
+      promptIdx: 0,
+      provider: providerWithoutTokenUsage,
+      registers: {},
+      repeatIndex: 0,
+      test: {},
+      testIdx: 0,
+    });
+
+    expect(results[0].tokenUsage).toMatchObject({ numRequests: 1 });
+    expect(results[0].tokenUsage).not.toHaveProperty('prompt');
+    expect(results[0].tokenUsage).not.toHaveProperty('completion');
+    expect(results[0].tokenUsage).not.toHaveProperty('cached');
+    expect(results[0].tokenUsage).not.toHaveProperty('total');
+  });
+
   it('preserves unknown provider usage and cost through persistence and export', async () => {
     const providerWithoutUsage: ApiProvider = {
       id: vi.fn().mockReturnValue('provider-without-usage'),
