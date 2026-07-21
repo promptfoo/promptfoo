@@ -263,7 +263,7 @@ providers:
 Image, audio, and video variables loaded with `file://` are converted to Gemini inline data. Supported image inputs include PNG, JPEG, WEBP, HEIC, and HEIF; audio includes WAV, MP3, AIFF/AIFC, AAC, OGG, FLAC, and M4A; video includes MP4, MPEG/MPG, MOV, AVI, FLV, WEBM, WMV, and 3GPP. See the [Google AI Studio multimodal example](/docs/providers/google) for a runnable configuration.
 
 :::note
-Ogg/Theora video is detected as video, but is not in Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats). Convert it to a supported container such as MP4 or WEBM before evaluation; OGG audio is supported.
+Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Convert unsupported video to MP4 or WEBM and unsupported audio to WAV or MP3 before evaluation; OGG audio is supported.
 :::
 
 ### Language Support
@@ -844,7 +844,7 @@ providers:
       tools: 'file://tools.json' # Supports variable substitution
 ```
 
-Vertex AI also supports [streaming function-call arguments](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling#streaming-function-call-arguments) in preview. Enable both streaming and `streamFunctionCallArguments`; promptfoo assembles the streamed argument parts before invoking a configured callback:
+Vertex AI also supports [streaming function-call arguments](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling#streaming-function-call-arguments) in preview. Enable both streaming and `streamFunctionCallArguments`; promptfoo assembles the streamed argument parts before invoking a configured callback. Callbacks, including JSON-encoded model-output calls, run as trusted, unsandboxed local code; isolate evals that use untrusted models or content.
 
 ```yaml
 providers:
@@ -1068,7 +1068,7 @@ Thinking levels for Gemini 3 Pro:
 
 #### Inference tiers and cached-token pricing
 
-Promptfoo forwards `service_tier` and includes cached-input and reasoning tokens in cost estimates. Gemini 3.6 Flash is global-only; Gemini 3.5 Flash-Lite has a 10% premium on the `us` and `eu` multi-region endpoints.
+Promptfoo converts `service_tier` to Vertex's required enum and includes cached-input and reasoning tokens in cost estimates. When Google reports a Priority-to-standard downgrade, `metadata.serviceTier` reflects the actual tier and standard pricing is used. Gemini 3.6 Flash is global-only; Gemini 3.5 Flash-Lite has a 10% premium on the `us` and `eu` multi-region endpoints. Both models reject frequency and presence penalties.
 
 ```yaml
 providers:

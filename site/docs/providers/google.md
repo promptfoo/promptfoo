@@ -675,7 +675,7 @@ For multimodal inputs, the provider supports:
 Image, audio, and video inputs loaded with `file://` are converted to Gemini inline data. For large inputs, use a native `fileData` part instead.
 
 :::note
-Ogg/Theora video is detected as video, but is not in Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats). Convert it to a supported container such as MP4 or WEBM before evaluation; OGG audio is supported.
+Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Convert unsupported video to MP4 or WEBM and unsupported audio to WAV or MP3 before evaluation; OGG audio is supported.
 :::
 
 When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
@@ -792,13 +792,13 @@ providers:
           thinkingLevel: MINIMAL # MINIMAL (default), LOW, MEDIUM, or HIGH
 ```
 
-Both models ignore `temperature`, `topP`, and `topK`; Promptfoo omits those fields and `candidateCount` when sending requests. Gemini 3.5 Flash-Lite defaults to `MINIMAL`; use `MEDIUM` or `HIGH` for multi-step tool use. Prompts must not end with a prefilled `model` turn, and function responses should preserve the matching function-call `name` and `id` when one is returned. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
+Both models ignore `temperature`, `topP`, and `topK` and reject frequency or presence penalties and multiple candidates. Promptfoo omits those unsupported generation fields when sending requests. Gemini 3.5 Flash-Lite defaults to `MINIMAL`; use `MEDIUM` or `HIGH` for multi-step tool use. Prompts must not end with a prefilled `model` turn, and function responses should preserve the matching function-call `name` and `id` when one is returned. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
 
 Both models accept text, image, audio, video, and PDF inputs and support structured output, function calling, code execution, Search and Maps grounding, URL context, File Search, context caching, and standard/Flex/Priority inference. Computer Use is available in preview on Gemini 3.6 Flash, but is not supported by Gemini 3.5 Flash-Lite. Neither model generates images or audio, nor supports the Live API.
 
 #### Inference tiers and cached-token pricing
 
-Set `service_tier` to select standard, Flex, or Priority inference. Promptfoo includes cached input and reasoning tokens in its cost estimate; Google bills reasoning as output tokens.
+Set `service_tier` to select standard, Flex, or Priority inference. Promptfoo includes cached input and reasoning tokens in its cost estimate; Google bills reasoning as output tokens. When Google reports that a Priority request was processed at the standard tier, `metadata.serviceTier` reflects the actual tier and cost estimates use standard pricing.
 
 ```yaml
 providers:
@@ -1010,7 +1010,7 @@ providers:
           mode: AUTO # AUTO, ANY, VALIDATED, or NONE
 ```
 
-Promptfoo can execute configured `functionToolCallbacks`, or return the native `functionCall` parts for assertions such as `is-valid-function-call`. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
+Promptfoo can execute configured `functionToolCallbacks`, including calls represented as JSON model output, or return the native `functionCall` parts for assertions such as `is-valid-function-call`. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
 
 ```yaml
 prompts:
