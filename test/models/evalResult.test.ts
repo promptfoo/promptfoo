@@ -28,6 +28,7 @@ describe('EvalResult', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   const mockProvider: ProviderOptions = {
@@ -92,6 +93,116 @@ describe('EvalResult', () => {
       });
     });
 
+    it('should redact provider configs that contain non-JSON primitives', () => {
+      const errorSecret = 'sk-provider-bigint-error-should-never-persist';
+      const lastError = Object.assign(new Error(`Invalid API key ${errorSecret}`), {
+        toJSON() {
+          return { message: `Invalid API key ${errorSecret}` };
+        },
+      });
+      const providerOptions = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+          lastError,
+          retryAfterNanos: 1n,
+        },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: '[REDACTED]',
+          lastError: {
+            name: 'Error',
+            message: '[REDACTED]',
+          },
+          retryAfterNanos: '1',
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain(errorSecret);
+    });
+
+    it('redacts AWS/Azure credential fields in provider config (name-based)', () => {
+      // Regression: Bedrock (`secretAccessKey`/`sessionToken`) and Azure
+      // (`azureClientSecret`) credentials use realistic values that fall
+      // outside the value-shape `looksLikeSecret` heuristics (a 40-char AWS
+      // secret is below the 64-char base64 threshold; Azure secrets contain
+      // `~`/`.`), so they must be redacted by field name.
+      const providerOptions = {
+        id: 'bedrock:anthropic.claude-3',
+        config: {
+          region: 'us-east-1',
+          accessKeyId: 'ASIAIOSFODNN7EXAMPLE',
+          secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+          sessionToken: 'short-session-token',
+          azureClientSecret: 'abc8Q~someSecretValue.With-Tilde_and.Dots123',
+        },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result.config).toEqual({
+        region: 'us-east-1',
+        accessKeyId: '[REDACTED]',
+        secretAccessKey: '[REDACTED]',
+        sessionToken: '[REDACTED]',
+        azureClientSecret: '[REDACTED]',
+      });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+      expect(serialized).not.toContain('short-session-token');
+      expect(serialized).not.toContain('abc8Q~someSecretValue');
+    });
+
+    it('redacts secrets exposed via a nested config toJSON()', () => {
+      // Attack: a nested config object whose custom toJSON() returns credentials.
+      // Redaction must run AFTER serialization so the toJSON output is caught,
+      // not bypassed.
+      const leakyCreds = {
+        toJSON() {
+          return {
+            apiKey: 'sk-ant-api03-TOJSON-SHOULD-NOT-PERSIST',
+            secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+          };
+        },
+      };
+      const result = sanitizeProvider({
+        id: 'test-provider',
+        config: { creds: leakyCreds },
+      } as unknown as ProviderOptions);
+
+      expect(result.config).toEqual({
+        creds: { apiKey: '[REDACTED]', secretAccessKey: '[REDACTED]' },
+      });
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain('sk-ant-api03-TOJSON-SHOULD-NOT-PERSIST');
+      expect(serialized).not.toContain('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+    });
+
+    it('should omit provider configs that throw during sanitization', () => {
+      const errorSecret = 'sk-provider-error-should-never-log';
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const config = { apiKey: 'sk-should-never-persist' } as Record<string, unknown>;
+      Object.defineProperty(config, 'client', {
+        enumerable: true,
+        get() {
+          throw new Error(`SDK client unavailable: ${errorSecret}`);
+        },
+      });
+
+      const result = sanitizeProvider({
+        id: 'test-provider',
+        config,
+      } as unknown as ProviderOptions);
+
+      expect(result.config).toEqual({});
+      expect(JSON.stringify(result)).not.toContain('sk-should-never-persist');
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
+    });
+
     it('should handle generic objects with id function', () => {
       const provider = {
         id: () => 'test-provider',
@@ -109,6 +220,28 @@ describe('EvalResult', () => {
           apiKey: '[REDACTED]',
         },
       });
+    });
+
+    it('should normalize string providers', () => {
+      expect(sanitizeProvider('openai:gpt-4.1-mini')).toEqual({
+        id: 'openai:gpt-4.1-mini',
+      });
+    });
+
+    it('should fail closed when provider accessors throw', () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const provider = {
+        get id() {
+          throw new Error('Provider unavailable: sk-provider-id-should-never-log');
+        },
+        config: { apiKey: 'sk-provider-config-should-never-persist' },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(provider);
+
+      expect(result).toEqual({ id: 'unknown' });
+      expect(JSON.stringify(result)).not.toContain('sk-provider-config-should-never-persist');
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('sk-provider-id-should-never-log');
     });
   });
 
@@ -428,8 +561,32 @@ describe('EvalResult', () => {
       expect(retrieved?.response?.output).toBe('test output');
     });
 
-    // Regression context (PR #8688): provider credentials such as apiKey/token
+    it('should not log exception details when generic result serialization fails', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const namedScores = { safe: 1 } as Record<string, number>;
+      Object.defineProperty(namedScores, 'client', {
+        enumerable: true,
+        get() {
+          throw new Error('Serialization failed for sk-response-should-never-log');
+        },
+      });
+
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-throwing-response',
+        {
+          ...mockEvaluateResult,
+          namedScores,
+        },
+        { persist: false },
+      );
+
+      expect(result.namedScores).toEqual({});
+      expect(JSON.stringify(debugSpy.mock.calls)).not.toContain('sk-response-should-never-log');
+    });
+
+    // Regression context (PR #8688): provider credentials (for example apiKey/token)
     // were leaking into persisted eval results and API-visible response payloads.
+    // These tests ensure sensitive fields are always redacted before storage/serialization.
     describe('credential redaction (regression for PR #8688 review)', () => {
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
@@ -892,6 +1049,39 @@ describe('EvalResult', () => {
 
         expect(result.persisted).toBe(true);
         expect(JSON.stringify(result.testCase)).not.toContain('sk-live-leak');
+      });
+
+      it('omits an unsafely inspectable provider-bearing field instead of persisting secrets', async () => {
+        const errorSecret = 'sk-field-error-should-never-log';
+        const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+        const providerConfig = { apiKey: 'sk-ant-api03-THROWING-GETTER' } as Record<
+          string,
+          unknown
+        >;
+        Object.defineProperty(providerConfig, 'client', {
+          enumerable: true,
+          get() {
+            throw new Error(`SDK getter failed: ${errorSecret}`);
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-redact-throwing-getter',
+          {
+            ...mockEvaluateResult,
+            testCase: {
+              vars: {},
+              options: {
+                provider: { id: 'anthropic:messages:claude', config: providerConfig },
+              },
+            } as AtomicTestCase,
+          },
+          { persist: true },
+        );
+
+        expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
+        expect(result.testCase).toEqual({});
+        expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
       });
     });
 

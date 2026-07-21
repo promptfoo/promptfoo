@@ -794,6 +794,36 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('should redact Error messages when requested', () => {
+      const result = sanitizeObject(
+        { error: new Error('Invalid API key sk-error-message-should-not-persist') },
+        { redactErrorMessages: true },
+      );
+
+      expect(result.error).toEqual({
+        name: 'Error',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(result)).not.toContain('sk-error-message-should-not-persist');
+    });
+
+    it('should redact Error messages before custom toJSON serialization', () => {
+      const secret = 'sk-error-to-json-should-not-persist';
+      const error = Object.assign(new Error(`Invalid API key ${secret}`), {
+        toJSON() {
+          return { message: `Invalid API key ${secret}` };
+        },
+      });
+
+      const result = sanitizeObject({ error }, { redactErrorMessages: true });
+
+      expect(result.error).toEqual({
+        name: 'Error',
+        message: '[REDACTED]',
+      });
+      expect(JSON.stringify(result)).not.toContain(secret);
+    });
+
     it('should convert Map objects to empty objects via JSON', () => {
       const map = new Map([['key', 'value']]);
       const result = sanitizeObject({ map });
@@ -955,11 +985,14 @@ describe('sanitizeObject', () => {
     it('should handle BigInt values', () => {
       const input = { bigNum: BigInt(9007199254740991), password: 'secret' };
       const result = sanitizeObject(input);
-      // BigInt is not JSON serializable; sanitizer should not expose original data.
-      expect(typeof result).toBe('string');
-      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
-      expect(result).not.toContain('9007199254740991');
-      expect(result).not.toContain('secret');
+      // The sanitizer's replacer converts BigInt to a string, so the object is
+      // preserved and secrets are still redacted (stronger than bailing out to a
+      // fallback string, which would drop the non-secret data too).
+      expect(result).toEqual({
+        bigNum: '9007199254740991',
+        password: '[REDACTED]',
+      });
+      expect(result.password).not.toContain('secret');
     });
   });
 
@@ -1097,14 +1130,53 @@ describe('sanitizeObject', () => {
       const awsConfig = {
         region: 'us-east-1',
         accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+        // Realistic 40-char AWS secret access key: below the 64-char base64
+        // `looksLikeSecret` threshold, so it must be caught by field name.
         secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        // Short session token: not matched by value shape, must be caught by name.
         sessionToken: 'session-token-value',
       };
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('session-token-value');
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
+    });
+
+    it('should sanitize temporary AWS credentials and snake_case env-var forms', () => {
+      const awsConfig = {
+        region: 'us-west-2',
+        // Temporary STS access key starts with ASIA (not AKIA), so value-shape
+        // detection misses it — the field name must redact it.
+        accessKeyId: 'ASIAIOSFODNN7EXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        aws_secret_access_key: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+        aws_session_token: 'short-session-token',
+      };
+      const result = sanitizeObject(awsConfig);
+      expect(result.region).toBe('us-west-2');
+      expect(result.accessKeyId).toBe('[REDACTED]');
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.aws_secret_access_key).toBe('[REDACTED]');
+      expect(result.aws_session_token).toBe('[REDACTED]');
+    });
+
+    it('should sanitize Azure client secret and SAS token by field name', () => {
+      const azureConfig = {
+        region: 'eastus',
+        clientId: 'my-app-client-id-1234',
+        tenantId: 'my-tenant-id-1234',
+        // Azure client secrets contain `~` and `.`, which fall outside the base64
+        // `looksLikeSecret` charset, so they must be caught by field name.
+        azureClientSecret: 'abc8Q~someSecretValue.With-Tilde_and.Dots123',
+        sasToken: '?sv=2021-08-06&sig=abc123def456',
+      };
+      const result = sanitizeObject(azureConfig);
+      expect(result.region).toBe('eastus');
+      expect(result.clientId).toBe('my-app-client-id-1234');
+      expect(result.tenantId).toBe('my-tenant-id-1234');
+      expect(result.azureClientSecret).toBe('[REDACTED]');
+      expect(result.sasToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {
