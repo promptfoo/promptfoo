@@ -130,13 +130,14 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           injectVar,
           {
             ...(strategy.config || {}),
-            // Strategy config may be serialized remotely or saved in generated tests.
-            redteamProvider: redteamProviderSpec,
           },
           strategy.id,
           {
             // Live provider instances stay request-local because they can contain credentials.
             generationProvider: redteamProvider,
+            // Provider option objects can contain resolved credentials, so only IDs may persist.
+            generationProviderSpec:
+              typeof redteamProviderSpec === 'string' ? redteamProviderSpec : undefined,
           },
         );
 

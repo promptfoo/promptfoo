@@ -274,11 +274,12 @@ describe('Redteam Routes', () => {
           expect(strategyAction).toHaveBeenCalledWith(
             expect.any(Array),
             'query',
-            expect.objectContaining({
-              redteamProvider: 'openai:chat:gpt-4.1',
-            }),
+            expect.not.objectContaining({ redteamProvider: expect.anything() }),
             'math-prompt',
-            { generationProvider: previewProvider },
+            {
+              generationProvider: previewProvider,
+              generationProviderSpec: 'openai:chat:gpt-4.1',
+            },
           );
           expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('__generationProvider');
         } finally {
@@ -315,12 +316,11 @@ describe('Redteam Routes', () => {
             });
 
           expect(response.status).toBe(200);
-          expect(strategyAction.mock.calls[0]?.[2]).toEqual(
-            expect.objectContaining({ redteamProvider: 'anthropic:claude-sonnet-4' }),
-          );
+          expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('redteamProvider');
           expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('apiKey');
           expect(strategyAction.mock.calls[0]?.[4]).toEqual({
             generationProvider: previewProvider,
+            generationProviderSpec: 'anthropic:claude-sonnet-4',
           });
         } finally {
           strategySpy.mockRestore();

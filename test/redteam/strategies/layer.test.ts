@@ -673,6 +673,40 @@ describe('addLayerTestCases', () => {
       }
     });
 
+    it('persists provider IDs only for layer attack providers that consume them', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'test' },
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ];
+      const runtimeContext = {
+        generationProviderSpec: 'anthropic:claude-sonnet-4',
+      };
+
+      const crescendo = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['crescendo'] },
+        mockStrategies,
+        mockLoadStrategy,
+        runtimeContext,
+      );
+      const hydra = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:hydra'] },
+        mockStrategies,
+        mockLoadStrategy,
+        runtimeContext,
+      );
+
+      expect((crescendo[0].provider as any)?.config?.redteamProvider).toBe(
+        'anthropic:claude-sonnet-4',
+      );
+      expect((hydra[0].provider as any)?.config).not.toHaveProperty('redteamProvider');
+    });
+
     it('should handle multiple per-turn layers', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {

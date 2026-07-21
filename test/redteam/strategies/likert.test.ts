@@ -167,4 +167,30 @@ describe('likert strategy', () => {
       expect.any(Number),
     );
   });
+
+  it('does not serialize strategy config into the remote payload', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { modifiedPrompts: ['modified'] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addLikertTestCases(testCases, 'prompt', {
+      env: { CANARY: 'env-secret' },
+      apiKey: 'config-secret',
+      headers: { Authorization: 'Bearer header-secret' },
+    });
+
+    const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
+    expect(requestBody).toBeTypeOf('string');
+    expect(requestBody).not.toContain('env-secret');
+    expect(requestBody).not.toContain('config-secret');
+    expect(requestBody).not.toContain('header-secret');
+    expect(JSON.parse(requestBody as string)).toMatchObject({
+      task: 'jailbreak:likert',
+      prompt: 'test prompt 1',
+      index: 0,
+    });
+  });
 });

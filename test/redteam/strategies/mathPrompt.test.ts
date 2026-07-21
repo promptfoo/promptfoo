@@ -229,16 +229,25 @@ describe('mathPrompt', () => {
       await addMathPrompt(
         [{ vars: { prompt: 'test' } }] as any,
         'prompt',
-        { redteamProvider: 'anthropic:claude-sonnet-4-20250514' },
-        { generationProvider: requestProvider as any },
+        {
+          mathConcepts: ['topology'],
+          env: { CANARY: 'env-secret' },
+          apiKey: 'config-secret',
+          headers: { Authorization: 'Bearer header-secret' },
+        },
+        {
+          generationProvider: requestProvider as any,
+          generationProviderSpec: 'anthropic:claude-sonnet-4-20250514',
+        },
       );
 
       const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
       expect(requestBody).toBeTypeOf('string');
       expect(requestBody).not.toContain('resolved-secret');
-      expect(JSON.parse(requestBody as string).config).toEqual({
-        redteamProvider: 'anthropic:claude-sonnet-4-20250514',
-      });
+      expect(requestBody).not.toContain('env-secret');
+      expect(requestBody).not.toContain('config-secret');
+      expect(requestBody).not.toContain('header-secret');
+      expect(JSON.parse(requestBody as string).config).toEqual({ mathConcepts: ['topology'] });
     });
 
     it('stays local when a runtime provider has no serializable spec', async () => {

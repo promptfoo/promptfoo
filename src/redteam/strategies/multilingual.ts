@@ -1,21 +1,15 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { loadYaml } from '../../util/yamlLoad';
 import { redteamProviderManager } from '../providers/shared';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  shouldGenerateRemote,
-} from '../remoteGeneration';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { ApiProvider, TestCase } from '../../types/index';
 import type { StrategyRuntimeContext } from './types';
@@ -133,20 +127,16 @@ async function processRemoteChunk(
     task: 'multilingual',
     testCases,
     injectVar,
-    config,
+    config: {
+      ...(config.languages !== undefined && { languages: config.languages }),
+      ...(config.batchSize !== undefined && { batchSize: config.batchSize }),
+      ...(config.maxConcurrency !== undefined && { maxConcurrency: config.maxConcurrency }),
+      ...(config.remoteChunkSize !== undefined && { remoteChunkSize: config.remoteChunkSize }),
+    },
     ...remoteGenerationContextPayload(config.targetId),
-    email: getUserEmail(),
   };
 
-  const resp = await fetchWithCache(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(payload),
-    },
-    getRequestTimeoutMs(),
-  );
+  const resp = await postRemoteGenerationTask(payload);
   const { data, status, statusText } = resp as any;
   const result = (data as any)?.result;
   if (!Array.isArray(result)) {
@@ -589,7 +579,7 @@ export async function addMultilingual(
   // If the winner is an opaque runtime provider, keep generation local instead of routing
   // the request to the remote service's default provider.
   const canGenerateRemote =
-    !runtimeContext?.generationProvider || config.redteamProvider !== undefined;
+    !runtimeContext?.generationProvider || runtimeContext.generationProviderSpec !== undefined;
   if (shouldGenerateRemote() && canGenerateRemote) {
     const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
     if (multilingualTestCases.length > 0) {

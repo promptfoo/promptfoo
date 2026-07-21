@@ -93,17 +93,30 @@ describe('multilingual', () => {
       'prompt',
       {
         languages: ['es'],
-        redteamProvider: 'anthropic:claude-sonnet-4-20250514',
+        batchSize: 2,
+        maxConcurrency: 3,
+        remoteChunkSize: 4,
+        env: { CANARY: 'env-secret' },
+        apiKey: 'config-secret',
+        headers: { Authorization: 'Bearer header-secret' },
       },
-      { generationProvider: requestProvider as any },
+      {
+        generationProvider: requestProvider as any,
+        generationProviderSpec: 'anthropic:claude-sonnet-4-20250514',
+      },
     );
 
     const requestBody = vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.body;
     expect(requestBody).toBeTypeOf('string');
     expect(requestBody).not.toContain('resolved-secret');
+    expect(requestBody).not.toContain('env-secret');
+    expect(requestBody).not.toContain('config-secret');
+    expect(requestBody).not.toContain('header-secret');
     expect(JSON.parse(requestBody as string).config).toEqual({
       languages: ['es'],
-      redteamProvider: 'anthropic:claude-sonnet-4-20250514',
+      batchSize: 2,
+      maxConcurrency: 3,
+      remoteChunkSize: 4,
     });
   });
 

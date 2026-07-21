@@ -104,10 +104,7 @@ describe('citation strategy', () => {
         },
         body: JSON.stringify({
           task: 'citation',
-          testCases: [testCases[0]],
-          injectVar: 'prompt',
           topic: 'original prompt',
-          config: {},
           email: 'test@example.com',
         }),
       },

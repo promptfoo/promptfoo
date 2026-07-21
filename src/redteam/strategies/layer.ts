@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
@@ -81,6 +82,12 @@ export async function addLayerTestCases(
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
+      const shouldPersistGenerationProvider = [
+        'promptfoo:redteam:crescendo',
+        'promptfoo:redteam:custom',
+        'promptfoo:redteam:iterative',
+        'promptfoo:redteam:iterative:tree',
+      ].includes(providerId);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
       const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
@@ -103,7 +110,9 @@ export async function addLayerTestCases(
             config: {
               injectVar,
               scanId,
-              ...stepObj.config,
+              ...(shouldPersistGenerationProvider
+                ? withPersistableGenerationProvider(stepObj.config || {}, runtimeContext)
+                : stepObj.config),
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),

@@ -4034,9 +4034,10 @@ describe('Language configuration', () => {
           expect(getProviderSpy).toHaveBeenCalledWith({ provider: 'openai:chat:gpt-4.1' });
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          expect(capturedConfig?.redteamProvider).toBe('openai:chat:gpt-4.1');
+          expect(capturedConfig).not.toHaveProperty('redteamProvider');
           expect(capturedConfig).not.toHaveProperty('__generationProvider');
           expect(capturedRuntimeContext?.generationProvider.id()).toBe('mock-provider');
+          expect(capturedRuntimeContext?.generationProviderSpec).toBe('openai:chat:gpt-4.1');
           expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
           getProviderSpy.mockRestore();
@@ -4135,9 +4136,10 @@ describe('Language configuration', () => {
 
         expect(mockStrategyAction).toHaveBeenCalled();
         expect(capturedConfig).toBeDefined();
-        expect(capturedConfig?.redteamProvider).toBeUndefined();
+        expect(capturedConfig).not.toHaveProperty('redteamProvider');
         expect(capturedConfig).not.toHaveProperty('__generationProvider');
         expect(capturedRuntimeContext?.generationProvider).toBeDefined();
+        expect(capturedRuntimeContext?.generationProviderSpec).toBeUndefined();
       } finally {
         cliState.config = originalConfig;
       }
@@ -4207,9 +4209,10 @@ describe('Language configuration', () => {
 
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
-          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+          expect(capturedConfig).not.toHaveProperty('redteamProvider');
           expect(capturedConfig).not.toHaveProperty('__generationProvider');
           expect(capturedRuntimeContext?.generationProvider.id()).toBe('mock-provider');
+          expect(capturedRuntimeContext?.generationProviderSpec).toBeUndefined();
         } finally {
           getProviderSpy.mockRestore();
           getGradingProviderSpy.mockRestore();

@@ -699,9 +699,6 @@ async function applyStrategies(
       {
         ...(strategy.config || {}),
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
-        // This config can be sent to remote generation and persisted in generated test cases.
-        // Keep it declarative; live providers can hold credentials and are not YAML-safe.
-        redteamProvider: providerSpec,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
@@ -710,6 +707,9 @@ async function applyStrategies(
         // Keep every local strategy phase on the provider already selected for this synthesis run.
         // Re-reading cliState here can select a stale or cached provider after plugin generation.
         generationProvider: provider,
+        // Only provider IDs are safe to persist in generated attack-provider configs.
+        // Provider option objects can hold resolved env values or credentials.
+        generationProviderSpec: typeof providerSpec === 'string' ? providerSpec : undefined,
         // Specialized local providers still need to contribute to generation usage totals.
         wrapGenerationProvider,
       },
