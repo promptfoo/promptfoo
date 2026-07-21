@@ -73,6 +73,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
 
+  /** References used to populate the callback cache, for prompt-level overrides. */
+  protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
+
   /** Custom provider ID function */
   protected customId?: () => string;
 
@@ -327,13 +330,15 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     config: CompletionOptions,
   ): Promise<any> {
     try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
+      const callbackRef = config.functionToolCallbacks?.[functionName];
+      let callback: Function | undefined = this.loadedFunctionCallbacks[functionName];
+
+      if (this.loadedFunctionCallbackRefs[functionName] !== callbackRef) {
+        callback = undefined;
+      }
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
@@ -361,9 +366,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
           // Cache for future use
           this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
           this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
         }
       }
 
@@ -428,7 +435,17 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       }
     }
 
-    return results.length > 0 ? results.join('\n') : output;
+    if (results.length === 0) {
+      return output;
+    }
+    if (results.length === 1) {
+      return results[0];
+    }
+    return results
+      .map((result) =>
+        typeof result === 'string' ? result : (JSON.stringify(result) ?? String(result)),
+      )
+      .join('\n');
   }
 
   /**

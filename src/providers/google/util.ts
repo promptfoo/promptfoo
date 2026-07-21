@@ -1229,6 +1229,35 @@ export function loadFile(
   return fileContents;
 }
 
+function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
+  const riffType = bytes.subarray(8, 12).toString('ascii');
+  if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
+    if (riffType === 'WEBP') {
+      return 'image/webp';
+    } else if (riffType === 'WAVE') {
+      return 'audio/wav';
+    } else if (riffType === 'AVI ') {
+      return 'video/avi';
+    }
+  } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = bytes.subarray(8, 12).toString('ascii');
+    return ['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand) ? 'audio/mp4' : 'video/mp4';
+  } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
+    return 'video/webm';
+  } else if (
+    bytes.subarray(0, 3).toString('ascii') === 'ID3' ||
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+  ) {
+    return 'audio/mpeg';
+  } else if (bytes.subarray(0, 4).toString('ascii') === 'fLaC') {
+    return 'audio/flac';
+  } else if (bytes.subarray(0, 4).toString('ascii') === 'OggS') {
+    return 'audio/ogg';
+  }
+
+  return undefined;
+}
+
 function getMimeTypeFromBase64(data: string): string | undefined {
   const parsed = parseDataUrl(data);
   const base64Data = parsed ? parsed.base64Data : data;
@@ -1260,32 +1289,7 @@ function getMimeTypeFromBase64(data: string): string | undefined {
     return 'application/pdf';
   }
 
-  const bytes = Buffer.from(base64Data, 'base64');
-  const riffType = bytes.subarray(8, 12).toString('ascii');
-  if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
-    if (riffType === 'WEBP') {
-      return 'image/webp';
-    } else if (riffType === 'WAVE') {
-      return 'audio/wav';
-    } else if (riffType === 'AVI ') {
-      return 'video/avi';
-    }
-  } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
-    return 'video/mp4';
-  } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
-    return 'video/webm';
-  } else if (
-    bytes.subarray(0, 3).toString('ascii') === 'ID3' ||
-    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
-  ) {
-    return 'audio/mpeg';
-  } else if (bytes.subarray(0, 4).toString('ascii') === 'fLaC') {
-    return 'audio/flac';
-  } else if (bytes.subarray(0, 4).toString('ascii') === 'OggS') {
-    return 'audio/ogg';
-  }
-
-  return undefined;
+  return getMimeTypeFromMediaBytes(Buffer.from(base64Data, 'base64'));
 }
 
 function processImagesInContents(

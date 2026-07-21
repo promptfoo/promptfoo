@@ -1720,6 +1720,7 @@ describe('util', () => {
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
           ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
         ])('should convert %s data URLs to Gemini inline data', (mimeType, base64Data) => {
@@ -1735,6 +1736,7 @@ describe('util', () => {
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
           ['video/webm', Buffer.from('1a45dfa3000000000000000000000000', 'hex').toString('base64')],
         ])('should infer %s for raw base64 media loaded from a file', (mimeType, base64Data) => {

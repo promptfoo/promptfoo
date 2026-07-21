@@ -60,11 +60,11 @@ Uses external tool definitions and validates function calls without execution:
 - `promptfooconfig.yaml` - YAML configuration with external tools
 - `tools.json` - Function definitions for weather lookup
 
-### Function Callbacks (`promptfooconfig-callback.js`)
+### Function Callbacks (`promptfooconfig-callback.mjs`)
 
 Demonstrates actual function execution with local callbacks:
 
-- `promptfooconfig-callback.js` - JavaScript configuration with inline tools and callbacks
+- `promptfooconfig-callback.mjs` - Portable ESM configuration with inline tools and callbacks
 - Includes local function implementation for adding numbers
 
 ## Running the Examples
@@ -78,7 +78,7 @@ Demonstrates actual function execution with local callbacks:
 2. **Function callback example:**
 
    ```sh
-   promptfoo eval -c promptfooconfig-callback.js
+   promptfoo eval -c promptfooconfig-callback.mjs
    ```
 
 3. **View results:**

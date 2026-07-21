@@ -1425,6 +1425,67 @@ describe('AIStudioChatProvider', () => {
       expect(response.output).toBe('Sunny, 25°C');
     });
 
+    it('should honor per-prompt callback replacements with the same function name', async () => {
+      const firstCallback = vi.fn().mockResolvedValue('First callback');
+      const secondCallback = vi.fn().mockResolvedValue('Second callback');
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { name: 'get_weather', args: { location: 'Boston' } },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        cached: false,
+      } as any);
+
+      const first = await provider.callGemini('first prompt', {
+        prompt: {
+          raw: 'first prompt',
+          label: 'first prompt',
+          config: { functionToolCallbacks: { get_weather: firstCallback } },
+        },
+      } as any);
+      const second = await provider.callGemini('second prompt', {
+        prompt: {
+          raw: 'second prompt',
+          label: 'second prompt',
+          config: { functionToolCallbacks: { get_weather: secondCallback } },
+        },
+      } as any);
+
+      expect(first.output).toBe('First callback');
+      expect(second.output).toBe('Second callback');
+      expect(firstCallback).toHaveBeenCalledTimes(1);
+      expect(secondCallback).toHaveBeenCalledTimes(1);
+    });
+
     it('should handle API version selection', async () => {
       const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
         config: { apiKey: 'test-key' },

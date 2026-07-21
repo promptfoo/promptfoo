@@ -443,6 +443,58 @@ describe('GoogleGenericProvider', () => {
         provider['executeFunctionCallback']('missing_function', '{}', config),
       ).rejects.toThrow("No callback found for function 'missing_function'");
     });
+
+    it('should honor callback replacements for the same function name', async () => {
+      const firstCallback = vi.fn().mockResolvedValue('first');
+      const secondCallback = vi.fn().mockResolvedValue('second');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const first = await provider['executeFunctionCallback']('test_function', '{}', {
+        functionToolCallbacks: { test_function: firstCallback },
+      });
+      const second = await provider['executeFunctionCallback']('test_function', '{}', {
+        functionToolCallbacks: { test_function: secondCallback },
+      });
+
+      expect(first).toBe('first');
+      expect(second).toBe('second');
+      expect(firstCallback).toHaveBeenCalledTimes(1);
+      expect(secondCallback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('executeFunctionToolCallbacks()', () => {
+    it('should preserve a single structured callback result', async () => {
+      const callback = vi.fn().mockResolvedValue({ status: 'ok', values: [1, 2] });
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [{ functionCall: { name: 'test_function', args: {} } }],
+        { functionToolCallbacks: { test_function: callback } },
+        false,
+      );
+
+      expect(result).toEqual({ status: 'ok', values: [1, 2] });
+    });
+
+    it('should serialize multiple structured callback results predictably', async () => {
+      const callback = vi
+        .fn()
+        .mockResolvedValueOnce({ status: 'first' })
+        .mockResolvedValueOnce(['second']);
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { name: 'test_function', args: { index: 1 } } },
+          { functionCall: { name: 'test_function', args: { index: 2 } } },
+        ],
+        { functionToolCallbacks: { test_function: callback } },
+        false,
+      );
+
+      expect(result).toBe('{"status":"first"}\n["second"]');
+    });
   });
 
   describe('cleanup()', () => {
