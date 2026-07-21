@@ -6,20 +6,15 @@ import { createTransformResponse, WebSocketProvider } from '../../src/providers/
 const websocketMocks = vi.hoisted(() => {
   let factory: (() => Mocked<WebSocket>) | null = null;
 
-  const createWebSocket = function () {
+  const WebSocketMock = vi.fn(function () {
     return factory?.() ?? ({} as Mocked<WebSocket>);
-  };
-  const WebSocketMock = vi.fn(createWebSocket);
+  });
 
   const setFactory = (nextFactory: () => Mocked<WebSocket>) => {
     factory = nextFactory;
   };
-  const reset = () => {
-    WebSocketMock.mockReset();
-    WebSocketMock.mockImplementation(createWebSocket);
-  };
 
-  return { WebSocketMock, setFactory, reset };
+  return { WebSocketMock, setFactory };
 });
 
 vi.mock('ws', () => ({
@@ -88,7 +83,7 @@ describe('WebSocketProvider', () => {
       onopen: vi.fn(),
     } as unknown as Mocked<WebSocket>;
 
-    websocketMocks.reset();
+    websocketMocks.WebSocketMock.mockReset();
     websocketMocks.setFactory(() => mockWs);
 
     provider = new WebSocketProvider('ws://test.com', {
@@ -106,6 +101,7 @@ describe('WebSocketProvider', () => {
 
   it('should initialize with correct config', () => {
     expect(provider.url).toBe('ws://test.com');
+    expect(provider.id()).toBe('ws://test.com');
     expect(provider.config.messageTemplate).toBe('{{ prompt }}');
   });
 
@@ -165,6 +161,18 @@ describe('WebSocketProvider', () => {
     expect(WebSocket).toHaveBeenNthCalledWith(2, 'ws://test.com/sessions/session-2', {});
   });
 
+  it('should redact literal credentials from templated provider identities', () => {
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://test.com/sessions/{{ sessionId }}?token=runtime-secret',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('ws://test.com/sessions/{{ sessionId }}?token=%5BREDACTED%5D');
+    expect(provider.toString()).not.toContain('runtime-secret');
+  });
+
   it('should not log rendered URLs that contain template-like runtime values', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
     provider = new WebSocketProvider('ws://test.com', {
@@ -194,9 +202,6 @@ describe('WebSocketProvider', () => {
   });
 
   it('should not expose rendered URLs in synchronous constructor errors', async () => {
-    websocketMocks.setFactory(() => {
-      throw new SyntaxError('Invalid URL: wss://[invalid-host/ws?token=runtime-secret');
-    });
     provider = new WebSocketProvider('ws://test.com', {
       config: {
         url: 'wss://{{ host }}/ws?token={{ token }}',
@@ -214,6 +219,24 @@ describe('WebSocketProvider', () => {
 
     expect(error).toEqual(new Error('Failed to create WebSocket connection'));
     expect((error as Error).message).not.toContain('runtime-secret');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it('should preserve safe synchronous WebSocket constructor errors', async () => {
+    websocketMocks.setFactory(() => {
+      throw new Error('An invalid or duplicated subprotocol was specified');
+    });
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        messageTemplate: '{{ prompt }}',
+        protocols: ['invalid protocol'],
+        timeoutMs: 1000,
+      },
+    });
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow(
+      'An invalid or duplicated subprotocol was specified',
+    );
   });
 
   it('should use configured Nunjucks filters for URL and message templates', async () => {
@@ -324,12 +347,29 @@ describe('WebSocketProvider', () => {
     expect(mockWs.close).toHaveBeenCalled();
   });
 
-  it('should handle WebSocket errors', async () => {
-    emitWebSocketEvents({ type: 'error', error: new Error('connection failed') });
+  it('should not expose URL-derived values from asynchronous WebSocket errors', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+      },
+    });
+    emitWebSocketEvents({
+      type: 'error',
+      error: new Error('getaddrinfo ENOTFOUND runtime-secret-tenant.invalid'),
+    });
 
-    await expect(provider.callApi('test prompt')).rejects.toThrow(
-      'WebSocket error: connection failed',
-    );
+    await expect(
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { tenant: 'runtime-secret-tenant', token: 'runtime-query-secret' },
+      }),
+    ).rejects.toThrow('WebSocket connection failed');
+    const errorLogs = JSON.stringify(errorSpy.mock.calls);
+    expect(errorLogs).not.toContain('runtime-secret-tenant');
+    expect(errorLogs).not.toContain('runtime-query-secret');
     expect(mockWs.close).toHaveBeenCalled();
   });
 

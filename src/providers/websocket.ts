@@ -7,6 +7,7 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
+import { REDACTED, sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
@@ -33,24 +34,13 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .filter(Boolean);
 }
 
-function getWebSocketErrorMessage(err: WebSocket.ErrorEvent | Error | unknown): string {
-  const error =
-    err && typeof err === 'object' && 'error' in err ? (err as WebSocket.ErrorEvent).error : err;
-
-  if (typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean') {
-    return String(error);
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
-  }
-
-  const serialized = safeJsonStringify(error);
-  return serialized && serialized !== '{}' ? serialized : 'unknown WebSocket error';
+function getWebSocketProviderId(url: string): string {
+  const sanitizedUrl = sanitizeUrl(url);
+  return sanitizedUrl === REDACTED ||
+    sanitizedUrl.includes(encodeURIComponent(REDACTED)) ||
+    sanitizedUrl.includes('***')
+    ? sanitizedUrl
+    : url;
 }
 
 interface WebSocketProviderConfig {
@@ -196,6 +186,7 @@ export async function createStreamResponse(
 
 export class WebSocketProvider implements ApiProvider {
   url: string;
+  private readonly providerId: string;
   config: WebSocketProviderConfig;
   timeoutMs: number;
   transformResponse: (data: any) => ProviderResponse;
@@ -210,6 +201,7 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
+    this.providerId = getWebSocketProviderId(this.url);
     this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -219,18 +211,18 @@ export class WebSocketProvider implements ApiProvider {
       : undefined;
     invariant(
       this.config.messageTemplate,
-      `Expected WebSocket provider ${this.url} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
-        this.config,
+      `Expected WebSocket provider ${this.providerId} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
+        sanitizeObject(this.config, { context: 'provider config' }),
       )}`,
     );
   }
 
   id(): string {
-    return this.url;
+    return this.providerId;
   }
 
   toString(): string {
-    return `[WebSocket Provider ${this.url}]`;
+    return `[WebSocket Provider ${this.providerId}]`;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -251,16 +243,16 @@ export class WebSocketProvider implements ApiProvider {
       if (this.config.headers) {
         wsOptions.headers = this.config.headers;
       }
-      let ws: WebSocket;
       try {
-        ws =
-          protocols.length > 0
-            ? new WebSocket(url, protocols, wsOptions)
-            : new WebSocket(url, wsOptions);
+        new URL(url);
       } catch {
         reject(new Error('Failed to create WebSocket connection'));
         return;
       }
+      const ws =
+        protocols.length > 0
+          ? new WebSocket(url, protocols, wsOptions)
+          : new WebSocket(url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
         logger.error(`[WebSocket Provider] Request timed out`);
@@ -332,12 +324,11 @@ export class WebSocketProvider implements ApiProvider {
         }
       };
 
-      ws.onerror = (err) => {
+      ws.onerror = () => {
         clearTimeout(timeout);
         ws.close();
-        const errorMessage = getWebSocketErrorMessage(err);
-        logger.error(`[WebSocket Provider] Error: ${errorMessage}`);
-        reject(new Error(`WebSocket error: ${errorMessage}`));
+        logger.error(`[WebSocket Provider] Connection failed`);
+        reject(new Error('WebSocket connection failed'));
       };
 
       ws.onopen = () => {
