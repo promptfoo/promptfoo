@@ -3,10 +3,13 @@ import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
+  sanitizeHeaders,
   sanitizeObject,
+  sanitizeQueryParams,
   sanitizeRuntimeOptions,
   sanitizeUrl,
   sanitizeUrlEncodedString,
+  sanitizeUrlForLogging,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -1409,6 +1412,13 @@ describe('sanitizeBody', () => {
   });
 });
 
+describe('legacy sanitizer aliases', () => {
+  it('preserves the header and query parameter aliases', () => {
+    expect(sanitizeHeaders).toBe(sanitizeObject);
+    expect(sanitizeQueryParams).toBe(sanitizeObject);
+  });
+});
+
 describe('sanitizeUrl', () => {
   describe('invalid inputs', () => {
     it('should handle non-string inputs', () => {
@@ -1729,6 +1739,24 @@ describe('sanitizeUrl', () => {
       const url = 'https://example.com/api/v1/users?token=secret123';
       const result = sanitizeUrl(url);
       expect(result).toBe('https://example.com/api/v1/users?token=%5BREDACTED%5D');
+    });
+
+    it.each([
+      'token_privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])('should redact opaque credential path segments', (credential) => {
+      const result = sanitizeUrlForLogging(`https://gateway.example/v1/${credential}/responses`);
+
+      expect(result).toBe('https://gateway.example/v1/%5BREDACTED%5D/responses');
+      expect(result).not.toContain(credential);
+    });
+
+    it('should preserve opaque resource IDs when sanitizing persisted URLs', () => {
+      const url =
+        'https://gateway.example/v1/resources/2e163f4d-28e2-4f84-b6d2-05e13058d6aa/responses';
+
+      expect(sanitizeUrl(url)).toBe(url);
     });
 
     it('should handle localhost URLs', () => {

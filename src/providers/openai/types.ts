@@ -53,22 +53,26 @@ export interface OpenAiSharedOptions {
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
- * **o-series models only**
+ * Configuration options for OpenAI reasoning models, including o-series and GPT-5 models.
  *
- * Configuration options for
- * [reasoning models](https://platform.openai.com/docs/guides/reasoning).
+ * See the [reasoning models guide](https://platform.openai.com/docs/guides/reasoning).
  */
 export interface Reasoning {
+  /** Controls which reasoning items are rendered back to the model on later turns. */
+  context?: 'auto' | 'current_turn' | 'all_turns' | null;
+
   /**
    * **o-series models only**
    *
    * Constraints effort on reasoning for
    * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Supported
-   * values are `low`, `medium`, and `high` for o-series models. GPT-5 models may
-   * also support `none`, `minimal`, and `xhigh`. Reducing reasoning effort can
-   * result in faster responses and fewer tokens used on reasoning in a response.
+   * values are `low`, `medium`, and `high` for o-series models. Reducing reasoning
+   * effort can result in faster responses and fewer tokens used on reasoning in a response.
    */
   effort?: ReasoningEffort;
+
+  /** Selects standard reasoning or GPT-5.6 Pro mode. */
+  mode?: 'standard' | 'pro' | null;
 
   /**
    * A summary of the reasoning performed by the model. This can be useful for
@@ -78,7 +82,11 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
-export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh';
+/**
+ * Reasoning effort values accepted by GPT-5 family models. Support varies by model;
+ * GPT-5.6 models add `max` reasoning.
+ */
+export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh' | 'max';
 
 export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
   effort?: GPT5ReasoningEffort;
@@ -117,13 +125,12 @@ export interface OpenAiCodeInterpreterTool {
   };
 }
 
-export type OpenAiResponsesTool =
-  | OpenAiTool
-  | OpenAiMCPTool
-  | OpenAiWebSearchTool
-  | OpenAiCodeInterpreterTool;
-
 export type OpenAiPromptCacheRetention = 'in_memory' | '24h' | null;
+
+export interface OpenAiPromptCacheOptions {
+  mode?: 'implicit' | 'explicit';
+  ttl?: '30m';
+}
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
@@ -160,6 +167,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   prompt_cache_key?: string;
+  prompt_cache_options?: OpenAiPromptCacheOptions;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
@@ -218,17 +226,33 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
 /**
  * Supported Sora video models
  */
-export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
+export type OpenAiVideoModel =
+  | 'sora-2'
+  | 'sora-2-2025-10-06'
+  | 'sora-2-2025-12-08'
+  | 'sora-2-pro'
+  | 'sora-2-pro-2025-10-06';
 
 /**
  * Supported video sizes (aspect ratios)
  */
-export type OpenAiVideoSize = '1280x720' | '720x1280' | '1792x1024' | '1024x1792';
+export type OpenAiVideoSize =
+  | '1280x720'
+  | '720x1280'
+  | '1792x1024'
+  | '1024x1792'
+  | '1920x1080'
+  | '1080x1920';
+
+/**
+ * Sizes accepted when creating a new Sora video.
+ */
+export type OpenAiVideoCreateSize = OpenAiVideoSize;
 
 /**
  * Valid video duration in seconds (Sora API only accepts these values)
  */
-export type OpenAiVideoDuration = 4 | 8 | 12;
+export type OpenAiVideoDuration = 4 | 8 | 12 | 16 | 20;
 
 /**
  * Video generation job status
@@ -248,11 +272,12 @@ export interface OpenAiVideoOptions extends OpenAiSharedOptions {
   model?: OpenAiVideoModel;
 
   // Video parameters
-  size?: OpenAiVideoSize;
+  size?: OpenAiVideoCreateSize;
   seconds?: OpenAiVideoDuration;
+  characters?: Array<{ id: string }>;
 
-  // Image-to-video: base64 image data or file path (file://path)
-  input_reference?: string;
+  // Image-to-video: URL, base64 image data, file path, or an uploaded file ID
+  input_reference?: string | { file_id: string } | { image_url: string };
 
   // Remix mode: ID of previous video to modify
   remix_video_id?: string;
@@ -282,22 +307,4 @@ export interface OpenAiVideoJob {
     message: string;
     code?: string;
   };
-}
-
-/**
- * Request body for creating a new video
- */
-export interface OpenAiVideoCreateRequest {
-  model: string;
-  prompt: string;
-  size?: string;
-  seconds?: OpenAiVideoDuration;
-  input_reference?: string;
-}
-
-/**
- * Request body for remixing an existing video
- */
-export interface OpenAiVideoRemixRequest {
-  prompt: string;
 }

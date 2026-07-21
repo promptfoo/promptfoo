@@ -844,6 +844,51 @@ describe('AIStudioChatProvider', () => {
       expect(calledOptions.headers['x-goog-api-key']).toBe('test-key');
     });
 
+    it('should normalize Gemini TTS audio and send the required audio generation config', async () => {
+      const ttsProvider = new AIStudioChatProvider('gemini-2.5-flash-preview-tts', {
+        config: { apiKey: 'test-key', generationConfig: { response_modalities: ['audio'] } },
+      });
+      const pcm = Buffer.from([1, 2, 3, 4]);
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'audio/L16;codec=pcm;rate=24000',
+                      data: pcm.toString('base64'),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await ttsProvider.callApi('Say hello.');
+
+      expect(result.audio).toMatchObject({ format: 'wav', sampleRate: 24_000, channels: 1 });
+      const wav = Buffer.from(result.audio?.data ?? '', 'base64');
+      expect(wav.subarray(0, 4).toString()).toBe('RIFF');
+      expect(wav.subarray(8, 12).toString()).toBe('WAVE');
+      expect(wav.subarray(44)).toEqual(pcm);
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+      );
+      expect(body.generationConfig).toMatchObject({
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+      });
+      expect(body.generationConfig.response_modalities).toBeUndefined();
+    });
+
     it('should call the Gemini API and return the response with token usage', async () => {
       const mockResponse = {
         data: {
@@ -924,7 +969,7 @@ describe('AIStudioChatProvider', () => {
         tokenUsage: {
           cached: 15,
           total: 15,
-          numRequests: 0,
+          numRequests: 1,
         },
         raw: mockResponse.data,
         cached: true,
@@ -1586,6 +1631,13 @@ describe('AIStudioChatProvider', () => {
             },
             { googleSearch: {} },
           ],
+          passthrough: {
+            tools: [
+              { functionDeclarations: [{ name: 'passthrough_function' }] },
+              { function_declarations: [{ name: 'passthrough_snake_case_function' }] },
+              { codeExecution: {} },
+            ],
+          },
           [key]: value,
         } as any,
       });
@@ -1610,8 +1662,87 @@ describe('AIStudioChatProvider', () => {
       const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
       const body = JSON.parse(callArgs![1]!.body as string);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-      // googleSearch is preserved; functionDeclarations entry is dropped.
-      expect(body.tools).toEqual([{ googleSearch: {} }]);
+      // Both non-function tools are preserved; functionDeclarations entries are dropped.
+      expect(body.tools).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
+    });
+
+    it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          passthrough: {
+            tools: {
+              function_declarations: [{ name: 'passthrough_snake_case_function' }],
+              codeExecution: {},
+            },
+          },
+        } as any,
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ codeExecution: {} }]);
+    });
+
+    it('merges a single-object passthrough tool with config tools instead of dropping them', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ googleSearch: {} }],
+          // Tools enabled + a single-object (non-array) passthrough.tools value: this must
+          // still send `tools` as an array and keep the config googleSearch tool.
+          passthrough: {
+            tools: { codeExecution: {} },
+          },
+        } as any,
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(Array.isArray(body.tools)).toBe(true);
+      expect(body.tools).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
     });
 
     it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
@@ -2331,7 +2462,7 @@ describe('AIStudioChatProvider', () => {
         expect(response.tokenUsage).toEqual({
           cached: 80,
           total: 80,
-          numRequests: 0,
+          numRequests: 1,
           completionDetails: {
             reasoning: 50,
             acceptedPrediction: 0,
@@ -2377,6 +2508,52 @@ describe('AIStudioChatProvider', () => {
         // completionForCost = candidatesTokenCount + thoughtsTokenCount = 5 + 300 = 305
         // cost = 0.3e-6 * 10 + 2.5e-6 * 305 = 0.000003 + 0.0007625 = 0.0007655
         expect(response.cost).toBeCloseTo(0.0007655, 10);
+      });
+
+      it('should price cached and audio usage for AI Studio responses', async () => {
+        const provider = new AIStudioChatProvider('gemini-3.5-flash', {
+          config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1_000,
+              candidatesTokenCount: 500,
+              totalTokenCount: 1_500,
+              cachedContentTokenCount: 500,
+              promptTokensDetails: [
+                { modality: 'TEXT', tokenCount: 600 },
+                { modality: 'AUDIO', tokenCount: 400 },
+              ],
+              cacheTokensDetails: [
+                { modality: 'TEXT', tokenCount: 200 },
+                { modality: 'AUDIO', tokenCount: 300 },
+              ],
+            },
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
+        expect(response.cost).toBeCloseTo(
+          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+          12,
+        );
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.serviceTier).toBe('priority');
+        expect(requestBody.service_tier).toBeUndefined();
       });
 
       it('should not include thinking tokens in cost when response is cached', async () => {
@@ -2500,6 +2677,41 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.tokenUsage).toEqual({ total: 7, numRequests: 1 });
   });
 
+  it('reports cost for priced embedding models', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2], 10_000) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    // $0.20 per 1M input tokens
+    expect(response.cost).toBeCloseTo(0.002, 10);
+  });
+
+  it('omits cost for cached embedding responses', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        embedding: { values: [0.1, 0.2] },
+        usageMetadata: { promptTokenCount: 10_000 },
+      },
+      cached: true,
+    } as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    expect(response.cached).toBe(true);
+    expect(response.cost).toBeUndefined();
+  });
+
+  it('omits cost when the response has no usage metadata', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2]) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2-preview');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    expect(response.cost).toBeUndefined();
+  });
+
   it('forwards taskType, outputDimensionality, and title from config', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1], 1) as any);
 
@@ -2563,7 +2775,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.error).toContain('No embedding found');
   });
 
-  it('marks responses as cached and records numRequests: 0', async () => {
+  it('marks responses as cached and records one logical request', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       ...(embeddingResponse([0.1, 0.2], 3) as any),
       cached: true,
@@ -2573,7 +2785,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello');
 
     expect(response.cached).toBe(true);
-    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 0 });
+    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 1 });
   });
 
   it('does not support text inference via callApi', async () => {

@@ -1,6 +1,7 @@
 import path from 'path';
 
 import dedent from 'dedent';
+import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -20,6 +21,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureImageProvider } from './azure/image';
 import { AzureModerationProvider } from './azure/moderation';
+import { AzureRealtimeProvider } from './azure/realtime';
 import { AzureResponsesProvider } from './azure/responses';
 import { AzureVideoProvider } from './azure/video';
 import { BrowserProvider } from './browser';
@@ -62,6 +64,7 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMetaProvider } from './meta';
 import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
@@ -78,6 +81,8 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { OpenAiTtsProvider } from './openai/tts';
+import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -121,6 +126,14 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     ? configuredModel
     : undefined;
 }
+
+// These tier IDs auto-routed to Responses during the GPT-5.6 preview. Preserve existing bare
+// provider configs while allowing every tier through an explicit openai:chat: prefix.
+const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+]);
 
 export const providerMap: ProviderFactory[] = [
   {
@@ -199,6 +212,25 @@ export const providerMap: ProviderFactory[] = [
         id: providerPath,
         config: providerOptions.config,
         env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'openinterpreter' || providerPath.startsWith('openinterpreter:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenInterpreterProvider } = await import('./openinterpreter');
+      const model = providerPath.split(':').slice(1).join(':');
+
+      return new OpenInterpreterProvider({
+        ...providerOptions,
+        id: providerOptions.id ?? providerPath,
+        config: model ? { ...providerOptions.config, model } : providerOptions.config,
+        env: { ...context.env, ...providerOptions.env },
       });
     },
   },
@@ -357,11 +389,22 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'realtime') {
+        requirePathSegment('realtime', 'a deployment name', 'deployment');
+        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
+          throw new Error(
+            deploymentName === 'gpt-realtime-whisper'
+              ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'
+              : `azure:realtime:${deploymentName} is translation-only and requires a separate Realtime translation-session endpoint not yet supported by promptfoo.`,
+          );
+        }
+        return new AzureRealtimeProvider(deploymentName, providerOptions);
+      }
       if (modelType === 'video') {
         return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
       }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:realtime:<deployment name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
@@ -657,7 +700,7 @@ export const providerMap: ProviderFactory[] = [
         if (!modelName) {
           throw new Error(
             `Invalid groq:responses provider path: "${providerPath}". ` +
-              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+              'Use format groq:responses:<model> (e.g., groq:responses:openai/gpt-oss-120b)',
           );
         }
         return new GroqResponsesProvider(modelName, providerOptions);
@@ -668,7 +711,7 @@ export const providerMap: ProviderFactory[] = [
       if (!modelName) {
         throw new Error(
           `Invalid groq provider path: "${providerPath}". ` +
-            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+            'Use format groq:<model> (e.g., groq:openai/gpt-oss-120b)',
         );
       }
       return new GroqProvider(modelName, providerOptions);
@@ -763,6 +806,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('meta:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMetaProvider(providerPath, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('minimax:'),
     create: async (
       providerPath: string,
@@ -786,7 +842,10 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new MistralEmbeddingProvider(providerOptions);
+        return new MistralEmbeddingProvider({
+          ...providerOptions,
+          modelName: modelName || undefined,
+        });
       }
       return new MistralChatCompletionProvider(modelName || modelType, providerOptions);
     },
@@ -908,6 +967,25 @@ export const providerMap: ProviderFactory[] = [
           env: context.env,
         });
       }
+      const requestedApiModel = modelName || configuredModel || modelType;
+      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
+        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+        const apiHost =
+          providerOptions.config?.apiHost ||
+          providerOptions.env?.OPENAI_API_HOST ||
+          getEnvString('OPENAI_API_HOST');
+        const apiUrl = apiHost
+          ? `https://${apiHost}/v1`
+          : providerOptions.config?.apiBaseUrl ||
+            providerOptions.env?.OPENAI_API_BASE_URL ||
+            providerOptions.env?.OPENAI_BASE_URL ||
+            getEnvString('OPENAI_API_BASE_URL') ||
+            getEnvString('OPENAI_BASE_URL') ||
+            'https://api.openai.com/v1';
+        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
+          assertOpenAiApiModel(candidate, apiUrl);
+        }
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
           modelName || configuredModel || 'gpt-4.1-2025-04-14',
@@ -951,11 +1029,23 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      if (modelType === 'tts' || modelType === 'speech') {
+        return new OpenAiTtsProvider(
+          modelName || configuredModel || 'gpt-4o-mini-tts',
+          providerOptions,
+        );
+      }
+      if (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType)) {
+        return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
       }
       if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
         return new OpenAiCompletionProvider(modelType, providerOptions);
+      }
+      if (OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType)) {
+        return new OpenAiTtsProvider(modelType, providerOptions);
       }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
@@ -991,7 +1081,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

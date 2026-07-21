@@ -6,7 +6,7 @@ prompts:
 
 providers:
   # Ultra quality - highest detail and quality
-  - id: google:image:imagen-4.0-ultra-generate-preview-06-06
+  - id: google:image:imagen-4.0-ultra-generate-001
     config:
       # projectId: 'your-project-id'  # Optional: Can be set here or via GOOGLE_PROJECT_ID env var
       aspectRatio: '16:9'
@@ -15,7 +15,7 @@ providers:
       # addWatermark: false  # Note: addWatermark is only supported in Vertex AI
 
   # Standard quality - balanced quality and speed
-  - id: google:image:imagen-4.0-generate-preview-06-06
+  - id: google:image:imagen-4.0-generate-001
     config:
       aspectRatio: '16:9'
       # seed: 42  # Note: seed is only supported in Vertex AI
@@ -23,7 +23,7 @@ providers:
       # addWatermark: false  # Note: addWatermark is only supported in Vertex AI
 
   # Fast generation - optimized for speed
-  - id: google:image:imagen-4.0-fast-generate-preview-06-06
+  - id: google:image:imagen-4.0-fast-generate-001
     config:
       aspectRatio: '16:9'
       # seed: 42  # Note: seed is only supported in Vertex AI
