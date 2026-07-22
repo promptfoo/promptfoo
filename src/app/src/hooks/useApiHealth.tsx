@@ -1,45 +1,82 @@
+import { useEffect } from 'react';
+
 import { callApi } from '@app/utils/api';
-import { useQuery } from '@tanstack/react-query';
+import { create } from 'zustand';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
 
-interface HealthResponse {
-  status: string;
+export interface ApiHealthResult {
+  status: ApiHealthStatus;
   message: string;
 }
 
-export type ApiHealthResult = {
-  status: ApiHealthStatus;
-  message: string;
-};
+export interface ApiHealthQueryResult {
+  data: ApiHealthResult;
+  isLoading: boolean;
+  refetch: () => Promise<ApiHealthResult>;
+}
 
-/**
- * Checks the health of the connection to Promptfoo Cloud.
- */
-export function useApiHealth() {
-  return useQuery<ApiHealthResult, Error>({
-    queryKey: ['apiHealth'],
-    queryFn: async () => {
-      try {
-        const response = await callApi('/remote-health', { cache: 'no-store' });
-        const { status, message } = (await response.json()) as HealthResponse;
-        return {
+let pendingRequest: Promise<ApiHealthResult> | undefined;
+let subscriberCount = 0;
+let pollingInterval: ReturnType<typeof setInterval> | undefined;
+
+export const useApiHealthStore = create<ApiHealthQueryResult>((set) => ({
+  data: { status: 'unknown', message: '' },
+  isLoading: false,
+  refetch: () => {
+    if (pendingRequest !== undefined) {
+      return pendingRequest;
+    }
+
+    set({ isLoading: true });
+    pendingRequest = callApi('/remote-health', { cache: 'no-store' })
+      .then((response) => response.json())
+      .then(
+        ({ status, message }: { status: string; message: string }): ApiHealthResult => ({
           status: status === 'DISABLED' ? 'disabled' : status === 'OK' ? 'connected' : 'blocked',
           message,
-        };
-      } catch {
-        return {
+        }),
+      )
+      .catch(
+        (): ApiHealthResult => ({
           status: 'blocked',
           message: 'Network error: Unable to check API health',
-        };
+        }),
+      )
+      .then((data) => {
+        set({ data });
+        return data;
+      })
+      .finally(() => {
+        pendingRequest = undefined;
+        set({ isLoading: false });
+      });
+
+    return pendingRequest;
+  },
+}));
+
+export function useApiHealth(): ApiHealthQueryResult {
+  const { data, isLoading, refetch } = useApiHealthStore();
+
+  useEffect(() => {
+    subscriberCount++;
+
+    if (subscriberCount === 1) {
+      pollingInterval = setInterval(() => {
+        void refetch();
+      }, 3000);
+    }
+
+    return () => {
+      subscriberCount--;
+
+      if (subscriberCount === 0) {
+        clearInterval(pollingInterval);
+        pollingInterval = undefined;
       }
-    },
-    refetchInterval: 3000, // Poll every 3 seconds
-    retry: false, // Failed queries will not be retried until the next poll
-    staleTime: 2000, // Data is fresh for 2 seconds
-    initialData: {
-      status: 'unknown',
-      message: '',
-    },
-  });
+    };
+  }, [refetch]);
+
+  return { data, isLoading, refetch };
 }

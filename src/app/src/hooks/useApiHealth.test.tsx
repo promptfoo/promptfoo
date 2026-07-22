@@ -1,5 +1,3 @@
-import React from 'react';
-
 import {
   createMockResponse,
   getCallApiMock,
@@ -7,12 +5,10 @@ import {
   rejectCallApi,
   resetCallApiMock,
 } from '@app/tests/apiMocks';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useApiHealth } from './useApiHealth';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useApiHealth, useApiHealthStore } from './useApiHealth';
 
-// Mock the API call
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
@@ -21,161 +17,150 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 describe('useApiHealth', () => {
-  let queryClient: QueryClient;
-
   beforeEach(() => {
     resetCallApiMock();
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: false,
-          gcTime: 0,
-          refetchInterval: false, // Disable auto-refetch for tests
-        },
-      },
+    useApiHealthStore.setState({
+      data: { status: 'unknown', message: '' },
+      isLoading: false,
     });
   });
 
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.resetAllMocks();
+  });
 
   it('initializes with unknown status', () => {
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
-    expect(result.current.data.status).toBe('unknown');
-    expect(result.current.data.message).toBe('');
+    const { result } = renderHook(() => useApiHealth());
+
+    expect(result.current.data).toEqual({ status: 'unknown', message: '' });
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('handles successful health check', async () => {
-    mockCallApiResponse({ status: 'OK', message: 'Cloud API is healthy' });
+  it.each([
+    ['OK', 'connected'],
+    ['ERROR', 'blocked'],
+    ['DISABLED', 'disabled'],
+  ] as const)('maps %s responses to %s', async (responseStatus, expectedStatus) => {
+    mockCallApiResponse({ status: responseStatus, message: 'Health check result' });
 
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
+    const { result } = renderHook(() => useApiHealth());
 
-    // Trigger a refetch since initialData prevents automatic fetching
-    result.current.refetch();
-
-    await waitFor(() => {
-      expect(result.current.data.status).toBe('connected');
+    await act(async () => {
+      await result.current.refetch();
     });
 
-    expect(result.current.data.message).toBe('Cloud API is healthy');
-    expect(result.current.isLoading).toBe(false);
-  });
-
-  it('handles failed health check', async () => {
-    mockCallApiResponse({ status: 'ERROR', message: 'API is not accessible' });
-
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
-
-    // Trigger a refetch since initialData prevents automatic fetching
-    result.current.refetch();
-
-    await waitFor(() => {
-      expect(result.current.data.status).toBe('blocked');
+    expect(result.current.data).toEqual({
+      status: expectedStatus,
+      message: 'Health check result',
     });
-
-    expect(result.current.data.message).toBe('API is not accessible');
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('handles network errors', async () => {
+  it('reports network failures without throwing', async () => {
     rejectCallApi(new Error('Network error'));
 
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
+    const { result } = renderHook(() => useApiHealth());
 
-    // Trigger a refetch since initialData prevents automatic fetching
-    result.current.refetch();
-
-    await waitFor(() => {
-      expect(result.current.data.status).toBe('blocked');
+    await act(async () => {
+      await result.current.refetch();
     });
 
-    expect(result.current.data.message).toBe('Network error: Unable to check API health');
-    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toEqual({
+      status: 'blocked',
+      message: 'Network error: Unable to check API health',
+    });
   });
 
-  it('handles disabled status from API', async () => {
-    mockCallApiResponse({ status: 'DISABLED', message: 'Remote generation is disabled' });
+  it('updates the loading state while a request is pending', async () => {
+    let resolveRequest!: (response: Response) => void;
+    getCallApiMock().mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
 
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
+    const { result } = renderHook(() => useApiHealth());
+    let request!: Promise<unknown>;
 
-    // Trigger a refetch since initialData prevents automatic fetching
-    result.current.refetch();
-
-    await waitFor(() => {
-      expect(result.current.data.status).toBe('disabled');
+    act(() => {
+      request = result.current.refetch();
     });
 
-    expect(result.current.data.message).toBe('Remote generation is disabled');
+    expect(result.current.isLoading).toBe(true);
+
+    await act(async () => {
+      resolveRequest(createMockResponse({ status: 'OK', message: 'Connected' }));
+      await request;
+    });
+
     expect(result.current.isLoading).toBe(false);
+    expect(result.current.data.status).toBe('connected');
   });
 
-  it('updates status when API response changes', async () => {
-    // First call succeeds
+  it('shares an in-flight request across consumers', async () => {
+    let resolveRequest!: (response: Response) => void;
+    getCallApiMock().mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+
+    const first = renderHook(() => useApiHealth());
+    const second = renderHook(() => useApiHealth());
+
+    await act(async () => {
+      const firstRequest = first.result.current.refetch();
+      const secondRequest = second.result.current.refetch();
+
+      expect(firstRequest).toBe(secondRequest);
+      expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+
+      resolveRequest(createMockResponse({ status: 'OK', message: 'Connected' }));
+      await Promise.all([firstRequest, secondRequest]);
+    });
+
+    expect(first.result.current.data.status).toBe('connected');
+    expect(second.result.current.data.status).toBe('connected');
+  });
+
+  it('uses one shared polling interval and stops polling after unmount', async () => {
+    vi.useFakeTimers();
+    mockCallApiResponse({ status: 'OK', message: 'Connected' });
+
+    const first = renderHook(() => useApiHealth());
+    const second = renderHook(() => useApiHealth());
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+
+    first.unmount();
+    second.unmount();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates the status when a later response changes', async () => {
     getCallApiMock()
-      .mockResolvedValueOnce(createMockResponse({ status: 'OK', message: 'Cloud API is healthy' }))
-      .mockResolvedValueOnce(
-        createMockResponse({ status: 'ERROR', message: 'API is not accessible' }),
-      );
+      .mockResolvedValueOnce(createMockResponse({ status: 'OK', message: 'Connected' }))
+      .mockResolvedValueOnce(createMockResponse({ status: 'ERROR', message: 'Unavailable' }));
 
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
+    const { result } = renderHook(() => useApiHealth());
 
-    // Trigger initial refetch
-    result.current.refetch();
+    await act(async () => {
+      await result.current.refetch();
+      await result.current.refetch();
+    });
 
     await waitFor(() => {
-      expect(result.current.data.status).toBe('connected');
-    });
-
-    await result.current.refetch();
-
-    await waitFor(() => {
-      expect(result.current.data.status).toBe('blocked');
-    });
-  });
-
-  it('shows loading state transitions correctly', async () => {
-    // Start with a slow response
-    let resolvePromise: (value: Response) => void;
-    const slowPromise = new Promise<Response>((resolve) => {
-      resolvePromise = resolve;
-    });
-
-    getCallApiMock().mockReturnValue(slowPromise);
-
-    const { result } = renderHook(() => useApiHealth(), { wrapper });
-
-    // Initial state should be unknown and not loading
-    expect(result.current.data.status).toBe('unknown');
-    expect(result.current.isLoading).toBe(false);
-
-    // Trigger refetch - this starts the loading state
-    const refetchPromise = result.current.refetch();
-
-    // Immediately check if loading (synchronously, right after calling refetch)
-    // Note: Due to React Query's internal batching, isLoading might not be true yet
-    // So we wait for it to become true
-    await waitFor(
-      () => {
-        expect(result.current.isLoading).toBe(true);
-      },
-      { timeout: 100 },
-    ).catch(() => {
-      // If we can't catch the loading state, that's okay - it may be too fast
-      // The important thing is that the query eventually completes
-    });
-
-    // Resolve the promise
-    resolvePromise!(createMockResponse({ status: 'OK', message: 'test' }));
-
-    // Wait for the refetch to complete
-    await refetchPromise;
-
-    // Wait for the state to update after the promise resolves
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-      expect(result.current.data.status).toBe('connected');
+      expect(result.current.data).toEqual({ status: 'blocked', message: 'Unavailable' });
     });
   });
 });

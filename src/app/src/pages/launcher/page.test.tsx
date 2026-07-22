@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthQueryResult, useApiHealth } from '@app/hooks/useApiHealth';
 import {
   mockMatchMedia as installMatchMedia,
   mockBrowserProperty,
@@ -11,7 +11,6 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { Mock } from 'vitest';
 
 const mockFetch = vi.fn();
@@ -39,7 +38,7 @@ vi.mock('@app/hooks/useApiHealth', () => ({
     data: { status: 'unknown', message: null },
     refetch: vi.fn(),
     isLoading: false,
-  } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>),
+  } as unknown as ApiHealthQueryResult),
 }));
 
 describe('LauncherPage', () => {
@@ -161,7 +160,7 @@ describe('LauncherPage', () => {
       data: { status: 'unknown', message: null },
       refetch: checkHealthMock,
       isLoading: false,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     renderLauncher();
 

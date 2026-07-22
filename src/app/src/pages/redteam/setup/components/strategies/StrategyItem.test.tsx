@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -45,14 +44,6 @@ describe('StrategyItem', () => {
     description: 'Test description',
   };
 
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-    },
-  });
-
   const renderStrategyItem = (props: any) => {
     const redTeamConfig = {
       description: 'Test config',
@@ -67,13 +58,11 @@ describe('StrategyItem', () => {
     };
 
     return render(
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
-            <StrategyItem {...props} />
-          </TestCaseGenerationProvider>
-        </TooltipProvider>
-      </QueryClientProvider>,
+      <TooltipProvider>
+        <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
+          <StrategyItem {...props} />
+        </TestCaseGenerationProvider>
+      </TooltipProvider>,
     );
   };
 
@@ -122,20 +111,18 @@ describe('StrategyItem', () => {
       };
 
       rerender(
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
-              <StrategyItem
-                isDisabled={false}
-                isRemoteGenerationDisabled={false}
-                strategy={baseStrategy}
-                isSelected={true}
-                onToggle={mockOnToggle}
-                onConfigClick={mockOnConfigClick}
-              />
-            </TestCaseGenerationProvider>
-          </TooltipProvider>
-        </QueryClientProvider>,
+        <TooltipProvider>
+          <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
+            <StrategyItem
+              isDisabled={false}
+              isRemoteGenerationDisabled={false}
+              strategy={baseStrategy}
+              isSelected={true}
+              onToggle={mockOnToggle}
+              onConfigClick={mockOnConfigClick}
+            />
+          </TestCaseGenerationProvider>
+        </TooltipProvider>,
       );
 
       expect(card).toHaveAttribute('aria-pressed', 'true');
@@ -346,20 +333,18 @@ describe('StrategyItem', () => {
       };
 
       render(
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
-              <StrategyItem
-                isDisabled={false}
-                isRemoteGenerationDisabled={false}
-                strategy={hydraStrategy}
-                isSelected={true}
-                onToggle={mockOnToggle}
-                onConfigClick={mockOnConfigClick}
-              />
-            </TestCaseGenerationProvider>
-          </TooltipProvider>
-        </QueryClientProvider>,
+        <TooltipProvider>
+          <TestCaseGenerationProvider redTeamConfig={redTeamConfig as any}>
+            <StrategyItem
+              isDisabled={false}
+              isRemoteGenerationDisabled={false}
+              strategy={hydraStrategy}
+              isSelected={true}
+              onToggle={mockOnToggle}
+              onConfigClick={mockOnConfigClick}
+            />
+          </TestCaseGenerationProvider>
+        </TooltipProvider>,
       );
 
       // Should have test case generation button + settings button

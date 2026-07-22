@@ -7,8 +7,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
 import { CustomPoliciesSection } from './CustomPoliciesSection';
-import type { ApiHealthResult } from '@app/hooks/useApiHealth';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthQueryResult } from '@app/hooks/useApiHealth';
 
 vi.mock('../../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry', () => ({
@@ -24,7 +23,7 @@ vi.mock('@app/hooks/useApiHealth', () => ({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+      }) as unknown as ApiHealthQueryResult,
   ),
 }));
 

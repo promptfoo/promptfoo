@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
-import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthQueryResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
@@ -9,7 +9,6 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 // Helper to render with required providers
 let rerenderWithProviders: (ui: React.ReactElement) => void;
@@ -83,7 +82,7 @@ vi.mocked(useApiHealth).mockReturnValue({
   data: { status: 'connected', message: null },
   refetch: vi.fn(),
   isLoading: false,
-} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+} as unknown as ApiHealthQueryResult);
 
 vi.mock('@app/pages/eval-creator/components/YamlEditor', () => ({
   default: ({ initialYaml }: { initialYaml: string }) => (
@@ -263,7 +262,7 @@ describe('Review Component', () => {
       data: { status: 'connected', message: null },
       refetch: vi.fn(),
       isLoading: false,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     // Reset the job store mock
     vi.mocked(useRedteamJobStore).mockReturnValue({
@@ -564,7 +563,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -585,7 +584,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -604,7 +603,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -623,7 +622,7 @@ Application Details:
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -642,7 +641,7 @@ Application Details:
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -661,7 +660,7 @@ Application Details:
         data: { status: 'loading', message: null },
         refetch: vi.fn(),
         isLoading: true,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -680,7 +679,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -704,7 +703,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -727,7 +726,7 @@ Application Details:
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -748,7 +747,7 @@ Application Details:
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -767,7 +766,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -788,7 +787,7 @@ Application Details:
         data: { status: 'loading', message: null },
         refetch: vi.fn(),
         isLoading: true,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -809,7 +808,7 @@ Application Details:
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -833,7 +832,7 @@ Application Details:
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -855,7 +854,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -883,7 +882,7 @@ Application Details:
         data: { status: 'loading', message: null },
         refetch: vi.fn(),
         isLoading: true,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -918,7 +917,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       // Mock successful job status check and run API calls
       vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
@@ -950,7 +949,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -987,7 +986,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -1020,7 +1019,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -1054,7 +1053,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -1096,7 +1095,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       // Mock email verification to proceed
       vi.mocked(useEmailVerification).mockReturnValue({
@@ -1123,7 +1122,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1150,7 +1149,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -1168,7 +1167,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1186,7 +1185,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1205,7 +1204,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -1224,7 +1223,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1246,7 +1245,7 @@ Application Details:
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1268,7 +1267,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1289,7 +1288,7 @@ Application Details:
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       renderWithProviders(
         <Review
@@ -1309,7 +1308,7 @@ Application Details:
         data: { status: 'disabled', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1327,7 +1326,7 @@ Application Details:
         data: { status: 'unknown', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerenderWithProviders(
         <Review
@@ -1352,7 +1351,7 @@ Application Details:
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
     });
 
     it('should check for running job on mount', async () => {

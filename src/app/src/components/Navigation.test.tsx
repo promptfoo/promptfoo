@@ -1,7 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES, REDTEAM_ROUTES, ROUTES } from '@app/constants/routes';
 import { mockMatchMedia, restoreBrowserMocks } from '@app/tests/browserMocks';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -12,34 +11,16 @@ const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
 
 // Helper function to render Navigation with all required providers
 const renderNavigation = (routerProps: { initialEntries?: string[] } = {}) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-    },
-  });
-
   return render(
     <TooltipProvider delayDuration={0}>
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter {...routerProps}>
-          <Navigation />
-        </MemoryRouter>
-      </QueryClientProvider>
+      <MemoryRouter {...routerProps}>
+        <Navigation />
+      </MemoryRouter>
     </TooltipProvider>,
   );
 };
 
 const renderWithModal = () => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-    },
-  });
-
   const Modal = () => (
     <div
       data-testid="modal"
@@ -59,12 +40,10 @@ const renderWithModal = () => {
 
   return render(
     <TooltipProvider delayDuration={0}>
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <Navigation />
-          <Modal />
-        </MemoryRouter>
-      </QueryClientProvider>
+      <MemoryRouter>
+        <Navigation />
+        <Modal />
+      </MemoryRouter>
     </TooltipProvider>,
   );
 };
