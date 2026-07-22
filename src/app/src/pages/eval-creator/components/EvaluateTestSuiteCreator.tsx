@@ -111,6 +111,41 @@ const EvaluateTestSuiteCreator = () => {
     useStore.persist.rehydrate();
   }, []);
 
+  useEffect(() => {
+    if (hasCustomConfig !== true || availableProviders === null) {
+      return;
+    }
+
+    const approvedProviders = normalizedProviders.flatMap((provider) => {
+      const matchingProviders = availableProviders.filter(
+        (availableProvider) => availableProvider.id === provider.id,
+      );
+      if (matchingProviders.length === 0) {
+        return [];
+      }
+
+      return [
+        matchingProviders.find(
+          (availableProvider) =>
+            availableProvider === provider ||
+            JSON.stringify(availableProvider) === JSON.stringify(provider),
+        ) ?? matchingProviders[0],
+      ];
+    });
+
+    if (
+      approvedProviders.length === normalizedProviders.length &&
+      approvedProviders.every((provider, index) => provider === normalizedProviders[index])
+    ) {
+      return;
+    }
+
+    updateConfig({ providers: approvedProviders });
+    if (approvedProviders.length !== normalizedProviders.length) {
+      showToast('Removed providers that are not in the administrator-configured catalog.', 'error');
+    }
+  }, [availableProviders, hasCustomConfig, normalizedProviders, showToast, updateConfig]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     let isMounted = true;
@@ -686,6 +721,7 @@ const EvaluateTestSuiteCreator = () => {
                       delay={config.evaluateOptions?.delay}
                       maxConcurrency={config.evaluateOptions?.maxConcurrency}
                       isReadyToRun={isReadyToRun}
+                      isProviderCatalogReady={hasCustomConfig !== null}
                       onChange={(options) => {
                         const { description: newDesc, ...evalOptions } = options;
                         updateConfig({

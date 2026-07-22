@@ -1,6 +1,6 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
@@ -536,6 +536,151 @@ describe('EvaluateTestSuiteCreator', () => {
       'openai:gpt-5.1-mini,http://llm-gateway.internal/v1',
     );
     expect(screen.queryByTestId('mock-configure-env-button')).not.toBeInTheDocument();
+  });
+
+  it('replaces persisted provider settings with the approved catalog entries', async () => {
+    const approvedProvider = {
+      id: 'http://llm-gateway.internal/v1',
+      label: 'Approved Gateway',
+      config: { method: 'POST', headers: { Authorization: 'Bearer {{ env.GATEWAY_KEY }}' } },
+    };
+    useStore.getState().updateConfig({
+      providers: [
+        'openai:unapproved',
+        { id: approvedProvider.id, config: { url: 'https://unapproved.example' } },
+      ],
+    });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(useStore.getState().config.providers).toEqual([approvedProvider]);
+    });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Removed providers that are not in the administrator-configured catalog.',
+      'error',
+    );
+  });
+
+  it('filters unapproved providers from uploaded YAML and restores approved settings', async () => {
+    const user = userEvent.setup();
+    const approvedProvider = {
+      id: 'http://llm-gateway.internal/v1',
+      config: { method: 'POST', headers: { Authorization: 'Bearer {{ env.GATEWAY_KEY }}' } },
+    };
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+    render(<EvaluateTestSuiteCreator />);
+    await screen.findByTestId('mock-available-providers');
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-available-providers')).toHaveTextContent(approvedProvider.id);
+    });
+
+    const yamlContent = [
+      'description: Imported config',
+      'providers:',
+      '  - openai:unapproved',
+      `  - id: ${approvedProvider.id}`,
+      '    config:',
+      '      url: https://unapproved.example',
+    ].join('\n');
+    const yamlFile = new File([yamlContent], 'restricted.yaml', { type: 'application/yaml' });
+    await user.upload(screen.getByLabelText('Upload YAML configuration'), yamlFile);
+
+    await waitFor(() => {
+      expect(useStore.getState().config.providers).toEqual([approvedProvider]);
+    });
+    expect(useStore.getState().config.description).toBe('Imported config');
+  });
+
+  it('filters provider changes saved through the YAML editor after the catalog is loaded', async () => {
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+    render(<EvaluateTestSuiteCreator />);
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('openai:approved');
+    });
+
+    act(() => {
+      useStore.getState().updateConfig({
+        providers: [
+          { id: 'openai:unapproved' },
+          { id: 'openai:approved', config: { temperature: 2 } },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(useStore.getState().config.providers).toEqual([approvedProvider]);
+    });
+  });
+
+  it('preserves the matching configured entry when catalog entries share an id', async () => {
+    const conservativeProvider = {
+      id: 'openai:approved',
+      label: 'Conservative',
+      config: { temperature: 0 },
+    };
+    const creativeProvider = {
+      id: 'openai:approved',
+      label: 'Creative',
+      config: { temperature: 1 },
+    };
+    useStore.getState().updateConfig({ providers: [{ ...creativeProvider }] });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: {
+          providers: [conservativeProvider, creativeProvider],
+          hasCustomConfig: true,
+        },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(useStore.getState().config.providers).toEqual([creativeProvider]);
+      expect(useStore.getState().config.providers?.[0]).toBe(creativeProvider);
+    });
+  });
+
+  it('keeps an empty custom catalog restricted instead of restoring built-in providers', async () => {
+    useStore.getState().updateConfig({ providers: ['openai:previously-saved'] });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-provider-catalog-ready')).toHaveTextContent('true');
+    });
+    expect(screen.queryByTestId('mock-configure-env-button')).not.toBeInTheDocument();
+    expect(useStore.getState().config.providers).toEqual([]);
   });
 
   it('keeps provider creation gated when the catalog request fails', async () => {

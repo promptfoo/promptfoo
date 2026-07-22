@@ -84,6 +84,7 @@ export function ProvidersListSection({
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
+  const hasEmptyCustomCatalog = availableProviders !== null && availableProviders.length === 0;
 
   const handleAddProvider = (provider: ProviderOptions) => {
     onChange([...providers, provider]);
@@ -116,7 +117,7 @@ export function ProvidersListSection({
         onClick={() => setIsAddDialogOpen(true)}
         className="w-full"
         variant="outline"
-        disabled={!isProviderCatalogReady}
+        disabled={!isProviderCatalogReady || hasEmptyCustomCatalog}
       >
         <Plus className="size-4 mr-2" />
         Add Provider
@@ -128,6 +129,11 @@ export function ProvidersListSection({
             Retry
           </Button>
         </div>
+      )}
+      {hasEmptyCustomCatalog && (
+        <p className="text-center text-sm text-muted-foreground">
+          No valid providers are configured.
+        </p>
       )}
     </div>
   );
@@ -167,6 +173,7 @@ export function ProvidersListSection({
                     onClick={() => setEditingIndex(index)}
                     className="size-8 p-0"
                     aria-label={`Edit ${label}`}
+                    disabled={!isProviderCatalogReady || hasEmptyCustomCatalog}
                   >
                     <Settings className="size-4" />
                   </Button>

@@ -43,6 +43,33 @@ describe('ProvidersListSection', () => {
     expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
   });
 
+  it('disables existing-provider edits until the server catalog is ready', () => {
+    render(
+      <ProvidersListSection
+        providers={providers}
+        onChange={onChange}
+        isProviderCatalogReady={false}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Edit Primary model' })).toBeDisabled();
+    expect(screen.queryByTestId('mock-add-provider-dialog')).not.toBeInTheDocument();
+  });
+
+  it('fails closed when a custom catalog has no valid providers', () => {
+    render(
+      <ProvidersListSection
+        providers={[]}
+        onChange={onChange}
+        availableProviders={[]}
+        isProviderCatalogReady={true}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Add Provider' })).toBeDisabled();
+    expect(screen.getByText('No valid providers are configured.')).toBeInTheDocument();
+  });
+
   it('offers a retry when the catalog request failed, in both list states', async () => {
     const user = userEvent.setup();
     const onRetryProviderCatalog = vi.fn();
