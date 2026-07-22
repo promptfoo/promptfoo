@@ -1,0 +1,187 @@
+# Reusable Promptfoo job for GitLab merge request, branch, and scheduled pipelines.
+# Include this file with an immutable commit SHA or GitLab's include:integrity.
+.promptfoo-eval:
+  image: node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
+  stage: test
+  variables:
+    PROMPTFOO_CONFIG: promptfooconfig.yaml
+    PROMPTFOO_VERSION: '0.121.19'
+    PROMPTFOO_OUTPUT_DIR: .promptfoo-results
+    PROMPTFOO_CACHE_PATH: .promptfoo/cache
+    PROMPTFOO_PASS_RATE_THRESHOLD: '100'
+    PROMPTFOO_SHARE: 'false'
+  cache:
+    key: 'promptfoo-$CI_JOB_NAME_SLUG-$CI_COMMIT_REF_SLUG'
+    paths:
+      - .promptfoo/cache/
+  before_script:
+    - |
+      if ! env \
+        -u CI_JOB_TOKEN \
+        -u CI_JOB_JWT \
+        -u CI_JOB_JWT_V1 \
+        -u CI_JOB_JWT_V2 \
+        -u CI_REGISTRY_PASSWORD \
+        -u CI_REPOSITORY_URL \
+        -u GITLAB_TOKEN \
+        -u GITLAB_API_TOKEN \
+        -u PROMPTFOO_GITLAB_TOKEN \
+        node -e 'process.exit(/^\d+\.\d+\.\d+(?:-[\da-z.-]+)?$/i.test(process.argv[1]) ? 0 : 1)' "$PROMPTFOO_VERSION"; then
+        echo 'PROMPTFOO_VERSION must be an exact semantic version, not latest or a range.' >&2
+        exit 1
+      fi
+
+      env \
+        -u CI_JOB_TOKEN \
+        -u CI_JOB_JWT \
+        -u CI_JOB_JWT_V1 \
+        -u CI_JOB_JWT_V2 \
+        -u CI_REGISTRY_PASSWORD \
+        -u CI_REPOSITORY_URL \
+        -u GITLAB_TOKEN \
+        -u GITLAB_API_TOKEN \
+        -u PROMPTFOO_GITLAB_TOKEN \
+        npm install --global --no-audit --no-fund --loglevel=error "promptfoo@$PROMPTFOO_VERSION"
+  script:
+    - |
+      : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a Promptfoo config file}"
+      : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
+
+      if [ ! -f "$PROMPTFOO_CONFIG" ]; then
+        echo "Promptfoo config not found: $PROMPTFOO_CONFIG" >&2
+        exit 1
+      fi
+
+      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
+
+      set -- eval \
+        --config "$PROMPTFOO_CONFIG" \
+        --no-progress-bar \
+        --output "$PROMPTFOO_OUTPUT_DIR/results.json" \
+        --output "$PROMPTFOO_OUTPUT_DIR/results.junit.xml"
+
+      case "${PROMPTFOO_SHARE:-false}" in
+        true) set -- "$@" --share ;;
+        false) set -- "$@" --no-share ;;
+        *)
+          echo 'PROMPTFOO_SHARE must be true or false.' >&2
+          exit 1
+          ;;
+      esac
+
+      env \
+        -u CI_JOB_TOKEN \
+        -u CI_JOB_JWT \
+        -u CI_JOB_JWT_V1 \
+        -u CI_JOB_JWT_V2 \
+        -u CI_REGISTRY_PASSWORD \
+        -u CI_REPOSITORY_URL \
+        -u GITLAB_TOKEN \
+        -u GITLAB_API_TOKEN \
+        -u PROMPTFOO_GITLAB_TOKEN \
+        promptfoo "$@"
+  after_script:
+    - |
+      if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
+        echo 'Skipping optional Promptfoo merge request comment.'
+        exit 0
+      fi
+
+      if [ ! -s "$PROMPTFOO_OUTPUT_DIR/results.json" ]; then
+        echo 'Skipping Promptfoo merge request comment: no results were written.' >&2
+        exit 0
+      fi
+
+      env -u NODE_OPTIONS -u NODE_PATH node --input-type=module <<'PROMPTFOO_COMMENT'
+      import { readFile } from 'node:fs/promises';
+
+      const {
+        CI_API_V4_URL: apiBaseUrl,
+        CI_JOB_NAME_SLUG: jobName = 'promptfoo-eval',
+        CI_JOB_STATUS: jobStatus = 'unknown',
+        CI_MERGE_REQUEST_IID: mergeRequestIid,
+        CI_PROJECT_ID: projectId,
+        CI_SERVER_URL: serverUrl,
+        PROMPTFOO_GITLAB_TOKEN: token,
+        PROMPTFOO_OUTPUT_DIR: outputDirectory,
+        PROMPTFOO_SHARE: share,
+      } = process.env;
+
+      if (!apiBaseUrl || !projectId || !serverUrl) {
+        throw new Error('GitLab API, project, and server variables must be available.');
+      }
+
+      const api = new URL(apiBaseUrl);
+      const server = new URL(serverUrl);
+      const isLoopback = api.hostname === 'localhost' || api.hostname === '127.0.0.1';
+      if (api.origin !== server.origin || (api.protocol !== 'https:' && !isLoopback)) {
+        throw new Error('Refusing to send the GitLab token to an unexpected or insecure API origin.');
+      }
+
+      const result = JSON.parse(await readFile(`${outputDirectory}/results.json`, 'utf8'));
+      const stats = result.results?.stats ?? {};
+      const successes = Number(stats.successes ?? 0);
+      const failures = Number(stats.failures ?? 0);
+      const errors = Number(stats.errors ?? 0);
+      const total = successes + failures + errors;
+      const marker = `<!-- promptfoo-eval:${jobName} -->`;
+      const outcome = jobStatus === 'success' ? 'Passed' : 'Failed';
+      let body = `${marker}\n### Promptfoo eval: ${outcome}\n\n${successes}/${total} tests passed`;
+
+      if (share === 'true' && typeof result.shareableUrl === 'string') {
+        try {
+          const shareUrl = new URL(result.shareableUrl);
+          if (shareUrl.protocol === 'https:' || shareUrl.protocol === 'http:') {
+            body += `\n\n[View eval results](${shareUrl.href})`;
+          }
+        } catch {
+          console.warn('Skipping invalid Promptfoo share URL.');
+        }
+      }
+
+      const apiUrl = api.href.replace(/\/$/, '');
+      const notesUrl = `${apiUrl}/projects/${encodeURIComponent(projectId)}/merge_requests/${encodeURIComponent(mergeRequestIid)}/notes`;
+      const headers = { 'PRIVATE-TOKEN': token, 'Content-Type': 'application/json' };
+      const identityResponse = await fetch(`${apiUrl}/user`, { headers, redirect: 'error' });
+      if (!identityResponse.ok) {
+        throw new Error(`GitLab token identity lookup failed with HTTP ${identityResponse.status}.`);
+      }
+
+      const identity = await identityResponse.json();
+      const existingResponse = await fetch(`${notesUrl}?per_page=100&sort=desc`, {
+        headers,
+        redirect: 'error',
+      });
+      if (!existingResponse.ok) {
+        throw new Error(`GitLab note lookup failed with HTTP ${existingResponse.status}.`);
+      }
+
+      const notes = await existingResponse.json();
+      const existing = notes.find((note) =>
+        note.author?.id === identity.id &&
+        typeof note.body === 'string' &&
+        note.body.startsWith(marker)
+      );
+      const response = await fetch(existing ? `${notesUrl}/${existing.id}` : notesUrl, {
+        method: existing ? 'PUT' : 'POST',
+        headers,
+        redirect: 'error',
+        body: JSON.stringify({ body }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`GitLab note ${existing ? 'update' : 'creation'} failed with HTTP ${response.status}.`);
+      }
+
+      console.log(`${existing ? 'Updated' : 'Posted'} Promptfoo merge request comment.`);
+      PROMPTFOO_COMMENT
+  artifacts:
+    when: always
+    access: developer
+    expire_in: 1 week
+    paths:
+      - $PROMPTFOO_OUTPUT_DIR/results.json
+      - $PROMPTFOO_OUTPUT_DIR/results.junit.xml
+    reports:
+      junit: $PROMPTFOO_OUTPUT_DIR/results.junit.xml
+  allow_failure: false

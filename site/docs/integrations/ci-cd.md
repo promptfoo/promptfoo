@@ -217,30 +217,31 @@ See also: [Standalone GitHub Action example](https://github.com/promptfoo/prompt
 See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 
 ```yaml title=".gitlab-ci.yml"
-image: node:24
+image: node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd
 
 evaluate:
+  variables:
+    PROMPTFOO_CACHE_PATH: .promptfoo/cache
   script:
     - |
-      npx promptfoo@latest eval \
+      npx --yes promptfoo@0.121.19 eval \
         -c promptfooconfig.yaml \
-        --share \
+        --no-share \
         -o output.json \
-        -o report.html \
         -o output.junit.xml
-  variables:
-    OPENAI_API_KEY: ${OPENAI_API_KEY}
-    PROMPTFOO_CACHE_PATH: .cache/promptfoo
   cache:
-    key: ${CI_COMMIT_REF_SLUG}-promptfoo
+    key: 'promptfoo-$CI_JOB_NAME_SLUG-$CI_COMMIT_REF_SLUG'
     paths:
-      - .cache/promptfoo
+      - .promptfoo/cache/
   artifacts:
+    when: always
+    access: developer
+    expire_in: 1 week
     reports:
       junit: output.junit.xml
     paths:
       - output.json
-      - report.html
+      - output.junit.xml
 ```
 
 ### Jenkins
