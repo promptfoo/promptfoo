@@ -20,6 +20,16 @@ class RateLimitExhaustedError extends Error {
   }
 }
 
+function shouldRetryResponse(result: unknown, attempt: number, policy: RetryPolicy): boolean {
+  return Boolean(
+    result &&
+      typeof result === 'object' &&
+      'error' in result &&
+      typeof result.error === 'string' &&
+      shouldRetry(attempt, new Error(result.error), false, policy),
+  );
+}
+
 export interface ProviderStateOptions {
   rateLimitKey: string;
   maxConcurrency: number;
@@ -209,6 +219,22 @@ export class ProviderRateLimitState extends EventEmitter {
           throw new RateLimitExhaustedError(
             `Rate limit exceeded for ${this.rateLimitKey} after ${attempt + 1} attempts`,
           );
+        }
+
+        if (shouldRetryResponse(result, attempt, retryPolicy)) {
+          attempt++;
+          this.retriedRequests++;
+          const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
+
+          this.emit('request:retrying', {
+            rateLimitKey: this.rateLimitKey,
+            attempt,
+            delayMs: delay,
+            reason: 'error',
+          });
+
+          await this.sleep(delay);
+          continue;
         }
 
         // Success

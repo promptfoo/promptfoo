@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { HttpRateLimitError } from '../../src/util/fetch/errors';
-import { fetchWithRetries } from '../../src/util/fetch/index';
+import { fetchWithProxy, fetchWithRetries } from '../../src/util/fetch/index';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -164,6 +164,33 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
       ).rejects.toThrow('Request failed after 2 retries');
 
       expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should retry transient HTTP failures returned as provider errors', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        async () => {
+          const response = await fetchWithProxy('https://example.com');
+          return response.ok
+            ? { output: 'ok' }
+            : { error: `API error ${response.status}: ${response.statusText}` };
+        },
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result).toEqual({ output: 'ok' });
+      expect(fetch).toHaveBeenCalledTimes(2);
     } finally {
       registry.dispose();
     }
