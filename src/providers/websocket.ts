@@ -4,7 +4,6 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { isAbortError, isTransientConnectionError } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
@@ -38,12 +37,15 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
 function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
   const sourceError = event.error instanceof Error ? event.error : new Error(event.message);
   const sourceCode = (sourceError as NodeJS.ErrnoException).code;
+  const isAbortError = sourceError.name === 'AbortError' || sourceError.name === 'AbortException';
+  const isPermanentProtocolError =
+    /wrong version number|self signed|unable to verify|unknown ca|cert/i.test(sourceError.message);
   let safeReason: string | undefined;
 
-  if (!isAbortError(sourceError)) {
+  if (!isAbortError) {
     if (sourceCode === 'ECONNRESET' || sourceCode === 'ECONNREFUSED' || sourceCode === 'EPIPE') {
       safeReason = sourceCode;
-    } else if (sourceCode === 'EPROTO' && isTransientConnectionError(sourceError)) {
+    } else if (sourceCode === 'EPROTO' && !isPermanentProtocolError) {
       safeReason = sourceCode;
     } else if (sourceCode === undefined) {
       const status = sourceError.message.match(
@@ -60,7 +62,7 @@ function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
           ?.toUpperCase()
           .replace(/^(?:REQUEST\s+|SSL ROUTINES:\s*)/, '');
 
-        if (candidate !== 'EPROTO' || isTransientConnectionError(sourceError)) {
+        if (candidate !== 'EPROTO' || !isPermanentProtocolError) {
           safeReason = candidate;
         }
       }
