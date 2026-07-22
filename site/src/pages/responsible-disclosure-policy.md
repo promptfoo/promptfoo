@@ -32,7 +32,7 @@ When you share an eval, Promptfoo sends its snapshot to your Cloud organization,
 
 `PROMPTFOO_STRIP_*` flags reduce data in certain results, exports, and views. They do not turn off sharing or guarantee that shared evals, traces, and media omit the same fields. If a flag hides a field in one output but that field appears in a share sent to its intended recipients, we treat that as a product or privacy issue, not a security vulnerability.
 
-Sharing remains in scope when it ignores a documented sharing control, reaches the wrong destination, exposes another tenant's data, or includes credentials or fields the feature promises to protect. Data that stays in your own local account is otherwise a hardening or privacy issue unless a promised security or redaction control fails.
+Sharing remains in scope if it bypasses a documented control, reaches the wrong destination, exposes another tenant's data, or includes fields or credentials the feature promises to protect. Data confined to your local account is a hardening or privacy issue unless a promised security or redaction control fails.
 
 ### Cloud Services
 
@@ -115,7 +115,7 @@ The following are out-of-scope:
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
 - Data that remains in your own local logs, databases, caches, reports, exports, or views, unless a promised security or redaction control fails
-- Eval snapshots sent to their intended recipients while sharing is enabled, including fields that a `PROMPTFOO_STRIP_*` flag removes elsewhere. This does not cover broken sharing controls, unauthorized access, cross-tenant disclosure, or credentials the feature promises to protect
+- Eval snapshots sent to their intended recipients while sharing is enabled, including fields that a `PROMPTFOO_STRIP_*` flag removes elsewhere. Sharing-control bypasses, broken redaction promises, unauthorized access, cross-tenant disclosure, and exposed provider credentials remain in scope
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
