@@ -392,7 +392,9 @@ describe('synthesize', () => {
         }),
         'goat',
         expect.objectContaining({
-          generationProvider: expect.any(Object),
+          generationProviderSelection: expect.objectContaining({
+            provider: expect.any(Object),
+          }),
           wrapGenerationProvider: expect.any(Function),
         }),
       );
@@ -4010,9 +4012,14 @@ describe('Language configuration', () => {
         // This avoids the loadApiProviders error while still testing strategy config
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
         const providersShared = await import('../../src/redteam/providers/shared');
-        const getProviderSpy = vi
-          .spyOn(providersShared.redteamProviderManager, 'getProvider')
-          .mockResolvedValue(mockProvider as any);
+        const getProviderSelectionSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProviderSelection')
+          .mockResolvedValue({
+            provider: mockProvider as any,
+            source: 'explicit',
+            localProviderSpec: 'openai:chat:gpt-4.1',
+            persistableId: 'openai:chat:gpt-4.1',
+          });
         const getGradingProviderSpy = vi
           .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
           .mockResolvedValue(mockProvider as any);
@@ -4031,16 +4038,22 @@ describe('Language configuration', () => {
             targetIds: ['test-provider'],
           });
 
-          expect(getProviderSpy).toHaveBeenCalledWith({ provider: 'openai:chat:gpt-4.1' });
+          expect(getProviderSelectionSpy).toHaveBeenCalledWith({
+            provider: 'openai:chat:gpt-4.1',
+          });
           expect(mockStrategyAction).toHaveBeenCalled();
           expect(capturedConfig).toBeDefined();
           expect(capturedConfig).not.toHaveProperty('redteamProvider');
           expect(capturedConfig).not.toHaveProperty('__generationProvider');
-          expect(capturedRuntimeContext?.generationProvider.id()).toBe('mock-provider');
-          expect(capturedRuntimeContext?.generationProviderSpec).toBe('openai:chat:gpt-4.1');
+          expect(capturedRuntimeContext?.generationProviderSelection.provider.id()).toBe(
+            'mock-provider',
+          );
+          expect(capturedRuntimeContext?.generationProviderSelection.persistableId).toBe(
+            'openai:chat:gpt-4.1',
+          );
           expect(capturedConfig?.targetId).toBe('cloud-target-123');
         } finally {
-          getProviderSpy.mockRestore();
+          getProviderSelectionSpy.mockRestore();
           getGradingProviderSpy.mockRestore();
           getMultilingualProviderSpy.mockRestore();
         }
@@ -4138,8 +4151,8 @@ describe('Language configuration', () => {
         expect(capturedConfig).toBeDefined();
         expect(capturedConfig).not.toHaveProperty('redteamProvider');
         expect(capturedConfig).not.toHaveProperty('__generationProvider');
-        expect(capturedRuntimeContext?.generationProvider).toBeDefined();
-        expect(capturedRuntimeContext?.generationProviderSpec).toBeUndefined();
+        expect(capturedRuntimeContext?.generationProviderSelection.provider).toBeDefined();
+        expect(capturedRuntimeContext?.generationProviderSelection.persistableId).toBeUndefined();
       } finally {
         cliState.config = originalConfig;
       }
@@ -4188,9 +4201,13 @@ describe('Language configuration', () => {
         // Mock the provider loading
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
         const providersShared = await import('../../src/redteam/providers/shared');
-        const getProviderSpy = vi
-          .spyOn(providersShared.redteamProviderManager, 'getProvider')
-          .mockResolvedValue(mockProvider as any);
+        const getProviderSelectionSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProviderSelection')
+          .mockResolvedValue({
+            provider: mockProvider as any,
+            source: 'explicit',
+            localProviderSpec: providerOptions,
+          });
         const getGradingProviderSpy = vi
           .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
           .mockResolvedValue(mockProvider as any);
@@ -4211,10 +4228,12 @@ describe('Language configuration', () => {
           expect(capturedConfig).toBeDefined();
           expect(capturedConfig).not.toHaveProperty('redteamProvider');
           expect(capturedConfig).not.toHaveProperty('__generationProvider');
-          expect(capturedRuntimeContext?.generationProvider.id()).toBe('mock-provider');
-          expect(capturedRuntimeContext?.generationProviderSpec).toBeUndefined();
+          expect(capturedRuntimeContext?.generationProviderSelection.provider.id()).toBe(
+            'mock-provider',
+          );
+          expect(capturedRuntimeContext?.generationProviderSelection.persistableId).toBeUndefined();
         } finally {
-          getProviderSpy.mockRestore();
+          getProviderSelectionSpy.mockRestore();
           getGradingProviderSpy.mockRestore();
           getMultilingualProviderSpy.mockRestore();
         }

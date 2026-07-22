@@ -46,12 +46,19 @@ describe('Redteam Routes', () => {
 
       // Default mock implementations
       mockedGetPluginConfigurationError.mockReturnValue(null);
-      mockedRedteamProviderManager.getProvider.mockResolvedValue({
-        id: () => 'test-provider',
-        callApi: vi.fn(),
-      } as any);
-      mockedRedteamProviderManager.getProviderSpec.mockImplementation(
-        ({ provider, fallbackProvider } = {}) => (provider ?? fallbackProvider) as any,
+      mockedRedteamProviderManager.getProviderSelection.mockImplementation(
+        async ({ provider, fallbackProvider } = {}) => {
+          const selected = provider ?? fallbackProvider;
+          return {
+            provider: {
+              id: () => 'test-provider',
+              callApi: vi.fn(),
+            } as any,
+            source: provider ? 'explicit' : fallbackProvider ? 'fallback' : 'default',
+            localProviderSpec: selected,
+            persistableId: typeof selected === 'string' ? selected : undefined,
+          };
+        },
       );
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
     });
@@ -145,9 +152,9 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
           provider: undefined,
-          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+          ignoreCliState: true,
         });
       });
 
@@ -178,9 +185,9 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
           provider: 'openai:chat:gpt-4.1',
-          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+          ignoreCliState: true,
         });
       });
 
@@ -209,9 +216,9 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
           provider,
-          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+          ignoreCliState: true,
         });
       });
 
@@ -237,9 +244,9 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(200);
-        expect(mockedRedteamProviderManager.getProvider).toHaveBeenCalledWith({
+        expect(mockedRedteamProviderManager.getProviderSelection).toHaveBeenCalledWith({
           provider: undefined,
-          fallbackProvider: 'openai:chat:gpt-5.5-2026-04-23',
+          ignoreCliState: true,
         });
       });
 
@@ -248,7 +255,12 @@ describe('Redteam Routes', () => {
           id: () => 'preview-provider',
           callApi: vi.fn(),
         };
-        mockedRedteamProviderManager.getProvider.mockResolvedValue(previewProvider as any);
+        mockedRedteamProviderManager.getProviderSelection.mockResolvedValue({
+          provider: previewProvider as any,
+          source: 'explicit',
+          localProviderSpec: 'openai:chat:gpt-4.1',
+          persistableId: 'openai:chat:gpt-4.1',
+        });
         const mockPluginFactory = {
           key: 'aegis',
           action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
@@ -277,8 +289,12 @@ describe('Redteam Routes', () => {
             expect.not.objectContaining({ redteamProvider: expect.anything() }),
             'math-prompt',
             {
-              generationProvider: previewProvider,
-              generationProviderSpec: 'openai:chat:gpt-4.1',
+              generationProviderSelection: {
+                provider: previewProvider,
+                source: 'explicit',
+                localProviderSpec: 'openai:chat:gpt-4.1',
+                persistableId: 'openai:chat:gpt-4.1',
+              },
             },
           );
           expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('__generationProvider');
@@ -293,8 +309,12 @@ describe('Redteam Routes', () => {
           callApi: vi.fn(),
           apiKey: 'resolved-secret',
         };
-        mockedRedteamProviderManager.getProvider.mockResolvedValue(previewProvider as any);
-        mockedRedteamProviderManager.getProviderSpec.mockReturnValue('anthropic:claude-sonnet-4');
+        mockedRedteamProviderManager.getProviderSelection.mockResolvedValue({
+          provider: previewProvider as any,
+          source: 'cache',
+          localProviderSpec: 'anthropic:claude-sonnet-4',
+          persistableId: 'anthropic:claude-sonnet-4',
+        });
         const mockPluginFactory = {
           key: 'aegis',
           action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
@@ -319,8 +339,12 @@ describe('Redteam Routes', () => {
           expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('redteamProvider');
           expect(strategyAction.mock.calls[0]?.[2]).not.toHaveProperty('apiKey');
           expect(strategyAction.mock.calls[0]?.[4]).toEqual({
-            generationProvider: previewProvider,
-            generationProviderSpec: 'anthropic:claude-sonnet-4',
+            generationProviderSelection: {
+              provider: previewProvider,
+              source: 'cache',
+              localProviderSpec: 'anthropic:claude-sonnet-4',
+              persistableId: 'anthropic:claude-sonnet-4',
+            },
           });
         } finally {
           strategySpy.mockRestore();

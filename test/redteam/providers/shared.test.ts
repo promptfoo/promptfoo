@@ -310,7 +310,11 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2); // Preloads regular and jsonOnly caches
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(1, ['test-provider']);
       expect(mockedLoadApiProviders).toHaveBeenNthCalledWith(2, ['test-provider']);
-      expect(redteamProviderManager.getProviderSpec()).toBe('test-provider');
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: mockProvider,
+        source: 'cache',
+        persistableId: 'test-provider',
+      });
     });
 
     it('does not expose runtime provider instances as cached provider specs', async () => {
@@ -319,13 +323,112 @@ describe('shared redteam provider utilities', () => {
 
       await redteamProviderManager.setProvider(runtimeProvider);
 
-      expect(redteamProviderManager.getProviderSpec()).toBeUndefined();
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: runtimeProvider,
+        source: 'cache',
+        persistableId: undefined,
+      });
     });
 
-    it('returns the defaultTest provider spec when it wins resolution', () => {
+    it('returns the defaultTest provider selection when it wins resolution', async () => {
       setCliStateConfig({ defaultTest: { options: { provider: 'default-test-provider' } } });
+      mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
 
-      expect(redteamProviderManager.getProviderSpec()).toBe('default-test-provider');
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: mockApiProvider,
+        source: 'explicit',
+        persistableId: 'default-test-provider',
+      });
+    });
+
+    it('reports fallback and default selections distinctly', async () => {
+      const fallbackProvider = createMockProvider({ id: 'fallback-provider' });
+      mockedLoadApiProviders.mockResolvedValue([fallbackProvider]);
+
+      expect(
+        await redteamProviderManager.getProviderSelection({
+          fallbackProvider: 'fallback-provider',
+        }),
+      ).toMatchObject({
+        provider: fallbackProvider,
+        source: 'fallback',
+        persistableId: 'fallback-provider',
+      });
+
+      redteamProviderManager.clearProvider();
+      setCliStateConfig({ redteam: { provider: undefined } });
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        source: 'default',
+        persistableId: undefined,
+      });
+    });
+
+    it('does not replace a working cache when preloading a new variant fails', async () => {
+      const oldProvider = createMockProvider({ id: 'old-provider' });
+      const newProvider = createMockProvider({ id: 'new-provider' });
+      mockedLoadApiProviders
+        .mockResolvedValueOnce([oldProvider])
+        .mockResolvedValueOnce([oldProvider])
+        .mockResolvedValueOnce([newProvider])
+        .mockRejectedValueOnce(new Error('json-only load failed'));
+
+      await redteamProviderManager.setProvider('old-provider');
+      await expect(redteamProviderManager.setProvider('new-provider')).rejects.toThrow(
+        'json-only load failed',
+      );
+
+      expect(await redteamProviderManager.getProviderSelection()).toMatchObject({
+        provider: oldProvider,
+        source: 'cache',
+        persistableId: 'old-provider',
+      });
+    });
+
+    it('loads the built-in default without consulting stale cliState', async () => {
+      setCliStateConfig({ redteam: { provider: 'stale-provider' } });
+
+      const provider = await redteamProviderManager.getDefaultProvider({
+        jsonOnly: true,
+        preferSmallModel: true,
+      });
+
+      expect(provider.id()).toBe(`openai:${ATTACKER_MODEL_SMALL}`);
+      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+      expect(mockOpenAiInstances[0].config.response_format).toEqual({ type: 'json_object' });
+    });
+
+    it('ignores stale cliState while preserving the built-in default selection', async () => {
+      setCliStateConfig({
+        redteam: { provider: 'stale-provider' },
+        defaultTest: { provider: 'stale-default-test-provider' },
+      });
+
+      const selection = await redteamProviderManager.getProviderSelection({
+        ignoreCliState: true,
+      });
+
+      expect(selection.source).toBe('default');
+      expect(selection.persistableId).toBeUndefined();
+      expect(selection.provider.id()).toBe(`openai:${ATTACKER_MODEL}`);
+      expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('keeps the cache ahead of ignoreCliState preview defaults', async () => {
+      const cachedProvider = createMockProvider({ id: 'cached-provider' });
+      mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
+      setCliStateConfig({ redteam: { provider: 'stale-provider' } });
+      await redteamProviderManager.setProvider('cached-provider');
+
+      const selection = await redteamProviderManager.getProviderSelection({
+        ignoreCliState: true,
+      });
+
+      expect(selection).toMatchObject({
+        provider: cachedProvider,
+        source: 'cache',
+        persistableId: 'cached-provider',
+      });
+      expect(mockedLoadApiProviders).toHaveBeenCalledTimes(2);
     });
 
     it('prefers an explicit provider over cached providers', async () => {

@@ -91,7 +91,10 @@ describe('addLayerTestCases', () => {
 
   it('passes runtime provider context to nested strategies', async () => {
     const runtimeContext = {
-      generationProvider: { id: () => 'request-provider', callApi: vi.fn() } as any,
+      generationProviderSelection: {
+        provider: { id: () => 'request-provider', callApi: vi.fn() } as any,
+        source: 'explicit' as const,
+      },
     };
     const nestedAction = vi.fn(async (testCases: TestCaseWithPlugin[]) => testCases);
     const strategies: Strategy[] = [{ id: 'math-prompt', action: nestedAction }];
@@ -681,7 +684,11 @@ describe('addLayerTestCases', () => {
         },
       ];
       const runtimeContext = {
-        generationProviderSpec: 'anthropic:claude-sonnet-4',
+        generationProviderSelection: {
+          provider: {} as any,
+          source: 'explicit' as const,
+          persistableId: 'anthropic:claude-sonnet-4',
+        },
       };
 
       const crescendo = await addLayerTestCases(

@@ -41,7 +41,7 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
-import { type LoadableRedteamProvider, redteamProviderManager } from './providers/shared';
+import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
   remoteGenerationContextPayload,
@@ -63,6 +63,7 @@ import {
 
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
 import type { Inputs, TokenUsage } from '../types/shared';
+import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
   Policy,
@@ -616,8 +617,7 @@ async function applyStrategies(
   testCases: TestCaseWithPlugin[],
   strategies: RedteamStrategyObject[],
   injectVar: string,
-  provider: ApiProvider,
-  providerSpec: LoadableRedteamProvider | undefined,
+  providerSelection: RedteamProviderSelection,
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
@@ -705,11 +705,8 @@ async function applyStrategies(
       strategy.id,
       {
         // Keep every local strategy phase on the provider already selected for this synthesis run.
-        // Re-reading cliState here can select a stale or cached provider after plugin generation.
-        generationProvider: provider,
-        // Only provider IDs are safe to persist in generated attack-provider configs.
-        // Provider option objects can hold resolved env values or credentials.
-        generationProviderSpec: typeof providerSpec === 'string' ? providerSpec : undefined,
+        // The source tells strategies whether the choice was explicit or an implicit default.
+        generationProviderSelection: providerSelection,
         // Specialized local providers still need to contribute to generation usage totals.
         wrapGenerationProvider,
       },
@@ -743,7 +740,7 @@ async function applyStrategies(
           const { inputMaterialization, vars } = await rematerializeStrategyInputVars(
             t,
             injectVar,
-            provider,
+            providerSelection.provider,
             purpose,
             materializationIndex,
           );
@@ -1100,10 +1097,9 @@ export async function synthesize({
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
 
-  const providerForGeneration = await redteamProviderManager.getProvider({
+  const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
-  const redteamProviderSpec = redteamProviderManager.getProviderSpec({ provider });
   const generationTokenUsage: TokenUsage = {
     cached: 0,
     completion: 0,
@@ -1111,7 +1107,14 @@ export async function synthesize({
     prompt: 0,
     total: 0,
   };
-  const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
+  const redteamProvider = trackGenerationTokenUsage(
+    providerSelection.provider,
+    generationTokenUsage,
+  );
+  const trackedProviderSelection = {
+    ...providerSelection,
+    provider: redteamProvider,
+  };
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1717,8 +1720,7 @@ export async function synthesize({
       pluginTestCases,
       [retryStrategy],
       injectVar,
-      redteamProvider,
-      redteamProviderSpec,
+      trackedProviderSelection,
       purpose,
       undefined,
       maxCharsPerMessage,
@@ -1744,8 +1746,7 @@ export async function synthesize({
       pluginTestCases,
       nonBasicStrategies,
       injectVar,
-      redteamProvider,
-      redteamProviderSpec,
+      trackedProviderSelection,
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,

@@ -7,7 +7,6 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
@@ -90,17 +89,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 
     // Keep preview generation request-scoped. A form-selected provider wins, followed by
     // any org/team cache, then the built-in default; previous CLI runs must not leak here.
-    const redteamProvider = await redteamProviderManager.getProvider({
+    const providerSelection = await redteamProviderManager.getProviderSelection({
       provider: provider as RedteamFileConfig['provider'],
-      fallbackProvider: REDTEAM_MODEL,
-    });
-    const redteamProviderSpec = redteamProviderManager.getProviderSpec({
-      provider: provider as RedteamFileConfig['provider'],
-      fallbackProvider: REDTEAM_MODEL,
+      ignoreCliState: true,
     });
 
     const testCases = await pluginFactory.action({
-      provider: redteamProvider,
+      provider: providerSelection.provider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
       n: effectiveCount, // Generate requested number of test cases
@@ -133,11 +128,8 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           },
           strategy.id,
           {
-            // Live provider instances stay request-local because they can contain credentials.
-            generationProvider: redteamProvider,
-            // Provider option objects can contain resolved credentials, so only IDs may persist.
-            generationProviderSpec:
-              typeof redteamProviderSpec === 'string' ? redteamProviderSpec : undefined,
+            // Provider options stay request-local because they can contain credentials.
+            generationProviderSelection: providerSelection,
           },
         );
 

@@ -6,6 +6,7 @@ import {
   getRemoteGenerationExplicitlyDisabledError,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
@@ -13,7 +14,7 @@ import type { TestCase } from '../../types/index';
 async function generateLikertPrompts(
   testCases: TestCase[],
   injectVar: string,
-  _config: Record<string, any>,
+  config: Record<string, any>,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -45,6 +46,7 @@ async function generateLikertPrompts(
         prompt: testCase.vars[injectVar],
         index,
         plugin: testCase.metadata?.plugins?.join(',') ?? testCase.metadata?.pluginId,
+        ...remoteGenerationContextPayload(config.targetId),
       };
 
       interface LikertGenerationResponse {

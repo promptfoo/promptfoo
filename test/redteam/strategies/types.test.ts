@@ -6,7 +6,13 @@ describe('withPersistableGenerationProvider', () => {
     expect(
       withPersistableGenerationProvider(
         { strategyText: 'test' },
-        { generationProviderSpec: 'anthropic:claude-sonnet-4' },
+        {
+          generationProviderSelection: {
+            provider: {} as any,
+            source: 'explicit',
+            persistableId: 'anthropic:claude-sonnet-4',
+          },
+        },
       ),
     ).toEqual({
       strategyText: 'test',
@@ -24,7 +30,24 @@ describe('withPersistableGenerationProvider', () => {
 
     expect(
       withPersistableGenerationProvider(config, {
-        generationProvider: runtimeProvider as any,
+        generationProviderSelection: {
+          provider: runtimeProvider as any,
+          source: 'explicit',
+        },
+      }),
+    ).toBe(config);
+  });
+
+  it('preserves a step-local provider override', () => {
+    const config = { redteamProvider: 'openai:gpt-4.1' };
+
+    expect(
+      withPersistableGenerationProvider(config, {
+        generationProviderSelection: {
+          provider: {} as any,
+          source: 'explicit',
+          persistableId: 'anthropic:claude-sonnet-4',
+        },
       }),
     ).toBe(config);
   });

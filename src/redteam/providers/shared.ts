@@ -45,6 +45,23 @@ export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:
  * redteam call site.
  */
 export type LoadableRedteamProvider = string | ProviderOptions;
+export type RedteamProviderSelectionSource = 'explicit' | 'cache' | 'fallback' | 'default';
+
+/**
+ * A provider chosen for one red-team generation request.
+ *
+ * localProviderSpec is intentionally runtime-only: provider option objects can
+ * contain resolved credentials, but are still needed to build local JSON-only
+ * variants of an explicitly configured provider. Only persistableId may cross
+ * a serialization boundary.
+ */
+export interface RedteamProviderSelection {
+  provider: ApiProvider;
+  source: RedteamProviderSelectionSource;
+  localProviderSpec?: RedteamFileConfig['provider'];
+  persistableId?: string;
+}
+
 export type RedteamProviderLoader = (
   providers: LoadableRedteamProvider[],
 ) => Promise<ApiProvider[]>;
@@ -91,7 +108,7 @@ async function loadRedteamProvider({
   purpose?: 'redteam' | 'grading';
 } = {}) {
   let ret;
-  const redteamProvider = provider || cliState.config?.redteam?.provider;
+  const redteamProvider = provider;
   if (isApiProvider(redteamProvider)) {
     logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
     ret = redteamProvider;
@@ -151,10 +168,16 @@ class RedteamProviderManager {
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
+    // Do not publish a partially replaced cache. Both variants and the spec must
+    // describe the same provider selection or callers can route different phases
+    // of one generation run to different backends.
+    const loadedProvider = await loadRedteamProvider({ provider });
+    const loadedJsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+
     this.providerSpec =
       typeof provider === 'string' || isProviderOptions(provider) ? provider : undefined;
-    this.provider = await loadRedteamProvider({ provider });
-    this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+    this.provider = loadedProvider;
+    this.jsonOnlyProvider = loadedJsonOnlyProvider;
   }
 
   private getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
@@ -170,36 +193,145 @@ class RedteamProviderManager {
     );
   }
 
-  /**
-   * Resolves the declarative provider using the same precedence as getProvider().
-   * Runtime ApiProvider instances are deliberately excluded because they can contain credentials.
-   */
-  getProviderSpec({
+  private resolveProviderCandidate({
     provider,
     fallbackProvider,
+    ignoreCliState = false,
   }: {
     provider?: RedteamFileConfig['provider'];
     fallbackProvider?: RedteamFileConfig['provider'];
-  } = {}): LoadableRedteamProvider | undefined {
-    const toSpec = (value: RedteamFileConfig['provider'] | undefined) =>
+    ignoreCliState?: boolean;
+  } = {}): {
+    source: RedteamProviderSelectionSource;
+    provider?: RedteamFileConfig['provider'];
+    cachedProvider?: ApiProvider;
+    cachedJsonOnlyProvider?: ApiProvider;
+    spec?: LoadableRedteamProvider;
+  } {
+    const toSpec = (
+      value: RedteamFileConfig['provider'] | undefined,
+    ): LoadableRedteamProvider | undefined =>
       typeof value === 'string' || isProviderOptions(value) ? value : undefined;
 
     if (provider) {
-      return toSpec(provider);
+      return { source: 'explicit', provider, spec: toSpec(provider) };
     }
+
     if (this.provider && this.jsonOnlyProvider) {
-      return this.providerSpec;
+      return {
+        source: 'cache',
+        cachedProvider: this.provider,
+        cachedJsonOnlyProvider: this.jsonOnlyProvider,
+        spec: this.providerSpec,
+      };
     }
+
     if (fallbackProvider) {
-      return toSpec(fallbackProvider);
+      return {
+        source: 'fallback',
+        provider: fallbackProvider,
+        spec: toSpec(fallbackProvider),
+      };
+    }
+
+    if (ignoreCliState) {
+      return { source: 'default' };
     }
 
     const configuredProvider = cliState.config?.redteam?.provider;
     if (configuredProvider) {
-      return toSpec(configuredProvider);
+      return {
+        source: 'explicit',
+        provider: configuredProvider,
+        spec: toSpec(configuredProvider),
+      };
     }
 
-    return toSpec(this.getDefaultTestProvider());
+    const defaultTestProvider = this.getDefaultTestProvider();
+    if (defaultTestProvider) {
+      return {
+        source: 'explicit',
+        provider: defaultTestProvider,
+        spec: toSpec(defaultTestProvider),
+      };
+    }
+
+    return { source: 'default' };
+  }
+
+  private async loadProviderCandidate(
+    candidate: ReturnType<RedteamProviderManager['resolveProviderCandidate']>,
+    {
+      jsonOnly = false,
+      preferSmallModel = false,
+    }: {
+      jsonOnly?: boolean;
+      preferSmallModel?: boolean;
+    } = {},
+  ): Promise<ApiProvider> {
+    if (candidate.source === 'cache') {
+      const cachedProvider = jsonOnly ? candidate.cachedJsonOnlyProvider : candidate.cachedProvider;
+      invariant(cachedProvider, 'Expected cached redteam provider variant to be set');
+      logger.debug(
+        '[RedteamProviderManager] Using cached redteam provider: ' + cachedProvider.id(),
+      );
+      return this.wrapProvider(cachedProvider);
+    }
+
+    const loaded = await loadRedteamProvider({
+      provider: candidate.provider,
+      jsonOnly,
+      preferSmallModel,
+    });
+    logger.debug(
+      '[RedteamProviderManager] Loaded ' + candidate.source + ' redteam provider: ' + loaded.id(),
+    );
+    return this.wrapProvider(loaded);
+  }
+
+  /**
+   * Resolves runtime provider, provenance, local-only spec, and safe persisted ID
+   * through one precedence walk.
+   */
+  async getProviderSelection({
+    provider,
+    fallbackProvider,
+    ignoreCliState = false,
+    jsonOnly = false,
+    preferSmallModel = false,
+  }: {
+    provider?: RedteamFileConfig['provider'];
+    fallbackProvider?: RedteamFileConfig['provider'];
+    /** Skip process-global config for request-scoped callers such as Web UI previews. */
+    ignoreCliState?: boolean;
+    jsonOnly?: boolean;
+    preferSmallModel?: boolean;
+  } = {}): Promise<RedteamProviderSelection> {
+    const candidate = this.resolveProviderCandidate({
+      provider,
+      fallbackProvider,
+      ignoreCliState,
+    });
+    return {
+      provider: await this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
+      source: candidate.source,
+      localProviderSpec: candidate.spec,
+      persistableId: typeof candidate.spec === 'string' ? candidate.spec : undefined,
+    };
+  }
+
+  /**
+   * Loads the built-in attacker model without consulting cache or CLI state.
+   */
+  async getDefaultProvider({
+    jsonOnly = false,
+    preferSmallModel = false,
+  }: {
+    jsonOnly?: boolean;
+    preferSmallModel?: boolean;
+  } = {}): Promise<ApiProvider> {
+    const provider = await loadRedteamProvider({ jsonOnly, preferSmallModel });
+    return this.wrapProvider(provider);
   }
 
   async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
@@ -219,88 +351,27 @@ class RedteamProviderManager {
   async getProvider({
     provider,
     fallbackProvider,
+    ignoreCliState = false,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
     provider?: RedteamFileConfig['provider'];
     /** Optional request-scoped fallback used after the cache but before process-global CLI config. */
     fallbackProvider?: RedteamFileConfig['provider'];
+    /** Skip process-global config for request-scoped callers such as Web UI previews. */
+    ignoreCliState?: boolean;
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   }): Promise<ApiProvider> {
-    // 1) Explicit provider argument. Strategy-scoped providers such as Meta's
-    // task provider must not be replaced by the global redteam provider cache.
-    if (provider) {
-      const loaded = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
-      return this.wrapProvider(loaded);
-    }
-
-    // 2) Cached redteam provider
-    if (this.provider && this.jsonOnlyProvider) {
-      logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
-      return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
-    }
-
-    // 3) Request-scoped fallback provider. This keeps long-lived server routes from
-    // accidentally inheriting stale cliState.config left behind by a previous run.
-    if (fallbackProvider) {
-      const loaded = await loadRedteamProvider({
-        provider: fallbackProvider,
+    return (
+      await this.getProviderSelection({
+        provider,
+        fallbackProvider,
+        ignoreCliState,
         jsonOnly,
         preferSmallModel,
-      });
-      return this.wrapProvider(loaded);
-    }
-
-    // Check if we have a redteam.provider configured
-    const configuredProvider = cliState.config?.redteam?.provider;
-
-    // 4) If no configured redteam provider, try defaultTest config chain as fallback
-    // This ensures users who configure defaultTest.options.provider get consistent behavior
-    if (!configuredProvider) {
-      const defaultTestProvider = this.getDefaultTestProvider();
-
-      if (defaultTestProvider) {
-        logger.debug(
-          '[RedteamProviderManager] Loading redteam provider from defaultTest fallback',
-          {
-            providedConfig:
-              typeof defaultTestProvider === 'string'
-                ? defaultTestProvider
-                : (defaultTestProvider?.id ?? 'object'),
-            jsonOnly,
-            preferSmallModel,
-          },
-        );
-        const redteamProvider = await loadRedteamProvider({
-          provider: defaultTestProvider,
-          jsonOnly,
-          preferSmallModel,
-        });
-        logger.debug(
-          `[RedteamProviderManager] Using redteam provider from defaultTest: ${redteamProvider.id()}`,
-        );
-        // Wrap for rate limiting to match every other return path in this method.
-        return this.wrapProvider(redteamProvider);
-      }
-    }
-
-    // 5) Configured redteam provider (cliState.config.redteam.provider) or the default attacker model.
-    logger.debug('[RedteamProviderManager] Loading redteam provider', {
-      providedConfig:
-        typeof configuredProvider === 'string'
-          ? configuredProvider
-          : (configuredProvider?.id ?? 'none'),
-      jsonOnly,
-      preferSmallModel,
-    });
-    const redteamProvider = await loadRedteamProvider({
-      provider: configuredProvider,
-      jsonOnly,
-      preferSmallModel,
-    });
-    logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
-    return this.wrapProvider(redteamProvider);
+      })
+    ).provider;
   }
 
   async getGradingProvider({

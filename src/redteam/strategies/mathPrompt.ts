@@ -4,12 +4,12 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
-import { redteamProviderManager } from '../providers/shared';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { canGenerateRemoteWithSelection, getStrategyGenerationProvider } from './types';
 
-import type { ApiProvider, TestCase } from '../../types/index';
+import type { TestCase } from '../../types/index';
 import type { StrategyRuntimeContext } from './types';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
@@ -94,20 +94,13 @@ export async function generateMathPrompt(
 export async function encodeMathPrompt(
   text: string,
   concept: string,
-  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
-  generationProvider?: ApiProvider,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<string> {
-  const loadedProvider =
-    generationProvider ||
-    (await redteamProviderManager.getProvider({
-      jsonOnly: true,
-      preferSmallModel: true,
-    }));
-  const redteamProvider = generationProvider
-    ? generationProvider
-    : wrapGenerationProvider
-      ? wrapGenerationProvider(loadedProvider)
-      : loadedProvider;
+  const redteamProvider = await getStrategyGenerationProvider({
+    runtimeContext,
+    jsonOnly: true,
+    preferSmallModel: true,
+  });
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 
   const result = await redteamProvider.callApi(
@@ -150,12 +143,10 @@ export async function addMathPrompt(
   config: Record<string, any>,
   runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
-  // Remote generation can only reproduce the selected provider from its declarative spec.
-  // If the winner is an opaque runtime provider, keep generation local instead of routing
-  // the request to the remote service's default provider.
-  const canGenerateRemote =
-    !runtimeContext?.generationProvider || runtimeContext.generationProviderSpec !== undefined;
-  if (shouldGenerateRemote() && canGenerateRemote) {
+  // Remote task handlers only know how to use their built-in default provider.
+  // Keep every request-, cache-, or route-selected provider local so this phase
+  // cannot silently switch backends.
+  if (shouldGenerateRemote() && canGenerateRemoteWithSelection(runtimeContext)) {
     const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);
     if (mathPromptTestCases.length > 0) {
       return mathPromptTestCases;
@@ -188,12 +179,7 @@ export async function addMathPrompt(
     const originalText = String(testCase.vars![injectVar]);
 
     for (const concept of mathConcepts) {
-      const encodedText = await encodeMathPrompt(
-        originalText,
-        concept,
-        runtimeContext?.wrapGenerationProvider,
-        runtimeContext?.generationProvider,
-      );
+      const encodedText = await encodeMathPrompt(originalText, concept, runtimeContext);
 
       encodedTestCases.push({
         ...testCase,

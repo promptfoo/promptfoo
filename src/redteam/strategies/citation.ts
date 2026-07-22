@@ -7,6 +7,7 @@ import {
   getRemoteGenerationExplicitlyDisabledError,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
@@ -14,7 +15,7 @@ import type { TestCase } from '../../types/index';
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
-  _config: Record<string, any>,
+  config: Record<string, any>,
 ): Promise<TestCase[]> {
   let progressBar: SingleBar | undefined;
   try {
@@ -42,6 +43,7 @@ async function generateCitations(
       const payload = {
         task: 'citation',
         topic: testCase.vars[injectVar],
+        ...remoteGenerationContextPayload(config.targetId),
       };
 
       interface CitationGenerationResponse {

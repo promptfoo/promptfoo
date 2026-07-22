@@ -6,12 +6,12 @@ import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { loadYaml } from '../../util/yamlLoad';
-import { redteamProviderManager } from '../providers/shared';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { canGenerateRemoteWithSelection, getStrategyGenerationProvider } from './types';
 
-import type { ApiProvider, TestCase } from '../../types/index';
+import type { TestCase } from '../../types/index';
 import type { StrategyRuntimeContext } from './types';
 
 /**
@@ -131,7 +131,6 @@ async function processRemoteChunk(
       ...(config.languages !== undefined && { languages: config.languages }),
       ...(config.batchSize !== undefined && { batchSize: config.batchSize }),
       ...(config.maxConcurrency !== undefined && { maxConcurrency: config.maxConcurrency }),
-      ...(config.remoteChunkSize !== undefined && { remoteChunkSize: config.remoteChunkSize }),
     },
     ...remoteGenerationContextPayload(config.targetId),
   };
@@ -339,25 +338,14 @@ async function generateMultilingual(
 async function translateBatchCore(
   text: string,
   languages: string[],
-  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
-  generationProvider?: ApiProvider,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<Record<string, string>> {
-  // Prefer a preconfigured multilingual provider if available (set by the server at boot).
-  const cachedMultilingual = generationProvider
-    ? undefined
-    : await redteamProviderManager.getMultilingualProvider();
-  const loadedProvider =
-    generationProvider ||
-    cachedMultilingual ||
-    (await redteamProviderManager.getProvider({
-      jsonOnly: true,
-      preferSmallModel: true,
-    }));
-  const redteamProvider = generationProvider
-    ? generationProvider
-    : wrapGenerationProvider
-      ? wrapGenerationProvider(loadedProvider)
-      : loadedProvider;
+  const redteamProvider = await getStrategyGenerationProvider({
+    runtimeContext,
+    jsonOnly: true,
+    preferSmallModel: true,
+    preferMultilingualProvider: true,
+  });
 
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 
@@ -486,8 +474,7 @@ export async function translateBatch(
   text: string,
   languages: string[],
   initialBatchSize?: number,
-  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
-  generationProvider?: ApiProvider,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<Record<string, string>> {
   const batchSize = initialBatchSize || languages.length;
   const allTranslations: Record<string, string> = {};
@@ -495,22 +482,12 @@ export async function translateBatch(
 
   for (let i = 0; i < languages.length; i += currentBatchSize) {
     const languageBatch = languages.slice(i, i + currentBatchSize);
-    const translations = await translateBatchCore(
-      text,
-      languageBatch,
-      wrapGenerationProvider,
-      generationProvider,
-    );
+    const translations = await translateBatchCore(text, languageBatch, runtimeContext);
 
     if (Object.keys(translations).length === 0 && currentBatchSize > 1) {
       // Try each language individually as fallback
       for (const lang of languageBatch) {
-        const singleTranslation = await translateBatchCore(
-          text,
-          [lang],
-          wrapGenerationProvider,
-          generationProvider,
-        );
+        const singleTranslation = await translateBatchCore(text, [lang], runtimeContext);
         if (Object.keys(singleTranslation).length > 0) {
           Object.assign(allTranslations, singleTranslation);
         }
@@ -524,12 +501,7 @@ export async function translateBatch(
       if (missingLanguages.length > 0) {
         for (const lang of missingLanguages) {
           try {
-            const singleTranslation = await translateBatchCore(
-              text,
-              [lang],
-              wrapGenerationProvider,
-              generationProvider,
-            );
+            const singleTranslation = await translateBatchCore(text, [lang], runtimeContext);
             if (Object.keys(singleTranslation).length > 0) {
               Object.assign(allTranslations, singleTranslation);
             }
@@ -575,12 +547,7 @@ export async function addMultilingual(
 
   // Fallback: No language modifiers found - use old translation logic
   // This maintains backward compatibility for users who specify language differently
-  // Remote generation can only reproduce the selected provider from its declarative spec.
-  // If the winner is an opaque runtime provider, keep generation local instead of routing
-  // the request to the remote service's default provider.
-  const canGenerateRemote =
-    !runtimeContext?.generationProvider || runtimeContext.generationProviderSpec !== undefined;
-  if (shouldGenerateRemote() && canGenerateRemote) {
+  if (shouldGenerateRemote() && canGenerateRemoteWithSelection(runtimeContext)) {
     const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
     if (multilingualTestCases.length > 0) {
       return multilingualTestCases;
@@ -623,13 +590,7 @@ export async function addMultilingual(
     const results: TestCase[] = [];
 
     // Use adaptive batching - pass the configured batch size as initial size
-    const translations = await translateBatch(
-      originalText,
-      languages,
-      batchSize,
-      runtimeContext?.wrapGenerationProvider,
-      runtimeContext?.generationProvider,
-    );
+    const translations = await translateBatch(originalText, languages, batchSize, runtimeContext);
 
     // Create test cases for each successful translation
     for (const [lang, translatedText] of Object.entries(translations)) {
