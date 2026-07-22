@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useStore as useEvalConfigStore } from '@app/stores/evalConfig';
 import nunjucks from 'nunjucks';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
@@ -50,6 +51,10 @@ type NunjucksAstNode = {
   else_?: NunjucksAstNode;
   args?: NunjucksAstNode;
   name?: NunjucksAstNode;
+  left?: NunjucksAstNode;
+  right?: NunjucksAstNode;
+  target?: NunjucksAstNode;
+  cond?: NunjucksAstNode;
 };
 
 type NunjucksUrlCandidate = {
@@ -60,10 +65,24 @@ type NunjucksUrlCandidate = {
 type NunjucksConstantValue = string | number | boolean | null;
 
 const TEMPLATE_PLACEHOLDER = '\0';
+const SCHEME_TEMPLATE_REPLACEMENTS = ['ws://', 'wss://'].flatMap((protocol) => [
+  `${protocol}1`,
+  ...Array.from({ length: protocol.length + 1 }, (_, index) => protocol.slice(index)),
+]);
 let nunjucksFilterEnvironment: nunjucks.Environment | undefined;
+
+const isValidWebSocketUrl = (value: string): boolean => {
+  try {
+    const url = new URL(value);
+    return ['ws:', 'wss:'].includes(url.protocol) && !url.hash;
+  } catch {
+    return false;
+  }
+};
 
 const getConstantNunjucksExpression = (
   node: NunjucksAstNode,
+  overriddenFilters: ReadonlySet<string>,
 ): NunjucksConstantValue | undefined => {
   if (node.typename === 'Literal') {
     return node.value === null ||
@@ -74,13 +93,33 @@ const getConstantNunjucksExpression = (
       : undefined;
   }
 
-  if (node.typename !== 'Filter' || typeof node.name?.value !== 'string') {
+  if (node.typename === 'Concat' || node.typename === 'Add') {
+    if (!node.left || !node.right) {
+      return undefined;
+    }
+
+    const left = getConstantNunjucksExpression(node.left, overriddenFilters);
+    const right = getConstantNunjucksExpression(node.right, overriddenFilters);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+
+    return node.typename === 'Add' && typeof left === 'number' && typeof right === 'number'
+      ? left + right
+      : `${left ?? ''}${right ?? ''}`;
+  }
+
+  if (
+    node.typename !== 'Filter' ||
+    typeof node.name?.value !== 'string' ||
+    overriddenFilters.has(node.name.value)
+  ) {
     return undefined;
   }
 
   const values: NunjucksConstantValue[] = [];
   for (const argument of node.args?.children ?? []) {
-    const value = getConstantNunjucksExpression(argument);
+    const value = getConstantNunjucksExpression(argument, overriddenFilters);
     if (value === undefined) {
       return undefined;
     }
@@ -104,6 +143,7 @@ const getConstantNunjucksExpression = (
 const getNunjucksUrlCandidates = (
   node: NunjucksAstNode,
   budget: { remaining: number },
+  overriddenFilters: ReadonlySet<string>,
   isOutputExpression = false,
 ): NunjucksUrlCandidate[] | null => {
   if (node.typename === 'TemplateData' || node.typename === 'Literal') {
@@ -111,9 +151,11 @@ const getNunjucksUrlCandidates = (
   }
 
   if (node.typename === 'If') {
-    const truthyCandidates = node.body ? getNunjucksUrlCandidates(node.body, budget) : null;
+    const truthyCandidates = node.body
+      ? getNunjucksUrlCandidates(node.body, budget, overriddenFilters)
+      : null;
     const falsyCandidates = node.else_
-      ? getNunjucksUrlCandidates(node.else_, budget)
+      ? getNunjucksUrlCandidates(node.else_, budget, overriddenFilters)
       : [{ value: '', expressions: [] }];
     if (!truthyCandidates || !falsyCandidates) {
       return null;
@@ -128,7 +170,12 @@ const getNunjucksUrlCandidates = (
     let candidates: NunjucksUrlCandidate[] = [{ value: '', expressions: [] }];
 
     for (const child of node.children ?? []) {
-      const nextCandidates = getNunjucksUrlCandidates(child, budget, node.typename === 'Output');
+      const nextCandidates = getNunjucksUrlCandidates(
+        child,
+        budget,
+        overriddenFilters,
+        node.typename === 'Output',
+      );
       if (!nextCandidates) {
         return null;
       }
@@ -154,7 +201,7 @@ const getNunjucksUrlCandidates = (
     return null;
   }
 
-  const constantExpression = getConstantNunjucksExpression(node);
+  const constantExpression = getConstantNunjucksExpression(node, overriddenFilters);
   if (constantExpression !== undefined) {
     return [{ value: String(constantExpression ?? ''), expressions: [] }];
   }
@@ -172,6 +219,56 @@ const getExpressionSymbol = (node?: NunjucksAstNode): string | undefined => {
   }
 
   return node.typename === 'Filter' ? getExpressionSymbol(node.args?.children?.[0]) : undefined;
+};
+
+const matchesTemplatedScheme = (scheme: string, protocol: string): boolean => {
+  const parts = scheme.toLowerCase().split(TEMPLATE_PLACEHOLDER);
+  const normalizedProtocol = protocol.toLowerCase();
+  let offset = 0;
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+
+    if (index === 0) {
+      if (!normalizedProtocol.startsWith(part)) {
+        return false;
+      }
+      offset = part.length;
+      continue;
+    }
+
+    if (index === parts.length - 1) {
+      return normalizedProtocol.slice(offset).endsWith(part);
+    }
+
+    const nextOffset = normalizedProtocol.indexOf(part, offset);
+    if (nextOffset === -1) {
+      return false;
+    }
+    offset = nextOffset + part.length;
+  }
+
+  return offset === normalizedProtocol.length;
+};
+
+const isValidSchemePrefixCandidate = (candidate: NunjucksUrlCandidate): boolean => {
+  const expressionSymbol = getExpressionSymbol(candidate.expressions[0]);
+  if (
+    candidate.value.startsWith(TEMPLATE_PLACEHOLDER) &&
+    expressionSymbol &&
+    /^(?:host(?:name)?|domain|port)$/i.test(expressionSymbol)
+  ) {
+    return false;
+  }
+
+  return SCHEME_TEMPLATE_REPLACEMENTS.some((replacement) =>
+    isValidWebSocketUrl(
+      candidate.value
+        .replace(TEMPLATE_PLACEHOLDER, replacement)
+        .split(TEMPLATE_PLACEHOLDER)
+        .join('1'),
+    ),
+  );
 };
 
 function ProviderConfigEditor({
@@ -198,114 +295,91 @@ function ProviderConfigEditor({
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
 
-  const validateUrl = useCallback(function validateUrl(
-    url: string,
-    type: 'http' | 'websocket' = 'http',
-  ): boolean {
-    try {
-      if (type === 'http') {
-        return ['http:', 'https:'].includes(new URL(url).protocol);
-      }
-
-      if (url.includes(TEMPLATE_PLACEHOLDER)) {
-        return false;
-      }
-
-      if (!/{{|{%|{#/.test(url)) {
-        return ['ws:', 'wss:'].includes(new URL(url).protocol);
-      }
-
-      const fixedProtocol = url.match(/^([a-z][a-z\d+.-]*):\/\//i);
-      if (fixedProtocol && !/^wss?$/i.test(fixedProtocol[1])) {
-        return false;
-      }
-
-      const parser = (
-        nunjucks as typeof nunjucks & {
-          parser?: { parse: (template: string) => NunjucksAstNode };
-        }
-      ).parser;
-      if (!parser) {
-        return false;
-      }
-
-      const candidates = getNunjucksUrlCandidates(parser.parse(url), { remaining: 128 });
-      if (!candidates) {
-        return false;
-      }
-
-      return candidates.some((candidate) => {
-        let urlToValidate = candidate.value;
-        let schemeSeparatorIndex = urlToValidate.indexOf('://');
-        if (urlToValidate.startsWith(TEMPLATE_PLACEHOLDER)) {
-          const suffixBoundary = urlToValidate.slice(TEMPLATE_PLACEHOLDER.length).search(/[/?#]/);
-          if (
-            suffixBoundary !== -1 &&
-            TEMPLATE_PLACEHOLDER.length + suffixBoundary < schemeSeparatorIndex
-          ) {
-            schemeSeparatorIndex = -1;
-          }
+  const validateUrl = useCallback(
+    function validateUrl(url: string, type: 'http' | 'websocket' = 'http'): boolean {
+      try {
+        if (type === 'http') {
+          return ['http:', 'https:'].includes(new URL(url).protocol);
         }
 
-        if (schemeSeparatorIndex === -1 && urlToValidate.includes(TEMPLATE_PLACEHOLDER)) {
-          const expressionSymbol = getExpressionSymbol(candidate.expressions[0]);
-          if (
-            urlToValidate.startsWith(TEMPLATE_PLACEHOLDER) &&
-            expressionSymbol &&
-            /^(?:host(?:name)?|domain|port)$/i.test(expressionSymbol)
-          ) {
-            return false;
+        if (url.includes(TEMPLATE_PLACEHOLDER)) {
+          return false;
+        }
+
+        if (!/{{|{%|{#/.test(url)) {
+          return isValidWebSocketUrl(url);
+        }
+
+        const fixedProtocol = url.match(/^([a-z][a-z\d+.-]*):\/\//i);
+        if (fixedProtocol && !/^wss?$/i.test(fixedProtocol[1])) {
+          return false;
+        }
+
+        const parser = (
+          nunjucks as typeof nunjucks & {
+            parser?: { parse: (template: string) => NunjucksAstNode };
+          }
+        ).parser;
+        if (!parser) {
+          return false;
+        }
+
+        const configuredFilters = isRedTeam
+          ? (useRedTeamConfig.getState().config as { nunjucksFilters?: Record<string, unknown> })
+              .nunjucksFilters
+          : useEvalConfigStore.getState().config.nunjucksFilters;
+        const overriddenFilters = new Set(Object.keys(configuredFilters ?? {}));
+        const candidates = getNunjucksUrlCandidates(
+          parser.parse(url),
+          { remaining: 128 },
+          overriddenFilters,
+        );
+        if (!candidates) {
+          return false;
+        }
+
+        return candidates.some((candidate) => {
+          let urlToValidate = candidate.value;
+          let schemeSeparatorIndex = urlToValidate.indexOf('://');
+          if (urlToValidate.startsWith(TEMPLATE_PLACEHOLDER)) {
+            const suffixBoundary = urlToValidate.slice(TEMPLATE_PLACEHOLDER.length).search(/[/?#]/);
+            if (
+              suffixBoundary !== -1 &&
+              TEMPLATE_PLACEHOLDER.length + suffixBoundary < schemeSeparatorIndex
+            ) {
+              schemeSeparatorIndex = -1;
+            }
           }
 
-          return ['ws://', 'ws://1'].some((replacement) => {
-            try {
-              const parsedUrl = new URL(
-                urlToValidate
-                  .replace(TEMPLATE_PLACEHOLDER, replacement)
-                  .split(TEMPLATE_PLACEHOLDER)
-                  .join('1'),
-              );
-              return ['ws:', 'wss:'].includes(parsedUrl.protocol);
-            } catch {
+          if (schemeSeparatorIndex === -1 && urlToValidate.includes(TEMPLATE_PLACEHOLDER)) {
+            return isValidSchemePrefixCandidate(candidate);
+          }
+
+          const scheme = urlToValidate.slice(0, schemeSeparatorIndex);
+          if (schemeSeparatorIndex !== -1 && scheme.includes(TEMPLATE_PLACEHOLDER)) {
+            const protocol = ['ws', 'wss'].find((value) => matchesTemplatedScheme(scheme, value));
+
+            if (!protocol) {
               return false;
             }
-          });
-        }
 
-        const scheme = urlToValidate.slice(0, schemeSeparatorIndex);
-        if (schemeSeparatorIndex !== -1 && scheme.includes(TEMPLATE_PLACEHOLDER)) {
-          const schemePattern = scheme
-            .split(TEMPLATE_PLACEHOLDER)
-            .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-            .join('.*');
-          const protocol = ['ws', 'wss'].find((value) =>
-            new RegExp(`^${schemePattern}$`, 'i').test(value),
-          );
-
-          if (!protocol) {
-            return false;
+            urlToValidate = `${protocol}${urlToValidate.slice(schemeSeparatorIndex)}`;
           }
 
-          urlToValidate = `${protocol}${urlToValidate.slice(schemeSeparatorIndex)}`;
-        }
-
-        try {
-          const parsedUrl = new URL(
+          return isValidWebSocketUrl(
             urlToValidate
               .split(`[${TEMPLATE_PLACEHOLDER}]`)
               .join('[::1]')
               .split(TEMPLATE_PLACEHOLDER)
               .join('1'),
           );
-          return ['ws:', 'wss:'].includes(parsedUrl.protocol);
-        } catch {
-          return false;
-        }
-      });
-    } catch {
-      return false;
-    }
-  }, []);
+        });
+      } catch {
+        return false;
+      }
+    },
+    [isRedTeam],
+  );
 
   const getA2AShorthandUrl = useCallback((id?: string): string | undefined => {
     if (!id?.startsWith('a2a:')) {

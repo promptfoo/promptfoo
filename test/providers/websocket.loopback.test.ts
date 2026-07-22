@@ -22,6 +22,8 @@ describe('WebSocketProvider URL templates over loopback', () => {
   it.each([
     ['an authority template', 'ws://{{ host }}/ws'],
     ['scheme and port templates', '{{ protocol }}://127.0.0.1:{{ port }}/ws'],
+    ['a separator supplied by a scheme expression', 'ws{{ separator }}127.0.0.1:{{ port }}/ws'],
+    ['a partial scheme and separator expression', 'w{{ suffix }}127.0.0.1:{{ port }}/ws'],
     ['a whole-URL template', '{{ websocketUrl }}'],
     [
       'a whole-URL template followed by a callback URL',
@@ -31,6 +33,7 @@ describe('WebSocketProvider URL templates over loopback', () => {
       'a boolean-valued constant filter operand',
       '{{ false | default("ws", true) }}://127.0.0.1:{{ port }}/ws',
     ],
+    ['an overridden built-in scheme filter', '{{ "HTTP" | lower }}://127.0.0.1:{{ port }}/ws'],
     ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://127.0.0.1:{{ port }}/ws'],
     [
       'a whitespace-trimmed conditional scheme',
@@ -80,8 +83,11 @@ describe('WebSocketProvider URL templates over loopback', () => {
         secure: false,
         useHttp: false,
         value: 2,
+        separator: '://',
+        suffix: 's://',
         port,
       },
+      filters: url.includes('"HTTP" | lower') ? { lower: () => 'ws' } : undefined,
     });
 
     expect(requestPath).toBe(

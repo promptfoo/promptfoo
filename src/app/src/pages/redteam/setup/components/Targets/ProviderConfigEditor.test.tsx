@@ -1,6 +1,7 @@
 import React from 'react';
 
 import AddProviderDialog from '@app/pages/eval-creator/components/AddProviderDialog';
+import { useStore as useEvalConfigStore } from '@app/stores/evalConfig';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -146,6 +147,9 @@ describe('ProviderConfigEditor', () => {
       ['a port template', 'wss://example.com:{{ port }}/ws'],
       ['a scheme template', '{{ protocol }}://example.com/ws'],
       ['a constant filtered WebSocket scheme', '{{ "WS" | lower }}://example.com/ws'],
+      ['a deterministic concatenated WebSocket scheme', '{{ "w" ~ "s" }}://example.com/ws'],
+      ['a separator supplied by a scheme expression', 'ws{{ separator }}example.com/ws'],
+      ['a partial scheme and separator expression', 'w{{ suffix }}example.com/ws'],
       [
         'a boolean-valued constant filter operand',
         '{{ false | default("ws", true) }}://example.com/ws',
@@ -236,6 +240,11 @@ describe('ProviderConfigEditor', () => {
       ['a constant filtered HTTP scheme', '{{ "http" | lower }}://example.com/ws'],
       ['a constant filtered HTTPS scheme', '{{ "https" | upper }}://example.com/ws'],
       ['a constant default-filtered HTTP scheme', '{{ "http" | default("ws") }}://example.com/ws'],
+      ['a deterministic concatenated HTTP scheme', '{{ "ht" ~ "tp" }}://example.com/ws'],
+      ['a static fragment identifier', 'wss://example.com/ws#debug'],
+      ['a templated fragment identifier', '{{ protocol }}://example.com/ws#debug'],
+      ['a templated host with a fragment identifier', 'wss://{{ host }}/ws#debug'],
+      ['many nonmatching scheme expressions', `${'{{ x }}'.repeat(128)}x://example.com/ws`],
       [
         'a static scheme containing the internal placeholder',
         '__promptfoo_template__://example.com/ws',
@@ -326,6 +335,37 @@ describe('ProviderConfigEditor', () => {
       expect(validateFn!()).toBe(true);
       expect(parse).not.toHaveBeenCalled();
       parse.mockRestore();
+    });
+
+    it('should not fold a built-in filter that the evaluation configuration overrides', () => {
+      useEvalConfigStore
+        .getState()
+        .updateConfig({ nunjucksFilters: { lower: 'file://filters.js' } });
+      let validateFn: (() => boolean) | null = null;
+
+      try {
+        renderWithProviders(
+          <ProviderConfigEditor
+            provider={{
+              id: 'websocket',
+              config: {
+                url: '{{ "HTTP" | lower }}://example.com/ws',
+                messageTemplate: '{{ prompt }}',
+              },
+            }}
+            setProvider={vi.fn()}
+            onValidationRequest={(validator) => {
+              validateFn = validator;
+            }}
+            providerType="websocket"
+            mode="eval"
+          />,
+        );
+
+        expect(validateFn!()).toBe(true);
+      } finally {
+        useEvalConfigStore.getState().reset();
+      }
     });
 
     it.each([
