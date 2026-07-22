@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import nunjucks from 'nunjucks';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
@@ -41,20 +42,86 @@ const shouldRemoveMcpConfig = (
 const containsNunjucksTemplate = (value: string): boolean =>
   /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
 
-const replaceNunjucksTemplates = (value: string, placeholder: string): string =>
-  value.replace(/{{[\s\S]*?}}|{%[\s\S]*?%}|{#[\s\S]*?#}/g, (template, offset, source) => {
-    if (template.startsWith('{#') || template.startsWith('{%')) {
-      return '';
+type NunjucksAstNode = {
+  typename: string;
+  value?: unknown;
+  children?: NunjucksAstNode[];
+  body?: NunjucksAstNode;
+  else_?: NunjucksAstNode;
+  args?: NunjucksAstNode;
+};
+
+type NunjucksUrlCandidate = {
+  value: string;
+  expressions: NunjucksAstNode[];
+};
+
+const TEMPLATE_PLACEHOLDER = '\0';
+
+const getNunjucksUrlCandidates = (
+  node: NunjucksAstNode,
+  budget: { remaining: number },
+  isOutputExpression = false,
+): NunjucksUrlCandidate[] | null => {
+  if (--budget.remaining < 0) {
+    return null;
+  }
+
+  if (node.typename === 'TemplateData' || node.typename === 'Literal') {
+    return [{ value: String(node.value ?? ''), expressions: [] }];
+  }
+
+  if (node.typename === 'If') {
+    const truthyCandidates = node.body ? getNunjucksUrlCandidates(node.body, budget) : null;
+    const falsyCandidates = node.else_
+      ? getNunjucksUrlCandidates(node.else_, budget)
+      : [{ value: '', expressions: [] }];
+    return truthyCandidates && falsyCandidates ? [...truthyCandidates, ...falsyCandidates] : null;
+  }
+
+  if (node.typename === 'Root' || node.typename === 'NodeList' || node.typename === 'Output') {
+    let candidates: NunjucksUrlCandidate[] = [{ value: '', expressions: [] }];
+
+    for (const child of node.children ?? []) {
+      const nextCandidates = getNunjucksUrlCandidates(child, budget, node.typename === 'Output');
+      if (!nextCandidates) {
+        return null;
+      }
+
+      const combinations = candidates.flatMap((candidate) =>
+        nextCandidates.map((nextCandidate) => ({
+          value: candidate.value + nextCandidate.value,
+          expressions: [...candidate.expressions, ...nextCandidate.expressions],
+        })),
+      );
+
+      budget.remaining -= combinations.length;
+      if (budget.remaining < 0) {
+        return null;
+      }
+      candidates = combinations;
     }
 
-    const before = source.slice(0, offset);
-    const after = source.slice(offset + template.length);
-    return before.endsWith('[') && after.startsWith(']') ? '::1' : placeholder;
-  });
+    return candidates;
+  }
 
-const getNunjucksConditionalBranches = (value: string): string[] => {
-  const branches = value.split(/{%-?\s*(?:else|elif\b(?:(?!%})[\s\S])*)\s*-?%}/);
-  return /{%-?\s*else\s*-?%}/.test(value) ? branches : [...branches, ''];
+  if (!isOutputExpression) {
+    return null;
+  }
+
+  return [{ value: TEMPLATE_PLACEHOLDER, expressions: [node] }];
+};
+
+const getExpressionSymbol = (node?: NunjucksAstNode): string | undefined => {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    return node.value;
+  }
+
+  return node.typename === 'Filter' ? getExpressionSymbol(node.args?.children?.[0]) : undefined;
 };
 
 function ProviderConfigEditor({
@@ -84,14 +151,13 @@ function ProviderConfigEditor({
   const validateUrl = useCallback(function validateUrl(
     url: string,
     type: 'http' | 'websocket' = 'http',
-    budget: { remaining: number } = { remaining: 64 },
   ): boolean {
     try {
       if (type === 'http') {
         return ['http:', 'https:'].includes(new URL(url).protocol);
       }
 
-      if (--budget.remaining < 0) {
+      if (url.includes(TEMPLATE_PLACEHOLDER)) {
         return false;
       }
 
@@ -100,73 +166,79 @@ function ProviderConfigEditor({
         return false;
       }
 
-      if (/{{\s*(?:}}|[\s\S]*?\|\s*}})|{%-?\s*(?:if|elif)\s*-?%}/.test(url)) {
+      const parser = (
+        nunjucks as typeof nunjucks & {
+          parser?: { parse: (template: string) => NunjucksAstNode };
+        }
+      ).parser;
+      if (!parser) {
         return false;
       }
 
-      const rawBlock = url.match(/{%-?\s*raw\s*-?%}([\s\S]*?){%-?\s*endraw\s*-?%}/);
-      if (rawBlock) {
-        const literal = rawBlock[1].replace(/[{}]/g, (character) => encodeURIComponent(character));
-        return validateUrl(url.replace(rawBlock[0], literal), type, budget);
-      }
-
-      const conditional = url.match(
-        /{%-?\s*if\b(?:(?!%})[\s\S])*%}((?:(?!{%-?\s*if\b)[\s\S])*?){%-?\s*endif\s*-?%}/,
-      );
-      if (conditional) {
-        return getNunjucksConditionalBranches(conditional[1]).some((branch) =>
-          validateUrl(url.replace(conditional[0], branch), type, budget),
-        );
-      }
-
-      if (/{%-?\s*(?:if|elif|else|endif|raw|endraw)\b/.test(url)) {
+      const candidates = getNunjucksUrlCandidates(parser.parse(url), { remaining: 128 });
+      if (!candidates) {
         return false;
       }
 
-      let templatePlaceholder = '__promptfoo_template__';
-      while (url.includes(templatePlaceholder)) {
-        templatePlaceholder += '_';
-      }
-      let urlToValidate = replaceNunjucksTemplates(url, templatePlaceholder);
+      return candidates.some((candidate) => {
+        let urlToValidate = candidate.value;
+        const schemeSeparatorIndex = urlToValidate.indexOf('://');
 
-      if (/{{|}}|{%|%}|{#|#}/.test(urlToValidate)) {
-        return false;
-      }
+        if (schemeSeparatorIndex === -1 && urlToValidate.includes(TEMPLATE_PLACEHOLDER)) {
+          const expressionSymbol = getExpressionSymbol(candidate.expressions[0]);
+          if (
+            urlToValidate.startsWith(TEMPLATE_PLACEHOLDER) &&
+            expressionSymbol &&
+            /^(?:host(?:name)?|domain|port)$/i.test(expressionSymbol)
+          ) {
+            return false;
+          }
 
-      const schemeSeparatorIndex = urlToValidate.indexOf('://');
-
-      if (schemeSeparatorIndex === -1 && urlToValidate.includes(templatePlaceholder)) {
-        return ['ws://', 'ws://1'].some((replacement) =>
-          validateUrl(
-            urlToValidate
-              .replace(templatePlaceholder, replacement)
-              .split(templatePlaceholder)
-              .join('1'),
-            type,
-            budget,
-          ),
-        );
-      }
-
-      const scheme = urlToValidate.slice(0, schemeSeparatorIndex);
-      if (schemeSeparatorIndex !== -1 && scheme.includes(templatePlaceholder)) {
-        const schemePattern = scheme
-          .split(templatePlaceholder)
-          .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('.*');
-        const protocol = ['ws', 'wss'].find((value) =>
-          new RegExp(`^${schemePattern}$`, 'i').test(value),
-        );
-
-        if (!protocol) {
-          return false;
+          return ['ws://', 'ws://1'].some((replacement) => {
+            try {
+              const parsedUrl = new URL(
+                urlToValidate
+                  .replace(TEMPLATE_PLACEHOLDER, replacement)
+                  .split(TEMPLATE_PLACEHOLDER)
+                  .join('1'),
+              );
+              return ['ws:', 'wss:'].includes(parsedUrl.protocol);
+            } catch {
+              return false;
+            }
+          });
         }
 
-        urlToValidate = `${protocol}${urlToValidate.slice(schemeSeparatorIndex)}`;
-      }
+        const scheme = urlToValidate.slice(0, schemeSeparatorIndex);
+        if (schemeSeparatorIndex !== -1 && scheme.includes(TEMPLATE_PLACEHOLDER)) {
+          const schemePattern = scheme
+            .split(TEMPLATE_PLACEHOLDER)
+            .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('.*');
+          const protocol = ['ws', 'wss'].find((value) =>
+            new RegExp(`^${schemePattern}$`, 'i').test(value),
+          );
 
-      const parsedUrl = new URL(urlToValidate.split(templatePlaceholder).join('1'));
-      return ['ws:', 'wss:'].includes(parsedUrl.protocol);
+          if (!protocol) {
+            return false;
+          }
+
+          urlToValidate = `${protocol}${urlToValidate.slice(schemeSeparatorIndex)}`;
+        }
+
+        try {
+          const parsedUrl = new URL(
+            urlToValidate
+              .split(`[${TEMPLATE_PLACEHOLDER}]`)
+              .join('[::1]')
+              .split(TEMPLATE_PLACEHOLDER)
+              .join('1'),
+          );
+          return ['ws:', 'wss:'].includes(parsedUrl.protocol);
+        } catch {
+          return false;
+        }
+      });
     } catch {
       return false;
     }

@@ -154,6 +154,10 @@ describe('ProviderConfigEditor', () => {
         '{%- if secure -%}wss{%- else -%}ws{%- endif -%}://example.com/ws',
       ],
       [
+        'a whitespace-trimmed conditional scheme with surrounding spaces',
+        '{%- if secure -%} wss {%- else -%} ws {%- endif -%}://example.com/ws',
+      ],
+      [
         'a modulo conditional scheme',
         '{% if value % 2 == 0 %}ws{% else %}wss{% endif %}://example.com/ws',
       ],
@@ -183,6 +187,10 @@ describe('ProviderConfigEditor', () => {
         'wss://{% if tenant %}{{ tenant }}{% else %}default{% endif %}.example.com/ws',
       ],
       ['literal raw-template path content', 'wss://example.com/{% raw %}{{ host }}{% endraw %}'],
+      [
+        'a long literal containing the previous collision marker',
+        `wss://example.com/__promptfoo_template__${'_'.repeat(4_096)}/{{ path }}`,
+      ],
     ])('should accept a WebSocket provider with %s', (_description, url) => {
       const setError = vi.fn();
       const onValidate = vi.fn();
@@ -224,10 +232,18 @@ describe('ProviderConfigEditor', () => {
       ],
       ['a malformed static URL', 'wss://[invalid-host/ws'],
       ['a scheme template without an authority', '{{ protocol }}://'],
+      ['a standalone host expression', '{{ host }}'],
+      ['a host expression without a WebSocket scheme', '{{ host }}/ws'],
+      ['a filtered host expression without a WebSocket scheme', '{{ host | lower }}/ws'],
       ['an incomplete template', 'wss://{{ host }/ws'],
       ['an incomplete expression in a path', 'wss://example.com/{{ host }'],
       ['an empty template expression', 'wss://example.com/{{ }}'],
       ['an incomplete template filter', 'wss://example.com/{{ host | }}'],
+      ['a syntactically invalid template expression', 'wss://{{ host + }}/ws'],
+      ['a syntactically invalid block tag', 'wss://example.com/{% for %}'],
+      ['an unsupported loop block', '{% for prefix in prefixes %}ws{% endfor %}://example.com/ws'],
+      ['an unsupported set block', '{% set protocol = "ws" %}{{ protocol }}://example.com/ws'],
+      ['an unsupported include block', '{% include "scheme.njk" %}://example.com/ws'],
       ['an unterminated conditional', 'wss://example.com/{% if secure %}/ws'],
       ['an unterminated whitespace-trimmed conditional', 'wss://{%- if secure -%}example.com/ws'],
       [
@@ -270,6 +286,10 @@ describe('ProviderConfigEditor', () => {
     it.each([
       ['an authority template', 'wss://{{ host }}/ws'],
       ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://example.com/ws'],
+      [
+        'a whitespace-trimmed conditional scheme with surrounding spaces',
+        '{%- if secure -%} wss {%- else -%} ws {%- endif -%}://example.com/ws',
+      ],
     ])('should continue from the actual red-team Next button with %s', async (_description, url) => {
       const user = userEvent.setup();
       const onNext = vi.fn();
@@ -310,6 +330,10 @@ describe('ProviderConfigEditor', () => {
     it.each([
       ['an authority template', 'wss://{{ host }}/ws'],
       ['a whole-URL template', '{{ websocketUrl }}'],
+      [
+        'a whitespace-trimmed conditional scheme with surrounding spaces',
+        '{%- if secure -%} wss {%- else -%} ws {%- endif -%}://example.com/ws',
+      ],
     ])('should save %s through the actual eval provider dialog', async (_description, url) => {
       const user = userEvent.setup();
       const onSave = vi.fn();

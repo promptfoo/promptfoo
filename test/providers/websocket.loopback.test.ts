@@ -29,6 +29,10 @@ describe('WebSocketProvider URL templates over loopback', () => {
       '{%- if secure -%}wss{%- else -%}ws{%- endif -%}://127.0.0.1:{{ port }}/ws',
     ],
     [
+      'a whitespace-trimmed conditional scheme with surrounding spaces',
+      '{%- if secure -%} wss {%- else -%} ws {%- endif -%}://127.0.0.1:{{ port }}/ws',
+    ],
+    [
       'a modulo conditional scheme',
       '{% if value % 2 == 0 %}ws{% else %}wss{% endif %}://127.0.0.1:{{ port }}/ws',
     ],
