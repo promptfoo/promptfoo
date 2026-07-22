@@ -229,10 +229,11 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(commentJob.image).toEqual(job.image);
     expect(commentJob.environment).toEqual({ name: 'promptfoo-review', action: 'verify' });
     expect(commentJob.variables.GIT_STRATEGY).toBe('none');
+    expect(commentJob.variables.PROMPTFOO_GITLAB_TRUST_PROXY).toBe('false');
     expect(commentJob.when).toBe('always');
     expect(commentJob.resource_group).toContain('$CI_MERGE_REQUEST_IID');
     expect(job.script[0]).toContain('exec env \\');
-    expect(commentJob.script[0]).toContain('NODE_USE_ENV_PROXY=1');
+    expect(commentJob.script[0]).toContain('NODE_USE_ENV_PROXY="$proxy_enabled"');
   });
 
   it('keeps the documented remote template integrity hashes current', () => {
@@ -737,6 +738,43 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     );
   });
 
+  it('does not send the GitLab token through an untrusted proxy by default', async () => {
+    await runEvaluation();
+
+    await withGitLabServer(
+      (_request, response) => {
+        response.statusCode = 502;
+        response.end('unexpected proxy request');
+      },
+      async (proxyOrigin, proxyRequests) => {
+        await withGitLabServer(
+          (request, response) => {
+            response.setHeader('Content-Type', 'application/json');
+            response.end(
+              request.url === '/api/v4/user'
+                ? JSON.stringify({ id: 123 })
+                : request.method === 'GET'
+                  ? '[]'
+                  : '{}',
+            );
+          },
+          async (gitlabOrigin) => {
+            const comment = await runScript(commentJob.script[0], {
+              CI_API_V4_URL: `${gitlabOrigin}/api/v4`,
+              CI_SERVER_URL: gitlabOrigin,
+              HTTP_PROXY: proxyOrigin,
+              HTTPS_PROXY: proxyOrigin,
+              NO_PROXY: '',
+            });
+
+            expect(comment.status).toBe(0);
+            expect(proxyRequests).toHaveLength(0);
+          },
+        );
+      },
+    );
+  });
+
   it('omits malformed share URLs from merge request comments', async () => {
     await runEvaluation({
       PROMPTFOO_SHARE: 'true',
@@ -844,6 +882,17 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('PROMPTFOO_SHARE must be true or false');
+  });
+
+  it('rejects ambiguous GitLab proxy trust settings', async () => {
+    await runEvaluation();
+
+    const result = await runScript(commentJob.script[0], {
+      PROMPTFOO_GITLAB_TRUST_PROXY: 'yes',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('PROMPTFOO_GITLAB_TRUST_PROXY must be true or false');
   });
 
   it('reports a missing eval status artifact before attempting to post a comment', async () => {

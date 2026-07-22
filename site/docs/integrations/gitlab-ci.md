@@ -23,7 +23,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-emXc6P4bxMr9wjJo/GqPqWzf6c8Y9mL1AInSdtyzN6Q='
+    integrity: 'sha256-j/3F/rmuWKL2DWSHzSjZ4IfgcvEmDk9/+9jdl8Oc4ZA='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -73,6 +73,7 @@ The template supports these job variables:
 | `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage needed for the job to succeed               |
 | `PROMPTFOO_SHARE`               | `false`                | Upload eval results only when explicitly set to `true`                 |
 | `PROMPTFOO_GITLAB_TOKEN`        | Unset                  | Optional write token scoped only to the `promptfoo-review` environment |
+| `PROMPTFOO_GITLAB_TRUST_PROXY`  | `false`                | Honor proxy variables only when the proxy and pipeline are trusted     |
 
 ### 3. Configure Caching (Optional but Recommended)
 
@@ -161,6 +162,8 @@ GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create 
 The eval records its job status as an artifact, and `when: always` lets the isolated comment job summarize both successful and failed evals without turning failures into passing pipelines. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 
 Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
+
+Proxy settings are ignored by default to prevent an attacker-controlled `HTTP_PROXY` or `HTTPS_PROXY` from intercepting the GitLab write token. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only for trusted pipelines whose configured proxy is authorized to handle GitLab API credentials.
 
 To include a Promptfoo Cloud link, set `PROMPTFOO_SHARE: 'true'` and configure a masked `PROMPTFOO_API_KEY`. Sharing is disabled with `--no-share` by default, including when cloud credentials or sharing-enabled config are present.
 

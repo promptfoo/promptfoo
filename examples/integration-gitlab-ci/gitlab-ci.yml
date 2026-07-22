@@ -138,6 +138,7 @@
   variables:
     GIT_STRATEGY: none
     PROMPTFOO_EVAL_JOB_NAME: promptfoo-eval
+    PROMPTFOO_GITLAB_TRUST_PROXY: 'false'
     PROMPTFOO_OUTPUT_DIR: .promptfoo-results
     PROMPTFOO_SHARE: 'false'
   environment:
@@ -172,6 +173,25 @@
         exit 1
       fi
 
+      case "${PROMPTFOO_GITLAB_TRUST_PROXY:-false}" in
+        true)
+          proxy_enabled=1
+          http_proxy="${HTTP_PROXY:-}"
+          https_proxy="${HTTPS_PROXY:-}"
+          no_proxy="${NO_PROXY:-}"
+          ;;
+        false)
+          proxy_enabled=0
+          http_proxy=''
+          https_proxy=''
+          no_proxy=''
+          ;;
+        *)
+          echo 'PROMPTFOO_GITLAB_TRUST_PROXY must be true or false.' >&2
+          exit 1
+          ;;
+      esac
+
       env -i \
         PATH="$PATH" \
         HOME="${HOME:-/home/promptfoo}" \
@@ -180,11 +200,11 @@
         CI_PIPELINE_ID="${CI_PIPELINE_ID:-}" \
         CI_PROJECT_ID="${CI_PROJECT_ID:-}" \
         CI_SERVER_URL="${CI_SERVER_URL:-}" \
-        HTTP_PROXY="${HTTP_PROXY:-}" \
-        HTTPS_PROXY="${HTTPS_PROXY:-}" \
-        NO_PROXY="${NO_PROXY:-}" \
+        HTTP_PROXY="$http_proxy" \
+        HTTPS_PROXY="$https_proxy" \
+        NO_PROXY="$no_proxy" \
         NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" \
-        NODE_USE_ENV_PROXY=1 \
+        NODE_USE_ENV_PROXY="$proxy_enabled" \
         PROMPTFOO_EVAL_JOB_NAME="${PROMPTFOO_EVAL_JOB_NAME:-promptfoo-eval}" \
         PROMPTFOO_GITLAB_TOKEN="$PROMPTFOO_GITLAB_TOKEN" \
         PROMPTFOO_OUTPUT_DIR="$PROMPTFOO_OUTPUT_DIR" \
