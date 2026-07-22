@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -105,6 +106,56 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
 
   it('should retry provider maxRetries + 1 total attempts', async () => {
     expect(await runRateLimitedCall(2)).toBe(3);
+  });
+
+  it('should not multiply scheduler retries by transport retries', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(
+      async () =>
+        new Response('{"error":{"code":"rate_limit_exceeded"}}', {
+          status: 429,
+          headers: { 'content-type': 'application/json', 'retry-after': '0' },
+        }),
+    );
+
+    try {
+      await expect(
+        registry.execute(
+          createProvider(2),
+          () => fetchWithRetries('https://example.com', {}, 1000, 2),
+          { getRetryAfter: () => 0 },
+        ),
+      ).rejects.toThrow('Rate limit exceeded');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
+    } finally {
+      fetchSpy.mockRestore();
+      registry.dispose();
+    }
+  });
+
+  it('should not retry a hard quota response', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(
+      async () =>
+        new Response('{"error":{"code":"insufficient_quota"}}', {
+          status: 429,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+
+    try {
+      await expect(
+        registry.execute(createProvider(2), () =>
+          fetchWithRetries('https://example.com', {}, 1000, 2),
+        ),
+      ).rejects.toThrow('Quota exceeded');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchSpy.mockRestore();
+      registry.dispose();
+    }
   });
 
   it('should parse numeric string maxRetries values', async () => {

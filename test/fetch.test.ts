@@ -1313,6 +1313,17 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
+  it('should leave retries to the scheduler even when the transport requests retries', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(2, () => fetchWithRetries('https://example.com', {}, 1000, 2), true),
+    ).rejects.toThrow('Request failed after 0 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it('should make retries+1 total attempts', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -2396,6 +2407,26 @@ describe('fetchWithProxy transient error retries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result).toBe(successResponse);
     expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should leave transient retries to the scheduler even when the caller opts in', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(transientResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(
+      2,
+      () => fetchWithProxy('https://example.com', { disableTransientRetries: false }),
+      true,
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it('should retry on 524 A Timeout Occurred (Cloudflare)', async () => {

@@ -20,7 +20,7 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
-import { getFetchRetryContextMaxRetries } from './retryContext';
+import { getFetchRetryContextMaxRetries, isFetchRetryManagedByScheduler } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
@@ -125,6 +125,9 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
  * `maxRetries === 0`.
  */
 function resolveTransientRetryDisabled(explicit?: boolean): boolean {
+  if (isFetchRetryManagedByScheduler()) {
+    return true;
+  }
   if (explicit !== undefined) {
     return explicit;
   }
@@ -665,7 +668,9 @@ export async function fetchWithRetries(
   maxRetries?: number,
 ): Promise<Response> {
   const contextMaxRetries = getFetchRetryContextMaxRetries();
-  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  maxRetries = isFetchRetryManagedByScheduler()
+    ? 0
+    : Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);

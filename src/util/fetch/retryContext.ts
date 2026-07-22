@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 interface FetchRetryContext {
   maxRetries?: number;
+  schedulerOwnsRetries: boolean;
 }
 
 const fetchRetryContext = new AsyncLocalStorage<FetchRetryContext>();
@@ -16,8 +17,9 @@ const fetchRetryContext = new AsyncLocalStorage<FetchRetryContext>();
 export function withFetchRetryContext<T>(
   maxRetries: number | undefined,
   fn: () => Promise<T>,
+  schedulerOwnsRetries = false,
 ): Promise<T> {
-  return fetchRetryContext.run({ maxRetries }, fn);
+  return fetchRetryContext.run({ maxRetries, schedulerOwnsRetries }, fn);
 }
 
 /**
@@ -25,4 +27,8 @@ export function withFetchRetryContext<T>(
  */
 export function getFetchRetryContextMaxRetries(): number | undefined {
   return fetchRetryContext.getStore()?.maxRetries;
+}
+
+export function isFetchRetryManagedByScheduler(): boolean {
+  return fetchRetryContext.getStore()?.schedulerOwnsRetries ?? false;
 }
