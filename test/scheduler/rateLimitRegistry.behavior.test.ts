@@ -177,6 +177,28 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
     }
   });
 
+  it('should not retry a non-idempotent request that explicitly disables retries', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        try {
+          await fetchWithRetries('https://example.com/webhook', { method: 'POST' }, 1000, 0);
+          return { output: 'unexpected' };
+        } catch (error) {
+          return { error: `webhook error: ${(error as Error).message}` };
+        }
+      });
+
+      expect(result.error).toContain('Network error');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it('should parse numeric string maxRetries values', async () => {
     expect(await runRateLimitedCall('2')).toBe(3);
   });

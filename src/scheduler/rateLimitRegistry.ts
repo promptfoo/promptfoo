@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
-import { withFetchRetryContext } from '../util/fetch/retryContext';
+import { canSchedulerRetry, withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
@@ -76,6 +76,7 @@ export class RateLimitRegistry extends EventEmitter {
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
         ...(options?.abortSignal && { abortSignal: options.abortSignal }),
+        canRetry: canSchedulerRetry,
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,

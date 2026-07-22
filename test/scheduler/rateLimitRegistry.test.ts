@@ -261,6 +261,7 @@ describe('RateLimitRegistry', () => {
         expect.stringContaining('test-provider-'),
         callFn,
         {
+          canRetry: expect.any(Function),
           getHeaders: undefined,
           isRateLimited: undefined,
           getRetryAfter: undefined,
@@ -286,6 +287,7 @@ describe('RateLimitRegistry', () => {
       });
 
       expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        canRetry: expect.any(Function),
         getHeaders,
         isRateLimited,
         getRetryAfter,
