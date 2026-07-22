@@ -1039,6 +1039,25 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
     expect(response.output).toBe('Sunny, 25°C');
+    expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
+  });
+
+  it('exposes text thought signatures in metadata without changing the textual output', async () => {
+    const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
+    const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
+      config: { region: 'global' },
+    });
+    mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [signedPart] } }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+      },
+    ]);
+
+    const response = await geminiProvider.callGeminiApi('test prompt');
+
+    expect(response.output).toBe('Signed response');
+    expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
   });
 
   it.each([

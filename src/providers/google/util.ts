@@ -283,6 +283,17 @@ export function mergeGoogleCompletionOptions(
     if (promptHasSnakeToolConfig) {
       mergedConfig.tool_config = promptConfig!.tool_config;
     }
+
+    if (promptHasToolChoice && !promptHasToolConfig && !promptHasSnakeToolConfig) {
+      const baseToolConfig = normalizeExplicitGoogleToolConfig(baseConfig);
+      if (baseToolConfig) {
+        const { functionCallingConfig: _functionCallingConfig, ...nonFunctionToolConfig } =
+          baseToolConfig;
+        if (Object.keys(nonFunctionToolConfig).length > 0) {
+          mergedConfig.toolConfig = nonFunctionToolConfig;
+        }
+      }
+    }
   }
 
   return mergedConfig;
@@ -1059,6 +1070,16 @@ export function getLastPromptSafetyRatings(
   return safetyRatings;
 }
 
+export function collectThoughtSignatures(data: GeminiResponseData[]): string[] {
+  return data.flatMap((datum) =>
+    (datum.candidates ?? []).flatMap((candidate) =>
+      (candidate.content?.parts ?? []).flatMap((part) =>
+        typeof part.thoughtSignature === 'string' ? [part.thoughtSignature] : [],
+      ),
+    ),
+  );
+}
+
 export interface CollectedGroundingMetadata {
   groundingMetadata?: Record<string, any>;
   groundingChunks?: Record<string, any>[];
@@ -1340,6 +1361,29 @@ const ASF_AUDIO_STREAM_GUID = Buffer.from('409e69f84d5bcf11a8fd00805f5c442b', 'h
 const ASF_VIDEO_STREAM_GUID = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');
 const EBML_DOCTYPE_ID = Buffer.from([0x42, 0x82]);
 const MAX_MEDIA_SNIFF_BYTES = 65_536;
+const SUPPORTED_INLINE_MEDIA_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'audio/wav',
+  'audio/mpeg',
+  'audio/aiff',
+  'audio/aac',
+  'audio/ogg',
+  'audio/flac',
+  'audio/mp4',
+  'video/mp4',
+  'video/mpeg',
+  'video/quicktime',
+  'video/avi',
+  'video/x-flv',
+  'video/webm',
+  'video/wmv',
+  'video/3gpp',
+]);
 
 function getAsfMimeType(bytes: Buffer): string | undefined {
   let streamOffset = bytes.indexOf(ASF_STREAM_PROPERTIES_GUID, ASF_HEADER_GUID.length);
@@ -1433,31 +1477,25 @@ function getMimeTypeFromBase64(data: string): string | undefined {
     return undefined;
   }
 
-  if (
-    parsed &&
-    (/^(image|audio|video)\//.test(parsed.mimeType) || parsed.mimeType === 'application/pdf')
-  ) {
-    return parsed.mimeType;
+  if (parsed) {
+    return SUPPORTED_INLINE_MEDIA_MIME_TYPES.has(parsed.mimeType) ? parsed.mimeType : undefined;
   }
 
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
-    return 'image/gif';
-  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
-    return 'image/bmp';
-  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
-    return 'image/tiff';
-  } else if (base64Data.startsWith('AAABAA')) {
-    return 'image/x-icon';
   } else if (base64Data.startsWith('JVBER')) {
     return 'application/pdf';
   }
 
   const sniffBase64Length = Math.ceil(MAX_MEDIA_SNIFF_BYTES / 3) * 4;
-  return getMimeTypeFromMediaBytes(Buffer.from(base64Data.slice(0, sniffBase64Length), 'base64'));
+  const inferredMimeType = getMimeTypeFromMediaBytes(
+    Buffer.from(base64Data.slice(0, sniffBase64Length), 'base64'),
+  );
+  return inferredMimeType && SUPPORTED_INLINE_MEDIA_MIME_TYPES.has(inferredMimeType)
+    ? inferredMimeType
+    : undefined;
 }
 
 function processImagesInContents(

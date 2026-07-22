@@ -1173,6 +1173,7 @@ describe('GoogleProvider', () => {
 
       expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
       expect(response.output).toBe('Sunny, 25°C');
+      expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
     it('should return undefined cost for cached responses', async () => {

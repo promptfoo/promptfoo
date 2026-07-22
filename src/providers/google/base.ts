@@ -577,7 +577,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     config: CompletionOptions,
     toolsDisabled: boolean,
   ): Promise<ProviderResponse['output']> {
-    if (toolsDisabled || !config.functionToolCallbacks) {
+    if (toolsDisabled) {
       return output;
     }
 
@@ -601,6 +601,13 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     if (!functionCalls) {
       return output;
     }
+
+    if (!config.functionToolCallbacks) {
+      return streamsFunctionCallArguments
+        ? functionCalls.map((functionCall) => ({ functionCall }))
+        : output;
+    }
+
     const preparedCalls: Array<{ functionName: string; args: string }> = [];
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;

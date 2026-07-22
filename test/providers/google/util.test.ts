@@ -19,6 +19,8 @@ import {
   calculateGoogleCostFromUsage,
   clearCachedAuth,
   collectGroundingMetadata,
+  collectThoughtSignatures,
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getGoogleResponseServiceTier,
   loadFile,
@@ -1841,6 +1843,8 @@ describe('util', () => {
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
           ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          ['audio/flac', Buffer.from('fLaC................').toString('base64')],
           ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
           ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
@@ -1850,12 +1854,6 @@ describe('util', () => {
           ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
           ['video/wmv', wmvBase64],
           ['video/webm', webmBase64],
-          [
-            'video/ogg',
-            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
-              'base64',
-            ),
-          ],
         ])('should convert %s data URLs to Gemini inline data', (mimeType, base64Data) => {
           const dataUrl = `data:${mimeType};base64,${base64Data}`;
           const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
@@ -1876,6 +1874,8 @@ describe('util', () => {
           ['audio/aac', Buffer.from('fff95080000000000000000000000000', 'hex').toString('base64')],
           ['audio/mpeg', Buffer.from('fffb5000000000000000000000000000', 'hex').toString('base64')],
           ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          ['audio/flac', Buffer.from('fLaC................').toString('base64')],
           ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
           ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
           ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
@@ -1887,20 +1887,50 @@ describe('util', () => {
           ['video/mpeg', Buffer.from('000001b3000000000000000000000000', 'hex').toString('base64')],
           ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
           ['video/wmv', wmvBase64],
-          ['audio/x-ms-wma', wmaBase64],
           ['video/webm', webmBase64],
-          [
-            'video/ogg',
-            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
-              'base64',
-            ),
-          ],
         ])('should infer %s for raw base64 media loaded from a file', (mimeType, base64Data) => {
           const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
 
           const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
 
           expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
+        it.each([
+          ['image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')],
+          ['image/gif', Buffer.from('GIF89a..............')],
+          ['image/bmp', Buffer.from('BM..................')],
+          ['image/tiff', Buffer.from('II*.................')],
+          ['image/x-icon', Buffer.from('00000100010000000000000000000000', 'hex')],
+          ['audio/x-ms-wma', Buffer.from(wmaBase64, 'base64')],
+          ['video/ogg', Buffer.from('OggS........\u0080theora...')],
+          ['video/x-matroska', Buffer.from(matroskaBase64, 'base64')],
+          ['audio/unsupported', Buffer.from('unsupported audio...')],
+          ['video/unsupported', Buffer.from('unsupported video...')],
+        ])('leaves unsupported %s data URLs as text', (mimeType, bytes) => {
+          const dataUrl = `data:${mimeType};base64,${bytes.toString('base64')}`;
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
+
+          expect(contents[0].parts).toEqual([{ text: dataUrl }]);
+        });
+
+        it.each([
+          ['GIF image', Buffer.from('GIF89a..............').toString('base64')],
+          ['WMA audio', wmaBase64],
+          [
+            'Ogg/Theora video',
+            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
+              'base64',
+            ),
+          ],
+        ])('leaves unsupported raw %s as text', (_media, base64Data) => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+          expect(contents[0].parts).toEqual([{ text: base64Data }]);
         });
 
         it('does not misclassify Matroska containers as WebM', () => {
@@ -1997,38 +2027,6 @@ describe('util', () => {
             {
               inlineData: {
                 mimeType: 'image/png',
-                data: base64Data,
-              },
-            },
-          ]);
-        });
-
-        it('should handle GIF data URLs', () => {
-          const base64Data =
-            'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
-          const dataUrl = `data:image/gif;base64,${base64Data}`;
-
-          const prompt = JSON.stringify([
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: dataUrl,
-                },
-              ],
-            },
-          ]);
-
-          const contextVars = {
-            image1: dataUrl,
-          };
-
-          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
-
-          expect(contents[0].parts).toEqual([
-            {
-              inlineData: {
-                mimeType: 'image/gif',
                 data: base64Data,
               },
             },
@@ -3857,6 +3855,38 @@ describe('util', () => {
   });
 
   describe('mergeParts', () => {
+    it('keeps signed textual responses compatible with text and JSON assertions', () => {
+      const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
+
+      expect(formatCandidateContents({ content: { parts: [signedPart] } } as any)).toBe(
+        'Signed response',
+      );
+    });
+
+    it('collects thought signatures across streamed candidate parts', () => {
+      expect(
+        collectThoughtSignatures([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'First', thoughtSignature: 'first' }] },
+                safetyRatings: [],
+              },
+            ],
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Second', thoughtSignature: 'second' }] },
+                safetyRatings: [],
+              },
+            ],
+          },
+          { candidates: [] },
+        ]),
+      ).toEqual(['first', 'second']);
+    });
+
     it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
       const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
       const secondChunk = [{ text: 'done' }];
@@ -3897,6 +3927,33 @@ describe('util', () => {
       );
       expect(merged.tool_choice).toBe('none');
       expect(merged.toolConfig).toBeUndefined();
+      expect(merged.tool_config).toBeUndefined();
+    });
+
+    it.each([
+      {
+        toolConfig: {
+          functionCallingConfig: { mode: 'AUTO' as const },
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        },
+      },
+      {
+        tool_config: {
+          function_calling_config: { mode: 'AUTO' as const },
+          retrieval_config: { lat_lng: { latitude: 42.36, longitude: -71.06 } },
+          include_server_side_tool_invocations: true,
+        },
+      },
+    ])('preserves non-function Maps settings when a prompt overrides tool choice', (baseConfig) => {
+      const merged = mergeGoogleCompletionOptions(baseConfig, { tool_choice: 'required' });
+
+      expect(merged.tool_choice).toBe('required');
+      expect(merged.toolConfig).toEqual({
+        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+        includeServerSideToolInvocations: true,
+      });
+      expect(merged.toolConfig?.functionCallingConfig).toBeUndefined();
       expect(merged.tool_config).toBeUndefined();
     });
   });

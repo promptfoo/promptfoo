@@ -11,6 +11,7 @@ import {
   calculateGoogleCost,
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -481,6 +482,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       }
 
       const grounding = collectGroundingMetadata(dataWithResponse);
+      const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
       const actualServiceTier = getGoogleResponseServiceTier(
         responseHeaders,
         lastData.usageMetadata,
@@ -550,6 +552,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ...(guardrails && { guardrails }),
         metadata: {
           ...grounding,
+          ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
           ...(actualServiceTier && { serviceTier: actualServiceTier }),
         },
       };

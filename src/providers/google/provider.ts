@@ -26,6 +26,7 @@ import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -714,6 +715,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             actualServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
+      const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
 
       const response: ProviderResponse = {
         output,
@@ -725,6 +727,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...(guardrails && { guardrails }),
         metadata: {
           ...grounding,
+          ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
           ...(actualServiceTier && { serviceTier: actualServiceTier }),
         },
       };

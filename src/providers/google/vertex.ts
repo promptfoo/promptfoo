@@ -29,6 +29,7 @@ import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -899,6 +900,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           actualServiceTier,
         );
         const audio = normalizeGeminiAudio(output);
+        const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
 
         response = {
           cached: false,
@@ -907,6 +909,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           tokenUsage,
           cost,
           metadata: {
+            ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
             ...(actualServiceTier && { serviceTier: actualServiceTier }),
           },
         };

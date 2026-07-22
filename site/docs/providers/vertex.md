@@ -263,7 +263,7 @@ providers:
 Image, audio, and video variables loaded with `file://` are converted to Gemini inline data. Supported image inputs include PNG, JPEG, WEBP, HEIC, and HEIF; audio includes WAV, MP3, AIFF/AIFC, AAC, OGG, FLAC, and M4A; video includes MP4, MPEG/MPG, MOV, AVI, FLV, WEBM, WMV, and 3GPP. See the [Google AI Studio multimodal example](/docs/providers/google) for a runnable configuration.
 
 :::note
-Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Convert unsupported video to MP4 or WEBM and unsupported audio to WAV or MP3 before evaluation; OGG audio is supported.
+SVG, GIF, BMP, TIFF, and ICO images are unsupported. Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Promptfoo leaves unsupported media variables as text instead of sending invalid inline data. Convert unsupported images to PNG or JPEG, video to MP4 or WEBM, and audio to WAV or MP3 before evaluation; OGG audio is supported.
 :::
 
 ### Language Support
@@ -859,7 +859,7 @@ providers:
 
 Function parameters containing spaces or hyphens are supported. Vertex can emit these paths as `$.first name` or `$.postal-code` during streaming; promptfoo reconstructs them alongside quoted JSONPath properties and nested array values.
 
-For a subsequent model turn, preserve the returned `thoughtSignature` and provide the matching `functionResponse`. Gemini 3 and later also support multimodal function responses, such as an image referenced from Cloud Storage:
+Returned thought signatures are available in `metadata.thoughtSignatures` without changing normal text or JSON output. For a subsequent model turn, preserve the returned `thoughtSignature` and provide the matching `functionResponse`. Gemini 3 and later also support multimodal function responses, such as an image referenced from Cloud Storage:
 
 ```yaml
 prompts:

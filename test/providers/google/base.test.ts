@@ -610,6 +610,30 @@ describe('GoogleGenericProvider', () => {
       expect(result).toBe('streamed');
     });
 
+    it('assembles streamed function calls for assertions when no callbacks are configured', async () => {
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { name: 'test_function', willContinue: true } },
+          {
+            functionCall: {
+              partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }],
+            },
+          },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+        },
+        false,
+      );
+
+      expect(result).toEqual([
+        { functionCall: { name: 'test_function', args: { city: 'Boston' } } },
+      ]);
+    });
+
     it('should invoke a cumulative streamed function call only once', async () => {
       const callback = vi.fn().mockResolvedValue('streamed');
       const provider = new TestGoogleProvider('gemini-3.6-flash');

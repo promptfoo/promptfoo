@@ -675,7 +675,7 @@ For multimodal inputs, the provider supports:
 Image, audio, and video inputs loaded with `file://` are converted to Gemini inline data. For large inputs, use a native `fileData` part instead.
 
 :::note
-Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Convert unsupported video to MP4 or WEBM and unsupported audio to WAV or MP3 before evaluation; OGG audio is supported.
+SVG, GIF, BMP, TIFF, and ICO images are unsupported. Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Promptfoo leaves unsupported media variables as text instead of sending invalid inline data. Convert unsupported images to PNG or JPEG, video to MP4 or WEBM, and audio to WAV or MP3 before evaluation; OGG audio is supported.
 :::
 
 When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
@@ -1010,7 +1010,7 @@ providers:
           mode: AUTO # AUTO, ANY, VALIDATED, or NONE
 ```
 
-Promptfoo can execute configured `functionToolCallbacks`, including calls represented as JSON model output, or return the native `functionCall` parts for assertions such as `is-valid-function-call`. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
+Promptfoo can execute configured `functionToolCallbacks`, including calls represented as JSON model output, or return the native `functionCall` parts for assertions such as `is-valid-function-call`. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content. Returned thought signatures are available in `metadata.thoughtSignatures` without changing normal text or JSON output. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
 
 ```yaml
 prompts:

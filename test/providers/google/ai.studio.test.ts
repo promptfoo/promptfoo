@@ -1448,6 +1448,7 @@ describe('AIStudioChatProvider', () => {
 
       expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
       expect(response.output).toBe('Sunny, 25°C');
+      expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
     it('should honor per-prompt callback replacements with the same function name', async () => {
