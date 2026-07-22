@@ -166,7 +166,7 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-Use `--no-share` to stop automatic sharing for one eval, or set `sharing: false` to turn off automatic sharing in your config. Neither prevents you from choosing to share that eval later.
+Use `--no-share` to stop automatic sharing for one eval. Set `sharing: false` to turn off automatic sharing and any self-hosted destination defined by that setting. You can share the eval later after signing in to Cloud or configuring a self-hosted destination.
 
 To block all eval and model-audit sharing while a process runs, set `PROMPTFOO_DISABLE_SHARING=true`. This also prevents associated media from being uploaded. Media remains available locally and can be shared later if you remove the setting.
 
