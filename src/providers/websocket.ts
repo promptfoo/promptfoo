@@ -37,34 +37,44 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
 function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
   const sourceError = event.error instanceof Error ? event.error : new Error(event.message);
   const sourceCode = (sourceError as NodeJS.ErrnoException).code;
-  const isAbortError = sourceError.name === 'AbortError' || sourceError.name === 'AbortException';
+  const isAbortError = ['AbortError', 'AbortException'].includes(sourceError.name);
+
+  if (isAbortError) {
+    const error = new Error('WebSocket connection failed');
+    error.name = sourceError.name;
+    return error;
+  }
+
+  const isSafeTransportCode = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(sourceCode ?? '');
   const isPermanentProtocolError =
-    /wrong version number|self signed|unable to verify|unknown ca|cert/i.test(sourceError.message);
+    /wrong version number|self signed|unable to verify|unknown ca|cert|alert protocol version|unsupported protocol/i.test(
+      sourceError.message,
+    );
   let safeReason: string | undefined;
 
-  if (!isAbortError) {
-    if (sourceCode === 'ECONNRESET' || sourceCode === 'ECONNREFUSED' || sourceCode === 'EPIPE') {
-      safeReason = sourceCode;
-    } else if (sourceCode === 'EPROTO' && !isPermanentProtocolError) {
-      safeReason = sourceCode;
-    } else if (sourceCode === undefined) {
-      const status = sourceError.message.match(
-        /^Unexpected server response:\s*(429|502|503|504)\b/i,
-      )?.[1];
+  if (isSafeTransportCode) {
+    safeReason = sourceCode;
+  } else if (sourceCode === 'ETIMEDOUT') {
+    safeReason = 'TIMEOUT';
+  } else if (sourceCode === 'EPROTO' && !isPermanentProtocolError) {
+    safeReason = sourceCode;
+  } else if (sourceCode === undefined) {
+    const status = sourceError.message.match(
+      /^Unexpected server response:\s*(429|502|503|504)\b/i,
+    )?.[1];
 
-      if (status) {
-        safeReason = status;
-      } else {
-        const transientReason = sourceError.message.match(
-          /^(?:(?:read|write|connect)\s+)?(ECONNRESET|ECONNREFUSED|EPROTO)\b|^(socket hang up|(?:SSL routines:\s*)?bad record mac|(?:request\s+)?timeout|network(?: error)?|rate limit|too many requests)\b/i,
-        );
-        const candidate = (transientReason?.[1] ?? transientReason?.[2])
-          ?.toUpperCase()
-          .replace(/^(?:REQUEST\s+|SSL ROUTINES:\s*)/, '');
+    if (status) {
+      safeReason = status;
+    } else {
+      const transientReason = sourceError.message.match(
+        /^(?:(?:read|write|connect)\s+)?(ECONNRESET|ECONNREFUSED|EPROTO)\b|^(socket hang up|(?:SSL routines:\s*)?bad record mac|(?:request\s+)?timeout|network(?: error)?|rate limit|too many requests)\b/i,
+      );
+      const candidate = (transientReason?.[1] ?? transientReason?.[2])
+        ?.toUpperCase()
+        .replace(/^(?:REQUEST\s+|SSL ROUTINES:\s*)/, '');
 
-        if (candidate !== 'EPROTO' || !isPermanentProtocolError) {
-          safeReason = candidate;
-        }
+      if (candidate !== 'EPROTO' || !isPermanentProtocolError) {
+        safeReason = candidate;
       }
     }
   }
@@ -76,8 +86,10 @@ function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
     `WebSocket connection failed${displayReason ? ` (${displayReason})` : ''}`,
   );
 
-  if (safeReason === 'ECONNRESET' || safeReason === 'ECONNREFUSED' || safeReason === 'EPIPE') {
-    (error as NodeJS.ErrnoException).code = safeReason;
+  if (isSafeTransportCode) {
+    (error as NodeJS.ErrnoException).code = sourceCode;
+  } else if (safeReason === 'TIMEOUT' && sourceCode === 'ETIMEDOUT') {
+    (error as NodeJS.ErrnoException).code = sourceCode;
   }
   if (status !== undefined) {
     (error as Error & { status: number }).status = status;

@@ -410,6 +410,13 @@ describe('WebSocketProvider', () => {
       expectedRateLimitHits: 0,
     },
     {
+      description: 'coded socket timeouts',
+      createError: (url: string) =>
+        Object.assign(new Error(`connect ETIMEDOUT ${url}`), { code: 'ETIMEDOUT' }),
+      expectedMessage: 'WebSocket connection failed (TIMEOUT)',
+      expectedRateLimitHits: 0,
+    },
+    {
       description: 'socket hang-ups',
       createError: (url: string) => new Error(`socket hang up ${url}`),
       expectedMessage: 'WebSocket connection failed (SOCKET HANG UP)',
@@ -514,6 +521,8 @@ describe('WebSocketProvider', () => {
     Object.assign(new Error('write EPROTO wrong version number runtime-secret-tenant.invalid'), {
       code: 'EPROTO',
     }),
+    Object.assign(new Error('write EPROTO tlsv1 alert protocol version'), { code: 'EPROTO' }),
+    Object.assign(new Error('write EPROTO unsupported protocol'), { code: 'EPROTO' }),
     Object.assign(new Error('request aborted for runtime-secret-tenant.invalid'), {
       name: 'AbortError',
       code: 'ABORT_ERR',
@@ -528,6 +537,10 @@ describe('WebSocketProvider', () => {
     }),
     Object.assign(new Error('The operation was aborted after ECONNRESET'), {
       name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after timeout'), {
+      name: 'AbortException',
       code: 'ABORT_ERR',
     }),
   ])('should not retry permanent or cancelled WebSocket errors: $message', async (sourceError) => {
@@ -551,12 +564,22 @@ describe('WebSocketProvider', () => {
     );
 
     try {
-      await expect(
-        registry.execute(provider, callApi, {
+      const error = await registry
+        .execute(provider, callApi, {
           isRateLimited: isProviderResponseRateLimited,
           getRetryAfter: () => 0,
-        }),
-      ).rejects.toThrow('WebSocket connection failed');
+        })
+        .catch((caughtError: Error) => caughtError);
+
+      if (!(error instanceof Error)) {
+        throw new Error('Expected the WebSocket provider call to fail');
+      }
+      expect(error.message).toBe('WebSocket connection failed');
+      expect(error.name).toBe(
+        sourceError.name === 'AbortError' || sourceError.name === 'AbortException'
+          ? sourceError.name
+          : 'Error',
+      );
       expect(callApi).toHaveBeenCalledOnce();
       expect(Object.values(registry.getMetrics())[0]).toMatchObject({
         retriedRequests: 0,
