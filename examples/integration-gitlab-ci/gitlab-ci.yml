@@ -154,9 +154,22 @@
 
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
 
+      case "${PROMPTFOO_SHARE:-false}" in
+        true | false) ;;
+        *)
+          echo 'PROMPTFOO_SHARE must be true or false.' >&2
+          exit 1
+          ;;
+      esac
+
       if [ ! -s "$PROMPTFOO_OUTPUT_DIR/results.json" ]; then
         echo 'Skipping Promptfoo merge request comment: no results were written.' >&2
         exit 0
+      fi
+
+      if [ ! -s "$PROMPTFOO_OUTPUT_DIR/job-status.txt" ]; then
+        echo 'Cannot post Promptfoo merge request comment: the eval job-status artifact is missing.' >&2
+        exit 1
       fi
 
       env -i \

@@ -784,6 +784,23 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(result.stderr).toContain('PROMPTFOO_OUTPUT_DIR must not be empty');
   });
 
+  it('rejects invalid comment sharing settings before looking up merge request results', async () => {
+    const result = await runScript(commentJob.script[0], { PROMPTFOO_SHARE: 'yes' });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('PROMPTFOO_SHARE must be true or false');
+  });
+
+  it('reports a missing eval status artifact before attempting to post a comment', async () => {
+    await runEvaluation();
+    fs.rmSync(path.join(tempDir, '.promptfoo-results/job-status.txt'));
+
+    const result = await runScript(commentJob.script[0]);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('eval job-status artifact is missing');
+  });
+
   it('runs the example when either bundled GitLab template changes', () => {
     const pipeline = parse(fs.readFileSync(path.join(exampleDir, '.gitlab-ci.yml'), 'utf8')) as {
       'promptfoo-eval': { rules: Array<{ changes?: string[] }> };
