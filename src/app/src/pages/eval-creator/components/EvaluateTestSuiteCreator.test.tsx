@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
@@ -75,12 +77,24 @@ vi.mock('./TestCasesSection', () => ({
   )),
 }));
 vi.mock('./YamlEditor', () => ({
-  // YamlEditor expects initialConfig prop.
-  default: vi.fn(() => (
-    <div data-testid="mock-yaml-editor">
-      <pre>YAML Editor</pre>
-    </div>
-  )),
+  default: vi.fn(({ onDirtyChange }: { onDirtyChange?: (isDirty: boolean) => void }) => {
+    const [draft, setDraft] = useState('');
+
+    return (
+      <div data-testid="mock-yaml-editor">
+        <input
+          aria-label="Mock unsaved YAML"
+          value={draft}
+          onChange={(event) => {
+            const value = event.currentTarget.value;
+            setDraft(value);
+            onDirtyChange?.(value.length > 0);
+          }}
+        />
+        <pre>YAML Editor</pre>
+      </div>
+    );
+  }),
 }));
 vi.mock('./StepSection', () => ({
   StepSection: vi.fn(({ children }) => <div data-testid="mock-step-section">{children}</div>),
@@ -667,6 +681,86 @@ describe('EvaluateTestSuiteCreator', () => {
       'Restored administrator-configured provider settings.',
       'error',
     );
+  });
+
+  it('preserves an unsaved YAML draft when a delayed catalog canonicalizes an equivalent provider', async () => {
+    const user = userEvent.setup();
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({
+      providers: [{ id: 'openai:approved', config: { temperature: 0 } }],
+    });
+
+    let resolveCatalog!: (response: Response) => void;
+    vi.mocked(callApi).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveCatalog = resolve;
+      }),
+    );
+
+    render(<EvaluateTestSuiteCreator />);
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await user.type(screen.getByLabelText('Mock unsaved YAML'), 'description: keep my draft');
+
+    await act(async () => {
+      resolveCatalog({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { providers: [approvedProvider], hasCustomConfig: true },
+        }),
+      } as Response);
+    });
+
+    await waitFor(() => {
+      const configuredProviders = useStore.getState().config.providers;
+      expect(configuredProviders).toEqual([approvedProvider]);
+      expect(
+        Array.isArray(configuredProviders) && configuredProviders[0] === approvedProvider,
+      ).toBe(true);
+      expect(screen.getByLabelText('Mock unsaved YAML')).toHaveValue('description: keep my draft');
+    });
+  });
+
+  it('defers catalog reconciliation resets until an unsaved YAML draft is discarded', async () => {
+    const user = userEvent.setup();
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({
+      providers: [{ id: 'openai:approved', config: { temperature: 2 } }],
+    });
+
+    let resolveCatalog!: (response: Response) => void;
+    vi.mocked(callApi).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveCatalog = resolve;
+      }),
+    );
+
+    render(<EvaluateTestSuiteCreator />);
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    const originalYamlEditor = await screen.findByTestId('mock-yaml-editor');
+    await user.type(screen.getByLabelText('Mock unsaved YAML'), 'description: do not lose me');
+
+    await act(async () => {
+      resolveCatalog({
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: { providers: [approvedProvider], hasCustomConfig: true },
+        }),
+      } as Response);
+    });
+
+    await waitFor(() => {
+      expect(useStore.getState().config.providers).toEqual([approvedProvider]);
+      expect(screen.getByLabelText('Mock unsaved YAML')).toHaveValue('description: do not lose me');
+    });
+
+    await user.clear(screen.getByLabelText('Mock unsaved YAML'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-yaml-editor')).not.toBe(originalYamlEditor);
+      expect(screen.getByLabelText('Mock unsaved YAML')).toHaveValue('');
+    });
   });
 
   it('preserves the matching configured entry when catalog entries share an id', async () => {

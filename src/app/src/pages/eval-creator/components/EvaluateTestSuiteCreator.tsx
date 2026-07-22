@@ -100,8 +100,10 @@ const EvaluateTestSuiteCreator = () => {
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
+  const [isYamlEditorDirty, setIsYamlEditorDirty] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const pendingYamlEditorReset = React.useRef(false);
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -146,14 +148,35 @@ const EvaluateTestSuiteCreator = () => {
       approvedProviders.some((provider, index) => !deepEqual(provider, normalizedProviders[index]));
 
     updateConfig({ providers: approvedProviders });
-    setResetKey((key) => key + 1);
+
+    if (removedUnapprovedProviders || restoredProviderSettings) {
+      if (isYamlEditorDirty) {
+        pendingYamlEditorReset.current = true;
+      } else {
+        setResetKey((key) => key + 1);
+      }
+    }
 
     if (removedUnapprovedProviders) {
       showToast('Removed providers that are not in the administrator-configured catalog.', 'error');
     } else if (restoredProviderSettings) {
       showToast('Restored administrator-configured provider settings.', 'error');
     }
-  }, [availableProviders, hasCustomConfig, normalizedProviders, showToast, updateConfig]);
+  }, [
+    availableProviders,
+    hasCustomConfig,
+    isYamlEditorDirty,
+    normalizedProviders,
+    showToast,
+    updateConfig,
+  ]);
+
+  useEffect(() => {
+    if (!isYamlEditorDirty && pendingYamlEditorReset.current) {
+      pendingYamlEditorReset.current = false;
+      setResetKey((key) => key + 1);
+    }
+  }, [isYamlEditorDirty]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -752,7 +775,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor key={resetKey} />
+            <YamlEditor key={resetKey} onDirtyChange={setIsYamlEditorDirty} />
           </div>
         </TabsContent>
       </Tabs>
