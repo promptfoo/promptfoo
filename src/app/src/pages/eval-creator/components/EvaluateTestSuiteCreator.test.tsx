@@ -659,8 +659,11 @@ describe('EvaluateTestSuiteCreator', () => {
     render(<EvaluateTestSuiteCreator />);
 
     await waitFor(() => {
-      expect(useStore.getState().config.providers).toEqual([creativeProvider]);
-      expect(useStore.getState().config.providers?.[0]).toBe(creativeProvider);
+      const configuredProviders = useStore.getState().config.providers;
+      expect(configuredProviders).toEqual([creativeProvider]);
+      expect(
+        Array.isArray(configuredProviders) && configuredProviders[0] === creativeProvider,
+      ).toBe(true);
     });
   });
 
