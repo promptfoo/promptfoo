@@ -210,14 +210,14 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.108.4",
-    "dompurify": "3.4.11",
+    "dompurify": "3.4.12",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.11"
+      "dompurify": "3.4.12"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.203",
+    "@anthropic-ai/claude-agent-sdk": "0.3.207",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -227,9 +227,9 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.2",
+    "@biomejs/biome": "2.5.3",
     "@fal-ai/client": "~1.10.1",
-    "@ibm-cloud/watsonx-ai": "^1.7.14",
+    "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -274,7 +274,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.203",
+    "@anthropic-ai/claude-agent-sdk": "0.3.207",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -288,7 +288,7 @@
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^13.0.1",
     "@huggingface/transformers": "^4.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.14",
+    "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.11.3",
@@ -318,7 +318,7 @@
     "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.110.0",
+    "@anthropic-ai/sdk": "0.111.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
