@@ -23,6 +23,7 @@ describe('Codex provider configuration', () => {
   it('preserves Windows process variables without inheriting unrelated credentials', () => {
     restoreEnv = mockProcessEnv(
       {
+        PATH: 'C:\\Windows\\System32',
         Path: 'C:\\Windows\\System32',
         SystemRoot: 'C:\\Windows',
         COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
@@ -36,6 +37,7 @@ describe('Codex provider configuration', () => {
     expect(prepareCodexProcessEnv({ cli_env: { CUSTOM_FLAG: 42 } })).toEqual({
       COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
       CUSTOM_FLAG: '42',
+      PATH: 'C:\\Windows\\System32',
       PATHEXT: '.COM;.EXE',
       Path: 'C:\\Windows\\System32',
       SystemRoot: 'C:\\Windows',
