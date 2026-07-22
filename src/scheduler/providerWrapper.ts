@@ -5,10 +5,10 @@
  * code paths that bypass the main evaluator.
  */
 
-import { isHttpRateLimitError } from '../util/fetch/errors';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
+  isHttpRateLimitError,
   isProviderResponseRateLimited,
   type RateLimitExecuteOptions,
 } from './types';

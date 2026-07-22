@@ -71,7 +71,7 @@ export function isProviderResponseRateLimited(
   );
 }
 
-export { isTransientConnectionError } from '../util/fetch/errors';
+export { isHttpRateLimitError, isTransientConnectionError } from '../util/fetch/errors';
 
 /**
  * Extract rate limit headers from ProviderResponse.
