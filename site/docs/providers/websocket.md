@@ -26,7 +26,7 @@ providers:
 
 ### Configuration Options
 
-- `url` (required): The WebSocket URL to connect to. Supports Nunjucks templating with test variables.
+- `url` (optional): The WebSocket URL to connect to. Supports Nunjucks templating with test variables. Required unless the provider `id` is a full `ws://` or `wss://` URL.
 - `messageTemplate` (required): A template for the message to be sent over the WebSocket connection. You can use placeholders like `{{prompt}}` which will be replaced with the actual prompt.
 - `transformResponse` (optional): A JavaScript snippet or function to extract the desired output from the WebSocket response given the `data` parameter. If not provided, the entire response will be used as the output. If the response is valid JSON, the object will be returned.
 - `streamResponse` (optional): A JavaScript function to extract the desired output from streamed WebSocket messages when the server sends multiple messages per prompt. It receives `(accumulator, data, context?)` and must return `[nextAccumulator, complete]`. When `streamResponse` is provided, it is used instead of `transformResponse`.
@@ -53,6 +53,8 @@ tests:
       model: 'gpt-4'
       language: 'French'
 ```
+
+When multiple WebSocket provider URLs differ only by credentials, give each provider a unique, non-secret `label` so result columns, provider references, and rate-limit state stay distinct.
 
 ## Parsing the Response
 

@@ -2038,10 +2038,23 @@ function buildExistingPromptsMap(store: EvaluationStore) {
 function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): CompletedPrompt[] {
   const prompts: CompletedPrompt[] = [];
   const existingPromptsMap = buildExistingPromptsMap(store);
+  const providersByIdentity = new Map<string, ApiProvider>();
 
   for (const provider of testSuite.providers) {
+    const providerId = provider.id();
+    const providerKey = provider.label || providerId;
+    const existingProvider = providersByIdentity.get(providerKey);
+    invariant(
+      !existingProvider ||
+        existingProvider === provider ||
+        (!isWebSocketProvider(existingProvider) &&
+          !isWebSocketProvider(provider) &&
+          existingProvider.id() !== providerId),
+      `Duplicate provider identity "${providerKey}". Configure a unique, non-secret label or provider ID for each distinct provider.`,
+    );
+    providersByIdentity.set(providerKey, provider);
+
     for (const prompt of testSuite.prompts) {
-      const providerKey = provider.label || provider.id();
       if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
         continue;
       }
@@ -2063,6 +2076,11 @@ function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): Co
   }
 
   return prompts;
+}
+
+function isWebSocketProvider(provider: ApiProvider): boolean {
+  const url = (provider as ApiProvider & { url?: unknown }).url;
+  return typeof url === 'string' && /^wss?:\/\//i.test(url);
 }
 
 function buildPromptIndexMap(prompts: CompletedPrompt[]) {

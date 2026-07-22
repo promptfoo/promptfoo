@@ -129,6 +129,78 @@ describe('EvalResult', () => {
         },
       });
     });
+
+    it.each([
+      {
+        name: 'username-only userinfo',
+        url: 'wss://runtime-secret@host/{{ sessionId }}',
+        sanitizedUrl: '[REDACTED]',
+      },
+      {
+        name: 'a literal path credential',
+        url: 'wss://host/sk-1234567890abcdefghijklmnopqrstuv/{{ sessionId }}',
+        sanitizedUrl: 'wss://host/%5BREDACTED%5D/{{ sessionId }}',
+      },
+      {
+        name: 'a credential beside a path template',
+        url: 'wss://host/sk-1234567890abcdefghijklmnopqrstuv-{{ sessionId }}',
+        sanitizedUrl: 'wss://host/%5BREDACTED%5D{{ sessionId }}',
+      },
+      {
+        name: 'an opaque lowercase path credential',
+        url: 'wss://host/token-abcdefghijklmnop/{{ sessionId }}',
+        sanitizedUrl: 'wss://host/%5BREDACTED%5D/{{ sessionId }}',
+      },
+      {
+        name: 'conditional Nunjucks tags',
+        url: 'wss://host/ws{% if token %}?token=runtime-secret{% endif %}',
+        sanitizedUrl: 'wss://host/ws{% if token %}?token=%5BREDACTED%5D{% endif %}',
+      },
+      {
+        name: 'a conditional query credential',
+        url: 'wss://host/ws?token={% if enabled %}runtime-secret{% endif %}',
+        sanitizedUrl: 'wss://host/ws?token={% if enabled %}%5BREDACTED%5D{% endif %}',
+      },
+      {
+        name: 'URL delimiters inside a conditional expression',
+        url: 'wss://host/ws{% if "?#" in token %}?token=runtime-secret{% endif %}',
+        sanitizedUrl: 'wss://host/ws{% if "?#" in token %}?token=%5BREDACTED%5D{% endif %}',
+      },
+    ])('should persist a faithful, secret-free WebSocket provider for $name', ({
+      url,
+      sanitizedUrl,
+    }) => {
+      const provider = new WebSocketProvider('websocket', {
+        config: {
+          url,
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+
+      expect(sanitizeProvider(provider)).toEqual({
+        id: sanitizedUrl,
+        label: undefined,
+        config: {
+          url: sanitizedUrl,
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+    });
+
+    it('should reject unsafe WebSocket labels without falling back to raw provider serialization', () => {
+      const provider = new WebSocketProvider('websocket', {
+        label: 'token=label-secret',
+        config: {
+          url: 'wss://host/ws?token=url-secret',
+          messageTemplate: '{{ prompt }}',
+          headers: { Authorization: 'Bearer header-secret' },
+        },
+      });
+
+      expect(() => sanitizeProvider(provider)).toThrow(
+        'WebSocket provider labels must not contain credentials',
+      );
+    });
   });
 
   describe('createFromEvaluateResult', () => {

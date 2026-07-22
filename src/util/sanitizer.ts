@@ -18,28 +18,70 @@ const SENSITIVE_URL_PARAM_NAMES =
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
+export function looksLikeCredentialPathSegment(value: string): boolean {
+  if (/^eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(value)) {
+    return true;
+  }
+
+  const match = /^(?:token|key|secret|credential|auth)[-_]([a-z0-9._]{8,})$/i.exec(value);
+  if (!match) {
+    return false;
+  }
+
+  const suffix = match[1];
+  return (
+    /\d/.test(suffix) ||
+    (/[a-z]/.test(suffix) && /[A-Z]/.test(suffix)) ||
+    /^[a-f]{12,}$/i.test(suffix) ||
+    new Set(suffix.toLowerCase()).size >= 13
+  );
+}
+
+function findUrlDelimiterOutsideTemplates(
+  value: string,
+  delimiters: string,
+  startIndex = 0,
+): number {
+  for (let index = startIndex; index < value.length; index++) {
+    const closingTag = value.startsWith('{{', index)
+      ? '}}'
+      : value.startsWith('{%', index)
+        ? '%}'
+        : value.startsWith('{#', index)
+          ? '#}'
+          : undefined;
+    if (closingTag) {
+      const tagEnd = value.indexOf(closingTag, index + 2);
+      if (tagEnd !== -1) {
+        index = tagEnd + 1;
+        continue;
+      }
+      return -1;
+    }
+
+    if (delimiters.includes(value[index])) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 /**
- * Whether a `scheme://user:pass@host` userinfo password is present. Implemented
+ * Whether a `scheme://user@host` or `scheme://user:pass@host` credential is present. Implemented
  * with plain string scans rather than a regex to avoid polynomial backtracking
  * on adversarial input (e.g. `://:::::…`).
  */
-function hasUrlUserinfoPassword(url: string): boolean {
+function hasUrlUserinfo(url: string): boolean {
   const schemeIndex = url.indexOf('://');
   if (schemeIndex === -1) {
     return false;
   }
   const authorityStart = schemeIndex + 3;
-  let authorityEnd = url.length;
-  for (let i = authorityStart; i < url.length; i++) {
-    const char = url[i];
-    if (char === '/' || char === '?' || char === '#') {
-      authorityEnd = i;
-      break;
-    }
-  }
+  const authorityDelimiter = findUrlDelimiterOutsideTemplates(url, '/?#', authorityStart);
+  const authorityEnd = authorityDelimiter === -1 ? url.length : authorityDelimiter;
   const authority = url.slice(authorityStart, authorityEnd);
-  const atIndex = authority.indexOf('@');
-  return atIndex !== -1 && authority.slice(0, atIndex).includes(':');
+  return findUrlDelimiterOutsideTemplates(authority, '@') !== -1;
 }
 
 /**
@@ -83,7 +125,7 @@ function hasSecretFormSegment(text: string): boolean {
  * sanitizeObject for any field literally named `url` and would otherwise be
  * destroyed in persisted eval results.
  *
- * Detection is structural — a `user:pass@` userinfo password, a whole value that
+ * Detection is structural — URL userinfo, a whole value that
  * looks like a secret, or a `key=value` form segment that carries one. We do NOT
  * fail closed on a bare credential keyword appearing anywhere in the string:
  * substring-matching `token`/`secret`/`sig`/etc. redacts benign values such as
@@ -93,7 +135,7 @@ function hasSecretFormSegment(text: string): boolean {
  * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
 function unparseableUrlMightLeakSecret(url: string): boolean {
-  return hasUrlUserinfoPassword(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
+  return hasUrlUserinfo(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
 }
 
 /**
@@ -570,6 +612,38 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
 // cannot backtrack against the closing `}}` (linear, no ReDoS).
 const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
+const NUNJUCKS_TEMPLATE_TOKEN = /(\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\})/g;
+
+function isNunjucksTemplateToken(value: string): boolean {
+  return (
+    (value.startsWith('{{') && value.endsWith('}}')) ||
+    (value.startsWith('{%') && value.endsWith('%}')) ||
+    (value.startsWith('{#') && value.endsWith('#}'))
+  );
+}
+
+function hasUnterminatedNunjucksTag(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const closingTag = value.startsWith('{{', index)
+      ? '}}'
+      : value.startsWith('{%', index)
+        ? '%}'
+        : value.startsWith('{#', index)
+          ? '#}'
+          : undefined;
+    if (!closingTag) {
+      continue;
+    }
+
+    const tagEnd = value.indexOf(closingTag, index + 2);
+    if (tagEnd === -1) {
+      return true;
+    }
+    index = tagEnd + 1;
+  }
+
+  return false;
+}
 
 // A value that is entirely Nunjucks placeholders (e.g. `{{password}}`) with no
 // literal content is a config template, not a runtime secret. A value that merely
@@ -805,25 +879,125 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
+function sanitizeTemplatedUrlComponent(component: string): string {
+  let sanitized = '';
+  let pairStart = 0;
+
+  while (pairStart < component.length) {
+    const separator = findUrlDelimiterOutsideTemplates(component, '&;', pairStart);
+    const pairEnd = separator === -1 ? component.length : separator;
+    const pair = component.slice(pairStart, pairEnd);
+    const equalsIndex = findUrlDelimiterOutsideTemplates(pair, '=');
+
+    if (equalsIndex === -1) {
+      sanitized += pair;
+    } else {
+      const rawKey = pair.slice(0, equalsIndex);
+      const literalKey = rawKey
+        .split(NUNJUCKS_TEMPLATE_TOKEN)
+        .filter((part) => !isNunjucksTemplateToken(part))
+        .join('');
+      const sanitizedValue = pair
+        .slice(equalsIndex + 1)
+        .split(NUNJUCKS_TEMPLATE_TOKEN)
+        .map((part) => {
+          if (!part || isNunjucksTemplateToken(part)) {
+            return part;
+          }
+
+          if (!literalKey && looksLikeSecret(part.replace(/^[-_.]+/, ''))) {
+            return encodeURIComponent(REDACTED);
+          }
+
+          const sanitizedPair = sanitizeUrlEncodedString(`${literalKey}=${part}`);
+          return sanitizedPair.slice(literalKey.length + 1);
+        })
+        .join('');
+      sanitized += `${rawKey}=${sanitizedValue}`;
+    }
+
+    if (separator === -1) {
+      break;
+    }
+    sanitized += component[separator];
+    pairStart = separator + 1;
+  }
+
+  return sanitized;
+}
+
 function sanitizeTemplatedUrl(url: string): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
   // persisted.
-  if (hasUrlUserinfoPassword(url)) {
+  if (hasUnterminatedNunjucksTag(url) || hasUrlUserinfo(url)) {
     return REDACTED;
   }
 
-  const hashIndex = url.indexOf('#');
+  const templateTokens = url.match(NUNJUCKS_TEMPLATE_TOKEN) || [];
+  if (
+    templateTokens.some((token) =>
+      token.split(/[\s"'=,()/?:&#;]+/).some((part) => {
+        let decoded = part;
+        try {
+          decoded = decodeURIComponent(part);
+        } catch {}
+
+        return decoded.split(/[\s/?:&#;]+/).some((value) => {
+          const candidate = value.replace(/^[-_.]+/, '');
+          return looksLikeCredentialPathSegment(candidate) || looksLikeSecret(candidate);
+        });
+      }),
+    )
+  ) {
+    return REDACTED;
+  }
+
+  const hashIndex = findUrlDelimiterOutsideTemplates(url, '#');
   const beforeHash = hashIndex === -1 ? url : url.slice(0, hashIndex);
   const hash = hashIndex === -1 ? '' : url.slice(hashIndex + 1);
-  const queryIndex = beforeHash.indexOf('?');
+  const queryIndex = findUrlDelimiterOutsideTemplates(beforeHash, '?');
   const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
-  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
-  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+  const sanitizedQuery = query ? sanitizeTemplatedUrlComponent(query) : query;
+  const sanitizedHash = hash ? sanitizeTemplatedUrlComponent(hash) : hash;
 
-  return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
+  const schemeIndex = beforeQuery.indexOf('://');
+  const pathStart = findUrlDelimiterOutsideTemplates(
+    beforeQuery,
+    '/',
+    schemeIndex === -1 ? 0 : schemeIndex + 3,
+  );
+  const sanitizedBeforeQuery =
+    pathStart === -1
+      ? beforeQuery
+      : beforeQuery.slice(0, pathStart) +
+        beforeQuery
+          .slice(pathStart)
+          .split(NUNJUCKS_TEMPLATE_TOKEN)
+          .map((part) => {
+            if (!part || isNunjucksTemplateToken(part)) {
+              return part;
+            }
+
+            return part
+              .split('/')
+              .map((segment) => {
+                let decoded = segment;
+                try {
+                  decoded = decodeURIComponent(segment);
+                } catch {}
+                const candidate = decoded.replace(/^[-_.]+/, '');
+                return looksLikeCredentialPathSegment(candidate) || looksLikeSecret(candidate)
+                  ? encodeURIComponent(REDACTED)
+                  : segment;
+              })
+              .join('/');
+          })
+          .join('');
+
+  return `${sanitizedBeforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
 }
 
 export function sanitizeUrl(url: string): string {
@@ -835,7 +1009,11 @@ export function sanitizeUrl(url: string): string {
 
     // Preserve unresolved template syntax while redacting any literal credentials
     // that were already rendered into another part of the same URL.
-    if (url.includes('{{') && url.includes('}}')) {
+    if (
+      (url.includes('{{') && url.includes('}}')) ||
+      (url.includes('{%') && url.includes('%}')) ||
+      (url.includes('{#') && url.includes('#}'))
+    ) {
       return sanitizeTemplatedUrl(url);
     }
 

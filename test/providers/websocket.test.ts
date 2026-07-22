@@ -173,6 +173,146 @@ describe('WebSocketProvider', () => {
     expect(provider.toString()).not.toContain('runtime-secret');
   });
 
+  it('should use an explicit non-secret provider ID instead of a credential-bearing URL', () => {
+    provider = new WebSocketProvider('websocket', {
+      id: 'account-a',
+      config: {
+        url: 'ws://test.com/ws?token=runtime-secret',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('account-a');
+    expect(provider.toString()).toBe('[WebSocket Provider account-a]');
+  });
+
+  it.each([
+    'sk-1234567890abcdefghijklmnopqrstuv',
+    'token-abcd1234efgh5678',
+    'token-abcdefghijklmnop',
+    'token-deadbeefdeadbeef',
+    'token=runtime-secret',
+    'account-a?token=runtime-secret',
+    'account-a?public=ok#token=runtime-secret',
+    'account/token/sk-1234567890abcdefghijklmnopqrstuv',
+    '{{ sessionId }}-sk-1234567890abcdefghijklmnopqrstuv',
+    'sk%2D1234567890abcdefghijklmnopqrstuv',
+    'token%2Dabcd1234efgh5678',
+    'token%2Dabcdefghijklmnop',
+    'api_key%3Druntime-secret',
+    'Bearer%20ABCDEFGHIJKLMNOPQRSTUVWX',
+    'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signedvalue123',
+    'account?cursor=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signedvalue123',
+  ])('should reject credentials in the explicitly configured provider ID %s', (id) => {
+    expect(
+      () =>
+        new WebSocketProvider('websocket', {
+          id,
+          config: {
+            url: 'wss://host/ws',
+            messageTemplate: '{{ prompt }}',
+          },
+        }),
+    ).toThrow('WebSocket provider IDs must not contain credentials');
+  });
+
+  it('should distinguish a redacted WebSocket identity with its explicit non-secret label', () => {
+    provider = new WebSocketProvider('websocket', {
+      label: 'Account A',
+      config: {
+        url: 'ws://test.com/ws?token=runtime-secret',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('Account A');
+    expect(provider.toString()).toBe('[WebSocket Provider Account A]');
+  });
+
+  it.each([
+    'account-a?token=runtime-secret',
+    'token-abcd1234efgh5678',
+    'token-abcdefghijklmnop',
+    'token-deadbeefdeadbeef',
+    '{{ sessionId }}-sk-1234567890abcdefghijklmnopqrstuv',
+    'sk%2D1234567890abcdefghijklmnopqrstuv',
+    'account?cursor=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signedvalue123',
+  ])('should reject credentials in provider labels %s', (label) => {
+    provider = new WebSocketProvider('ws://test.com/ws', {
+      label,
+      config: {
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(() => provider.id()).toThrow('WebSocket provider labels must not contain credentials');
+  });
+
+  it.each([
+    'auth-service-target',
+    'token-budget-model',
+    'key-management-service',
+    'secret-shopping-agent',
+    'credential-rotation-test',
+    'token-classification',
+    'token-tokenization',
+    'auth-authentication',
+    'auth-authorization',
+    'credential-verification',
+    'key-infrastructure',
+    'secret-configuration',
+    'token-conversation',
+    'token-misconfiguration',
+    'auth-misconfiguration',
+    'credential-misconfiguration',
+    'token-reproducibility',
+  ])('should preserve ordinary non-secret provider labels such as %s', (label) => {
+    provider = new WebSocketProvider('ws://test.com/ws', {
+      label,
+      config: {
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('ws://test.com/ws');
+    expect(provider.label).toBe(label);
+  });
+
+  it('should preserve the ordinary WebSocket URL identity when a display label is set', () => {
+    provider = new WebSocketProvider('ws://test.com/ws', {
+      label: 'Account A',
+      config: {
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('ws://test.com/ws');
+  });
+
+  it('should keep username-only credentials out of templated identities', () => {
+    provider = new WebSocketProvider('websocket', {
+      config: {
+        url: 'wss://runtime-secret@host/{{ sessionId }}',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe('[REDACTED]');
+    expect(provider.toString()).not.toContain('runtime-secret');
+  });
+
+  it('should preserve Nunjucks control tags in provider identities', () => {
+    const url = 'wss://host/ws{% if token %}?token={{ token }}{% endif %}';
+    provider = new WebSocketProvider('websocket', {
+      config: {
+        url,
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+
+    expect(provider.id()).toBe(url);
+  });
+
   it('should not log rendered URLs that contain template-like runtime values', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
     provider = new WebSocketProvider('ws://test.com', {

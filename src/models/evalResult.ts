@@ -126,7 +126,11 @@ export function sanitizeProvider(
         }),
       };
     }
-  } catch {}
+  } catch (error) {
+    if (isApiProvider(provider)) {
+      throw error;
+    }
+  }
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 

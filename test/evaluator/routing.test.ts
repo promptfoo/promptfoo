@@ -5,11 +5,199 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import { WebSocketProvider } from '../../src/providers/websocket';
+import { createRateLimitRegistry, wrapProviderWithRateLimiting } from '../../src/scheduler';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator prompt and provider routing', () => {
+  it('keeps credential-distinguished WebSocket providers in separate result columns', async () => {
+    const providerA = new WebSocketProvider('websocket', {
+      label: 'Account A',
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-a',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const providerB = new WebSocketProvider('websocket', {
+      label: 'Account B',
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-b',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    vi.spyOn(providerA, 'callApi').mockResolvedValue({ output: 'from-a' });
+    vi.spyOn(providerB, 'callApi').mockResolvedValue({ output: 'from-b' });
+    const testSuite: TestSuite = {
+      providers: [providerA, providerB],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results.sort((a, b) => a.promptIdx - b.promptIdx);
+    expect(
+      results.map(({ promptIdx, provider, response }) => ({
+        promptIdx,
+        providerId: provider.id,
+        output: response?.output,
+      })),
+    ).toEqual([
+      { promptIdx: 0, providerId: 'Account A', output: 'from-a' },
+      { promptIdx: 1, providerId: 'Account B', output: 'from-b' },
+    ]);
+    expect(
+      evalRecord.prompts.map(({ provider, metrics }) => ({
+        provider,
+        testPassCount: metrics?.testPassCount,
+      })),
+    ).toEqual([
+      { provider: 'Account A', testPassCount: 1 },
+      { provider: 'Account B', testPassCount: 1 },
+    ]);
+    expect(JSON.stringify(summary)).not.toContain('credential-a');
+    expect(JSON.stringify(summary)).not.toContain('credential-b');
+  });
+
+  it('rejects distinct WebSocket providers whose credentials redact to the same identity', async () => {
+    const providerA = new WebSocketProvider('websocket', {
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-a',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const providerB = new WebSocketProvider('websocket', {
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-b',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const callA = vi.spyOn(providerA, 'callApi');
+    const callB = vi.spyOn(providerB, 'callApi');
+    const testSuite: TestSuite = {
+      providers: [providerA, providerB],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'Configure a unique, non-secret label or provider ID',
+    );
+    expect(callA).not.toHaveBeenCalled();
+    expect(callB).not.toHaveBeenCalled();
+  });
+
+  it('rejects credential-redacted WebSocket identity collisions after rate-limit wrapping', async () => {
+    const providerA = new WebSocketProvider('websocket', {
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-a',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const providerB = new WebSocketProvider('websocket', {
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-b',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const registry = createRateLimitRegistry({ maxConcurrency: 1 });
+    const testSuite: TestSuite = {
+      providers: [
+        wrapProviderWithRateLimiting(providerA, registry),
+        wrapProviderWithRateLimiting(providerB, registry),
+      ],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'Configure a unique, non-secret label or provider ID',
+    );
+  });
+
+  it('rejects distinct WebSocket providers with the same label and different provider IDs', async () => {
+    const providerA = new WebSocketProvider('websocket', {
+      id: 'account-a',
+      label: 'Shared Account',
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-a',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const providerB = new WebSocketProvider('websocket', {
+      id: 'account-b',
+      label: 'Shared Account',
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-b',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const testSuite: TestSuite = {
+      providers: [providerA, providerB],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'Configure a unique, non-secret label or provider ID',
+    );
+  });
+
+  it('rejects WebSocket provider ID and label collisions before results can be misattributed', async () => {
+    const providerA = new WebSocketProvider('websocket', {
+      id: 'account-a',
+      label: 'shared',
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-a',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const providerB = new WebSocketProvider('websocket', {
+      id: 'shared',
+      config: {
+        url: 'ws://127.0.0.1/ws?token=credential-b',
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const testSuite: TestSuite = {
+      providers: [providerA, providerB],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'Configure a unique, non-secret label or provider ID',
+    );
+  });
+
+  it('rejects unsafe WebSocket labels before persisting prompt metadata', async () => {
+    const provider = new WebSocketProvider('ws://127.0.0.1/ws', {
+      label: 'account-a?token=runtime-secret',
+      config: {
+        messageTemplate: '{{ prompt }}',
+      },
+    });
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow(
+      'WebSocket provider labels must not contain credentials',
+    );
+    expect(JSON.stringify(evalRecord.prompts)).not.toContain('runtime-secret');
+  });
+
   it('evaluate with providerPromptMap', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
