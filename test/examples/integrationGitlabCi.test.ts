@@ -759,6 +759,31 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     );
   });
 
+  it('reports invalid GitLab merge request note responses clearly', async () => {
+    await runEvaluation();
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : JSON.stringify({ message: 'unexpected note payload' }),
+        );
+      },
+      async (origin) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+        });
+
+        expect(comment.status).not.toBe(0);
+        expect(comment.stderr).toContain('note lookup returned an invalid response');
+        expect(comment.stderr).not.toContain('notes.find is not a function');
+      },
+    );
+  });
+
   it('refuses to send the merge request token to an unexpected GitLab API origin', async () => {
     await runEvaluation();
     const comment = await runScript(commentJob.script[0], {

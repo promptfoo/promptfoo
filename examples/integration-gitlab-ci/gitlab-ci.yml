@@ -266,6 +266,10 @@
         }
 
         const notes = await existingResponse.json();
+        if (!Array.isArray(notes)) {
+          throw new Error('GitLab merge request note lookup returned an invalid response.');
+        }
+
         existing = notes.find((note) =>
           note.author?.id === identity.id &&
           typeof note.body === 'string' &&
