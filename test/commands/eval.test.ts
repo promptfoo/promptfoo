@@ -557,9 +557,7 @@ describe('evalCommand', () => {
       // The shared chokidar mock is declared as `vi.fn(() => watcher)`, so its
       // recorded call args type as an empty tuple. Read the first argument through
       // `unknown` rather than widening the shared mock's signature.
-      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as
-        | [string[]]
-        | undefined;
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
       return lastCall?.[0] ?? [];
     }
 
