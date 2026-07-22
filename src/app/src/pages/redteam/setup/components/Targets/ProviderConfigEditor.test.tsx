@@ -1,9 +1,12 @@
 import React from 'react';
 
+import AddProviderDialog from '@app/pages/eval-creator/components/AddProviderDialog';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
+import ProviderEditor from './ProviderEditor';
 
 import type { ProviderOptions } from '../../types';
 
@@ -15,10 +18,31 @@ vi.mock('./HttpEndpointConfiguration', () => ({
   default: () => <div data-testid="http-config" />,
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
-  default: () => <div data-testid="ws-config" />,
+  default: ({
+    selectedTarget,
+    updateWebSocketTarget,
+    urlError,
+  }: {
+    selectedTarget: ProviderOptions;
+    updateWebSocketTarget: (field: string, value: unknown) => void;
+    urlError: string | null;
+  }) => (
+    <div data-testid="ws-config">
+      <label htmlFor="websocket-url">WebSocket URL</label>
+      <input
+        id="websocket-url"
+        value={selectedTarget.config.url}
+        onChange={(event) => updateWebSocketTarget('url', event.target.value)}
+      />
+      {urlError && <div>{urlError}</div>}
+    </div>
+  ),
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
   default: () => <div data-testid="custom-config" />,
+}));
+vi.mock('./ProviderTypeSelector', () => ({
+  default: () => <div data-testid="provider-type-selector" />,
 }));
 vi.mock('./A2AEndpointConfiguration', async () => {
   const React = await vi.importActual<typeof import('react')>('react');
@@ -112,6 +136,211 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it.each([
+      ['a static URL', 'wss://example.com/ws'],
+      ['a path template', 'wss://example.com/{{ path }}'],
+      ['an authority template', 'wss://{{ host }}/ws'],
+      ['a port template', 'wss://example.com:{{ port }}/ws'],
+      ['a scheme template', '{{ protocol }}://example.com/ws'],
+      ['a partial scheme template', 'w{{ protocolSuffix }}://example.com/ws'],
+      ['a case-insensitive partial scheme template', 'W{{ protocolSuffix }}://example.com/ws'],
+      ['a whole-URL template', '{{ websocketUrl }}'],
+      ['a filtered scheme prefix', '{{ protocol | default("ws://") }}example.com/ws'],
+      ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://example.com/ws'],
+      [
+        'a whitespace-trimmed conditional scheme',
+        '{%- if secure -%}wss{%- else -%}ws{%- endif -%}://example.com/ws',
+      ],
+      [
+        'a modulo conditional scheme',
+        '{% if value % 2 == 0 %}ws{% else %}wss{% endif %}://example.com/ws',
+      ],
+      [
+        'a quoted-percent conditional scheme',
+        '{% if value == "100%" %}ws{% else %}wss{% endif %}://example.com/ws',
+      ],
+      [
+        'an implicit empty conditional branch',
+        '{% if useHttp %}http{% endif %}ws://example.com/ws',
+      ],
+      [
+        'a nested conditional scheme',
+        '{% if outer %}{% if inner %}wss{% else %}ws{% endif %}{% else %}ws{% endif %}://example.com/ws',
+      ],
+      ['an IPv6 authority template', 'ws://[{{ address }}]:{{ port }}/ws'],
+      [
+        'an IPv6-or-DNS conditional authority',
+        'ws://{% if ipv6 %}[::1]{% else %}example.com{% endif %}/ws',
+      ],
+      [
+        'a conditional host and port',
+        'ws://{% if usePort %}example.com:1234{% else %}example.com{% endif %}/ws',
+      ],
+      [
+        'authority control-flow templates',
+        'wss://{% if tenant %}{{ tenant }}{% else %}default{% endif %}.example.com/ws',
+      ],
+      ['literal raw-template path content', 'wss://example.com/{% raw %}{{ host }}{% endraw %}'],
+    ])('should accept a WebSocket provider with %s', (_description, url) => {
+      const setError = vi.fn();
+      const onValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'websocket', config: { url, messageTemplate: '{{ prompt }}' } }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidate={onValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="websocket"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+      expect(setError).toHaveBeenCalledWith(null);
+      expect(onValidate).toHaveBeenCalledWith(true);
+    });
+
+    it.each([
+      ['an HTTP URL', 'https://example.com/ws'],
+      ['an HTTP URL with a templated host', 'https://{{ host }}/ws'],
+      ['an incompatible templated scheme', 'http{{ suffix }}://example.com/ws'],
+      [
+        'a static scheme containing the internal placeholder',
+        '__promptfoo_template__://example.com/ws',
+      ],
+      [
+        'a static partial scheme containing the internal placeholder',
+        'w__promptfoo_template__://example.com/ws',
+      ],
+      [
+        'an exclusively non-WebSocket conditional scheme',
+        '{% if secure %}https{% else %}http{% endif %}://example.com/ws',
+      ],
+      ['a malformed static URL', 'wss://[invalid-host/ws'],
+      ['a scheme template without an authority', '{{ protocol }}://'],
+      ['an incomplete template', 'wss://{{ host }/ws'],
+      ['an incomplete expression in a path', 'wss://example.com/{{ host }'],
+      ['an empty template expression', 'wss://example.com/{{ }}'],
+      ['an incomplete template filter', 'wss://example.com/{{ host | }}'],
+      ['an unterminated conditional', 'wss://example.com/{% if secure %}/ws'],
+      ['an unterminated whitespace-trimmed conditional', 'wss://{%- if secure -%}example.com/ws'],
+      [
+        'an unterminated nested conditional',
+        '{% if outer %}{% if inner %}wss{% else %}ws{% endif %}://example.com/ws',
+      ],
+      ['literal raw-template host content', 'wss://{% raw %}{{ host }}{% endraw %}/ws'],
+      ['an unfinished comment', 'wss://example.com/{# unfinished'],
+      [
+        'many conditional branches under an invalid static scheme',
+        `https://example.com/${'{% if condition %}x{% else %}y{% endif %}'.repeat(20)}`,
+      ],
+      [
+        'too many incompatible conditional scheme branches',
+        `${'{% if condition %}x{% else %}y{% endif %}'.repeat(20)}://example.com/ws`,
+      ],
+    ])('should reject a WebSocket provider with %s', (_description, url) => {
+      const setError = vi.fn();
+      const onValidate = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'websocket', config: { url, messageTemplate: '{{ prompt }}' } }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidate={onValidate}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="websocket"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(setError).toHaveBeenCalledWith('Valid WebSocket URL is required');
+      expect(onValidate).toHaveBeenCalledWith(false);
+    });
+
+    it.each([
+      ['an authority template', 'wss://{{ host }}/ws'],
+      ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://example.com/ws'],
+    ])('should continue from the actual red-team Next button with %s', async (_description, url) => {
+      const user = userEvent.setup();
+      const onNext = vi.fn();
+
+      function WebSocketEditorHarness() {
+        const [provider, setProvider] = React.useState<ProviderOptions>({
+          id: 'websocket',
+          label: 'WebSocket target',
+          config: { url: 'wss://example.com/ws', messageTemplate: '{{ prompt }}' },
+        });
+
+        return (
+          <ProviderEditor
+            provider={provider}
+            setProvider={setProvider}
+            onActionButtonClick={onNext}
+            opts={{ disableNameField: true }}
+          />
+        );
+      }
+
+      renderWithProviders(<WebSocketEditorHarness />);
+
+      const urlInput = screen.getByRole('textbox', { name: 'WebSocket URL' });
+      await user.clear(urlInput);
+      await user.paste(url);
+
+      expect(urlInput).toHaveValue(url);
+      expect(
+        screen.queryByText('Please enter a valid WebSocket URL (ws:// or wss://)'),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(onNext).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['an authority template', 'wss://{{ host }}/ws'],
+      ['a whole-URL template', '{{ websocketUrl }}'],
+    ])('should save %s through the actual eval provider dialog', async (_description, url) => {
+      const user = userEvent.setup();
+      const onSave = vi.fn();
+
+      renderWithProviders(
+        <AddProviderDialog
+          open
+          initialProvider={{
+            id: 'websocket',
+            label: 'WebSocket target',
+            config: { url: 'wss://example.com/ws', messageTemplate: '{{ prompt }}' },
+          }}
+          onSave={onSave}
+          onClose={vi.fn()}
+        />,
+      );
+
+      const urlInput = screen.getByRole('textbox', { name: 'WebSocket URL' });
+      await user.clear(urlInput);
+      await user.paste(url);
+
+      expect(
+        screen.queryByText('Please enter a valid WebSocket URL (ws:// or wss://)'),
+      ).not.toBeInTheDocument();
+      const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+      expect(saveButton).toBeEnabled();
+      await user.click(saveButton);
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ config: expect.objectContaining({ url }) }),
+      );
     });
 
     it('should return false from validate() when provider ID contains only whitespace characters for foundation model providers', () => {
