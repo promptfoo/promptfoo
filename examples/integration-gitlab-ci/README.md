@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-F82MAd/o9ov97cAfA8mtFPV7oJf9ngwD65yPc5vvabI='
+    integrity: 'sha256-D6IJhdWU8Q3vj4006E251ok/eoEA/qgcblTIURmKIl8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -47,14 +47,18 @@ To enable merge request comments, create a masked project access token with its 
 ```yaml
 promptfoo-comment:
   extends: .promptfoo-comment
+  variables:
+    PROMPTFOO_OUTPUT_DIR: .promptfoo-results
+    PROMPTFOO_SHARE: 'false'
   needs:
     - job: promptfoo-eval
       artifacts: true
+      optional: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
 ```
 
-The comment runs in a fresh non-root container without a checkout; its write token is never available to the eval. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
+The comment runs in a fresh non-root container without a checkout; its write token is never available to the eval. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
 
 For self-managed GitLab instances with an internal certificate authority, configure a file-type CI/CD variable containing the CA certificate and set `NODE_EXTRA_CA_CERTS` to that variable's file path. Do not disable TLS verification.

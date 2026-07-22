@@ -230,6 +230,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(commentJob.variables.GIT_STRATEGY).toBe('none');
     expect(commentJob.when).toBe('always');
     expect(commentJob.resource_group).toContain('$CI_MERGE_REQUEST_IID');
+    expect(job.script[0]).toContain('exec env \\');
+    expect(commentJob.script[0]).toContain('NODE_USE_ENV_PROXY=1');
   });
 
   it('keeps the documented remote template integrity hashes current', () => {
@@ -277,6 +279,22 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(result.stderr).toContain('expected 0.121.20');
   });
 
+  it('never treats an untrusted version as a Node preload option', async () => {
+    const preloadPath = path.join(tempDir, 'version-preload.cjs');
+    const markerPath = path.join(tempDir, 'version-preload-ran');
+    fs.writeFileSync(
+      preloadPath,
+      `require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, 'executed')`,
+    );
+
+    const result = await runScript(job.before_script[0], {
+      PROMPTFOO_VERSION: `--require=${preloadPath}`,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
   it('fails closed when a merge request write token is exposed to the eval job', async () => {
     const result = await runScript(job.before_script[0], {
       PROMPTFOO_GITLAB_TOKEN: 'incorrectly-unscoped-token',
@@ -295,6 +313,20 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(args).not.toContain('\n--share\n');
     expect(fs.readFileSync(path.join(tempDir, 'promptfoo-token'), 'utf8').trim()).toBe('absent');
     expect(fs.existsSync(path.join(tempDir, '.promptfoo-results/results.junit.xml'))).toBe(true);
+  });
+
+  it('removes Node preload hooks before invoking executable eval code', async () => {
+    const preloadPath = path.join(tempDir, 'eval-preload.cjs');
+    const markerPath = path.join(tempDir, 'eval-preload-ran');
+    fs.writeFileSync(
+      preloadPath,
+      `require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, process.env.OPENAI_API_KEY || '')`,
+    );
+
+    const evaluation = await runEvaluation({ NODE_OPTIONS: `--require=${preloadPath}` });
+
+    expect(evaluation.status).toBe(0);
+    expect(fs.existsSync(markerPath)).toBe(false);
   });
 
   it('removes root and nested checkout metadata before executable providers can read it', async () => {
@@ -346,13 +378,32 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     '101',
     'NaN',
     'Infinity',
+    '0x10',
+    '1e2',
+    ' 10 ',
     '',
   ])('rejects unsafe pass-rate threshold %s', async (value) => {
     const result = await runEvaluation({ PROMPTFOO_PASS_RATE_THRESHOLD: value });
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('finite percentage from 0 through 100');
+    expect(result.stderr).toContain('finite decimal percentage from 0 through 100');
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+  });
+
+  it('never treats an untrusted pass-rate threshold as a Node preload option', async () => {
+    const preloadPath = path.join(tempDir, 'threshold-preload.cjs');
+    const markerPath = path.join(tempDir, 'threshold-preload-ran');
+    fs.writeFileSync(
+      preloadPath,
+      `require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, 'executed')`,
+    );
+
+    const result = await runEvaluation({
+      PROMPTFOO_PASS_RATE_THRESHOLD: `--require=${preloadPath}`,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(fs.existsSync(markerPath)).toBe(false);
   });
 
   it('preserves failing eval exit codes while still posting a failure summary', async () => {
@@ -421,6 +472,67 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         expect(JSON.parse(requests[2].body).body).toContain(
           'https://custom.promptfoo.example/eval/eval-123',
         );
+      },
+    );
+  });
+
+  it('escapes valid share URLs before embedding them in Markdown comments', async () => {
+    await runEvaluation({
+      PROMPTFOO_SHARE: 'true',
+      PROMPTFOO_TEST_SHARE_URL:
+        'https://share.example/)@reviewer[trusted-results](https://attacker.example)',
+    });
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : request.method === 'GET'
+              ? '[]'
+              : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+          PROMPTFOO_SHARE: 'true',
+        });
+
+        expect(comment.status).toBe(0);
+        const body = JSON.parse(requests[2].body).body;
+        expect(body).toContain('%29@reviewer%5Btrusted-results%5D%28');
+        expect(body).not.toContain(')@reviewer[trusted-results](');
+      },
+    );
+  });
+
+  it('supports a custom artifact directory when comment settings match the eval job', async () => {
+    const outputDirectory = '.promptfoo-results/custom';
+    await runEvaluation({ PROMPTFOO_OUTPUT_DIR: outputDirectory });
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : request.method === 'GET'
+              ? '[]'
+              : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+          PROMPTFOO_OUTPUT_DIR: outputDirectory,
+        });
+
+        expect(comment.status).toBe(0);
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'POST']);
       },
     );
   });
@@ -680,5 +792,16 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(pipeline['promptfoo-eval'].rules[0].changes).toEqual(
       expect.arrayContaining(['.gitlab-ci.yml', 'gitlab-ci.yml']),
     );
+  });
+
+  it('documents optional comment dependencies and matching job-scoped settings', () => {
+    for (const file of [
+      path.join(exampleDir, 'README.md'),
+      path.join(rootDir, 'site/docs/integrations/gitlab-ci.md'),
+    ]) {
+      const documentation = fs.readFileSync(file, 'utf8');
+      expect(documentation).toContain('optional: true');
+      expect(documentation).toContain('GitLab `needs` does not inherit job variables');
+    }
   });
 });

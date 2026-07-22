@@ -25,7 +25,7 @@
 
       if ! env -i PATH="$PATH" node \
         -e 'process.exit(/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[\da-z-]+(?:\.[\da-z-]+)*)?$/i.test(process.argv[1]) ? 0 : 1)' \
-        "$PROMPTFOO_VERSION"; then
+        -- "$PROMPTFOO_VERSION"; then
         echo 'PROMPTFOO_VERSION must be an exact semantic version, not latest or a range.' >&2
         exit 1
       fi
@@ -51,9 +51,9 @@
       fi
 
       if ! env -i PATH="$PATH" node \
-        -e 'const value = Number(process.argv[1]); process.exit(process.argv[1].trim() && Number.isFinite(value) && value >= 0 && value <= 100 ? 0 : 1)' \
-        "${PROMPTFOO_PASS_RATE_THRESHOLD:-}"; then
-        echo 'PROMPTFOO_PASS_RATE_THRESHOLD must be a finite percentage from 0 through 100.' >&2
+        -e 'const input = process.argv[1]; const value = Number(input); process.exit(/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(input) && Number.isFinite(value) && value >= 0 && value <= 100 ? 0 : 1)' \
+        -- "${PROMPTFOO_PASS_RATE_THRESHOLD:-}"; then
+        echo 'PROMPTFOO_PASS_RATE_THRESHOLD must be a finite decimal percentage from 0 through 100.' >&2
         exit 1
       fi
 
@@ -94,7 +94,8 @@
           ;;
       esac
 
-      env \
+      # Replace the credential-bearing job shell so providers cannot read its /proc environ.
+      exec env \
         -u CI_DEPENDENCY_PROXY_PASSWORD \
         -u CI_DEPLOY_PASSWORD \
         -u CI_JOB_TOKEN \
@@ -107,6 +108,8 @@
         -u GITLAB_API_TOKEN \
         -u NPM_TOKEN \
         -u NODE_AUTH_TOKEN \
+        -u NODE_OPTIONS \
+        -u NODE_PATH \
         -u PROMPTFOO_GITLAB_TOKEN \
         PROMPTFOO_FAILED_TEST_EXIT_CODE=1 \
         promptfoo "$@"
@@ -168,6 +171,7 @@
         HTTPS_PROXY="${HTTPS_PROXY:-}" \
         NO_PROXY="${NO_PROXY:-}" \
         NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" \
+        NODE_USE_ENV_PROXY=1 \
         PROMPTFOO_EVAL_JOB_NAME="${PROMPTFOO_EVAL_JOB_NAME:-promptfoo-eval}" \
         PROMPTFOO_GITLAB_TOKEN="$PROMPTFOO_GITLAB_TOKEN" \
         PROMPTFOO_OUTPUT_DIR="$PROMPTFOO_OUTPUT_DIR" \
@@ -218,7 +222,10 @@
         try {
           const shareUrl = new URL(result.shareableUrl);
           if (shareUrl.protocol === 'https:' || shareUrl.protocol === 'http:') {
-            body += `\n\n[View eval results](${shareUrl.href})`;
+            const destination = shareUrl.href.replace(/[()[\]]/g, (character) =>
+              ({ '(': '%28', ')': '%29', '[': '%5B', ']': '%5D' })[character]
+            );
+            body += `\n\n[View eval results](${destination})`;
           }
         } catch {
           console.warn('Skipping invalid Promptfoo share URL.');

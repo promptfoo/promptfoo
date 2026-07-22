@@ -23,7 +23,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-F82MAd/o9ov97cAfA8mtFPV7oJf9ngwD65yPc5vvabI='
+    integrity: 'sha256-D6IJhdWU8Q3vj4006E251ok/eoEA/qgcblTIURmKIl8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -144,15 +144,19 @@ Add a separate comment job after the eval:
 ```yaml
 promptfoo-comment:
   extends: .promptfoo-comment
+  variables:
+    PROMPTFOO_OUTPUT_DIR: .promptfoo-results
+    PROMPTFOO_SHARE: 'false'
   needs:
     - job: promptfoo-eval
       artifacts: true
+      optional: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: always
 ```
 
-GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
+GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
 
 The eval records its job status as an artifact, and `when: always` lets the isolated comment job summarize both successful and failed evals without turning failures into passing pipelines. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 
