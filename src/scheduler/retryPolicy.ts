@@ -79,7 +79,11 @@ export function shouldRetry(
       message.includes('timeout') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
-      (policy.retryAllServerErrors === true && /\b5\d{2}\b/.test(message)) ||
+      /\b(?:enotfound|eai_again|epipe)\b/.test(message) ||
+      (policy.retryAllServerErrors === true &&
+        /\b(?:https?|status(?:\s+code)?|(?:api|server)\s+error)\s*[:=]?\s*5\d{2}\b/.test(
+          message,
+        )) ||
       message.includes('503') ||
       message.includes('502') ||
       message.includes('504') ||

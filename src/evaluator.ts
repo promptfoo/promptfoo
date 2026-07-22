@@ -941,7 +941,7 @@ async function callActiveProvider({
     ? await rateLimitRegistry.execute(
         activeProvider,
         callApi,
-        createProviderRateLimitOptions(abortSignal),
+        createProviderRateLimitOptions(abortSignal, callApiContext.prompt.config?.maxRetries),
       )
     : await callApi();
 

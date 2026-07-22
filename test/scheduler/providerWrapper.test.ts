@@ -65,6 +65,23 @@ describe('providerWrapper', () => {
       );
     });
 
+    it.each([
+      0, 2,
+    ])('should pass a per-request retry budget of %s to the scheduler', async (maxRetries) => {
+      mockExecute.mockImplementation(async (_provider, callFn) => callFn());
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test', {
+        prompt: { raw: 'test', label: 'test', config: { maxRetries } },
+        vars: {},
+      });
+
+      expect(mockExecute).toHaveBeenCalledWith(
+        mockProvider,
+        expect.any(Function),
+        expect.objectContaining({ maxRetries }),
+      );
+    });
+
     it('should preserve other provider properties', () => {
       const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
 

@@ -319,6 +319,30 @@ describe('RateLimitRegistry', () => {
     });
 
     it.each([
+      { configured: 0, requested: 2 },
+      { configured: 5, requested: 1 },
+      { configured: 2, requested: 0 },
+    ])('should prefer request maxRetries=$requested over provider maxRetries=$configured', async ({
+      configured,
+      requested,
+    }) => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const provider = {
+        ...mockProvider,
+        config: { ...mockProvider.config, maxRetries: configured },
+      } as ApiProvider;
+
+      await registry.execute(provider, vi.fn(), { maxRetries: requested });
+
+      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({ maxRetriesOverride: requested }),
+      );
+    });
+
+    it.each([
       ['negative number', -1],
       ['non-integer number', 2.5],
       ['non-integer string', '2.5'],

@@ -82,6 +82,46 @@ describe('shouldRetry', () => {
     ).toBe(true);
   });
 
+  it.each([
+    'HTTP 500: Internal Server Error',
+    'status code: 501',
+    'API error: 505',
+    'Internal Server Error: 511',
+  ])('should only retry explicit server status %s when all-5xx retry is enabled', (message) => {
+    expect(
+      shouldRetry(0, new Error(message), false, {
+        ...DEFAULT_RETRY_POLICY,
+        retryAllServerErrors: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('should not treat a number in a client-error body as a server status', () => {
+    expect(
+      shouldRetry(0, new Error('HTTP 400: maximum 500 tokens'), false, {
+        ...DEFAULT_RETRY_POLICY,
+        retryAllServerErrors: true,
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EPIPE',
+  ])('should retry flattened transient network error %s', (code) => {
+    expect(
+      shouldRetry(
+        0,
+        new Error(
+          `Request failed after 0 retries: TypeError: fetch failed (Cause: Error: ${code})`,
+        ),
+        false,
+        DEFAULT_RETRY_POLICY,
+      ),
+    ).toBe(true);
+  });
+
   it('should not retry on generic error', () => {
     const error = new Error('Some random error');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);

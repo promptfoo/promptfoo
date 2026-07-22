@@ -12,6 +12,7 @@ import type { ProviderResponse } from '../types/providers';
  */
 export interface RateLimitExecuteOptions<T> {
   abortSignal?: AbortSignal;
+  maxRetries?: number;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */

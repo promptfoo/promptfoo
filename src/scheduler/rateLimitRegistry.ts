@@ -48,12 +48,13 @@ export class RateLimitRegistry extends EventEmitter {
     callFn: () => Promise<T>,
     options?: {
       abortSignal?: AbortSignal;
+      maxRetries?: number;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
     },
   ): Promise<T> {
-    const providerMaxRetries = getProviderMaxRetries(provider);
+    const providerMaxRetries = getProviderMaxRetries(provider, options?.maxRetries);
 
     // Even when the scheduler is disabled, propagate the retry context so
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
@@ -174,11 +175,16 @@ export function createRateLimitRegistry(options: RateLimitRegistryOptions): Rate
  * means "disable retries". Invalid user-supplied values (negatives, floats,
  * non-numeric strings) are logged so config typos aren't silently ignored.
  */
-function getProviderMaxRetries(provider: ApiProvider): number | undefined {
+function getProviderMaxRetries(
+  provider: ApiProvider,
+  requestMaxRetries?: unknown,
+): number | undefined {
   const raw: unknown =
-    provider.config && typeof provider.config === 'object'
-      ? (provider.config as { maxRetries?: unknown }).maxRetries
-      : undefined;
+    requestMaxRetries === undefined
+      ? provider.config && typeof provider.config === 'object'
+        ? (provider.config as { maxRetries?: unknown }).maxRetries
+        : undefined
+      : requestMaxRetries;
 
   if (raw === undefined) {
     return undefined;

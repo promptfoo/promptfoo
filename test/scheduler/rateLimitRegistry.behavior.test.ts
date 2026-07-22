@@ -111,6 +111,64 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
   });
 
   it.each([
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EPIPE',
+  ])('should retry the flattened fetch failure %s', async (code) => {
+    const cause = Object.assign(new Error(`getaddrinfo ${code} example.com`), { code });
+    const failure = new TypeError('fetch failed', { cause });
+    const fetch = vi.fn().mockRejectedValueOnce(failure).mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        async () => {
+          try {
+            const response = await fetchWithRetries('https://example.com', {}, 1000, 2);
+            return { output: await response.text() };
+          } catch (error) {
+            return { error: (error as Error).message };
+          }
+        },
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result.output).toBe('ok');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([
+    { configured: 0, requested: 2, attempts: 3 },
+    { configured: 5, requested: 1, attempts: 2 },
+    { configured: 2, requested: 0, attempts: 1 },
+  ])('should honor request maxRetries=$requested over provider maxRetries=$configured', async ({
+    configured,
+    requested,
+    attempts,
+  }) => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callFn = vi.fn(async () => ({ status: 429 }));
+
+    try {
+      await expect(
+        registry.execute(createProvider(configured), callFn, {
+          maxRetries: requested,
+          isRateLimited: (result) => result?.status === 429,
+          getRetryAfter: () => 0,
+        }),
+      ).rejects.toThrow('Rate limit exceeded');
+      expect(callFn).toHaveBeenCalledTimes(attempts);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([
     { maxRetries: undefined, expectedAttempts: 4 },
     { maxRetries: 0, expectedAttempts: 1 },
     { maxRetries: 2, expectedAttempts: 3 },

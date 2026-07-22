@@ -46,9 +46,11 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  */
 export function createProviderRateLimitOptions(
   abortSignal?: AbortSignal,
+  maxRetries?: number,
 ): RateLimitExecuteOptions<ProviderResponse> {
   return {
     ...(abortSignal && { abortSignal }),
+    ...(maxRetries !== undefined && { maxRetries }),
     getHeaders: getProviderResponseHeaders,
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
@@ -121,7 +123,7 @@ export function wrapProviderWithRateLimiting(
       return registry.execute(
         provider,
         () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(options?.abortSignal),
+        createProviderRateLimitOptions(options?.abortSignal, context?.prompt?.config?.maxRetries),
       );
     },
   };
