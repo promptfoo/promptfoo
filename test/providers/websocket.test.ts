@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, type Mocked, vi } from 'vi
 import WebSocket from 'ws';
 import logger from '../../src/logger';
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
 const websocketMocks = vi.hoisted(() => {
   let factory: (() => Mocked<WebSocket>) | null = null;
@@ -371,6 +373,224 @@ describe('WebSocketProvider', () => {
     expect(errorLogs).not.toContain('runtime-secret-tenant');
     expect(errorLogs).not.toContain('runtime-query-secret');
     expect(mockWs.close).toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      description: 'HTTP 429 handshake responses',
+      createError: (url: string) => new Error(`Unexpected server response: 429 ${url}`),
+      expectedMessage: 'WebSocket connection failed (HTTP 429)',
+      expectedRateLimitHits: 3,
+    },
+    {
+      description: 'connection resets',
+      createError: (url: string) =>
+        Object.assign(new Error(`read ECONNRESET ${url}`), { code: 'ECONNRESET' }),
+      expectedMessage: 'WebSocket connection failed (ECONNRESET)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'refused connections',
+      createError: (url: string) =>
+        Object.assign(new Error(`connect ECONNREFUSED ${url}`), { code: 'ECONNREFUSED' }),
+      expectedMessage: 'WebSocket connection failed (ECONNREFUSED)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'broken pipes',
+      createError: (url: string) =>
+        Object.assign(new Error(`write EPIPE ${url}`), { code: 'EPIPE' }),
+      expectedMessage: 'WebSocket connection failed (EPIPE)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'request timeouts',
+      createError: (url: string) => new Error(`request timeout after 1000ms ${url}`),
+      expectedMessage: 'WebSocket connection failed (TIMEOUT)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'coded socket timeouts',
+      createError: (url: string) =>
+        Object.assign(new Error(`connect ETIMEDOUT ${url}`), { code: 'ETIMEDOUT' }),
+      expectedMessage: 'WebSocket connection failed (TIMEOUT)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'socket hang-ups',
+      createError: (url: string) => new Error(`socket hang up ${url}`),
+      expectedMessage: 'WebSocket connection failed (SOCKET HANG UP)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'transient TLS record failures',
+      createError: (url: string) => new Error(`SSL routines: bad record mac ${url}`),
+      expectedMessage: 'WebSocket connection failed (BAD RECORD MAC)',
+      expectedRateLimitHits: 0,
+    },
+    {
+      description: 'retryable TLS protocol failures',
+      createError: (url: string) =>
+        Object.assign(new Error(`write EPROTO transient TLS failure ${url}`), { code: 'EPROTO' }),
+      expectedMessage: 'WebSocket connection failed (EPROTO)',
+      expectedRateLimitHits: 0,
+    },
+  ])('should retry $description without exposing rendered WebSocket URL values', async ({
+    createError,
+    expectedMessage,
+    expectedRateLimitHits,
+  }) => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const renderedUrl =
+      'ws://runtime-secret-tenant.invalid/sessions/private-session-123?token=runtime-query-secret';
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+        maxRetries: 2,
+      },
+    });
+    emitWebSocketEvents({ type: 'error', error: createError(renderedUrl) });
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callApi = vi.fn(() =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {
+          tenant: 'runtime-secret-tenant',
+          sessionId: 'private-session-123',
+          token: 'runtime-query-secret',
+        },
+      }),
+    );
+
+    try {
+      const error = await registry
+        .execute(provider, callApi, {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        })
+        .catch((caughtError: Error) => caughtError);
+
+      if (!(error instanceof Error)) {
+        throw new Error('Expected the WebSocket provider call to fail');
+      }
+      expect(callApi).toHaveBeenCalledTimes(3);
+      expect(error.message).toBe(expectedMessage);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        retriedRequests: 2,
+        rateLimitHits: expectedRateLimitHits,
+        failedRequests: 1,
+      });
+
+      const observableError = JSON.stringify({
+        message: error.message,
+        logs: errorSpy.mock.calls,
+        metrics: registry.getMetrics(),
+      });
+      expect(observableError).not.toContain('runtime-secret-tenant');
+      expect(observableError).not.toContain('private-session-123');
+      expect(observableError).not.toContain('runtime-query-secret');
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it.each([
+    new Error('getaddrinfo ENOTFOUND runtime-secret-tenant.invalid'),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-429.invalid'), { code: 'ENOTFOUND' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-503.invalid'), { code: 'ENOTFOUND' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-network.invalid'), { code: 'ENOTFOUND' }),
+    Object.assign(new Error('getaddrinfo ENOTFOUND tenant-ECONNRESET.invalid'), {
+      code: 'ENOTFOUND',
+    }),
+    new Error('getaddrinfo ENOTFOUND tenant-ECONNRESET.invalid'),
+    new Error('Unexpected server response: 401'),
+    new Error('Unexpected server response: 401 ws://tenant-429.invalid?token=503'),
+    new Error('Unexpected server response: 401 ws://tenant-ECONNRESET.invalid'),
+    Object.assign(new Error('self signed certificate for runtime-secret-tenant.invalid'), {
+      code: 'DEPTH_ZERO_SELF_SIGNED_CERT',
+    }),
+    Object.assign(new Error('self signed certificate for tenant-network.invalid'), {
+      code: 'DEPTH_ZERO_SELF_SIGNED_CERT',
+    }),
+    Object.assign(new Error('Host: timeout.invalid. is not in the certificate'), {
+      code: 'ERR_TLS_CERT_ALTNAME_INVALID',
+    }),
+    Object.assign(new Error('write EPROTO wrong version number runtime-secret-tenant.invalid'), {
+      code: 'EPROTO',
+    }),
+    Object.assign(new Error('write EPROTO tlsv1 alert protocol version'), { code: 'EPROTO' }),
+    Object.assign(new Error('write EPROTO unsupported protocol'), { code: 'EPROTO' }),
+    Object.assign(new Error('request aborted for runtime-secret-tenant.invalid'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('request aborted for tenant-network.invalid'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after timeout'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after ECONNRESET'), {
+      name: 'AbortError',
+      code: 'ABORT_ERR',
+    }),
+    Object.assign(new Error('The operation was aborted after timeout'), {
+      name: 'AbortException',
+      code: 'ABORT_ERR',
+    }),
+  ])('should not retry permanent or cancelled WebSocket errors: $message', async (sourceError) => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/ws?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+        maxRetries: 2,
+      },
+    });
+    emitWebSocketEvents({ type: 'error', error: sourceError });
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callApi = vi.fn(() =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { tenant: 'runtime-secret-tenant', token: 'runtime-query-secret' },
+      }),
+    );
+
+    try {
+      const error = await registry
+        .execute(provider, callApi, {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        })
+        .catch((caughtError: Error) => caughtError);
+
+      if (!(error instanceof Error)) {
+        throw new Error('Expected the WebSocket provider call to fail');
+      }
+      expect(error.message).toBe('WebSocket connection failed');
+      expect(error.name).toBe(
+        sourceError.name === 'AbortError' || sourceError.name === 'AbortException'
+          ? sourceError.name
+          : 'Error',
+      );
+      expect(callApi).toHaveBeenCalledOnce();
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        retriedRequests: 0,
+        rateLimitHits: 0,
+        failedRequests: 1,
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-secret-tenant');
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-query-secret');
+    } finally {
+      registry.dispose();
+    }
   });
 
   it('should handle timeout', async () => {
