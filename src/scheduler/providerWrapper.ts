@@ -55,7 +55,10 @@ export function createProviderRateLimitOptions(
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
       if (isHttpRateLimitError(error)) {
-        return error.retryAfterMs;
+        return (
+          error.retryAfterMs ??
+          (error.resetAt === undefined ? undefined : Math.max(0, error.resetAt - Date.now()))
+        );
       }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {

@@ -74,23 +74,31 @@ export function shouldRetry(
   // that are distinct from those low-level connection errors.
   if (error) {
     const message = (error.message ?? '').toLowerCase();
-    const httpStatus = message.match(
-      /\b(?:https?|status(?:\s+code)?|(?:api(?:\s+call)?|server)\s+error)\s*[:=]?\s*(\d{3})\b/,
-    )?.[1];
+    const httpError = message.match(
+      /\b(?:https?|(?:status\s+)?code|status|(?:api(?:\s+call)?|server)\s+error)\s*[:=]?\s*(?:[a-z]+_error\s+)?(\d{3})\b([\s\S]*)/,
+    );
+    const httpStatus = httpError?.[1];
 
     if (httpStatus) {
-      return (
-        httpStatus === '502' ||
-        httpStatus === '503' ||
-        httpStatus === '504' ||
-        httpStatus === '524' ||
-        (policy.retryAllServerErrors === true && httpStatus.startsWith('5'))
-      );
+      if (policy.retryAllServerErrors === true && httpStatus.startsWith('5')) {
+        return true;
+      }
+
+      const expectedStatusText: Record<string, string> = {
+        '502': 'bad gateway',
+        '503': 'service unavailable',
+        '504': 'gateway timeout',
+        '524': 'timeout',
+      };
+      const expectedText = expectedStatusText[httpStatus];
+      const statusText = httpError[2].trim();
+      return expectedText !== undefined && (!statusText || statusText.includes(expectedText));
     }
 
     return (
       isTransientConnectionError(error) ||
       message.includes('timeout') ||
+      message.includes('timed out') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       /\b(?:enotfound|eai_again|epipe)\b/.test(message)

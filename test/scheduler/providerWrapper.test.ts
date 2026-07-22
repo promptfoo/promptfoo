@@ -252,6 +252,23 @@ describe('providerWrapper', () => {
       ).toBe(2500);
     });
 
+    it('should honor reset-only rate-limit metadata', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test');
+      const delay = capturedOptions.getRetryAfter(
+        undefined,
+        new HttpRateLimitError({ status: 429, resetAt: Date.now() + 5000 }),
+      );
+
+      expect(delay).toBeGreaterThanOrEqual(4900);
+      expect(delay).toBeLessThanOrEqual(5000);
+    });
+
     it('should ignore non-finite retry-after-ms and fall back to retry-after', async () => {
       let capturedOptions: any;
       mockExecute.mockImplementation(async (_provider, callFn, options) => {

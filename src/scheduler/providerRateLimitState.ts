@@ -278,13 +278,18 @@ export class ProviderRateLimitState extends EventEmitter {
         // Check if we should retry
         if (canRetry(lastError, isRateLimited)) {
           attempt++;
-          await this.waitForRetry(
-            attempt,
-            retryPolicy,
-            retryAfterMs,
-            isRateLimited ? 'ratelimit' : 'error',
-            options.abortSignal,
-          );
+          try {
+            await this.waitForRetry(
+              attempt,
+              retryPolicy,
+              retryAfterMs,
+              isRateLimited ? 'ratelimit' : 'error',
+              options.abortSignal,
+            );
+          } catch (retryError) {
+            this.failedRequests++;
+            throw retryError;
+          }
           continue;
         }
 
@@ -408,7 +413,7 @@ export class ProviderRateLimitState extends EventEmitter {
     signal?: AbortSignal,
   ): Promise<void> {
     this.retriedRequests++;
-    const delay = getRetryDelay(attempt, policy, retryAfterMs);
+    const delay = getRetryDelay(attempt - 1, policy, retryAfterMs);
     this.emit('request:retrying', {
       rateLimitKey: this.rateLimitKey,
       attempt,

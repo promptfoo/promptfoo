@@ -358,6 +358,7 @@ describe('ProviderRateLimitState', () => {
       await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
       expect(callFn).toHaveBeenCalledTimes(1);
       expect(state.getMetrics().activeRequests).toBe(0);
+      expect(state.getMetrics().failedRequests).toBe(1);
     });
 
     it('should normalize custom abort reasons during retry backoff', async () => {
@@ -489,6 +490,21 @@ describe('ProviderRateLimitState', () => {
       expect(events.length).toBe(1);
       expect(events[0].attempt).toBe(1);
       expect(events[0].reason).toBe('ratelimit');
+    });
+
+    it('should start retry backoff at the configured base delay', async () => {
+      const events: any[] = [];
+      state.on('request:retrying', (event) => events.push(event));
+      const callFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('HTTP 503: Service Unavailable'))
+        .mockResolvedValueOnce('success');
+
+      const pending = state.executeWithRetry('req-base-delay', callFn, {});
+      await vi.runAllTimersAsync();
+
+      await expect(pending).resolves.toBe('success');
+      expect(events[0].delayMs).toBe(FAST_RETRY_POLICY.baseDelayMs);
     });
 
     it('should increment retriedRequests', async () => {

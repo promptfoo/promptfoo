@@ -5,8 +5,9 @@ import { storeBlob } from '../../blobs';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
-import { ellipsize } from '../../util/text';
+import { markNonIdempotentRequestAccepted } from '../../util/fetch/retryContext';
 import { sleep } from '../../util/time';
+import { formatVideoOutput } from '../video';
 import {
   determineGoogleVertexMode,
   getGoogleApiKey,
@@ -897,6 +898,7 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: createError || 'Failed to create video job' };
     }
 
+    markNonIdempotentRequestAccepted();
     const operationName = createdOp.name;
     logger.info(`[Google Video] Video job created: ${operationName}`);
 
@@ -954,12 +956,7 @@ export class GoogleVideoProvider implements ApiProvider {
     const latencyMs = Date.now() - startTime;
 
     // Format output with blob URI
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const output = `[Video: ${ellipsizedPrompt}](${blobRef.uri})`;
+    const output = formatVideoOutput(prompt, blobRef.uri);
 
     return {
       output,
