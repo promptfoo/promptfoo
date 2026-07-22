@@ -213,6 +213,65 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
   return pendingById.size === 0 && !pendingUnnamed ? completed : undefined;
 }
 
+function restoreStreamedFunctionCallParts(
+  parts: any[],
+  functionCalls: StreamedFunctionCall[],
+): any[] {
+  const callsById = new Map<string, StreamedFunctionCall[]>();
+  const unnamedCalls: StreamedFunctionCall[] = [];
+  for (const functionCall of functionCalls) {
+    if (functionCall.id) {
+      const calls = callsById.get(functionCall.id) ?? [];
+      calls.push(functionCall);
+      callsById.set(functionCall.id, calls);
+    } else {
+      unnamedCalls.push(functionCall);
+    }
+  }
+
+  const activeCallIds = new Set<string>();
+  let unnamedCallInProgress = false;
+
+  return parts.flatMap((part) => {
+    const fragment = part?.functionCall as StreamedFunctionCall | undefined;
+    if (!fragment) {
+      return [part];
+    }
+
+    if (fragment.id) {
+      if (activeCallIds.has(fragment.id)) {
+        if (fragment.willContinue !== true) {
+          activeCallIds.delete(fragment.id);
+        }
+        return [];
+      }
+
+      const functionCall = callsById.get(fragment.id)?.shift();
+      if (!functionCall) {
+        return [];
+      }
+      if (fragment.willContinue === true) {
+        activeCallIds.add(fragment.id);
+      }
+      return [{ ...part, functionCall }];
+    }
+
+    if (unnamedCallInProgress) {
+      if (fragment.willContinue !== true) {
+        unnamedCallInProgress = false;
+      }
+      return [];
+    }
+
+    const functionCall = unnamedCalls.shift();
+    if (!functionCall) {
+      return [];
+    }
+    unnamedCallInProgress = fragment.willContinue === true;
+    return [{ ...part, functionCall }];
+  });
+}
+
 /**
  * Abstract base class for Google AI providers.
  *
@@ -591,20 +650,37 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     }
 
     const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
+    const passthroughToolConfig = config.passthrough?.toolConfig ?? config.passthrough?.tool_config;
+    const effectiveToolConfig = (passthroughToolConfig ??
+      config.toolConfig ??
+      config.tool_config) as
+      | {
+          functionCallingConfig?: {
+            streamFunctionCallArguments?: boolean;
+            stream_function_call_arguments?: boolean;
+          };
+          function_calling_config?: {
+            streamFunctionCallArguments?: boolean;
+            stream_function_call_arguments?: boolean;
+          };
+        }
+      | undefined;
+    const functionCallingConfig =
+      effectiveToolConfig?.functionCallingConfig ?? effectiveToolConfig?.function_calling_config;
     const streamsFunctionCallArguments =
       config.streaming === true &&
-      (config.toolConfig?.functionCallingConfig?.streamFunctionCallArguments === true ||
-        config.tool_config?.function_calling_config?.stream_function_call_arguments === true);
+      (functionCallingConfig?.streamFunctionCallArguments === true ||
+        functionCallingConfig?.stream_function_call_arguments === true);
     const functionCalls = streamsFunctionCallArguments
       ? assembleStreamedFunctionCalls(parts)
       : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
-    if (!functionCalls) {
+    if (!functionCalls?.length) {
       return output;
     }
 
     if (!config.functionToolCallbacks) {
       return streamsFunctionCallArguments
-        ? functionCalls.map((functionCall) => ({ functionCall }))
+        ? restoreStreamedFunctionCallParts(parts, functionCalls)
         : output;
     }
 

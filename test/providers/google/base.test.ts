@@ -634,6 +634,83 @@ describe('GoogleGenericProvider', () => {
       ]);
     });
 
+    it('preserves non-call parts when assembling streamed calls without callbacks', async () => {
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const signedText = { text: 'Before the call', thoughtSignature: 'text-signature' };
+      const inlineData = { inlineData: { mimeType: 'audio/ogg', data: 'encoded-audio' } };
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          signedText,
+          {
+            functionCall: { name: 'test_function', willContinue: true },
+            thoughtSignature: 'call-signature',
+          },
+          { text: 'While the call is streamed' },
+          { functionCall: { partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }] } },
+          inlineData,
+          { text: 'After the call' },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+        },
+        false,
+      );
+
+      expect(result).toEqual([
+        signedText,
+        {
+          functionCall: { name: 'test_function', args: { city: 'Boston' } },
+          thoughtSignature: 'call-signature',
+        },
+        { text: 'While the call is streamed' },
+        inlineData,
+        { text: 'After the call' },
+      ]);
+    });
+
+    it('preserves structured JSON when streaming is enabled but no function is called', async () => {
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const output = JSON.stringify({ tweet: 'Structured output remains available' });
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        output,
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+        },
+        false,
+      );
+
+      expect(result).toBe(output);
+    });
+
+    it.each([
+      { toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } } },
+      { tool_config: { function_calling_config: { stream_function_call_arguments: true } } },
+    ])('assembles streamed calls enabled through passthrough tool config', async (passthrough) => {
+      const callback = vi.fn().mockResolvedValue('streamed');
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { name: 'test_function', willContinue: true } },
+          { functionCall: { partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }] } },
+        ],
+        {
+          streaming: true,
+          passthrough,
+          functionToolCallbacks: { test_function: callback },
+        },
+        false,
+      );
+
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith('{"city":"Boston"}');
+      expect(result).toBe('streamed');
+    });
+
     it('should invoke a cumulative streamed function call only once', async () => {
       const callback = vi.fn().mockResolvedValue('streamed');
       const provider = new TestGoogleProvider('gemini-3.6-flash');
