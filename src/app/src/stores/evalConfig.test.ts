@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG, useStore } from './evalConfig';
 
 describe('evalConfig store', () => {
@@ -59,6 +59,20 @@ describe('evalConfig store', () => {
 
     expect(useStore.getState().config).toMatchObject(config);
     expect(localStorage.getItem('promptfoo')).toBeNull();
+  });
+
+  it('removes existing evaluation drafts without clearing unrelated browser storage', async () => {
+    localStorage.setItem(
+      'promptfoo',
+      JSON.stringify({ state: { config: { env: { OPENAI_API_KEY: 'old-secret' } } } }),
+    );
+    localStorage.setItem('unrelated-preference', 'preserved');
+
+    vi.resetModules();
+    await import('./evalConfig');
+
+    expect(localStorage.getItem('promptfoo')).toBeNull();
+    expect(localStorage.getItem('unrelated-preference')).toBe('preserved');
   });
 
   it('preserves supported default test configurations', () => {

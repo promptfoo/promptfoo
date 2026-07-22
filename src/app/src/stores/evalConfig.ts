@@ -23,6 +23,12 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
+try {
+  globalThis.localStorage?.removeItem('promptfoo');
+} catch {
+  // Browsers can disable access to local storage.
+}
+
 export const useStore = create<EvalConfigState>()((set, get) => ({
   config: { ...DEFAULT_CONFIG },
 
