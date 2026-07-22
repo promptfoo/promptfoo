@@ -344,6 +344,30 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - retry behavior', () => {
+    it('should retry transient errors returned in provider responses', async () => {
+      const callFn = vi
+        .fn()
+        .mockResolvedValueOnce({ error: 'API error 503: Service Unavailable' })
+        .mockResolvedValueOnce({ output: 'success' });
+
+      const promise = state.executeWithRetry('req-1', callFn, {});
+      await vi.runAllTimersAsync();
+
+      await expect(promise).resolves.toEqual({ output: 'success' });
+      expect(callFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return the final transient provider response after retries are exhausted', async () => {
+      const response = { error: 'Network error' };
+      const callFn = vi.fn().mockResolvedValue(response);
+
+      const promise = state.executeWithRetry('req-1', callFn, { maxRetriesOverride: 2 });
+      await vi.runAllTimersAsync();
+
+      await expect(promise).resolves.toBe(response);
+      expect(callFn).toHaveBeenCalledTimes(3);
+    });
+
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
