@@ -225,6 +225,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(job.cache.key).toContain('$CI_JOB_NAME_SLUG');
     expect(job.cache.key).toContain('$CI_PROJECT_ID');
     expect(job.cache.key).toContain('$CI_COMMIT_SHA');
+    expect(job.cache.paths).toEqual(['$PROMPTFOO_CACHE_PATH/']);
     expect(commentJob.image).toEqual(job.image);
     expect(commentJob.environment).toEqual({ name: 'promptfoo-review', action: 'verify' });
     expect(commentJob.variables.GIT_STRATEGY).toBe('none');
@@ -565,6 +566,35 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
         expect(comment.status).toBe(0);
         expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'POST']);
+      },
+    );
+  });
+
+  it('encodes custom job names before embedding them in comment markers', async () => {
+    await runEvaluation();
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : request.method === 'GET'
+              ? '[]'
+              : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+          PROMPTFOO_EVAL_JOB_NAME: 'trusted -->\n@reviewer',
+        });
+
+        expect(comment.status).toBe(0);
+        const body = JSON.parse(requests[2].body).body;
+        expect(body).toContain('<!-- promptfoo-eval:trusted%20--%3E%0A%40reviewer -->');
+        expect(body).not.toContain('-->\n@reviewer');
       },
     );
   });
