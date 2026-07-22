@@ -805,6 +805,27 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
+function sanitizeTemplatedUrl(url: string): string {
+  // A template may coexist with an already-rendered env credential. Avoid URL
+  // parsing here because it encodes the remaining Nunjucks syntax, but still
+  // scrub literal query and fragment credentials before the value is logged or
+  // persisted.
+  if (hasUrlUserinfoPassword(url)) {
+    return REDACTED;
+  }
+
+  const hashIndex = url.indexOf('#');
+  const beforeHash = hashIndex === -1 ? url : url.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? '' : url.slice(hashIndex + 1);
+  const queryIndex = beforeHash.indexOf('?');
+  const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
+  const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
+  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
+  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+
+  return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
+}
+
 export function sanitizeUrl(url: string): string {
   try {
     // Ensure url is a string and handle edge cases
@@ -812,21 +833,10 @@ export function sanitizeUrl(url: string): string {
       return url;
     }
 
-    // Check if URL contains template variables (e.g., {{ variable }})
-    // These are configuration templates, not runtime secrets, so skip sanitization entirely.
-    //
-    // Important trade-off: URLs with both templates AND real sensitive params
-    // (e.g., "https://example.com/{{ path }}?api_key=secret") will NOT be sanitized.
-    // This is acceptable because:
-    // 1. Template URLs come from config files (version-controlled, not runtime)
-    // 2. Secrets should be in environment variables, not hardcoded in config
-    // 3. Attempting to parse/sanitize would URL-encode template syntax ({{ → %7B%7B),
-    //    breaking Nunjucks rendering
-    // 4. When templates render to real URLs at runtime, those URLs get sanitized normally
-    //
-    // Use simple string check instead of regex to avoid ReDoS vulnerability
+    // Preserve unresolved template syntax while redacting any literal credentials
+    // that were already rendered into another part of the same URL.
     if (url.includes('{{') && url.includes('}}')) {
-      return url;
+      return sanitizeTemplatedUrl(url);
     }
 
     // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
