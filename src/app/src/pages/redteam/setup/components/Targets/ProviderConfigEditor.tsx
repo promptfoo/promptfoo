@@ -49,6 +49,7 @@ type NunjucksAstNode = {
   body?: NunjucksAstNode;
   else_?: NunjucksAstNode;
   args?: NunjucksAstNode;
+  name?: NunjucksAstNode;
 };
 
 type NunjucksUrlCandidate = {
@@ -57,6 +58,36 @@ type NunjucksUrlCandidate = {
 };
 
 const TEMPLATE_PLACEHOLDER = '\0';
+
+const getConstantNunjucksExpression = (node: NunjucksAstNode): string | undefined => {
+  if (node.typename === 'Literal') {
+    return String(node.value ?? '');
+  }
+
+  if (node.typename !== 'Filter' || typeof node.name?.value !== 'string') {
+    return undefined;
+  }
+
+  const values: string[] = [];
+  for (const argument of node.args?.children ?? []) {
+    const value = getConstantNunjucksExpression(argument);
+    if (value === undefined) {
+      return undefined;
+    }
+    values.push(value);
+  }
+
+  try {
+    const value = new nunjucks.Environment(null, { autoescape: false }).getFilter(node.name.value)(
+      ...values,
+    );
+    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+      ? String(value)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const getNunjucksUrlCandidates = (
   node: NunjucksAstNode,
@@ -109,6 +140,11 @@ const getNunjucksUrlCandidates = (
     return null;
   }
 
+  const constantExpression = getConstantNunjucksExpression(node);
+  if (constantExpression !== undefined) {
+    return [{ value: constantExpression, expressions: [] }];
+  }
+
   return [{ value: TEMPLATE_PLACEHOLDER, expressions: [node] }];
 };
 
@@ -159,6 +195,10 @@ function ProviderConfigEditor({
 
       if (url.includes(TEMPLATE_PLACEHOLDER)) {
         return false;
+      }
+
+      if (!/{{|{%|{#/.test(url)) {
+        return ['ws:', 'wss:'].includes(new URL(url).protocol);
       }
 
       const fixedProtocol = url.match(/^([a-z][a-z\d+.-]*):\/\//i);

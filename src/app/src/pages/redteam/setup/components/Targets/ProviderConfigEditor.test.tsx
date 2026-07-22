@@ -4,6 +4,7 @@ import AddProviderDialog from '@app/pages/eval-creator/components/AddProviderDia
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import nunjucks from 'nunjucks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderEditor from './ProviderEditor';
@@ -144,6 +145,7 @@ describe('ProviderConfigEditor', () => {
       ['an authority template', 'wss://{{ host }}/ws'],
       ['a port template', 'wss://example.com:{{ port }}/ws'],
       ['a scheme template', '{{ protocol }}://example.com/ws'],
+      ['a constant filtered WebSocket scheme', '{{ "WS" | lower }}://example.com/ws'],
       ['a partial scheme template', 'w{{ protocolSuffix }}://example.com/ws'],
       ['a case-insensitive partial scheme template', 'W{{ protocolSuffix }}://example.com/ws'],
       ['a whole-URL template', '{{ websocketUrl }}'],
@@ -218,6 +220,9 @@ describe('ProviderConfigEditor', () => {
       ['an HTTP URL', 'https://example.com/ws'],
       ['an HTTP URL with a templated host', 'https://{{ host }}/ws'],
       ['an incompatible templated scheme', 'http{{ suffix }}://example.com/ws'],
+      ['a constant filtered HTTP scheme', '{{ "http" | lower }}://example.com/ws'],
+      ['a constant filtered HTTPS scheme', '{{ "https" | upper }}://example.com/ws'],
+      ['a constant default-filtered HTTP scheme', '{{ "http" | default("ws") }}://example.com/ws'],
       [
         'a static scheme containing the internal placeholder',
         '__promptfoo_template__://example.com/ws',
@@ -281,6 +286,32 @@ describe('ProviderConfigEditor', () => {
       expect(validateFn!()).toBe(false);
       expect(setError).toHaveBeenCalledWith('Valid WebSocket URL is required');
       expect(onValidate).toHaveBeenCalledWith(false);
+    });
+
+    it('should validate a static WebSocket URL without using the Nunjucks parser', () => {
+      const parser = (
+        nunjucks as typeof nunjucks & { parser: { parse: (template: string) => unknown } }
+      ).parser;
+      const parse = vi.spyOn(parser, 'parse');
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'websocket',
+            config: { url: 'wss://example.com/ws', messageTemplate: '{{ prompt }}' },
+          }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="websocket"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+      expect(parse).not.toHaveBeenCalled();
+      parse.mockRestore();
     });
 
     it.each([
