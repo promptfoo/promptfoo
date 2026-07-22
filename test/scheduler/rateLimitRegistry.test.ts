@@ -180,6 +180,7 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 3,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
     });
 
@@ -197,6 +198,7 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 2,
         queueTimeoutMs: 2,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 2, retryAllServerErrors: false }),
       });
     });
 
@@ -425,6 +427,7 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 1,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
     });
 
@@ -498,12 +501,14 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 1,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
       expect(mockProviderRateLimitStateConstructor).toHaveBeenNthCalledWith(2, {
         rateLimitKey: 'provider-2[def456]',
         maxConcurrency: 10,
         minConcurrency: 1,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
     });
   });

@@ -360,6 +360,37 @@ describe('ProviderRateLimitState', () => {
       expect(state.getMetrics().activeRequests).toBe(0);
     });
 
+    it('should normalize custom abort reasons during retry backoff', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn().mockRejectedValue(new Error('Rate limit exceeded'));
+      const pending = state.executeWithRetry('req-custom-abort', callFn, {
+        abortSignal: controller.signal,
+        getRetryAfter: () => 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort(new Error('caller cancelled'));
+
+      await expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'caller cancelled',
+      });
+      expect(callFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should prefer cancellation over a concurrent provider error', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn(async () => {
+        controller.abort(new Error('caller cancelled'));
+        throw new Error('Network error');
+      });
+
+      await expect(
+        state.executeWithRetry('req-abort-error', callFn, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled' });
+      expect(callFn).toHaveBeenCalledTimes(1);
+    });
+
     it('should cancel transient-response backoff without releasing another request', async () => {
       const controller = new AbortController();
       const callFn = vi.fn().mockResolvedValue({ error: 'API error 503: Service Unavailable' });

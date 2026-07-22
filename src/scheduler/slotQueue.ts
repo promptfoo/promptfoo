@@ -17,6 +17,17 @@ export interface SlotQueueOptions {
 
 const DEFAULT_QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+export function getSchedulerAbortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error && signal.reason.name === 'AbortError') {
+    return signal.reason;
+  }
+  const error = new Error(
+    signal.reason instanceof Error ? signal.reason.message : 'Request was aborted',
+  );
+  error.name = 'AbortError';
+  return error;
+}
+
 /**
  * Manages concurrency slots with FIFO queue for waiting requests.
  *
@@ -56,7 +67,9 @@ export class SlotQueue {
    * Returns when a slot is available and quota is not exhausted.
    */
   async acquire(requestId: string, signal?: AbortSignal): Promise<void> {
-    signal?.throwIfAborted();
+    if (signal?.aborted) {
+      throw getSchedulerAbortError(signal);
+    }
 
     return new Promise((resolve, reject) => {
       const queuedAt = Date.now();
@@ -98,11 +111,7 @@ export class SlotQueue {
         const index = this.waiting.findIndex((request) => request.id === requestId);
         if (index !== -1) {
           this.waiting.splice(index, 1);
-          wrappedReject(
-            signal?.reason instanceof Error
-              ? signal.reason
-              : new DOMException('The operation was aborted', 'AbortError'),
-          );
+          wrappedReject(getSchedulerAbortError(signal!));
         }
       };
       signal?.addEventListener('abort', onAbort, { once: true });

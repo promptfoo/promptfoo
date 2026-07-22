@@ -6,6 +6,7 @@ import { canSchedulerRetry, withFetchRetryContext } from '../util/fetch/retryCon
 import { sanitizeProviderIdForLog } from '../util/provider';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
+import { DEFAULT_RETRY_POLICY } from './retryPolicy';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -114,6 +115,11 @@ export class RateLimitRegistry extends EventEmitter {
         maxConcurrency: this.maxConcurrency,
         minConcurrency: this.minConcurrency,
         queueTimeoutMs: this.queueTimeoutMs,
+        retryPolicy: {
+          ...DEFAULT_RETRY_POLICY,
+          baseDelayMs: getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_RETRY_POLICY.baseDelayMs),
+          retryAllServerErrors: getEnvBool('PROMPTFOO_RETRY_5XX'),
+        },
       });
 
       // Forward events

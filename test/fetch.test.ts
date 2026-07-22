@@ -2431,6 +2431,34 @@ describe('fetchWithProxy transient error retries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it('should retry a download without replaying an accepted non-idempotent request', async () => {
+    const createdResponse = createMockResponse({ ok: true });
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const downloadResponse = createMockResponse({ ok: true });
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(createdResponse)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(downloadResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(
+      2,
+      async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        return fetchWithProxy('https://example.com/jobs/123/content');
+      },
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(result).toBe(downloadResponse);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it('should retry on 524 A Timeout Occurred (Cloudflare)', async () => {
     const transientResponse = createMockResponse({
       status: 524,

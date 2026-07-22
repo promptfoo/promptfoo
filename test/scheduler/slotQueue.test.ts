@@ -123,6 +123,16 @@ describe('SlotQueue', () => {
       expect(queue.getActiveCount()).toBe(0);
     });
 
+    it('should normalize custom abort reasons to AbortError', async () => {
+      const controller = new AbortController();
+      controller.abort(new Error('caller cancelled'));
+
+      await expect(queue.acquire('aborted', controller.signal)).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'caller cancelled',
+      });
+    });
+
     it('should remove aborted requests from the waiting queue', async () => {
       queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });
       await queue.acquire('active');
@@ -134,6 +144,20 @@ describe('SlotQueue', () => {
 
       await expect(waiting).rejects.toMatchObject({ name: 'AbortError' });
       expect(queue.getQueueDepth()).toBe(0);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('should normalize custom abort reasons while waiting for a slot', async () => {
+      queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });
+      await queue.acquire('active');
+      const controller = new AbortController();
+      const waiting = queue.acquire('waiting', controller.signal);
+      controller.abort(new Error('caller cancelled'));
+
+      await expect(waiting).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'caller cancelled',
+      });
       expect(queue.getActiveCount()).toBe(1);
     });
 

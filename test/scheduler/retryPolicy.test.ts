@@ -67,6 +67,21 @@ describe('shouldRetry', () => {
     expect(result).toBe(true);
   });
 
+  it('should retry on bare 524 response errors', () => {
+    expect(
+      shouldRetry(0, new Error('QuiverAI API error: HTTP 524'), false, DEFAULT_RETRY_POLICY),
+    ).toBe(true);
+  });
+
+  it('should retry other server errors when explicitly enabled', () => {
+    const error = new Error('HTTP 500: Internal Server Error');
+
+    expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+    expect(
+      shouldRetry(0, error, false, { ...DEFAULT_RETRY_POLICY, retryAllServerErrors: true }),
+    ).toBe(true);
+  });
+
   it('should not retry on generic error', () => {
     const error = new Error('Some random error');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);

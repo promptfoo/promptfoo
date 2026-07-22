@@ -21,6 +21,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import {
+  canSchedulerRetry,
   disableSchedulerRetries,
   doesSchedulerOwnFetchRetries,
   getFetchRetryContextMaxRetries,
@@ -123,12 +124,12 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
 }
 
 /**
- * Scheduler-owned calls never retry in the transport. Otherwise an explicit
- * caller flag wins, and maxRetries: 0 disables implicit transient retries.
+ * The scheduler owns retries until an accepted mutation makes replay unsafe.
+ * Then direct transport calls can retry unless explicitly disabled.
  */
 function resolveTransientRetryDisabled(explicit?: boolean): boolean {
   if (doesSchedulerOwnFetchRetries()) {
-    return true;
+    return explicit === true || canSchedulerRetry() || getFetchRetryContextMaxRetries() === 0;
   }
   if (explicit !== undefined) {
     return explicit;
@@ -274,6 +275,14 @@ export async function fetchWithProxy(
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
     const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    const method = (
+      finalOptions.method ?? (url instanceof Request ? url.method : 'GET')
+    ).toUpperCase();
+
+    if (response.ok && (method === 'POST' || method === 'PATCH')) {
+      // Replaying the provider could create another billable job.
+      disableSchedulerRetries(true);
+    }
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
@@ -671,9 +680,7 @@ export async function fetchWithRetries(
 ): Promise<Response> {
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   if (doesSchedulerOwnFetchRetries()) {
-    if (maxRetries === 0) {
-      disableSchedulerRetries();
-    }
+    disableSchedulerRetries(maxRetries === 0);
     maxRetries = 0;
   } else {
     maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);

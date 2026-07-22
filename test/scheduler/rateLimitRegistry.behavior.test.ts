@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
-import { fetchWithRetries } from '../../src/util/fetch';
+import { fetchWithProxy, fetchWithRetries } from '../../src/util/fetch';
 import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
@@ -194,6 +194,111 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
 
       expect(result.error).toContain('Network error');
       expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should keep retrying after a successful zero-retry credential request', async () => {
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi.fn().mockImplementation(async (url: RequestInfo | URL) => {
+      if (String(url).includes('/token')) {
+        return new Response('token');
+      }
+      throw new Error('Network error');
+    });
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        async () => {
+          await fetchWithRetries('https://example.com/token', { method: 'POST' }, 1000, 0);
+          try {
+            await fetchWithRetries('https://example.com/api', {}, 1000, 2);
+            return { output: 'unexpected' };
+          } catch (error) {
+            return { error: `API error: ${(error as Error).message}` };
+          }
+        },
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result.error).toContain('Network error');
+      expect(fetch).toHaveBeenCalledTimes(6);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should not replay a non-idempotent webhook that returns an application error', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'network timeout' })));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        const response = await fetchWithRetries(
+          'https://example.com/webhook',
+          { method: 'POST' },
+          1000,
+          0,
+        );
+        return response.json() as Promise<{ error: string }>;
+      });
+
+      expect(result.error).toBe('network timeout');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should not recreate an accepted job when its download cannot be retried', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'job-123' })))
+      .mockResolvedValue(new Response(null, { status: 503, statusText: 'Service Unavailable' }));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        const response = await fetchWithProxy('https://example.com/jobs/123/content', {
+          disableTransientRetries: true,
+        });
+        return { error: `Failed to download video: ${response.status} ${response.statusText}` };
+      });
+
+      expect(result.error).toContain('503');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should honor the all-5xx retry setting with the scheduler enabled', async () => {
+    vi.stubEnv('PROMPTFOO_RETRY_5XX', 'true');
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 500, statusText: 'Server Error' }))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(
+        createProvider(2),
+        () => fetchWithRetries('https://example.com', {}, 1000, 2),
+        { getRetryAfter: () => 0 },
+      );
+
+      expect(result.ok).toBe(true);
+      expect(fetch).toHaveBeenCalledTimes(2);
     } finally {
       registry.dispose();
     }

@@ -5,6 +5,7 @@ export interface RetryPolicy {
   baseDelayMs: number;
   maxDelayMs: number;
   jitterFactor: number; // 0-1, adds randomness to prevent thundering herd
+  retryAllServerErrors?: boolean;
 }
 
 export const DEFAULT_RETRY_POLICY: RetryPolicy = {
@@ -78,9 +79,11 @@ export function shouldRetry(
       message.includes('timeout') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
+      (policy.retryAllServerErrors === true && /\b5\d{2}\b/.test(message)) ||
       message.includes('503') ||
       message.includes('502') ||
-      message.includes('504')
+      message.includes('504') ||
+      message.includes('524')
     );
   }
 

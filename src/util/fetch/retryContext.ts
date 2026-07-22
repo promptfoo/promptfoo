@@ -34,10 +34,10 @@ export function doesSchedulerOwnFetchRetries(): boolean {
   return fetchRetryContext.getStore()?.schedulerOwnsRetries === true;
 }
 
-export function disableSchedulerRetries(): void {
+export function disableSchedulerRetries(disabled: boolean): void {
   const context = fetchRetryContext.getStore();
   if (context?.schedulerOwnsRetries) {
-    context.schedulerRetriesDisabled = true;
+    context.schedulerRetriesDisabled = disabled;
   }
 }
 
