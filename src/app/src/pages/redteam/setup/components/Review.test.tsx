@@ -657,7 +657,7 @@ Application Details:
 
     it('should enable the Run Now button when API status is loading', () => {
       vi.mocked(useApiHealth).mockReturnValue({
-        data: { status: 'loading', message: null },
+        data: { status: 'connected', message: '' },
         refetch: vi.fn(),
         isLoading: true,
       } as unknown as ApiHealthQueryResult);
@@ -784,7 +784,7 @@ Application Details:
 
     it('should not display warning alert when API is loading', () => {
       vi.mocked(useApiHealth).mockReturnValue({
-        data: { status: 'loading', message: null },
+        data: { status: 'connected', message: '' },
         refetch: vi.fn(),
         isLoading: true,
       } as unknown as ApiHealthQueryResult);
@@ -879,7 +879,7 @@ Application Details:
 
     it('should not show tooltip when API is loading', async () => {
       vi.mocked(useApiHealth).mockReturnValue({
-        data: { status: 'loading', message: null },
+        data: { status: 'connected', message: '' },
         refetch: vi.fn(),
         isLoading: true,
       } as unknown as ApiHealthQueryResult);

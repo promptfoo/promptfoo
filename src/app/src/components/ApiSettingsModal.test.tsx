@@ -74,7 +74,7 @@ describe('ApiSettingsModal', () => {
 
   it('shows loading state during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      data: { status: 'loading', message: '' },
+      data: { status: 'unknown', message: '' },
       refetch: mockCheckHealth,
       isLoading: true,
     } as unknown as ApiHealthQueryResult);
@@ -139,21 +139,27 @@ describe('ApiSettingsModal', () => {
     });
   });
 
-  it('disables form controls during health check', () => {
+  it('keeps API settings editable while a health check is pending', async () => {
+    const user = userEvent.setup();
+    mockCheckHealth.mockReturnValueOnce(new Promise(() => {}));
     vi.mocked(useApiHealth).mockReturnValue({
-      data: { status: 'loading', message: '' },
+      data: { status: 'connected', message: '' },
       refetch: mockCheckHealth,
       isLoading: true,
     } as unknown as ApiHealthQueryResult);
 
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
-    expect(screen.getByLabelText('API Base URL')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    // Find the Close button in the footer (not the dialog X button)
+    const input = screen.getByLabelText('API Base URL');
+    expect(input).toBeEnabled();
+    await user.clear(input);
+    await user.type(input, 'https://working.example.com');
+    expect(input).toHaveValue('https://working.example.com');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(screen.getByLabelText('Check connection')).toBeDisabled();
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
-    expect(footerCloseButton).toBeDisabled();
+    expect(footerCloseButton).toBeEnabled();
   });
 
   it('shows refresh button and handles click', async () => {
