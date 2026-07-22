@@ -201,9 +201,19 @@ describe('useApiHealth', () => {
     expect(getCallApiMock()).toHaveBeenCalledTimes(1);
   });
 
-  it('refreshes immediately when the connection comes back online', async () => {
+  it('pauses offline polling and refreshes when the connection comes back', async () => {
+    const timers = useTestTimers();
+    let isOnline = false;
+    vi.spyOn(navigator, 'onLine', 'get').mockImplementation(() => isOnline);
     mockCallApiResponse({ status: 'OK', message: 'Connected' });
     renderHook(() => useApiHealth());
+
+    await act(async () => {
+      await timers.advanceByAsync(3000);
+    });
+
+    expect(getCallApiMock()).not.toHaveBeenCalled();
+    isOnline = true;
 
     await act(async () => {
       window.dispatchEvent(new Event('online'));

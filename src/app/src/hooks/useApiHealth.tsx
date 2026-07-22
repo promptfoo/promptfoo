@@ -70,7 +70,7 @@ function refreshHealth(background = false): Promise<ApiHealthResult> {
 }
 
 function refreshVisiblePage(): void {
-  if (document.visibilityState !== 'hidden') {
+  if (document.visibilityState !== 'hidden' && navigator.onLine) {
     void refreshHealth(true);
   }
 }
