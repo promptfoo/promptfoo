@@ -194,7 +194,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('keeps the documented remote template integrity hashes current', () => {
-    const integrity = `sha256-${createHash('sha256').update(templateSource).digest('base64')}`;
+    const publishedSource = templateSource.replace(/\r\n/g, '\n');
+    const integrity = `sha256-${createHash('sha256').update(publishedSource).digest('base64')}`;
     const exampleReadme = fs.readFileSync(path.join(exampleDir, 'README.md'), 'utf8');
     const integrationDocs = fs.readFileSync(
       path.join(rootDir, 'site/docs/integrations/gitlab-ci.md'),
