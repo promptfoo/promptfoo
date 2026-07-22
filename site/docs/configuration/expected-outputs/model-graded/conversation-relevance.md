@@ -23,6 +23,8 @@ assert:
     threshold: 0.8
 ```
 
+The threshold defaults to `0.5` when omitted. Set it explicitly to `0` to accept any score.
+
 ## Using with conversations
 
 The assertion works with the special `_conversation` variable that contains an array of input/output pairs:
