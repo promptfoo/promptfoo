@@ -2047,9 +2047,7 @@ function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): Co
     invariant(
       !existingProvider ||
         existingProvider === provider ||
-        (!isWebSocketProvider(existingProvider) &&
-          !isWebSocketProvider(provider) &&
-          existingProvider.id() !== providerId),
+        (!isWebSocketProvider(existingProvider) && !isWebSocketProvider(provider)),
       `Duplicate provider identity "${providerKey}". Configure a unique, non-secret label or provider ID for each distinct provider.`,
     );
     providersByIdentity.set(providerKey, provider);
@@ -2080,7 +2078,10 @@ function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): Co
 
 function isWebSocketProvider(provider: ApiProvider): boolean {
   const url = (provider as ApiProvider & { url?: unknown }).url;
-  return typeof url === 'string' && /^wss?:\/\//i.test(url);
+  return (
+    typeof url === 'string' &&
+    (/^wss?:\/\//i.test(url) || typeof provider.config?.messageTemplate === 'string')
+  );
 }
 
 function buildPromptIndexMap(prompts: CompletedPrompt[]) {

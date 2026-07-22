@@ -612,7 +612,6 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
 // cannot backtrack against the closing `}}` (linear, no ReDoS).
 const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
-const NUNJUCKS_TEMPLATE_TOKEN = /(\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}|\{#[\s\S]*?#\})/g;
 
 function isNunjucksTemplateToken(value: string): boolean {
   return (
@@ -620,6 +619,36 @@ function isNunjucksTemplateToken(value: string): boolean {
     (value.startsWith('{%') && value.endsWith('%}')) ||
     (value.startsWith('{#') && value.endsWith('#}'))
   );
+}
+
+function splitNunjucksTemplateTokens(value: string): string[] {
+  const parts: string[] = [];
+  let literalStart = 0;
+
+  for (let index = 0; index < value.length; index++) {
+    const closingTag = value.startsWith('{{', index)
+      ? '}}'
+      : value.startsWith('{%', index)
+        ? '%}'
+        : value.startsWith('{#', index)
+          ? '#}'
+          : undefined;
+    if (!closingTag) {
+      continue;
+    }
+
+    const tagEnd = value.indexOf(closingTag, index + 2);
+    if (tagEnd === -1) {
+      break;
+    }
+
+    parts.push(value.slice(literalStart, index), value.slice(index, tagEnd + 2));
+    index = tagEnd + 1;
+    literalStart = index + 1;
+  }
+
+  parts.push(value.slice(literalStart));
+  return parts;
 }
 
 function hasUnterminatedNunjucksTag(value: string): boolean {
@@ -893,13 +922,10 @@ function sanitizeTemplatedUrlComponent(component: string): string {
       sanitized += pair;
     } else {
       const rawKey = pair.slice(0, equalsIndex);
-      const literalKey = rawKey
-        .split(NUNJUCKS_TEMPLATE_TOKEN)
+      const literalKey = splitNunjucksTemplateTokens(rawKey)
         .filter((part) => !isNunjucksTemplateToken(part))
         .join('');
-      const sanitizedValue = pair
-        .slice(equalsIndex + 1)
-        .split(NUNJUCKS_TEMPLATE_TOKEN)
+      const sanitizedValue = splitNunjucksTemplateTokens(pair.slice(equalsIndex + 1))
         .map((part) => {
           if (!part || isNunjucksTemplateToken(part)) {
             return part;
@@ -935,7 +961,7 @@ function sanitizeTemplatedUrl(url: string): string {
     return REDACTED;
   }
 
-  const templateTokens = url.match(NUNJUCKS_TEMPLATE_TOKEN) || [];
+  const templateTokens = splitNunjucksTemplateTokens(url).filter(isNunjucksTemplateToken);
   if (
     templateTokens.some((token) =>
       token.split(/[\s"'=,()/?:&#;]+/).some((part) => {
@@ -973,9 +999,7 @@ function sanitizeTemplatedUrl(url: string): string {
     pathStart === -1
       ? beforeQuery
       : beforeQuery.slice(0, pathStart) +
-        beforeQuery
-          .slice(pathStart)
-          .split(NUNJUCKS_TEMPLATE_TOKEN)
+        splitNunjucksTemplateTokens(beforeQuery.slice(pathStart))
           .map((part) => {
             if (!part || isNunjucksTemplateToken(part)) {
               return part;

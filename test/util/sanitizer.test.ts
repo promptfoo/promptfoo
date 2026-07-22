@@ -1688,6 +1688,17 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(`wss://host/ws?value=${malformed}`)).toBe('[REDACTED]');
     });
 
+    it.each([
+      '{{',
+      '{%',
+      '{#',
+    ])('should fail closed for repeated unterminated %s template tags without backtracking', (openingTag) => {
+      const validTag = openingTag === '{{' ? '{% if active %}' : '{{ sessionId }}';
+      const malformed = `${openingTag.repeat(10_000)}${validTag}`;
+
+      expect(sanitizeUrl(`wss://host/ws?value=${malformed}`)).toBe('[REDACTED]');
+    });
+
     it('should redact mixed template and sensitive params', () => {
       const url = 'https://admin:secret@{{ api_base }}/api?api_key=key123&data=public';
       expect(sanitizeUrl(url)).toBe('[REDACTED]');
