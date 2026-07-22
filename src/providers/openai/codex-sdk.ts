@@ -32,6 +32,7 @@ import {
   getOmittedCodexProcessEnvKeys,
   prepareCodexProcessEnv,
   resolveCodexWorkingDirectory,
+  sortCodexProcessEnv,
   validateCodexWorkingDirectory,
 } from './codexConfig';
 import {
@@ -554,7 +555,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       delete env.TRACEPARENT;
     }
 
-    return env;
+    return sortCodexProcessEnv(env);
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {

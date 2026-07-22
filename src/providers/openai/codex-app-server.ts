@@ -29,6 +29,7 @@ import {
   getOmittedCodexProcessEnvKeys,
   prepareCodexProcessEnv,
   resolveCodexWorkingDirectory,
+  sortCodexProcessEnv,
   validateCodexWorkingDirectory,
 } from './codexConfig';
 import {
@@ -1326,7 +1327,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       delete env.TRACEPARENT;
     }
 
-    return env;
+    return sortCodexProcessEnv(env);
   }
 
   private buildAppServerArgs(config: CodexAppServerConfig): string[] {

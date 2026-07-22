@@ -5409,6 +5409,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const spawnEnv = mocks.spawn.mock.calls[0][2].env;
     expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
     expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
+    expect(Object.keys(spawnEnv)).toEqual([...Object.keys(spawnEnv)].sort());
 
     const loginStart = await waitForMessage(
       server,

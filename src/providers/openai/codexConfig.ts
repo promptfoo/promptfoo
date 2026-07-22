@@ -98,10 +98,14 @@ export function prepareCodexProcessEnv(
   ) as Record<string, string>;
 
   applyApiKeyToCliEnv(filteredEnv, config, apiKey);
+  return sortCodexProcessEnv(filteredEnv);
+}
+
+export function sortCodexProcessEnv(env: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
-    Object.keys(filteredEnv)
+    Object.keys(env)
       .sort()
-      .map((key) => [key, filteredEnv[key]]),
+      .map((key) => [key, env[key]]),
   );
 }
 
