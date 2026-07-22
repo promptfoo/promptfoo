@@ -24,11 +24,15 @@ Treat Promptfoo configuration files and everything they reference or evaluate ag
 
 Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Adversarial data flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts, variable values rendered through Nunjucks) is normal operation. However, if a code path outside the configured template engine or user-configured code-executing fields promotes runtime data to code, that is a vulnerability.
 
-**In scope for OSS:** runtime data promoted to code by a code path outside the configured template engine and user-configured code-executing fields; bypasses of supported isolation boundaries or hardening controls; data or secret leakage to destinations not configured to receive that data or secret.
+**In scope for OSS:** unexpected code execution; broken isolation, access, or sharing controls; and data or credentials sent somewhere the user did not configure.
 
 **Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
 
-Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction or disable/opt-out control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account.
+When you share an eval, Promptfoo sends its snapshot to your Cloud organization, on-premises deployment, or configured self-hosted endpoint. Your account or config may also enable automatic sharing. A snapshot can include prompts, test vars, model outputs, grading results, traces, configuration, and media.
+
+`PROMPTFOO_STRIP_*` flags reduce data in certain results, exports, and views. They do not turn off sharing or guarantee that shared evals, traces, and media omit the same fields. If a flag hides a field in one output but that field appears in a share sent to its intended recipients, we treat that as a product or privacy issue, not a security vulnerability.
+
+Sharing remains in scope when it ignores a documented sharing control, reaches the wrong destination, exposes another tenant's data, or includes credentials or fields the feature promises to protect. Data that stays in your own local account is otherwise a hardening or privacy issue unless a promised security or redaction control fails.
 
 ### Cloud Services
 
@@ -110,7 +114,8 @@ The following are out-of-scope:
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
 - Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
 - Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
-- Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, unless Promptfoo bypasses a documented redaction or disable/opt-out control or uploads, shares, exports, or otherwise exposes that artifact beyond that account
+- Data that remains in your own local logs, databases, caches, reports, exports, or views, unless a promised security or redaction control fails
+- Eval snapshots sent to their intended recipients while sharing is enabled, including fields that a `PROMPTFOO_STRIP_*` flag removes elsewhere. This does not cover broken sharing controls, unauthorized access, cross-tenant disclosure, or credentials the feature promises to protect
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service
