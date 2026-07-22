@@ -4,6 +4,7 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { isAbortError, isTransientConnectionError } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
@@ -32,6 +33,55 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
+  const sourceError = event.error instanceof Error ? event.error : new Error(event.message);
+  const sourceCode = (sourceError as NodeJS.ErrnoException).code;
+  let safeReason: string | undefined;
+
+  if (!isAbortError(sourceError)) {
+    if (sourceCode === 'ECONNRESET' || sourceCode === 'ECONNREFUSED' || sourceCode === 'EPIPE') {
+      safeReason = sourceCode;
+    } else if (sourceCode === 'EPROTO' && isTransientConnectionError(sourceError)) {
+      safeReason = sourceCode;
+    } else if (sourceCode === undefined) {
+      const status = sourceError.message.match(
+        /^Unexpected server response:\s*(429|502|503|504)\b/i,
+      )?.[1];
+
+      if (status) {
+        safeReason = status;
+      } else {
+        const transientReason = sourceError.message.match(
+          /^(?:(?:read|write|connect)\s+)?(ECONNRESET|ECONNREFUSED|EPROTO)\b|^(socket hang up|(?:SSL routines:\s*)?bad record mac|(?:request\s+)?timeout|network(?: error)?|rate limit|too many requests)\b/i,
+        );
+        const candidate = (transientReason?.[1] ?? transientReason?.[2])
+          ?.toUpperCase()
+          .replace(/^(?:REQUEST\s+|SSL ROUTINES:\s*)/, '');
+
+        if (candidate !== 'EPROTO' || isTransientConnectionError(sourceError)) {
+          safeReason = candidate;
+        }
+      }
+    }
+  }
+
+  const status =
+    safeReason && /^(?:429|502|503|504)$/.test(safeReason) ? Number(safeReason) : undefined;
+  const displayReason = status === undefined ? safeReason : `HTTP ${status}`;
+  const error = new Error(
+    `WebSocket connection failed${displayReason ? ` (${displayReason})` : ''}`,
+  );
+
+  if (safeReason === 'ECONNRESET' || safeReason === 'ECONNREFUSED' || safeReason === 'EPIPE') {
+    (error as NodeJS.ErrnoException).code = safeReason;
+  }
+  if (status !== undefined) {
+    (error as Error & { status: number }).status = status;
+  }
+
+  return error;
 }
 
 interface WebSocketProviderConfig {
@@ -315,11 +365,11 @@ export class WebSocketProvider implements ApiProvider {
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event) => {
         clearTimeout(timeout);
         ws.close();
         logger.error(`[WebSocket Provider] Connection failed`);
-        reject(new Error('WebSocket connection failed'));
+        reject(getSafeWebSocketError(event));
       };
 
       ws.onopen = () => {
