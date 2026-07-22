@@ -58,6 +58,29 @@ describe('Codex provider configuration', () => {
     expect(env.OPENAI_API_KEY).toBeUndefined();
   });
 
+  it('canonicalizes environment keys after injecting API credentials', () => {
+    restoreEnv = mockProcessEnv({ PATH: '/usr/bin' }, { clear: true });
+
+    const injected = prepareCodexProcessEnv(
+      { cli_env: { Z_FLAG: 'last', A_FLAG: 'first' } },
+      'test-key',
+    );
+    const explicit = prepareCodexProcessEnv(
+      {
+        cli_env: {
+          Z_FLAG: 'last',
+          OPENAI_API_KEY: 'test-key',
+          CODEX_API_KEY: 'test-key',
+          A_FLAG: 'first',
+        },
+      },
+      'test-key',
+    );
+
+    expect(JSON.stringify(injected)).toBe(JSON.stringify(explicit));
+    expect(Object.keys(injected)).toEqual([...Object.keys(injected)].sort());
+  });
+
   it('only reports omitted SSH credentials when networking is enabled', () => {
     restoreEnv = mockProcessEnv({ HTTP_PROXY: 'http://proxy', SSH_AUTH_SOCK: '/tmp/ssh.sock' });
 

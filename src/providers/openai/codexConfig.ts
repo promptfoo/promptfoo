@@ -93,17 +93,16 @@ export function prepareCodexProcessEnv(
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     ),
   };
-  const sortedEnv = Object.fromEntries(
-    Object.keys(env)
-      .sort()
-      .flatMap((key) => {
-        const value = env[key];
-        return value === undefined ? [] : [[key, value]];
-      }),
+  const filteredEnv = Object.fromEntries(
+    Object.entries(env).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]])),
   ) as Record<string, string>;
 
-  applyApiKeyToCliEnv(sortedEnv, config, apiKey);
-  return sortedEnv;
+  applyApiKeyToCliEnv(filteredEnv, config, apiKey);
+  return Object.fromEntries(
+    Object.keys(filteredEnv)
+      .sort()
+      .map((key) => [key, filteredEnv[key]]),
+  );
 }
 
 export function getIgnoredCodexProviderEnvKeys(
