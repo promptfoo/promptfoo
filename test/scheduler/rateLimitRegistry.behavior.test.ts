@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
+import { fetchWithRetries } from '../../src/util/fetch/index';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -39,6 +41,7 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
   afterEach(() => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it('should propagate provider maxRetries into the fetch retry context', async () => {
@@ -105,6 +108,89 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
 
   it('should retry provider maxRetries + 1 total attempts', async () => {
     expect(await runRateLimitedCall(2)).toBe(3);
+  });
+
+  it.each([
+    { providerRetries: 0, explicitTransportRetries: 8, requests: 1 },
+    { providerRetries: 2, explicitTransportRetries: 8, requests: 3 },
+    { providerRetries: undefined, explicitTransportRetries: 8, requests: 4 },
+  ])('should make $requests HTTP requests with provider maxRetries=$providerRetries', async ({
+    providerRetries,
+    explicitTransportRetries,
+    requests,
+  }) => {
+    const fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 'rate_limit_exceeded' } }), {
+          status: 429,
+          headers: { 'content-type': 'application/json', 'retry-after': '0' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      await expect(
+        registry.execute(
+          createProvider(providerRetries),
+          () => fetchWithRetries('https://example.com', {}, 1000, explicitTransportRetries),
+          {
+            isRateLimited: (_result, error) =>
+              error instanceof HttpRateLimitError && error.kind === 'rate_limit',
+            getRetryAfter: (_result, error) =>
+              error instanceof HttpRateLimitError ? error.retryAfterMs : undefined,
+          },
+        ),
+      ).rejects.toThrow('Rate limit exceeded');
+
+      expect(fetch).toHaveBeenCalledTimes(requests);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should leave transport retries intact when the scheduler is disabled', async () => {
+    vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'true');
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      await expect(
+        registry.execute(createProvider(2), () =>
+          fetchWithRetries('https://example.com', {}, 1000),
+        ),
+      ).rejects.toThrow('Request failed after 2 retries');
+
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should not retry exhausted quotas in either retry layer', async () => {
+    const fetch = vi.fn().mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: { code: 'insufficient_quota' } }), {
+          status: 429,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      await expect(
+        registry.execute(createProvider(2), () =>
+          fetchWithRetries('https://example.com', {}, 1000, 2),
+        ),
+      ).rejects.toThrow('Quota exceeded');
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      registry.dispose();
+    }
   });
 
   it('should parse numeric string maxRetries values', async () => {

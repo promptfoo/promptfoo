@@ -4,6 +4,7 @@ import {
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { createMockProvider } from '../factories/provider';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -200,6 +201,23 @@ describe('providerWrapper', () => {
       // Headers are normalized to lowercase in getRetryAfter
       const retryAfter = capturedOptions.getRetryAfter(result, undefined);
       expect(retryAfter).toBe(30000); // 30 seconds in ms
+    });
+
+    it('should preserve retry-after metadata from transport rate-limit errors', async () => {
+      let capturedOptions: any;
+      mockExecute.mockImplementation(async (_provider, callFn, options) => {
+        capturedOptions = options;
+        return callFn();
+      });
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test');
+
+      expect(
+        capturedOptions.getRetryAfter(
+          undefined,
+          new HttpRateLimitError({ status: 429, retryAfterMs: 2500 }),
+        ),
+      ).toBe(2500);
     });
 
     it('should ignore non-finite retry-after-ms and fall back to retry-after', async () => {

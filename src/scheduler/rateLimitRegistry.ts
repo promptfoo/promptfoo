@@ -53,9 +53,7 @@ export class RateLimitRegistry extends EventEmitter {
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
 
-    // Even when the scheduler is disabled, propagate the retry context so
-    // `fetchWithRetries` picks up the provider's `maxRetries` as its default
-    // and `fetchWithProxy` disables transient retries when `maxRetries: 0`.
+    // Without the scheduler, the transport owns the provider's retry budget.
     if (!this.enabled) {
       return withFetchRetryContext(providerMaxRetries, callFn);
     }
@@ -81,7 +79,7 @@ export class RateLimitRegistry extends EventEmitter {
       });
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
+      const result = await withFetchRetryContext(providerMaxRetries, run, 'scheduler');
 
       this.emit('request:completed', {
         rateLimitKey,

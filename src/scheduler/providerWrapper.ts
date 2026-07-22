@@ -5,6 +5,7 @@
  * code paths that bypass the main evaluator.
  */
 
+import { isHttpRateLimitError } from '../util/fetch/errors';
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
@@ -48,6 +49,9 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
     getHeaders: getProviderResponseHeaders,
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (isHttpRateLimitError(error)) {
+        return error.retryAfterMs;
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access
