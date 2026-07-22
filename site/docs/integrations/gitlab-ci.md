@@ -23,7 +23,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-/bOFbxoVmaVVHWs+i+swWKcsOshSfmoei8qxttC9e/A='
+    integrity: 'sha256-6GX5+uVTNV4J1FF7EYHr+BCdDg3XEvH8OpOYB62P2aY='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -137,7 +137,7 @@ The cache key already includes the GitLab job name. If these jobs should run in 
 
 To enable optional merge request summaries, create a short-lived, project-scoped access token with the minimum API access needed to create and update merge request notes. Store it as the masked `PROMPTFOO_GITLAB_TOKEN` CI/CD variable.
 
-GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The template removes GitLab tokens from both the npm-install and eval subprocess environments, then posts or updates one summary per job in `after_script`. This preserves summaries for failing evals without converting failures into passing pipelines.
+GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The template removes GitLab job, deploy, dependency-proxy, and project-write credentials from both the npm-install and eval subprocess environments, then posts or updates one summary per job in `after_script`. This preserves summaries for failing evals without converting failures into passing pipelines.
 
 Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
 

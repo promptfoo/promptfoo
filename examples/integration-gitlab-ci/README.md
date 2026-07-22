@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-/bOFbxoVmaVVHWs+i+swWKcsOshSfmoei8qxttC9e/A='
+    integrity: 'sha256-6GX5+uVTNV4J1FF7EYHr+BCdDg3XEvH8OpOYB62P2aY='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -42,6 +42,6 @@ Override job variables as needed:
 
 Configure provider credentials and optional tokens as masked GitLab CI/CD variables. Use protected variables only for trusted protected branches; ordinary merge request pipelines cannot access them unless GitLab's protected-resource requirements are met. Never run fork-controlled code with parent-project secrets.
 
-Merge request comments run in `after_script`, so failing evals still produce a summary without turning failures into successful jobs. The template removes GitLab write and job tokens from the npm-install and eval subprocess environments, restricts result artifacts to project developers, and configures one-week artifact expiration. GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
+Merge request comments run in `after_script`, so failing evals still produce a summary without turning failures into successful jobs. The template removes GitLab write, job, deploy, and dependency-proxy credentials from the npm-install and eval subprocess environments, restricts result artifacts to project developers, and configures one-week artifact expiration. GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
 
 For self-managed GitLab instances with an internal certificate authority, configure a file-type CI/CD variable containing the CA certificate and set `NODE_EXTRA_CA_CERTS` to that variable's file path. Do not disable TLS verification.

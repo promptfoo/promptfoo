@@ -17,6 +17,8 @@
   before_script:
     - |
       if ! env \
+        -u CI_DEPENDENCY_PROXY_PASSWORD \
+        -u CI_DEPLOY_PASSWORD \
         -u CI_JOB_TOKEN \
         -u CI_JOB_JWT \
         -u CI_JOB_JWT_V1 \
@@ -32,6 +34,8 @@
       fi
 
       env \
+        -u CI_DEPENDENCY_PROXY_PASSWORD \
+        -u CI_DEPLOY_PASSWORD \
         -u CI_JOB_TOKEN \
         -u CI_JOB_JWT \
         -u CI_JOB_JWT_V1 \
@@ -70,6 +74,8 @@
       esac
 
       env \
+        -u CI_DEPENDENCY_PROXY_PASSWORD \
+        -u CI_DEPLOY_PASSWORD \
         -u CI_JOB_TOKEN \
         -u CI_JOB_JWT \
         -u CI_JOB_JWT_V1 \

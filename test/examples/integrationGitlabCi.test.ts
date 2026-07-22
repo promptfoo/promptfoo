@@ -53,7 +53,7 @@ describe('GitLab CI integration example', () => {
       path.join(binDir, 'npm'),
       `#!/bin/sh
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-args"
-if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
+if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-token"
 else
   printf 'absent\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-token"
@@ -66,7 +66,7 @@ fi
       path.join(binDir, 'promptfoo'),
       `#!/bin/sh
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-args"
-if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
+if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
 else
   printf 'absent\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
@@ -105,6 +105,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           ...process.env,
           ...job.variables,
           CI_API_V4_URL: 'http://127.0.0.1:1/api/v4',
+          CI_DEPENDENCY_PROXY_PASSWORD: 'test-dependency-proxy-token',
+          CI_DEPLOY_PASSWORD: 'test-long-lived-deploy-token',
           CI_JOB_NAME_SLUG: 'promptfoo-eval',
           CI_JOB_STATUS: 'success',
           CI_JOB_TOKEN: 'test-job-token',
