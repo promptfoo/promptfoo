@@ -75,7 +75,7 @@ export function callProviderWithContext(
       return executionContext.rateLimitRegistry.execute(
         provider,
         callApi,
-        createProviderRateLimitOptions(executionContext.abortSignal),
+        createProviderRateLimitOptions(),
       );
     }
 
