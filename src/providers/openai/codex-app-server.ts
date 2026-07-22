@@ -46,35 +46,6 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 
-export type CodexAppServerSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
-export interface CodexAppServerGranularApprovalPolicy {
-  granular: {
-    sandbox_approval: boolean;
-    rules: boolean;
-    skill_approval: boolean;
-    request_permissions: boolean;
-    mcp_elicitations: boolean;
-  };
-}
-export type CodexAppServerApprovalPolicy =
-  | 'never'
-  | 'on-request'
-  | 'on-failure'
-  | 'untrusted'
-  | CodexAppServerGranularApprovalPolicy;
-export type CodexAppServerReasoningEffort =
-  | 'none'
-  | 'minimal'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'xhigh'
-  | 'max'
-  | 'ultra';
-export type CodexAppServerReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
-export type CodexAppServerServiceTier = 'fast' | 'flex';
-export type CodexAppServerPersonality = 'none' | 'friendly' | 'pragmatic';
-
 function redactAppServerText(value: string): string {
   return value
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
@@ -87,15 +58,6 @@ function redactAppServerText(value: string): string {
       (_match, key, separator, spacing, quote) =>
         `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
     );
-}
-
-export interface CodexAppServerCollaborationMode {
-  mode: 'plan' | 'default';
-  settings: {
-    model: string;
-    reasoning_effort: CodexAppServerReasoningEffort | null;
-    developer_instructions: string | null;
-  };
 }
 
 type CodexAppServerCommandExecutionApprovalDecision =

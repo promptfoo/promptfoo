@@ -104,57 +104,6 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
  * - With thread_id: Resumes specific thread from ~/.codex/sessions
  */
 
-/**
- * Sandbox modes controlling filesystem access
- */
-export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
-
-/**
- * Approval policies controlling when user approval is required
- */
-export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted';
-
-/**
- * Reasoning effort levels for model reasoning intensity.
- *
- * Model support varies:
- * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
- * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
- * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
- *   the OpenAI API uses 'none' instead of 'minimal'
- * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
- *
- * Values:
- * - 'minimal': Minimal reasoning overhead
- * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
- * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
- * - 'max': Deepest single-agent reasoning for GPT-5.6
- * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
- */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
-
-/**
- * Web search modes controlling how the agent accesses the web.
- * - 'disabled': No web search
- * - 'cached': Use cached results only
- * - 'live': Allow live web searches
- */
-export type WebSearchMode = 'disabled' | 'cached' | 'live';
-
-/**
- * Multi-agent collaboration presets accepted by Codex CLI config.
- */
-export type CollaborationMode = 'coding' | 'plan';
-
 type CodexPromptInputItem =
   | {
       type: 'text';
