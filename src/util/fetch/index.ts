@@ -20,7 +20,7 @@ import {
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
-import { getFetchRetryContextMaxRetries } from './retryContext';
+import { doesSchedulerOwnFetchRetries, getFetchRetryContextMaxRetries } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
 import type { FetchOptions } from './types';
@@ -119,12 +119,13 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
 }
 
 /**
- * Resolve whether to disable transient-error retries. An explicit caller flag
- * always wins (a caller may opt back in even when the provider set
- * `maxRetries: 0`); otherwise we disable only when the retry context carries
- * `maxRetries === 0`.
+ * Scheduler-owned calls never retry in the transport. Otherwise an explicit
+ * caller flag wins, and maxRetries: 0 disables implicit transient retries.
  */
 function resolveTransientRetryDisabled(explicit?: boolean): boolean {
+  if (doesSchedulerOwnFetchRetries()) {
+    return true;
+  }
   if (explicit !== undefined) {
     return explicit;
   }
@@ -665,7 +666,9 @@ export async function fetchWithRetries(
   maxRetries?: number,
 ): Promise<Response> {
   const contextMaxRetries = getFetchRetryContextMaxRetries();
-  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
+  maxRetries = doesSchedulerOwnFetchRetries()
+    ? 0
+    : Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
