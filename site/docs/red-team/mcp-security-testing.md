@@ -196,6 +196,12 @@ redteam:
 
 The [`mcp:tool-response-poisoning`](./plugins/mcp-tool-response-poisoning.md) plugin is designed for this scenario. Because the target is the MCP provider itself, the plugin can issue benign JSON tool calls directly to the server and grade each response for embedded prompt-injection content — useful as a supply-chain integrity check before trusting a new MCP server or as a regression guard in CI.
 
+:::note
+
+Unlike the earlier scenarios, `mcp:tool-response-poisoning` does not use strategies — only the `basic` baseline runs. The MCP provider parses each prompt as JSON, so any strategy that rewrites it would break the tool call, and they are excluded automatically. Expect one test per generated tool call rather than a per-strategy fan-out. See [Strategy exclusions](./plugins/mcp-tool-response-poisoning.md#configuration) on the plugin page.
+
+:::
+
 ## Red Team Agent Testing
 
 The `redteam-mcp-agent` example demonstrates testing AI agents that actively call MCP tools and process their return values. Unlike passive prompt testing, this approach evaluates real agent behavior when handling tool outputs.
