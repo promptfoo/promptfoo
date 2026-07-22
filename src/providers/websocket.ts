@@ -8,6 +8,7 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
+import { getSafeProviderId, sanitizeProviderObject } from './providerLogging';
 import { getRequestTimeoutMs } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { parseFileTransformReference } from './transformUtils';
@@ -18,8 +19,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-
-const nunjucks = getNunjucksEngine();
 
 export const processResult = normalizeResponseTransformResult;
 
@@ -35,24 +34,68 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .filter(Boolean);
 }
 
-function getWebSocketErrorMessage(err: WebSocket.ErrorEvent | Error | unknown): string {
-  const error =
-    err && typeof err === 'object' && 'error' in err ? (err as WebSocket.ErrorEvent).error : err;
+function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
+  const sourceError = event.error instanceof Error ? event.error : new Error(event.message);
+  const sourceCode = (sourceError as NodeJS.ErrnoException).code;
+  const isAbortError = ['AbortError', 'AbortException'].includes(sourceError.name);
 
-  if (typeof error === 'string' || typeof error === 'number' || typeof error === 'boolean') {
-    return String(error);
+  if (isAbortError) {
+    const error = new Error('WebSocket connection failed');
+    error.name = sourceError.name;
+    return error;
   }
 
-  if (error instanceof Error) {
-    return error.message;
+  const isSafeTransportCode = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(sourceCode ?? '');
+  const isPermanentProtocolError =
+    /wrong version number|self signed|unable to verify|unknown ca|cert|alert protocol version|unsupported protocol/i.test(
+      sourceError.message,
+    );
+  let safeReason: string | undefined;
+
+  if (isSafeTransportCode) {
+    safeReason = sourceCode;
+  } else if (sourceCode === 'ETIMEDOUT') {
+    safeReason = 'TIMEOUT';
+  } else if (sourceCode === 'EPROTO' && !isPermanentProtocolError) {
+    safeReason = sourceCode;
+  } else if (sourceCode === undefined) {
+    const status = sourceError.message.match(
+      /^Unexpected server response:\s*(429|502|503|504)\b/i,
+    )?.[1];
+
+    if (status) {
+      safeReason = status;
+    } else {
+      const transientReason = sourceError.message.match(
+        /^(?:(?:read|write|connect)\s+)?(ECONNRESET|ECONNREFUSED|EPROTO)\b|^(socket hang up|(?:SSL routines:\s*)?bad record mac|(?:request\s+)?timeout|network(?: error)?|rate limit|too many requests)\b/i,
+      );
+      const candidate = (transientReason?.[1] ?? transientReason?.[2])
+        ?.toUpperCase()
+        .replace(/^(?:REQUEST\s+|SSL ROUTINES:\s*)/, '');
+
+      if (candidate !== 'EPROTO' || !isPermanentProtocolError) {
+        safeReason = candidate;
+      }
+    }
   }
 
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
+  const status =
+    safeReason && /^(?:429|502|503|504)$/.test(safeReason) ? Number(safeReason) : undefined;
+  const displayReason = status === undefined ? safeReason : `HTTP ${status}`;
+  const error = new Error(
+    `WebSocket connection failed${displayReason ? ` (${displayReason})` : ''}`,
+  );
+
+  if (isSafeTransportCode) {
+    (error as NodeJS.ErrnoException).code = sourceCode;
+  } else if (safeReason === 'TIMEOUT' && sourceCode === 'ETIMEDOUT') {
+    (error as NodeJS.ErrnoException).code = sourceCode;
+  }
+  if (status !== undefined) {
+    (error as Error & { status: number }).status = status;
   }
 
-  const serialized = safeJsonStringify(error);
-  return serialized && serialized !== '{}' ? serialized : 'unknown WebSocket error';
+  return error;
 }
 
 interface WebSocketProviderConfig {
@@ -198,6 +241,7 @@ export async function createStreamResponse(
 
 export class WebSocketProvider implements ApiProvider {
   url: string;
+  private readonly providerId: string;
   config: WebSocketProviderConfig;
   timeoutMs: number;
   transformResponse: (data: any) => ProviderResponse;
@@ -212,6 +256,7 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
+    this.providerId = getSafeProviderId(this.url);
     this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -221,18 +266,18 @@ export class WebSocketProvider implements ApiProvider {
       : undefined;
     invariant(
       this.config.messageTemplate,
-      `Expected WebSocket provider ${this.url} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
-        this.config,
+      `Expected WebSocket provider ${this.providerId} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
+        sanitizeProviderObject(this.config, 'provider config'),
       )}`,
     );
   }
 
   id(): string {
-    return this.url;
+    return this.providerId;
   }
 
   toString(): string {
-    return `[WebSocket Provider ${this.url}]`;
+    return `[WebSocket Provider ${this.providerId}]`;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -240,10 +285,12 @@ export class WebSocketProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     };
+    const nunjucks = getNunjucksEngine(context?.filters);
+    const url = nunjucks.renderString(this.url, vars);
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
     const streamResponse = this.streamResponse == null ? undefined : await this.streamResponse;
 
-    logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
+    logger.debug(`Sending WebSocket message: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };
     return new Promise<ProviderResponse>((resolve, reject) => {
       const wsOptions: ClientOptions = {};
@@ -251,10 +298,16 @@ export class WebSocketProvider implements ApiProvider {
       if (this.config.headers) {
         wsOptions.headers = this.config.headers;
       }
+      try {
+        new URL(url);
+      } catch {
+        reject(new Error('Failed to create WebSocket connection'));
+        return;
+      }
       const ws =
         protocols.length > 0
-          ? new WebSocket(this.url, protocols, wsOptions)
-          : new WebSocket(this.url, wsOptions);
+          ? new WebSocket(url, protocols, wsOptions)
+          : new WebSocket(url, wsOptions);
       const timeout = setTimeout(() => {
         ws.close();
         logger.error(`[WebSocket Provider] Request timed out`);
@@ -326,12 +379,11 @@ export class WebSocketProvider implements ApiProvider {
         }
       };
 
-      ws.onerror = (err) => {
+      ws.onerror = (event) => {
         clearTimeout(timeout);
         ws.close();
-        const errorMessage = getWebSocketErrorMessage(err);
-        logger.error(`[WebSocket Provider] Error: ${errorMessage}`);
-        reject(new Error(`WebSocket error: ${errorMessage}`));
+        logger.error(`[WebSocket Provider] Connection failed`);
+        reject(getSafeWebSocketError(event));
       };
 
       ws.onopen = () => {
