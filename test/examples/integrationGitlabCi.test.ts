@@ -42,8 +42,9 @@ const templateSource = fs.readFileSync(templatePath, 'utf8');
 const template = parse(templateSource) as Record<string, GitLabJob>;
 const job = template['.promptfoo-eval'];
 const commentJob = template['.promptfoo-comment'];
+const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
-describe('GitLab CI integration example', () => {
+describeUnix('GitLab CI integration example', () => {
   let tempDir: string;
   let binDir: string;
 
@@ -57,7 +58,7 @@ describe('GitLab CI integration example', () => {
       path.join(binDir, 'npm'),
       `#!/bin/sh
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-args"
-if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
+if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_BUILD_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-token"
 else
   printf 'absent\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-token"
@@ -78,7 +79,7 @@ if [ "\${1:-}" = '--version' ]; then
   exit 0
 fi
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-args"
-if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
+if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_BUILD_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
 else
   printf 'absent\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
@@ -122,6 +123,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           ...job.variables,
           ...(isCommentJob ? commentJob.variables : {}),
           CI_API_V4_URL: 'http://127.0.0.1:1/api/v4',
+          CI_BUILD_TOKEN: 'test-legacy-job-token',
           CI_DEPENDENCY_PROXY_PASSWORD: 'test-dependency-proxy-token',
           CI_DEPLOY_PASSWORD: 'test-long-lived-deploy-token',
           CI_JOB_NAME_SLUG: 'promptfoo-eval',
@@ -233,6 +235,9 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(commentJob.when).toBe('always');
     expect(commentJob.resource_group).toContain('$CI_MERGE_REQUEST_IID');
     expect(job.script[0]).toContain('exec env \\');
+    expect(job.script[0]).toContain('/proc/1/environ');
+    expect(job.script[0]).toContain('credential-bearing container init');
+    expect(job.script[0]).toContain('-u CI_BUILD_TOKEN');
     expect(commentJob.script[0]).toContain('NODE_USE_ENV_PROXY="$proxy_enabled"');
   });
 
@@ -765,11 +770,59 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
               HTTP_PROXY: proxyOrigin,
               HTTPS_PROXY: proxyOrigin,
               NO_PROXY: '',
+              http_proxy: proxyOrigin,
+              https_proxy: proxyOrigin,
+              no_proxy: '',
             });
 
             expect(comment.status).toBe(0);
             expect(proxyRequests).toHaveLength(0);
           },
+        );
+      },
+    );
+  });
+
+  it('honors lowercase proxy settings first after an explicit trusted-proxy opt-in', async () => {
+    await runEvaluation();
+    const proxyCapture = path.join(tempDir, 'selected-proxy');
+    fs.writeFileSync(
+      path.join(binDir, 'node'),
+      `#!/bin/sh
+printf '%s\\n' "\${HTTP_PROXY:-}" "\${http_proxy:-}" "\${NODE_USE_ENV_PROXY:-}" > ${JSON.stringify(proxyCapture)}
+unset HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy NODE_USE_ENV_PROXY
+exec ${JSON.stringify(process.execPath)} "$@"
+`,
+      { mode: 0o755 },
+    );
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : request.method === 'GET'
+              ? '[]'
+              : '{}',
+        );
+      },
+      async (gitlabOrigin) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${gitlabOrigin}/api/v4`,
+          CI_SERVER_URL: gitlabOrigin,
+          HTTP_PROXY: 'http://uppercase-proxy.invalid:3128',
+          HTTPS_PROXY: 'http://uppercase-proxy.invalid:3128',
+          NO_PROXY: '',
+          PROMPTFOO_GITLAB_TRUST_PROXY: 'true',
+          http_proxy: 'http://lowercase-proxy.invalid:3128',
+          https_proxy: 'http://lowercase-proxy.invalid:3128',
+          no_proxy: '',
+        });
+
+        expect(comment.status, comment.stderr).toBe(0);
+        expect(fs.readFileSync(proxyCapture, 'utf8')).toBe(
+          'http://lowercase-proxy.invalid:3128\nhttp://lowercase-proxy.invalid:3128\n1\n',
         );
       },
     );

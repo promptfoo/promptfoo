@@ -23,7 +23,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-j/3F/rmuWKL2DWSHzSjZ4IfgcvEmDk9/+9jdl8Oc4ZA='
+    integrity: 'sha256-gWJYSFbacdtNgwYxEILHdX4EJD+5LioEG9e6XdN46g8='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -164,6 +164,8 @@ The eval records its job status as an artifact, and `when: always` lets the isol
 Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
 
 Proxy settings are ignored by default to prevent an attacker-controlled `HTTP_PROXY` or `HTTPS_PROXY` from intercepting the GitLab write token. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only for trusted pipelines whose configured proxy is authorized to handle GitLab API credentials.
+
+The eval also fails closed when a Kubernetes or custom executor leaves GitLab credentials readable in a long-lived, same-user container init process. Use an executor that starts the sanitized eval as PID 1, or configure runner-level process isolation before enabling executable providers.
 
 To include a Promptfoo Cloud link, set `PROMPTFOO_SHARE: 'true'` and configure a masked `PROMPTFOO_API_KEY`. Sharing is disabled with `--no-share` by default, including when cloud credentials or sharing-enabled config are present.
 

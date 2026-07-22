@@ -57,6 +57,35 @@
         exit 1
       fi
 
+      # Kubernetes executors can leave job credentials on a same-UID container init.
+      if [ "$$" -ne 1 ] && [ -r /proc/1/environ ]; then
+        if ! env -i PATH="$PATH" node --input-type=module <<'PROMPTFOO_CHECK_CONTAINER_INIT'; then
+      import { readFile } from 'node:fs/promises';
+
+      const environment = await readFile('/proc/1/environ', 'utf8');
+      const sensitive = [
+        'CI_BUILD_TOKEN',
+        'CI_DEPENDENCY_PROXY_PASSWORD',
+        'CI_DEPLOY_PASSWORD',
+        'CI_JOB_TOKEN',
+        'CI_REGISTRY_PASSWORD',
+        'CI_REPOSITORY_URL',
+        'GITLAB_API_TOKEN',
+        'GITLAB_TOKEN',
+        'NODE_AUTH_TOKEN',
+        'NPM_TOKEN',
+        'PROMPTFOO_GITLAB_TOKEN',
+      ];
+
+      if (environment.split('\0').some((entry) => sensitive.some((name) => entry.startsWith(`${name}=`)))) {
+        console.error('Refusing to run executable eval code alongside a credential-bearing container init.');
+        process.exit(1);
+      }
+      PROMPTFOO_CHECK_CONTAINER_INIT
+          exit 1
+        fi
+      fi
+
       # GitLab may embed CI_JOB_TOKEN in .git/config and submodule gitfiles.
       # Evals can execute repository-controlled providers and assertions.
       env -u NODE_OPTIONS -u NODE_PATH node --input-type=module <<'PROMPTFOO_CLEAN_CHECKOUT'
@@ -96,6 +125,7 @@
 
       # Replace the credential-bearing job shell so providers cannot read its /proc environ.
       exec env \
+        -u CI_BUILD_TOKEN \
         -u CI_DEPENDENCY_PROXY_PASSWORD \
         -u CI_DEPLOY_PASSWORD \
         -u CI_JOB_TOKEN \
@@ -176,15 +206,15 @@
       case "${PROMPTFOO_GITLAB_TRUST_PROXY:-false}" in
         true)
           proxy_enabled=1
-          http_proxy="${HTTP_PROXY:-}"
-          https_proxy="${HTTPS_PROXY:-}"
-          no_proxy="${NO_PROXY:-}"
+          selected_http_proxy="${http_proxy:-${HTTP_PROXY:-}}"
+          selected_https_proxy="${https_proxy:-${HTTPS_PROXY:-}}"
+          selected_no_proxy="${no_proxy:-${NO_PROXY:-}}"
           ;;
         false)
           proxy_enabled=0
-          http_proxy=''
-          https_proxy=''
-          no_proxy=''
+          selected_http_proxy=''
+          selected_https_proxy=''
+          selected_no_proxy=''
           ;;
         *)
           echo 'PROMPTFOO_GITLAB_TRUST_PROXY must be true or false.' >&2
@@ -200,9 +230,12 @@
         CI_PIPELINE_ID="${CI_PIPELINE_ID:-}" \
         CI_PROJECT_ID="${CI_PROJECT_ID:-}" \
         CI_SERVER_URL="${CI_SERVER_URL:-}" \
-        HTTP_PROXY="$http_proxy" \
-        HTTPS_PROXY="$https_proxy" \
-        NO_PROXY="$no_proxy" \
+        HTTP_PROXY="$selected_http_proxy" \
+        HTTPS_PROXY="$selected_https_proxy" \
+        NO_PROXY="$selected_no_proxy" \
+        http_proxy="$selected_http_proxy" \
+        https_proxy="$selected_https_proxy" \
+        no_proxy="$selected_no_proxy" \
         NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-}" \
         NODE_USE_ENV_PROXY="$proxy_enabled" \
         PROMPTFOO_EVAL_JOB_NAME="${PROMPTFOO_EVAL_JOB_NAME:-promptfoo-eval}" \
