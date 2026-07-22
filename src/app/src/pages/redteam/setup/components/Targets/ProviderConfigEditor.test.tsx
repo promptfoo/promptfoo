@@ -146,10 +146,23 @@ describe('ProviderConfigEditor', () => {
       ['a port template', 'wss://example.com:{{ port }}/ws'],
       ['a scheme template', '{{ protocol }}://example.com/ws'],
       ['a constant filtered WebSocket scheme', '{{ "WS" | lower }}://example.com/ws'],
+      [
+        'a boolean-valued constant filter operand',
+        '{{ false | default("ws", true) }}://example.com/ws',
+      ],
+      ['a numeric constant filter operand', '{{ 0 | default("wss", true) }}://example.com/ws'],
       ['a partial scheme template', 'w{{ protocolSuffix }}://example.com/ws'],
       ['a case-insensitive partial scheme template', 'W{{ protocolSuffix }}://example.com/ws'],
       ['a whole-URL template', '{{ websocketUrl }}'],
+      [
+        'a whole-URL template followed by a callback URL',
+        '{{ websocketUrl }}?callback=https://example.com',
+      ],
       ['a filtered scheme prefix', '{{ protocol | default("ws://") }}example.com/ws'],
+      [
+        'many non-branching query-value templates',
+        `wss://example.com/?${Array.from({ length: 32 }, (_, index) => `p${index}={{ v${index} }}`).join('&')}`,
+      ],
       ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://example.com/ws'],
       [
         'a whitespace-trimmed conditional scheme',
@@ -240,6 +253,7 @@ describe('ProviderConfigEditor', () => {
       ['a standalone host expression', '{{ host }}'],
       ['a host expression without a WebSocket scheme', '{{ host }}/ws'],
       ['a filtered host expression without a WebSocket scheme', '{{ host | lower }}/ws'],
+      ['a host expression followed by a callback URL', '{{ host }}?callback=https://example.com'],
       ['an incomplete template', 'wss://{{ host }/ws'],
       ['an incomplete expression in a path', 'wss://example.com/{{ host }'],
       ['an empty template expression', 'wss://example.com/{{ }}'],
@@ -318,6 +332,10 @@ describe('ProviderConfigEditor', () => {
       ['an authority template', 'wss://{{ host }}/ws'],
       ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://example.com/ws'],
       [
+        'a whole-URL template followed by a callback URL',
+        '{{ websocketUrl }}?callback=https://example.com',
+      ],
+      [
         'a whitespace-trimmed conditional scheme with surrounding spaces',
         '{%- if secure -%} wss {%- else -%} ws {%- endif -%}://example.com/ws',
       ],
@@ -361,6 +379,10 @@ describe('ProviderConfigEditor', () => {
     it.each([
       ['an authority template', 'wss://{{ host }}/ws'],
       ['a whole-URL template', '{{ websocketUrl }}'],
+      [
+        'a whole-URL template followed by a callback URL',
+        '{{ websocketUrl }}?callback=https://example.com',
+      ],
       [
         'a whitespace-trimmed conditional scheme with surrounding spaces',
         '{%- if secure -%} wss {%- else -%} ws {%- endif -%}://example.com/ws',

@@ -57,18 +57,28 @@ type NunjucksUrlCandidate = {
   expressions: NunjucksAstNode[];
 };
 
-const TEMPLATE_PLACEHOLDER = '\0';
+type NunjucksConstantValue = string | number | boolean | null;
 
-const getConstantNunjucksExpression = (node: NunjucksAstNode): string | undefined => {
+const TEMPLATE_PLACEHOLDER = '\0';
+let nunjucksFilterEnvironment: nunjucks.Environment | undefined;
+
+const getConstantNunjucksExpression = (
+  node: NunjucksAstNode,
+): NunjucksConstantValue | undefined => {
   if (node.typename === 'Literal') {
-    return String(node.value ?? '');
+    return node.value === null ||
+      typeof node.value === 'string' ||
+      typeof node.value === 'number' ||
+      typeof node.value === 'boolean'
+      ? node.value
+      : undefined;
   }
 
   if (node.typename !== 'Filter' || typeof node.name?.value !== 'string') {
     return undefined;
   }
 
-  const values: string[] = [];
+  const values: NunjucksConstantValue[] = [];
   for (const argument of node.args?.children ?? []) {
     const value = getConstantNunjucksExpression(argument);
     if (value === undefined) {
@@ -78,11 +88,13 @@ const getConstantNunjucksExpression = (node: NunjucksAstNode): string | undefine
   }
 
   try {
-    const value = new nunjucks.Environment(null, { autoescape: false }).getFilter(node.name.value)(
-      ...values,
-    );
-    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-      ? String(value)
+    nunjucksFilterEnvironment ??= new nunjucks.Environment([], { autoescape: false });
+    const value = nunjucksFilterEnvironment.getFilter(node.name.value)(...values);
+    return value === null ||
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+      ? value
       : undefined;
   } catch {
     return undefined;
@@ -94,10 +106,6 @@ const getNunjucksUrlCandidates = (
   budget: { remaining: number },
   isOutputExpression = false,
 ): NunjucksUrlCandidate[] | null => {
-  if (--budget.remaining < 0) {
-    return null;
-  }
-
   if (node.typename === 'TemplateData' || node.typename === 'Literal') {
     return [{ value: String(node.value ?? ''), expressions: [] }];
   }
@@ -107,7 +115,13 @@ const getNunjucksUrlCandidates = (
     const falsyCandidates = node.else_
       ? getNunjucksUrlCandidates(node.else_, budget)
       : [{ value: '', expressions: [] }];
-    return truthyCandidates && falsyCandidates ? [...truthyCandidates, ...falsyCandidates] : null;
+    if (!truthyCandidates || !falsyCandidates) {
+      return null;
+    }
+
+    const candidates = [...truthyCandidates, ...falsyCandidates];
+    budget.remaining -= candidates.length - 1;
+    return budget.remaining < 0 ? null : candidates;
   }
 
   if (node.typename === 'Root' || node.typename === 'NodeList' || node.typename === 'Output') {
@@ -126,7 +140,7 @@ const getNunjucksUrlCandidates = (
         })),
       );
 
-      budget.remaining -= combinations.length;
+      budget.remaining -= combinations.length - candidates.length;
       if (budget.remaining < 0) {
         return null;
       }
@@ -142,7 +156,7 @@ const getNunjucksUrlCandidates = (
 
   const constantExpression = getConstantNunjucksExpression(node);
   if (constantExpression !== undefined) {
-    return [{ value: constantExpression, expressions: [] }];
+    return [{ value: String(constantExpression ?? ''), expressions: [] }];
   }
 
   return [{ value: TEMPLATE_PLACEHOLDER, expressions: [node] }];
@@ -222,7 +236,16 @@ function ProviderConfigEditor({
 
       return candidates.some((candidate) => {
         let urlToValidate = candidate.value;
-        const schemeSeparatorIndex = urlToValidate.indexOf('://');
+        let schemeSeparatorIndex = urlToValidate.indexOf('://');
+        if (urlToValidate.startsWith(TEMPLATE_PLACEHOLDER)) {
+          const suffixBoundary = urlToValidate.slice(TEMPLATE_PLACEHOLDER.length).search(/[/?#]/);
+          if (
+            suffixBoundary !== -1 &&
+            TEMPLATE_PLACEHOLDER.length + suffixBoundary < schemeSeparatorIndex
+          ) {
+            schemeSeparatorIndex = -1;
+          }
+        }
 
         if (schemeSeparatorIndex === -1 && urlToValidate.includes(TEMPLATE_PLACEHOLDER)) {
           const expressionSymbol = getExpressionSymbol(candidate.expressions[0]);

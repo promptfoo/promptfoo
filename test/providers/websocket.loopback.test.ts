@@ -23,6 +23,14 @@ describe('WebSocketProvider URL templates over loopback', () => {
     ['an authority template', 'ws://{{ host }}/ws'],
     ['scheme and port templates', '{{ protocol }}://127.0.0.1:{{ port }}/ws'],
     ['a whole-URL template', '{{ websocketUrl }}'],
+    [
+      'a whole-URL template followed by a callback URL',
+      '{{ websocketUrl }}?callback=https://example.com',
+    ],
+    [
+      'a boolean-valued constant filter operand',
+      '{{ false | default("ws", true) }}://127.0.0.1:{{ port }}/ws',
+    ],
     ['a conditional scheme', '{% if secure %}wss{% else %}ws{% endif %}://127.0.0.1:{{ port }}/ws'],
     [
       'a whitespace-trimmed conditional scheme',
@@ -76,7 +84,9 @@ describe('WebSocketProvider URL templates over loopback', () => {
       },
     });
 
-    expect(requestPath).toBe('/ws');
+    expect(requestPath).toBe(
+      url.includes('?callback=') ? '/ws?callback=https://example.com' : '/ws',
+    );
     expect(result).toEqual({ output: 'loopback:hello' });
   });
 });
