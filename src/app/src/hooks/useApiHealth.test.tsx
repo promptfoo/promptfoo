@@ -5,6 +5,7 @@ import {
   rejectCallApi,
   resetCallApiMock,
 } from '@app/tests/apiMocks';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { getApiBaseUrl } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +30,7 @@ describe('useApiHealth', () => {
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    restoreTestTimers();
     vi.restoreAllMocks();
     vi.resetAllMocks();
   });
@@ -129,14 +130,14 @@ describe('useApiHealth', () => {
   });
 
   it('uses one shared polling interval and stops polling after unmount', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     mockCallApiResponse({ status: 'OK', message: 'Connected' });
 
     const first = renderHook(() => useApiHealth());
     const second = renderHook(() => useApiHealth());
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+      await timers.advanceByAsync(3000);
     });
 
     expect(getCallApiMock()).toHaveBeenCalledTimes(1);
@@ -145,14 +146,14 @@ describe('useApiHealth', () => {
     second.unmount();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+      await timers.advanceByAsync(3000);
     });
 
     expect(getCallApiMock()).toHaveBeenCalledTimes(1);
   });
 
   it('keeps background polling from showing a loading state', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     let resolveRequest!: (response: Response) => void;
     getCallApiMock().mockReturnValue(
       new Promise<Response>((resolve) => {
@@ -163,7 +164,7 @@ describe('useApiHealth', () => {
     const { result } = renderHook(() => useApiHealth());
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+      await timers.advanceByAsync(3000);
     });
 
     expect(result.current.isLoading).toBe(false);
@@ -177,7 +178,7 @@ describe('useApiHealth', () => {
   });
 
   it('pauses hidden-tab polling and refreshes when the page becomes visible', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     let visibility: DocumentVisibilityState = 'hidden';
     vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibility);
     mockCallApiResponse({ status: 'OK', message: 'Connected' });
@@ -185,7 +186,7 @@ describe('useApiHealth', () => {
     renderHook(() => useApiHealth());
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
+      await timers.advanceByAsync(3000);
     });
 
     expect(getCallApiMock()).not.toHaveBeenCalled();
@@ -247,7 +248,7 @@ describe('useApiHealth', () => {
   });
 
   it('refreshes stale cached health as soon as a subscriber remounts', async () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     mockCallApiResponse({ status: 'OK', message: 'Connected' });
 
     const first = renderHook(() => useApiHealth());
@@ -259,7 +260,7 @@ describe('useApiHealth', () => {
     first.unmount();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2001);
+      await timers.advanceByAsync(2001);
     });
 
     await act(async () => {
