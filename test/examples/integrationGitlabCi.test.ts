@@ -20,9 +20,12 @@ interface GitLabJob {
   };
   before_script: string[];
   cache: { key: string; paths: string[] };
-  image: string;
+  environment?: { action: string; name: string };
+  image: { entrypoint: string[]; name: string };
   script: string[];
   variables: Record<string, string>;
+  resource_group?: string;
+  when?: string;
 }
 
 interface CapturedRequest {
@@ -38,6 +41,7 @@ const templatePath = path.join(exampleDir, 'gitlab-ci.yml');
 const templateSource = fs.readFileSync(templatePath, 'utf8');
 const template = parse(templateSource) as Record<string, GitLabJob>;
 const job = template['.promptfoo-eval'];
+const commentJob = template['.promptfoo-comment'];
 
 describe('GitLab CI integration example', () => {
   let tempDir: string;
@@ -65,6 +69,14 @@ fi
     fs.writeFileSync(
       path.join(binDir, 'promptfoo'),
       `#!/bin/sh
+if [ "\${1:-}" = '--version' ]; then
+  if [ -n "\${OPENAI_API_KEY:-}" ] || [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
+    printf 'Provider or GitLab credentials reached version validation\\n' >&2
+    exit 70
+  fi
+  printf '0.121.19\\n'
+  exit 0
+fi
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-args"
 if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
@@ -82,8 +94,11 @@ node -e '
       shareableUrl: process.env.PROMPTFOO_TEST_SHARE_URL || null,
     }),
   );
-  fs.writeFileSync(directory + "/results.junit.xml", "<testsuites />");
+fs.writeFileSync(directory + "/results.junit.xml", "<testsuites />");
 '
+if [ "\${PROMPTFOO_TEST_FAIL_ASSERTION:-false}" = true ]; then
+  exit "\${PROMPTFOO_FAILED_TEST_EXIT_CODE:-1}"
+fi
 exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 `,
       { mode: 0o755 },
@@ -99,11 +114,13 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     overrides: NodeJS.ProcessEnv = {},
   ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
+      const isCommentJob = script === commentJob.script[0];
       const child = spawn('sh', ['-ec', script], {
         cwd: tempDir,
         env: {
           ...process.env,
           ...job.variables,
+          ...(isCommentJob ? commentJob.variables : {}),
           CI_API_V4_URL: 'http://127.0.0.1:1/api/v4',
           CI_DEPENDENCY_PROXY_PASSWORD: 'test-dependency-proxy-token',
           CI_DEPLOY_PASSWORD: 'test-long-lived-deploy-token',
@@ -111,12 +128,14 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           CI_JOB_STATUS: 'success',
           CI_JOB_TOKEN: 'test-job-token',
           CI_MERGE_REQUEST_IID: '7',
+          CI_PIPELINE_ID: '100',
           CI_PROJECT_ID: '42',
           CI_REGISTRY_PASSWORD: 'test-registry-token',
           CI_REPOSITORY_URL: 'https://gitlab-ci-token:test-job-token@gitlab.example/project',
           CI_SERVER_URL: 'http://127.0.0.1:1',
+          OPENAI_API_KEY: 'test-provider-secret',
           PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-          PROMPTFOO_GITLAB_TOKEN: 'test-project-token',
+          PROMPTFOO_GITLAB_TOKEN: isCommentJob ? 'test-project-token' : '',
           PROMPTFOO_TEST_CAPTURE_DIR: tempDir,
           ...overrides,
         },
@@ -134,6 +153,15 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
       child.once('error', reject);
       child.once('close', (status) => resolve({ status, stdout, stderr }));
     });
+  }
+
+  async function runEvaluation(overrides: NodeJS.ProcessEnv = {}) {
+    const evaluation = await runScript(job.script[0], overrides);
+    await runScript(job.after_script[0], {
+      CI_JOB_STATUS: evaluation.status === 0 ? 'success' : 'failed',
+      ...overrides,
+    });
+    return evaluation;
   }
 
   async function withGitLabServer(
@@ -178,19 +206,30 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   }
 
   it('defines blocking, private, expiring JUnit artifacts and an isolated branch cache', () => {
-    expect(job.image).toBe(
-      'node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd',
-    );
+    expect(job.image).toEqual({
+      name: 'ghcr.io/promptfoo/promptfoo:0.121.19@sha256:50d3a796710e4db7a5ede90bf27dc28146ef022a7ebb83914c5105608396fd96',
+      entrypoint: [''],
+    });
     expect(job.allow_failure).toBe(false);
     expect(job.artifacts).toEqual({
       when: 'always',
       access: 'developer',
       expire_in: '1 week',
-      paths: ['$PROMPTFOO_OUTPUT_DIR/results.json', '$PROMPTFOO_OUTPUT_DIR/results.junit.xml'],
+      paths: [
+        '$PROMPTFOO_OUTPUT_DIR/results.json',
+        '$PROMPTFOO_OUTPUT_DIR/results.junit.xml',
+        '$PROMPTFOO_OUTPUT_DIR/job-status.txt',
+      ],
       reports: { junit: '$PROMPTFOO_OUTPUT_DIR/results.junit.xml' },
     });
     expect(job.cache.key).toContain('$CI_JOB_NAME_SLUG');
-    expect(job.cache.key).toContain('$CI_COMMIT_REF_SLUG');
+    expect(job.cache.key).toContain('$CI_PROJECT_ID');
+    expect(job.cache.key).toContain('$CI_COMMIT_SHA');
+    expect(commentJob.image).toEqual(job.image);
+    expect(commentJob.environment).toEqual({ name: 'promptfoo-review', action: 'verify' });
+    expect(commentJob.variables.GIT_STRATEGY).toBe('none');
+    expect(commentJob.when).toBe('always');
+    expect(commentJob.resource_group).toContain('$CI_MERGE_REQUEST_IID');
   });
 
   it('keeps the documented remote template integrity hashes current', () => {
@@ -201,22 +240,27 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
       path.join(rootDir, 'site/docs/integrations/gitlab-ci.md'),
       'utf8',
     );
+    const overviewDocs = fs.readFileSync(
+      path.join(rootDir, 'site/docs/integrations/ci-cd.md'),
+      'utf8',
+    );
 
     expect(exampleReadme).toContain(integrity);
     expect(integrationDocs).toContain(integrity);
+    expect(overviewDocs).toContain(integrity);
   });
 
-  it('installs a pinned version without passing GitLab tokens to npm', async () => {
+  it('uses the pinned prebuilt release without exposing provider secrets or installing dependencies', async () => {
     const result = await runScript(job.before_script[0]);
 
     expect(result.status).toBe(0);
-    expect(fs.readFileSync(path.join(tempDir, 'npm-token'), 'utf8').trim()).toBe('absent');
-    expect(fs.readFileSync(path.join(tempDir, 'npm-args'), 'utf8')).toContain('promptfoo@0.121.19');
+    expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
   });
 
   it.each([
     'latest',
     '^0.121.19',
+    '01.121.19',
     '0.121.19 --registry=https://example.invalid',
   ])('rejects the unpinned or unsafe npm version %s', async (version) => {
     const result = await runScript(job.before_script[0], { PROMPTFOO_VERSION: version });
@@ -226,8 +270,24 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
   });
 
+  it('rejects a valid version that does not match the pinned container release', async () => {
+    const result = await runScript(job.before_script[0], { PROMPTFOO_VERSION: '0.121.20' });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('expected 0.121.20');
+  });
+
+  it('fails closed when a merge request write token is exposed to the eval job', async () => {
+    const result = await runScript(job.before_script[0], {
+      PROMPTFOO_GITLAB_TOKEN: 'incorrectly-unscoped-token',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('promptfoo-review environment');
+  });
+
   it('explicitly disables sharing and removes GitLab tokens from the eval process', async () => {
-    const result = await runScript(job.script[0]);
+    const result = await runEvaluation();
     const args = fs.readFileSync(path.join(tempDir, 'promptfoo-args'), 'utf8');
 
     expect(result.status).toBe(0);
@@ -237,8 +297,35 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, '.promptfoo-results/results.junit.xml'))).toBe(true);
   });
 
+  it('removes root and nested checkout metadata before executable providers can read it', async () => {
+    const rootGit = path.join(tempDir, '.git');
+    const nestedGit = path.join(tempDir, 'packages', 'nested', '.git');
+    fs.mkdirSync(rootGit);
+    fs.mkdirSync(path.dirname(nestedGit), { recursive: true });
+    fs.writeFileSync(path.join(rootGit, 'config'), 'https://gitlab-ci-token:secret@example.test');
+    fs.writeFileSync(nestedGit, 'gitdir: /tmp/token-bearing-submodule');
+
+    const evaluation = await runEvaluation();
+
+    expect(evaluation.status).toBe(0);
+    expect(fs.existsSync(rootGit)).toBe(false);
+    expect(fs.existsSync(nestedGit)).toBe(false);
+  });
+
+  it('forces a failing assertion to remain blocking despite a zero exit-code override', async () => {
+    const evaluation = await runEvaluation({
+      PROMPTFOO_FAILED_TEST_EXIT_CODE: '0',
+      PROMPTFOO_TEST_FAIL_ASSERTION: 'true',
+    });
+
+    expect(evaluation.status).toBe(1);
+    expect(fs.readFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'utf8')).toBe(
+      'failed\n',
+    );
+  });
+
   it('only enables sharing after explicit opt-in', async () => {
-    const result = await runScript(job.script[0], { PROMPTFOO_SHARE: 'true' });
+    const result = await runEvaluation({ PROMPTFOO_SHARE: 'true' });
     const args = fs.readFileSync(path.join(tempDir, 'promptfoo-args'), 'utf8');
 
     expect(result.status).toBe(0);
@@ -247,15 +334,29 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('rejects ambiguous sharing values before running the eval', async () => {
-    const result = await runScript(job.script[0], { PROMPTFOO_SHARE: 'yes' });
+    const result = await runEvaluation({ PROMPTFOO_SHARE: 'yes' });
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('PROMPTFOO_SHARE must be true or false');
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 
+  it.each([
+    '-1',
+    '101',
+    'NaN',
+    'Infinity',
+    '',
+  ])('rejects unsafe pass-rate threshold %s', async (value) => {
+    const result = await runEvaluation({ PROMPTFOO_PASS_RATE_THRESHOLD: value });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('finite percentage from 0 through 100');
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+  });
+
   it('preserves failing eval exit codes while still posting a failure summary', async () => {
-    const evaluation = await runScript(job.script[0], { PROMPTFOO_TEST_EXIT_CODE: '100' });
+    const evaluation = await runEvaluation({ PROMPTFOO_TEST_EXIT_CODE: '100' });
     expect(evaluation.status).toBe(100);
 
     await withGitLabServer(
@@ -270,9 +371,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         );
       },
       async (origin, requests) => {
-        const comment = await runScript(job.after_script[0], {
+        const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: `${origin}/api/v4`,
-          CI_JOB_STATUS: 'failed',
           CI_SERVER_URL: origin,
         });
 
@@ -286,7 +386,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('updates an existing note and uses the real share URL instead of a hard-coded host', async () => {
-    await runScript(job.script[0], {
+    await runEvaluation({
       PROMPTFOO_SHARE: 'true',
       PROMPTFOO_TEST_SHARE_URL: 'https://custom.promptfoo.example/eval/eval-123',
     });
@@ -309,7 +409,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         );
       },
       async (origin, requests) => {
-        const comment = await runScript(job.after_script[0], {
+        const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
           PROMPTFOO_SHARE: 'true',
@@ -326,7 +426,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('does not update a marker planted by another merge request participant', async () => {
-    await runScript(job.script[0]);
+    await runEvaluation();
 
     await withGitLabServer(
       (request, response) => {
@@ -346,7 +446,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         );
       },
       async (origin, requests) => {
-        const comment = await runScript(job.after_script[0], {
+        const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
         });
@@ -357,8 +457,84 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     );
   });
 
+  it('follows all merge request note pages before deciding whether to create a summary', async () => {
+    await runEvaluation();
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        if (request.url === '/api/v4/user') {
+          response.end(JSON.stringify({ id: 123 }));
+          return;
+        }
+
+        if (
+          request.method === 'GET' &&
+          new URL(request.url ?? '/', 'http://127.0.0.1').searchParams.get('page') === '1'
+        ) {
+          response.setHeader('x-next-page', '2');
+          response.end('[]');
+          return;
+        }
+
+        if (request.method === 'GET') {
+          response.end(
+            JSON.stringify([
+              { author: { id: 123 }, body: '<!-- promptfoo-eval:promptfoo-eval --> old', id: 12 },
+            ]),
+          );
+          return;
+        }
+
+        response.end('{}');
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+        });
+
+        expect(comment.status).toBe(0);
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'PUT']);
+        expect(requests[3].url).toContain('/notes/12');
+      },
+    );
+  });
+
+  it('does not let an older pipeline overwrite a newer merge request summary', async () => {
+    await runEvaluation();
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : JSON.stringify([
+                {
+                  author: { id: 123 },
+                  body: '<!-- promptfoo-eval:promptfoo-eval -->\n<!-- promptfoo-pipeline:101 -->',
+                  id: 9,
+                },
+              ]),
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_PIPELINE_ID: '100',
+          CI_SERVER_URL: origin,
+        });
+
+        expect(comment.status).toBe(0);
+        expect(comment.stdout).toContain('Skipping stale');
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET']);
+      },
+    );
+  });
+
   it('ignores Node preload hooks while the merge request write token is available', async () => {
-    await runScript(job.script[0]);
+    await runEvaluation();
     const preloadPath = path.join(tempDir, 'preload.js');
     const leakedTokenPath = path.join(tempDir, 'leaked-token');
     fs.writeFileSync(
@@ -378,7 +554,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         );
       },
       async (origin) => {
-        const comment = await runScript(job.after_script[0], {
+        const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
           NODE_OPTIONS: `--require ${preloadPath}`,
@@ -391,7 +567,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('refuses redirects before a GitLab write token can reach another origin', async () => {
-    await runScript(job.script[0]);
+    await runEvaluation();
 
     await withGitLabServer(
       (_request, response) => {
@@ -406,7 +582,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
             response.end();
           },
           async (gitlabOrigin) => {
-            const comment = await runScript(job.after_script[0], {
+            const comment = await runScript(commentJob.script[0], {
               CI_API_V4_URL: `${gitlabOrigin}/api/v4`,
               CI_SERVER_URL: gitlabOrigin,
             });
@@ -420,7 +596,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('omits malformed share URLs from merge request comments', async () => {
-    await runScript(job.script[0], {
+    await runEvaluation({
       PROMPTFOO_SHARE: 'true',
       PROMPTFOO_TEST_SHARE_URL: 'not-a-url',
     });
@@ -437,7 +613,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         );
       },
       async (origin, requests) => {
-        const comment = await runScript(job.after_script[0], {
+        const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
           PROMPTFOO_SHARE: 'true',
@@ -451,7 +627,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('reports GitLab API errors instead of claiming the merge request comment succeeded', async () => {
-    await runScript(job.script[0]);
+    await runEvaluation();
 
     await withGitLabServer(
       (_request, response) => {
@@ -459,7 +635,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         response.end('forbidden');
       },
       async (origin) => {
-        const comment = await runScript(job.after_script[0], {
+        const comment = await runScript(commentJob.script[0], {
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
         });
@@ -472,8 +648,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('refuses to send the merge request token to an unexpected GitLab API origin', async () => {
-    await runScript(job.script[0]);
-    const comment = await runScript(job.after_script[0], {
+    await runEvaluation();
+    const comment = await runScript(commentJob.script[0], {
       CI_API_V4_URL: 'https://attacker.example/api/v4',
       CI_SERVER_URL: 'https://gitlab.example',
     });
@@ -483,9 +659,26 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('skips merge request comments when no token was configured', async () => {
-    const result = await runScript(job.after_script[0], { PROMPTFOO_GITLAB_TOKEN: '' });
+    const result = await runScript(commentJob.script[0], { PROMPTFOO_GITLAB_TOKEN: '' });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Skipping optional Promptfoo merge request comment');
+  });
+
+  it('rejects an empty output directory before looking up merge request results', async () => {
+    const result = await runScript(commentJob.script[0], { PROMPTFOO_OUTPUT_DIR: '' });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('PROMPTFOO_OUTPUT_DIR must not be empty');
+  });
+
+  it('runs the example when either bundled GitLab template changes', () => {
+    const pipeline = parse(fs.readFileSync(path.join(exampleDir, '.gitlab-ci.yml'), 'utf8')) as {
+      'promptfoo-eval': { rules: Array<{ changes?: string[] }> };
+    };
+
+    expect(pipeline['promptfoo-eval'].rules[0].changes).toEqual(
+      expect.arrayContaining(['.gitlab-ci.yml', 'gitlab-ci.yml']),
+    );
   });
 });

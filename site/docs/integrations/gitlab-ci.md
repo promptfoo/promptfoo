@@ -23,7 +23,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-6GX5+uVTNV4J1FF7EYHr+BCdDg3XEvH8OpOYB62P2aY='
+    integrity: 'sha256-F82MAd/o9ov97cAfA8mtFPV7oJf9ngwD65yPc5vvabI='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -40,7 +40,7 @@ promptfoo-eval:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 ```
 
-GitLab verifies the included template against its SHA-256 integrity value before starting the pipeline. The template also pins its Node image by digest and its Promptfoo npm release by exact version. For GitLab versions older than 17.9, replace `main` with a full, reviewed commit SHA and omit `integrity`. Do not include an unpinned third-party branch.
+GitLab verifies the included template against its SHA-256 integrity value before starting the pipeline. The template runs as the unprivileged user in Promptfoo's official, digest-pinned container image, so provider secrets are never exposed to an npm installation. For GitLab versions older than 17.9, replace `main` with a full, reviewed commit SHA and omit `integrity`. Do not include an unpinned third-party branch.
 
 The job-level merge request rule is intentional: GitLab requires `merge_request_event` rules in the consuming pipeline configuration to create merge request pipelines.
 
@@ -65,18 +65,18 @@ Protected variables are not available to ordinary merge request pipelines. GitLa
 
 The template supports these job variables:
 
-| Variable                        | Default                | Purpose                                                               |
-| ------------------------------- | ---------------------- | --------------------------------------------------------------------- |
-| `PROMPTFOO_CONFIG`              | `promptfooconfig.yaml` | Config file to evaluate                                               |
-| `PROMPTFOO_VERSION`             | `0.121.19`             | Exact Promptfoo npm version; version ranges and `latest` are rejected |
-| `PROMPTFOO_OUTPUT_DIR`          | `.promptfoo-results`   | Directory containing JSON and JUnit results                           |
-| `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage needed for the job to succeed              |
-| `PROMPTFOO_SHARE`               | `false`                | Upload eval results only when explicitly set to `true`                |
-| `PROMPTFOO_GITLAB_TOKEN`        | Unset                  | Optional project access token used only for merge request comments    |
+| Variable                        | Default                | Purpose                                                                |
+| ------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| `PROMPTFOO_CONFIG`              | `promptfooconfig.yaml` | Config file to evaluate                                                |
+| `PROMPTFOO_VERSION`             | `0.121.19`             | Exact expected version of the digest-pinned Promptfoo container        |
+| `PROMPTFOO_OUTPUT_DIR`          | `.promptfoo-results`   | Directory containing JSON and JUnit results                            |
+| `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage needed for the job to succeed               |
+| `PROMPTFOO_SHARE`               | `false`                | Upload eval results only when explicitly set to `true`                 |
+| `PROMPTFOO_GITLAB_TOKEN`        | Unset                  | Optional write token scoped only to the `promptfoo-review` environment |
 
 ### 3. Configure Caching (Optional but Recommended)
 
-The template stores Promptfoo's response cache in `.promptfoo/cache` and uses a cache key containing both the job name and branch slug. Separate keys prevent unrelated jobs or branches from sharing cached responses.
+The template stores Promptfoo's response cache in `.promptfoo/cache` and uses a key containing the project, job name, and immutable commit SHA. This avoids collisions between branch names that normalize to the same GitLab slug; caches are reused by retries of the same commit rather than shared between commits.
 
 Keep GitLab's separate caches for protected branches enabled, and consider disabling caching when prompt inputs or model responses contain sensitive data:
 
@@ -92,8 +92,9 @@ Each job writes:
 
 - `.promptfoo-results/results.json` for the complete eval output.
 - `.promptfoo-results/results.junit.xml` for the merge request test summary and pipeline **Tests** tab.
+- `.promptfoo-results/job-status.txt` for the isolated merge request summary job.
 
-Artifacts are uploaded even when the eval fails, are configured to expire after one week, and are restricted to users with the Developer role or higher. GitLab keeps artifacts from the most recent successful pipeline on each ref indefinitely by default; disable **Keep artifacts from most recent successful jobs** when strict expiration is required. Treat both files as sensitive because they can contain prompts, model responses, and grading details.
+Artifacts are uploaded even when the eval fails, are configured to expire after one week, and are restricted to users with the Developer role or higher. GitLab keeps artifacts from the most recent successful pipeline on each ref indefinitely by default; disable **Keep artifacts from most recent successful jobs** when strict expiration is required. Treat all result artifacts as sensitive because they can contain prompts, model responses, and grading details.
 
 ## Advanced Configuration
 
@@ -107,6 +108,7 @@ inspect-promptfoo-results:
   needs:
     - job: promptfoo-eval
       artifacts: true
+  when: always
   script:
     - node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".promptfoo-results/results.json", "utf8")).results.stats)'
 ```
@@ -131,13 +133,28 @@ promptfoo-billing:
     PROMPTFOO_OUTPUT_DIR: .promptfoo-results/billing
 ```
 
-The cache key already includes the GitLab job name. If these jobs should run in merge request pipelines, add the same explicit merge request `rules` shown in the basic configuration.
+The cache key already includes the GitLab job name and commit SHA. If these jobs should run in merge request pipelines, add the same explicit merge request `rules` shown in the basic configuration.
 
 ### Integration with GitLab Merge Requests
 
-To enable optional merge request summaries, create a short-lived, project-scoped access token with the minimum API access needed to create and update merge request notes. Store it as the masked `PROMPTFOO_GITLAB_TOKEN` CI/CD variable.
+To enable optional merge request summaries, create a short-lived, project-scoped access token with the minimum API access needed to create and update merge request notes. Store it as the masked `PROMPTFOO_GITLAB_TOKEN` CI/CD variable and set its **Environment scope** to exactly `promptfoo-review`.
 
-GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The template removes GitLab job, deploy, dependency-proxy, and project-write credentials from both the npm-install and eval subprocess environments, then posts or updates one summary per job in `after_script`. This preserves summaries for failing evals without converting failures into passing pipelines.
+Add a separate comment job after the eval:
+
+```yaml
+promptfoo-comment:
+  extends: .promptfoo-comment
+  needs:
+    - job: promptfoo-eval
+      artifacts: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
+```
+
+GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
+
+The eval records its job status as an artifact, and `when: always` lets the isolated comment job summarize both successful and failed evals without turning failures into passing pipelines. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 
 Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
 
@@ -156,7 +173,7 @@ After the eval runs, GitLab displays:
 
 1. **Template integrity mismatch:** Update the integrity value only after reviewing the new template content. To calculate it locally, run `openssl dgst -sha256 -binary gitlab-ci.yml | openssl base64 -A` and prefix the result with `sha256-`.
 2. **Provider credentials are unavailable:** Check whether the variables are masked or protected and whether the merge request pipeline satisfies GitLab's protected-resource requirements.
-3. **Merge request comments are missing:** Verify that `PROMPTFOO_GITLAB_TOKEN` has permission to create merge request notes and that the job runs in a merge request pipeline. An expired token or HTTP error is reported in the job's `after_script` logs.
+3. **Merge request comments are missing:** Verify that the `.promptfoo-comment` job is configured, `PROMPTFOO_GITLAB_TOKEN` is scoped to exactly `promptfoo-review`, and the job runs in a merge request pipeline. The comment job reports expired tokens and HTTP errors directly.
 4. **Internal certificate authority:** Store the CA bundle as a GitLab file-type variable and set `NODE_EXTRA_CA_CERTS` to its file path. Never disable TLS certificate verification.
 5. **Job timing out:** Override `timeout` in the extending job, for example `timeout: 2 hours`.
 

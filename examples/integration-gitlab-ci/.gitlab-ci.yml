@@ -6,6 +6,8 @@ promptfoo-eval:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
+        - .gitlab-ci.yml
+        - gitlab-ci.yml
         - promptfooconfig.yaml
         - prompts/**/*
         - tests/**/*
