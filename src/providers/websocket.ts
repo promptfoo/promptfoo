@@ -7,8 +7,8 @@ import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
-import { REDACTED, sanitizeObject, sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
+import { getSafeProviderId, sanitizeProviderObject } from './providerLogging';
 import { getRequestTimeoutMs } from './shared';
 import { normalizeResponseTransformResult } from './transformResult';
 import { parseFileTransformReference } from './transformUtils';
@@ -32,15 +32,6 @@ function normalizeWebSocketProtocols(protocols: string | string[] | undefined): 
     .flatMap((value) => value.split(','))
     .map((value) => value.trim())
     .filter(Boolean);
-}
-
-function getWebSocketProviderId(url: string): string {
-  const sanitizedUrl = sanitizeUrl(url);
-  return sanitizedUrl === REDACTED ||
-    sanitizedUrl.includes(encodeURIComponent(REDACTED)) ||
-    sanitizedUrl.includes('***')
-    ? sanitizedUrl
-    : url;
 }
 
 interface WebSocketProviderConfig {
@@ -201,7 +192,7 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
-    this.providerId = getWebSocketProviderId(this.url);
+    this.providerId = getSafeProviderId(this.url);
     this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -212,7 +203,7 @@ export class WebSocketProvider implements ApiProvider {
     invariant(
       this.config.messageTemplate,
       `Expected WebSocket provider ${this.providerId} to have a config containing {messageTemplate}, but got ${safeJsonStringify(
-        sanitizeObject(this.config, { context: 'provider config' }),
+        sanitizeProviderObject(this.config, 'provider config'),
       )}`,
     );
   }
