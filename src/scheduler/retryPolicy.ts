@@ -74,20 +74,26 @@ export function shouldRetry(
   // that are distinct from those low-level connection errors.
   if (error) {
     const message = (error.message ?? '').toLowerCase();
+    const httpStatus = message.match(
+      /\b(?:https?|status(?:\s+code)?|(?:api(?:\s+call)?|server)\s+error)\s*[:=]?\s*(\d{3})\b/,
+    )?.[1];
+
+    if (httpStatus) {
+      return (
+        httpStatus === '502' ||
+        httpStatus === '503' ||
+        httpStatus === '504' ||
+        httpStatus === '524' ||
+        (policy.retryAllServerErrors === true && httpStatus.startsWith('5'))
+      );
+    }
+
     return (
       isTransientConnectionError(error) ||
       message.includes('timeout') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
-      /\b(?:enotfound|eai_again|epipe)\b/.test(message) ||
-      (policy.retryAllServerErrors === true &&
-        /\b(?:https?|status(?:\s+code)?|(?:api|server)\s+error)\s*[:=]?\s*5\d{2}\b/.test(
-          message,
-        )) ||
-      message.includes('503') ||
-      message.includes('502') ||
-      message.includes('504') ||
-      message.includes('524')
+      /\b(?:enotfound|eai_again|epipe)\b/.test(message)
     );
   }
 

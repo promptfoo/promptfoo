@@ -4,6 +4,7 @@ interface FetchRetryContext {
   maxRetries?: number;
   schedulerOwnsRetries?: boolean;
   schedulerRetriesDisabled?: boolean;
+  nonIdempotentRequestAccepted?: boolean;
 }
 
 const fetchRetryContext = new AsyncLocalStorage<FetchRetryContext>();
@@ -41,6 +42,20 @@ export function disableSchedulerRetries(disabled: boolean): void {
   }
 }
 
+export function markNonIdempotentRequestAccepted(): void {
+  const context = fetchRetryContext.getStore();
+  if (context?.schedulerOwnsRetries) {
+    context.nonIdempotentRequestAccepted = true;
+  }
+}
+
+export function hasAcceptedNonIdempotentRequest(): boolean {
+  return fetchRetryContext.getStore()?.nonIdempotentRequestAccepted === true;
+}
+
 export function canSchedulerRetry(): boolean {
-  return fetchRetryContext.getStore()?.schedulerRetriesDisabled !== true;
+  const context = fetchRetryContext.getStore();
+  return (
+    context?.schedulerRetriesDisabled !== true && context?.nonIdempotentRequestAccepted !== true
+  );
 }

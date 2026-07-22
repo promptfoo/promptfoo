@@ -86,6 +86,7 @@ describe('shouldRetry', () => {
     'HTTP 500: Internal Server Error',
     'status code: 501',
     'API error: 505',
+    'API call error: 503',
     'Internal Server Error: 511',
   ])('should only retry explicit server status %s when all-5xx retry is enabled', (message) => {
     expect(
@@ -96,9 +97,16 @@ describe('shouldRetry', () => {
     ).toBe(true);
   });
 
-  it('should not treat a number in a client-error body as a server status', () => {
+  it.each([
+    '500',
+    '502',
+    '503',
+    '504',
+    '524',
+    'network timeout',
+  ])('should not retry a client error mentioning %s', (text) => {
     expect(
-      shouldRetry(0, new Error('HTTP 400: maximum 500 tokens'), false, {
+      shouldRetry(0, new Error(`HTTP 400: maximum ${text} tokens`), false, {
         ...DEFAULT_RETRY_POLICY,
         retryAllServerErrors: true,
       }),

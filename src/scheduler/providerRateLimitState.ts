@@ -226,10 +226,20 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         const responseError = getResponseError(result);
-        if (responseError && canRetry(responseError, false)) {
-          attempt++;
-          await this.waitForRetry(attempt, retryPolicy, retryAfterMs, 'error', options.abortSignal);
-          continue;
+        if (responseError) {
+          if (canRetry(responseError, false)) {
+            attempt++;
+            await this.waitForRetry(
+              attempt,
+              retryPolicy,
+              retryAfterMs,
+              'error',
+              options.abortSignal,
+            );
+            continue;
+          }
+          this.failedRequests++;
+          return result;
         }
 
         // Success

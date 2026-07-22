@@ -1326,6 +1326,64 @@ describe('fetchWithRetries', () => {
     expect(sleep).not.toHaveBeenCalled();
   });
 
+  it('should preserve a successful mutation that exhausts the current rate-limit window', async () => {
+    const acceptedResponse = new Response('accepted', {
+      headers: { 'x-ratelimit-remaining-requests': '0' },
+    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(acceptedResponse);
+
+    const result = await withFetchRetryContext(
+      2,
+      () => fetchWithRetries('https://example.com/jobs', { method: 'POST' }, 1000, 2),
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(await result.text()).toBe('accepted');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should retry a nested request without replaying a previously accepted mutation', async () => {
+    const acceptedResponse = new Response('created');
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(acceptedResponse)
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce(new Response('downloaded'));
+
+    const result = await withFetchRetryContext(
+      2,
+      async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        return fetchWithRetries('https://example.com/jobs/123/content', {}, 1000, 2);
+      },
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(await result.text()).toBe('downloaded');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry transient HTTP responses after an accepted mutation', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(new Response('created'))
+      .mockResolvedValueOnce(new Response(null, { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response('downloaded'));
+
+    const result = await withFetchRetryContext(
+      2,
+      async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        return fetchWithRetries('https://example.com/jobs/123/content', {}, 1000, 2);
+      },
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(await result.text()).toBe('downloaded');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it('should make retries+1 total attempts', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 

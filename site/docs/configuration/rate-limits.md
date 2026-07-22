@@ -94,7 +94,7 @@ PROMPTFOO_DELAY_MS=1000 promptfoo eval
 
 ### Backoff Configuration
 
-The adaptive scheduler owns provider retries, using a 1-second base backoff and up to 3 retries by default. Set the provider's `maxRetries` to override this budget, including `0` to disable retries. Nested HTTP requests do not retry independently.
+The adaptive scheduler owns provider retries, using a 1-second base backoff and up to 3 retries by default. Set the provider's `maxRetries` to override this budget, including `0` to disable retries. Nested HTTP requests do not retry independently unless a successful non-idempotent request prevents the entire provider call from being retried.
 
 When the adaptive scheduler is disabled, the HTTP transport owns retries instead. It defaults to 4 retries and honors the provider's `maxRetries` or an explicit per-call override.
 

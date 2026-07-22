@@ -25,6 +25,8 @@ import {
   disableSchedulerRetries,
   doesSchedulerOwnFetchRetries,
   getFetchRetryContextMaxRetries,
+  hasAcceptedNonIdempotentRequest,
+  markNonIdempotentRequestAccepted,
 } from './retryContext';
 import { stripDecompressionHeaders } from './stripDecompressionHeaders';
 
@@ -281,7 +283,7 @@ export async function fetchWithProxy(
 
     if (response.ok && (method === 'POST' || method === 'PATCH')) {
       // Replaying the provider could create another billable job.
-      disableSchedulerRetries(true);
+      markNonIdempotentRequestAccepted();
     }
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
@@ -681,7 +683,10 @@ export async function fetchWithRetries(
   const contextMaxRetries = getFetchRetryContextMaxRetries();
   if (doesSchedulerOwnFetchRetries()) {
     disableSchedulerRetries(maxRetries === 0);
-    maxRetries = 0;
+    maxRetries =
+      hasAcceptedNonIdempotentRequest() && contextMaxRetries !== 0
+        ? Math.max(0, maxRetries ?? contextMaxRetries ?? 4)
+        : 0;
   } else {
     maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
   }
@@ -700,11 +705,18 @@ export async function fetchWithRetries(
         timeout,
       );
 
+      if (hasAcceptedNonIdempotentRequest() && isTransientError(response) && i < maxRetries) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
       if (response && isRateLimited(response)) {
+        if (response.ok && doesSchedulerOwnFetchRetries()) {
+          return response;
+        }
         await handleRateLimitedResponse(response, url, i, maxRetries, signal);
         continue;
       }

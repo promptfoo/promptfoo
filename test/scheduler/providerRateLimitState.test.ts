@@ -428,6 +428,7 @@ describe('ProviderRateLimitState', () => {
 
       await expect(promise).resolves.toBe(response);
       expect(callFn).toHaveBeenCalledTimes(3);
+      expect(state.getMetrics()).toMatchObject({ failedRequests: 1, completedRequests: 0 });
     });
 
     it('should retry on rate limit and eventually succeed', async () => {

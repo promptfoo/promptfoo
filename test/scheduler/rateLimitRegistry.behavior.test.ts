@@ -284,7 +284,31 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
       );
 
       expect(result.error).toContain('Network error');
-      expect(fetch).toHaveBeenCalledTimes(6);
+      expect(fetch).toHaveBeenCalledTimes(4);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should recover an ordinary 503 without replaying a successful token request', async () => {
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('token'))
+      .mockResolvedValueOnce(new Response(null, { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response('ok'));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        await fetchWithRetries('https://example.com/token', { method: 'POST' }, 1000, 0);
+        const response = await fetchWithRetries('https://example.com/api', {}, 1000, 2);
+        return { output: await response.text() };
+      });
+
+      expect(result.output).toBe('ok');
+      expect(fetch).toHaveBeenCalledTimes(3);
     } finally {
       registry.dispose();
     }
@@ -330,6 +354,63 @@ describe('RateLimitRegistry integration - provider maxRetries', () => {
           disableTransientRetries: true,
         });
         return { error: `Failed to download video: ${response.status} ${response.statusText}` };
+      });
+
+      expect(result.error).toContain('503');
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should never recreate an accepted job after a later request resets its retry budget', async () => {
+    vi.stubEnv('PROMPTFOO_REQUEST_BACKOFF_MS', '0');
+    const fetch = vi.fn().mockImplementation(async (url: RequestInfo | URL) => {
+      if (String(url).endsWith('/jobs')) {
+        return new Response(JSON.stringify({ id: 'job-123' }));
+      }
+      throw new Error('Network error');
+    });
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(2), async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        try {
+          await fetchWithRetries('https://example.com/jobs/123/content', {}, 1000, 2);
+          return { output: 'unexpected' };
+        } catch (error) {
+          return { error: (error as Error).message };
+        }
+      });
+
+      expect(result.error).toContain('Network error');
+      expect(fetch).toHaveBeenCalledTimes(4);
+      expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/jobs'))).toHaveLength(1);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('should keep provider maxRetries zero after a mutation is accepted', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'job-123' })))
+      .mockResolvedValue(new Response(null, { status: 503, statusText: 'Service Unavailable' }));
+    vi.stubGlobal('fetch', fetch);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+
+    try {
+      const result = await registry.execute(createProvider(0), async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        const response = await fetchWithRetries(
+          'https://example.com/jobs/123/content',
+          {},
+          1000,
+          2,
+        );
+        return { error: `HTTP ${response.status}: ${response.statusText}` };
       });
 
       expect(result.error).toContain('503');
