@@ -439,7 +439,7 @@ export function calculateGoogleCost(
 
   const region = (config as { region?: unknown }).region;
   const vertexRegionalMultiplier =
-    isVertexMode && typeof region === 'string' && region !== 'global'
+    isVertexMode && (region === 'us' || region === 'eu')
       ? (model?.vertexRegionalMultiplier ?? 1)
       : 1;
   const inputCost = config.inputCost ?? config.cost ?? modelCost.input * vertexRegionalMultiplier;
