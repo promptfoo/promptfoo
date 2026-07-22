@@ -601,32 +601,36 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     if (!functionCalls) {
       return output;
     }
-    const results = [];
-    let callbackFailed = false;
-
+    const preparedCalls: Array<{ functionName: string; args: string }> = [];
     for (const functionCall of functionCalls) {
       const functionName = functionCall.name;
       if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
-        callbackFailed = true;
-        continue;
+        return output;
       }
       try {
         const args =
           typeof functionCall.args === 'string'
             ? JSON.parse(functionCall.args)
             : (functionCall.args ?? {});
-        results.push(
-          await this.executeFunctionCallback(functionName, JSON.stringify(args), config),
-        );
+        preparedCalls.push({ functionName, args: JSON.stringify(args) });
       } catch {
-        // executeFunctionCallback already logs the callback error. Preserve the
-        // original model output when a callback cannot be executed.
-        callbackFailed = true;
+        return output;
       }
     }
 
-    if (results.length === 0 || callbackFailed) {
+    if (preparedCalls.length === 0) {
       return output;
+    }
+
+    const results = [];
+    for (const { functionName, args } of preparedCalls) {
+      try {
+        results.push(await this.executeFunctionCallback(functionName, args, config));
+      } catch {
+        // executeFunctionCallback already logs the error. Preserve the original
+        // model output when a callback cannot be executed.
+        return output;
+      }
     }
     if (results.length === 1) {
       return results[0];

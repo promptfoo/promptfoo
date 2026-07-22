@@ -1326,7 +1326,7 @@ function getMimeTypeFromFtypBrand(brand: string): string {
   } else if (['mif1', 'msf1'].includes(brand)) {
     return 'image/heif';
   } else if (brand === 'qt  ') {
-    return 'video/mov';
+    return 'video/quicktime';
   } else if (brand.startsWith('3g')) {
     return 'video/3gpp';
   }
@@ -1398,7 +1398,7 @@ function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
   } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
     return getMimeTypeFromFtypBrand(bytes.subarray(8, 12).toString('ascii'));
   } else if (['moov', 'mdat', 'wide'].includes(bytes.subarray(4, 8).toString('ascii'))) {
-    return 'video/mov';
+    return 'video/quicktime';
   } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
     return getEbmlMimeType(bytes);
   } else if (['000001ba', '000001b3'].includes(bytes.subarray(0, 4).toString('hex'))) {

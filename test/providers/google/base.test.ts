@@ -863,6 +863,42 @@ describe('GoogleGenericProvider', () => {
       expect(result).toBe(originalCalls);
     });
 
+    it('does not execute callbacks when a later parallel call is not configured', async () => {
+      const callback = vi.fn().mockResolvedValue('should not execute');
+      const originalCalls = [
+        { functionCall: { name: 'configured', args: {} } },
+        { functionCall: { name: 'missing', args: {} } },
+      ];
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        { functionToolCallbacks: { configured: callback } },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('does not execute callbacks when a later parallel call has malformed arguments', async () => {
+      const callback = vi.fn().mockResolvedValue('should not execute');
+      const originalCalls = [
+        { functionCall: { name: 'configured', args: {} } },
+        { functionCall: { name: 'configured', args: '{' } },
+      ];
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        originalCalls,
+        { functionToolCallbacks: { configured: callback } },
+        false,
+      );
+
+      expect(result).toBe(originalCalls);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it.each([
       'toString',
       'constructor',

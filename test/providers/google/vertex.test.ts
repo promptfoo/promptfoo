@@ -1087,21 +1087,18 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
       {},
     ];
-    const mockRequest = mockVertexRequest(
-      functionCalls.map((functionCall, index) => ({
+    const mockRequest = mockVertexRequest([
+      { promptFeedback: { safetyRatings: [] } },
+      ...functionCalls.map((functionCall, index) => ({
         candidates: [
           {
             content: { parts: [{ functionCall }] },
             ...(index === functionCalls.length - 1 ? { finishReason: 'STOP' } : {}),
           },
         ],
-        ...(index === functionCalls.length - 1
-          ? {
-              usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-            }
-          : {}),
       })),
-    );
+      { usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 } },
+    ]);
 
     const response = await geminiProvider.callGeminiApi('test prompt');
 

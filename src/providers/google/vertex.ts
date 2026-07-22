@@ -34,6 +34,7 @@ import {
   getCandidate,
   getGoogleClient,
   getGoogleResponseServiceTier,
+  isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
@@ -792,6 +793,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
                   : undefined,
               },
             };
+          }
+
+          if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+            continue;
           }
 
           const candidate = getCandidate(datum);

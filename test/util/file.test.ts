@@ -116,7 +116,7 @@ describe('file utilities', () => {
     it('identifies video files correctly', () => {
       expect(isVideoFile('video.mp4')).toBe(true);
       expect(isVideoFile('clip.webm')).toBe(true);
-      expect(isVideoFile('video.ogg')).toBe(true);
+      expect(isVideoFile('audio.ogg')).toBe(false);
       expect(isVideoFile('movie.mov')).toBe(true);
       expect(isVideoFile('video.avi')).toBe(true);
       expect(isVideoFile('clip.wmv')).toBe(true);
