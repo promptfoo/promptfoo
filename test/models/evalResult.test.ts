@@ -3,6 +3,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
+import { WebSocketProvider } from '../../src/providers/websocket';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -107,6 +108,24 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+        },
+      });
+    });
+
+    it('should redact env-rendered credentials from templated WebSocket provider data', () => {
+      const provider = new WebSocketProvider('websocket', {
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+
+      expect(sanitizeProvider(provider)).toEqual({
+        id: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+        label: undefined,
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+          messageTemplate: '{{ prompt }}',
         },
       });
     });
