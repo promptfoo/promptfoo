@@ -938,7 +938,11 @@ async function callActiveProvider({
 
   const callApi = () => activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
   const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+    ? await rateLimitRegistry.execute(
+        activeProvider,
+        callApi,
+        createProviderRateLimitOptions(abortSignal),
+      )
     : await callApi();
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);

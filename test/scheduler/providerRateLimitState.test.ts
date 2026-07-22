@@ -344,6 +344,37 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - retry behavior', () => {
+    it('should cancel rate-limit backoff without calling the provider again', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn().mockRejectedValue(new Error('Rate limit exceeded'));
+      const pending = state.executeWithRetry('req-abort', callFn, {
+        abortSignal: controller.signal,
+        getRetryAfter: () => 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callFn).toHaveBeenCalledTimes(1);
+      expect(state.getMetrics().activeRequests).toBe(0);
+    });
+
+    it('should cancel transient-response backoff without releasing another request', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn().mockResolvedValue({ error: 'API error 503: Service Unavailable' });
+      const pending = state.executeWithRetry('req-abort-response', callFn, {
+        abortSignal: controller.signal,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callFn).toHaveBeenCalledTimes(1);
+      expect(state.getMetrics().activeRequests).toBe(0);
+    });
+
     it('should retry transient errors returned in provider responses', async () => {
       const callFn = vi
         .fn()

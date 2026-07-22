@@ -55,7 +55,9 @@ export class SlotQueue {
    * Acquire a slot. All requests go through the queue to prevent race conditions.
    * Returns when a slot is available and quota is not exhausted.
    */
-  async acquire(requestId: string): Promise<void> {
+  async acquire(requestId: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+
     return new Promise((resolve, reject) => {
       const queuedAt = Date.now();
 
@@ -67,7 +69,7 @@ export class SlotQueue {
           const idx = this.waiting.findIndex((r) => r.id === requestId);
           if (idx !== -1) {
             this.waiting.splice(idx, 1);
-            reject(
+            wrappedReject(
               new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
             );
           }
@@ -78,6 +80,7 @@ export class SlotQueue {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
+        signal?.removeEventListener('abort', onAbort);
         this.activeCount++;
         this.onSlotAcquired?.(this.waiting.length);
         resolve();
@@ -87,8 +90,22 @@ export class SlotQueue {
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
+        signal?.removeEventListener('abort', onAbort);
         reject(error);
       };
+
+      const onAbort = () => {
+        const index = this.waiting.findIndex((request) => request.id === requestId);
+        if (index !== -1) {
+          this.waiting.splice(index, 1);
+          wrappedReject(
+            signal?.reason instanceof Error
+              ? signal.reason
+              : new DOMException('The operation was aborted', 'AbortError'),
+          );
+        }
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       // Always queue the request
       this.waiting.push({

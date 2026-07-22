@@ -50,6 +50,21 @@ describe('providerWrapper', () => {
       );
     });
 
+    it('should pass request cancellation to the scheduler', async () => {
+      mockExecute.mockImplementation(async (_provider, callFn) => callFn());
+      const abortSignal = new AbortController().signal;
+
+      await wrapProviderWithRateLimiting(mockProvider, mockRegistry).callApi('test', undefined, {
+        abortSignal,
+      });
+
+      expect(mockExecute).toHaveBeenCalledWith(
+        mockProvider,
+        expect.any(Function),
+        expect.objectContaining({ abortSignal }),
+      );
+    });
+
     it('should preserve other provider properties', () => {
       const wrappedProvider = wrapProviderWithRateLimiting(mockProvider, mockRegistry);
 

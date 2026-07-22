@@ -94,12 +94,9 @@ PROMPTFOO_DELAY_MS=1000 promptfoo eval
 
 ### Backoff Configuration
 
-Promptfoo has two retry layers:
+The adaptive scheduler owns provider retries, using a 1-second base backoff and up to 3 retries by default. Set the provider's `maxRetries` to override this budget, including `0` to disable retries. Nested HTTP requests do not retry independently.
 
-1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times by default. If a provider config sets `maxRetries`, the scheduler uses that value (including `0` to disable scheduler retries entirely).
-2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set.
-
-When a provider config includes `maxRetries`, promptfoo propagates that value to both layers. Explicit per-call overrides (e.g. a provider that passes a specific `maxRetries` to `fetchWithRetries`) still take precedence. For direct `fetchWithProxy` calls, transient retries (502/503/504/524) are disabled when the provider sets `maxRetries: 0`.
+When the adaptive scheduler is disabled, the HTTP transport owns retries instead. It defaults to 4 retries and honors the provider's `maxRetries` or an explicit per-call override.
 
 Example — disable retries for a provider to fail fast on rate limits:
 
