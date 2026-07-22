@@ -17,6 +17,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
+import deepEqual from 'fast-deep-equal';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -127,8 +128,7 @@ const EvaluateTestSuiteCreator = () => {
       return [
         matchingProviders.find(
           (availableProvider) =>
-            availableProvider === provider ||
-            JSON.stringify(availableProvider) === JSON.stringify(provider),
+            availableProvider === provider || deepEqual(availableProvider, provider),
         ) ?? matchingProviders[0],
       ];
     });
@@ -140,9 +140,18 @@ const EvaluateTestSuiteCreator = () => {
       return;
     }
 
+    const removedUnapprovedProviders = approvedProviders.length !== normalizedProviders.length;
+    const restoredProviderSettings =
+      !removedUnapprovedProviders &&
+      approvedProviders.some((provider, index) => !deepEqual(provider, normalizedProviders[index]));
+
     updateConfig({ providers: approvedProviders });
-    if (approvedProviders.length !== normalizedProviders.length) {
+    setResetKey((key) => key + 1);
+
+    if (removedUnapprovedProviders) {
       showToast('Removed providers that are not in the administrator-configured catalog.', 'error');
+    } else if (restoredProviderSettings) {
+      showToast('Restored administrator-configured provider settings.', 'error');
     }
   }, [availableProviders, hasCustomConfig, normalizedProviders, showToast, updateConfig]);
 

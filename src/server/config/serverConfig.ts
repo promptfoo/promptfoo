@@ -155,9 +155,9 @@ export function getAvailableProviders(): ProviderOptions[] {
       continue;
     }
 
-    // Ensure id is a non-empty string (required for providers even though the
-    // schema allows other shapes) so one bad entry cannot 500 the catalog route.
-    if (typeof result.data.id !== 'string' || !result.data.id) {
+    // Ensure id contains non-whitespace text (required for providers even though
+    // the schema allows other shapes) so one bad entry cannot break the catalog.
+    if (typeof result.data.id !== 'string' || result.data.id.trim().length === 0) {
       logger.warn('Provider missing required string "id" field in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,

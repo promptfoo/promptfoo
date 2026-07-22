@@ -633,6 +633,42 @@ describe('EvaluateTestSuiteCreator', () => {
     });
   });
 
+  it('refreshes the YAML editor and reports rejected changes to approved provider settings', async () => {
+    const user = userEvent.setup();
+    const approvedProvider = { id: 'openai:approved', config: { temperature: 0 } };
+    useStore.getState().updateConfig({ providers: [approvedProvider] });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: { providers: [approvedProvider], hasCustomConfig: true },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('openai:approved');
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    const originalYamlEditor = await screen.findByTestId('mock-yaml-editor');
+
+    act(() => {
+      useStore.getState().updateConfig({
+        providers: [{ id: 'openai:approved', config: { temperature: 2 } }],
+      });
+    });
+
+    await waitFor(() => {
+      expect(useStore.getState().config.providers).toEqual([approvedProvider]);
+      expect(screen.getByTestId('mock-yaml-editor')).not.toBe(originalYamlEditor);
+    });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Restored administrator-configured provider settings.',
+      'error',
+    );
+  });
+
   it('preserves the matching configured entry when catalog entries share an id', async () => {
     const conservativeProvider = {
       id: 'openai:approved',
@@ -645,6 +681,54 @@ describe('EvaluateTestSuiteCreator', () => {
       config: { temperature: 1 },
     };
     useStore.getState().updateConfig({ providers: [{ ...creativeProvider }] });
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: {
+          providers: [conservativeProvider, creativeProvider],
+          hasCustomConfig: true,
+        },
+      }),
+    } as Response);
+
+    render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      const configuredProviders = useStore.getState().config.providers;
+      expect(configuredProviders).toEqual([creativeProvider]);
+      expect(
+        Array.isArray(configuredProviders) && configuredProviders[0] === creativeProvider,
+      ).toBe(true);
+    });
+  });
+
+  it('matches duplicate configured providers when YAML object keys are ordered differently', async () => {
+    const conservativeProvider = {
+      id: 'openai:approved',
+      label: 'Conservative',
+      config: { temperature: 0 },
+    };
+    const creativeProvider = {
+      id: 'openai:approved',
+      label: 'Creative',
+      config: {
+        headers: { Authorization: 'Bearer {{ env.GATEWAY_KEY }}', 'X-Tier': 'creative' },
+        temperature: 1,
+      },
+    };
+    useStore.getState().updateConfig({
+      providers: [
+        {
+          config: {
+            temperature: 1,
+            headers: { 'X-Tier': 'creative', Authorization: 'Bearer {{ env.GATEWAY_KEY }}' },
+          },
+          label: 'Creative',
+          id: 'openai:approved',
+        },
+      ],
+    });
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
       json: async () => ({

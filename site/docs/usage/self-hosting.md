@@ -547,11 +547,11 @@ docker logs promptfoo_container | grep "Invalid provider"
 
 Common issues: missing `id` field, invalid provider ID format, YAML syntax errors.
 
-Entries whose `id` is not a non-empty string are skipped, so quote values that look numeric (`- id: '123'`) to keep them from being parsed as numbers.
+Entries whose `id` is not a non-empty, non-whitespace string are skipped, so quote values that look numeric (`- id: '123'`) to keep them from being parsed as numbers.
 
 :::warning
 
-The restriction fails open. If **every** entry fails validation the catalog is empty, which is indistinguishable from having no `ui-providers.yaml` at all - the UI falls back to the full built-in provider list and the restriction is not enforced. After any change to the file, confirm the loaded provider count in the logs or check that `GET /api/providers` returns `hasCustomConfig: true`.
+The restriction fails closed. If **every** entry fails validation, the custom catalog remains active but empty: the built-in provider list stays hidden, and Add Provider, Edit, and Run Eval remain unavailable. After any change to the file, confirm the loaded provider count in the logs or check that `GET /api/providers` returns `hasCustomConfig: true` with the expected providers.
 
 :::
 
