@@ -413,6 +413,11 @@ async function transformForPerTurnLayer(
   const results: TestCase[] = [];
 
   for (const testCase of testCases) {
+    const runtimeTransformDiagnostics: Array<{
+      component: 'indirect-web-pwn';
+      stage: 'create-page' | 'update-page';
+      outcome: 'degraded';
+    }> = [];
     const rawAttackPrompt = String(testCase.vars?.[injectVar] ?? '');
 
     // Log what prompt we're receiving (helps debug layer integration)
@@ -490,6 +495,11 @@ async function transformForPerTurnLayer(
           uuid: pageState.uuid,
         });
         // On error, still use the existing URL
+        runtimeTransformDiagnostics.push({
+          component: 'indirect-web-pwn',
+          stage: 'update-page',
+          outcome: 'degraded',
+        });
       }
 
       turnNumber = pageState.turnCount;
@@ -542,7 +552,19 @@ async function transformForPerTurnLayer(
           stateKey,
         });
         // On error, pass through the original prompt
-        results.push(testCase);
+        results.push({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            runtimeTransformDiagnostics: [
+              {
+                component: 'indirect-web-pwn',
+                stage: 'create-page',
+                outcome: 'degraded',
+              },
+            ],
+          },
+        });
         continue;
       }
 
@@ -579,6 +601,7 @@ async function transformForPerTurnLayer(
         embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
         fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        ...(runtimeTransformDiagnostics.length > 0 && { runtimeTransformDiagnostics }),
       },
     });
   }

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import path from 'path';
 
@@ -51,6 +52,44 @@ export interface SanitizedLogContext {
   body?: unknown;
   queryParams?: Record<string, string>;
   [key: string]: unknown;
+}
+
+export interface RedactedLogToken {
+  goatRunId: string;
+}
+
+const sensitiveLogScope = new AsyncLocalStorage<RedactedLogToken | undefined>();
+const safeSensitiveLogContexts = new WeakSet<object>();
+
+/**
+ * Runs an async operation with fail-closed logging. Unmarked child logs are replaced before
+ * serialization, while callers can explicitly retain known-safe metadata diagnostics.
+ */
+export function runWithRedactedLogging<T>(goatRunId: string, callback: () => T): T {
+  return sensitiveLogScope.run({ goatRunId }, callback);
+}
+
+/** Captures the current operation token so long-lived resources can bind each event explicitly. */
+export function captureRedactedLogToken(): RedactedLogToken | undefined {
+  return sensitiveLogScope.getStore();
+}
+
+/**
+ * Binds a callback to an operation token. Passing `undefined` explicitly clears an inherited
+ * scope, which shared resources must do for unrelated work after a sensitive operation ends.
+ */
+export function bindRedactedLogToken<TArgs extends unknown[], TResult>(
+  token: RedactedLogToken | undefined,
+  callback: (...args: TArgs) => TResult,
+): (...args: TArgs) => TResult {
+  return (...args) => sensitiveLogScope.run(token, () => callback(...args));
+}
+
+/** Marks a freshly-created, content-free context as safe inside a redacted logging scope. */
+export function markLogContextSafe(context: Record<string, unknown> = {}): SanitizedLogContext {
+  const marked = { ...context } as SanitizedLogContext;
+  safeSensitiveLogContexts.add(marked);
+  return marked;
 }
 
 // Lazy source map support - only loaded when debug is enabled
@@ -399,6 +438,19 @@ function createLogMethodWithContext(
     // Prevent new writes once shutdown starts
     if (isLoggerShuttingDown) {
       return;
+    }
+
+    const scope = sensitiveLogScope.getStore();
+    const markedSafe = Boolean(context && safeSensitiveLogContexts.has(context));
+    if (scope && !markedSafe) {
+      message = '[Sensitive operation] Diagnostic content suppressed';
+      context = {
+        goatRunId: scope.goatRunId,
+        level,
+        contentSuppressed: true,
+      };
+    } else if (scope && context) {
+      context = { ...context, goatRunId: scope.goatRunId };
     }
 
     if (!context) {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
-import logger from '../../../src/logger';
+import logger, { bindRedactedLogToken, captureRedactedLogToken } from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -16,6 +16,8 @@ const MockWebSocket = WebSocket as Mocked<typeof WebSocket>;
 // Mock logger
 vi.mock('../../../src/logger', () => ({
   __esModule: true,
+  bindRedactedLogToken: vi.fn((_token, callback) => callback),
+  captureRedactedLogToken: vi.fn(() => undefined),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -2348,6 +2350,30 @@ describe('OpenAI Realtime Provider', () => {
       provider.cleanup();
     });
 
+    it('binds persistent turn handlers to the captured redaction token', async () => {
+      const token = { goatRunId: 'goat-turn' };
+      vi.mocked(captureRedactedLogToken).mockReturnValue(token);
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+      const persistentConnection = createPersistentMockWebSocket(provider);
+      provider.persistentConnection = persistentConnection;
+
+      const turn = provider.callApi('private turn', {
+        test: { metadata: { conversationId: 'redacted-turn' } },
+      } as any);
+      await flushMicrotasks();
+
+      expect(bindRedactedLogToken).toHaveBeenCalledWith(token, expect.any(Function));
+      const handler = lastMessageHandler();
+      emitUserItem(handler, 'redacted-item');
+      emitOutputTextDone(handler, 'done');
+      emitResponseDone(handler);
+      await expect(turn).resolves.toMatchObject({ output: 'done' });
+
+      provider.cleanup();
+    });
+
     it('serializes concurrent persistent-path turns and waits for OPEN before sending', async () => {
       // Regression test for the concurrency race that caused the shipped
       // promptfooconfig-conversation.yaml example to fail 100% at default
@@ -2511,6 +2537,8 @@ describe('OpenAI Realtime Provider', () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { modalities: ['text'], maintainContext: true },
       });
+      const redactedLogToken = { goatRunId: 'mid-turn-close' };
+      vi.mocked(captureRedactedLogToken).mockReturnValue(redactedLogToken);
 
       const firstWs = {
         on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
@@ -2533,7 +2561,13 @@ describe('OpenAI Realtime Provider', () => {
       // close listener must (a) reject the in-flight turn, (b) clear cached
       // lifecycle state. Pre-fix this listener didn't exist.
       const closeHandlers = mockHandlers.close;
-      expect(closeHandlers.length).toBeGreaterThan(0);
+      expect(closeHandlers.length).toBeGreaterThan(1);
+      vi.mocked(bindRedactedLogToken).mockClear();
+      // EventEmitter invokes the persistent lifecycle listener first. It must
+      // dynamically inherit the active turn token rather than clearing it as
+      // though the socket were idle.
+      closeHandlers[0](1011, Buffer.from('server policy violation'));
+      expect(bindRedactedLogToken).toHaveBeenCalledWith(redactedLogToken, expect.any(Function));
       // The setupMessageHandlers listener is registered AFTER any
       // before-OPEN listeners; pick the last one to fire it.
       const midTurnClose = closeHandlers[closeHandlers.length - 1];
@@ -2544,6 +2578,7 @@ describe('OpenAI Realtime Provider', () => {
       // tearDown must run so the next turn reconnects.
       expect(provider.persistentConnection).toBeNull();
       expect((provider as any).connectionReady).toBeNull();
+      expect((provider as any).persistentConnectionTurnLogToken).toBeUndefined();
     });
 
     it('rejects the in-flight turn and tears down state when the response times out', async () => {
