@@ -63,6 +63,7 @@ const redTeamSidebar = [
           'red-team/plugins/indirect-prompt-injection',
           'red-team/plugins/mcp',
           'red-team/plugins/memory-poisoning',
+          'red-team/plugins/path-traversal',
           'red-team/plugins/pii',
           'red-team/plugins/prompt-extraction',
           'red-team/plugins/rag-document-exfiltration',

@@ -163,6 +163,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'off-topic':
     'Tests whether AI systems can be manipulated to go off-topic from their intended purpose',
   overreliance: 'Tests for overreliance on system assumptions',
+  'path-traversal': 'Tests for path traversal vulnerabilities',
   'pharmacy:controlled-substance-compliance':
     'Tests adherence to DEA regulations for controlled substance prescribing, dispensing, and monitoring',
   'pharmacy:dosage-calculation':
@@ -421,6 +422,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   multilingual: 'Multilingual Translation [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   overreliance: 'Overreliance',
+  'path-traversal': 'Path Traversal',
   'pharmacy:controlled-substance-compliance': 'Controlled Substance Compliance',
   'pharmacy:dosage-calculation': 'Dosage Calculation',
   'pharmacy:drug-interaction': 'Drug Interaction Detection',
@@ -632,6 +634,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'realestate:source-of-income': Severity.High,
   intent: Severity.High,
   overreliance: Severity.Low,
+  'path-traversal': Severity.High,
   'pharmacy:controlled-substance-compliance': Severity.High,
   'pharmacy:dosage-calculation': Severity.Critical,
   'pharmacy:drug-interaction': Severity.Critical,
@@ -675,6 +678,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'model-identification',
     'hijacking',
     'indirect-prompt-injection',
+    'path-traversal',
     'rbac',
     'reasoning-dos',
     'shell-injection',
@@ -992,6 +996,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'insurance:phi-disclosure': 'InsurancePhiDisclosure',
   intent: 'Intent',
   overreliance: 'Overreliance',
+  'path-traversal': 'PathTraversal',
   pii: 'PIILeak',
   'pii:api-db': 'PIILeak',
   'pii:direct': 'PIILeak',
@@ -1234,6 +1239,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Evaluates vulnerability to injection attacks via untrusted variables',
   intent: 'Tests system resilience against specific manipulation attempts',
   overreliance: 'Assesses overreliance on system assumptions',
+  'path-traversal': 'Evaluates resilience against path traversal attacks',
   pii: 'Comprehensive evaluation of personal identifiable information protection',
   'pii:api-db': 'Tests for PII exposure through API and database access vectors',
   'pii:direct': 'Evaluates direct PII exposure vulnerabilities',
