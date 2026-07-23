@@ -10,7 +10,6 @@ import {
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
-  riskCategorySeverityMap,
   Severity,
   severityDisplayNames,
 } from '@promptfoo/redteam/constants';
@@ -22,6 +21,8 @@ import {
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
+  getPluginSeverity,
+  type PluginCategories,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
 
@@ -68,10 +69,6 @@ const categoryNamesByFramework: Partial<Record<string, string[]>> = {
   'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
 };
 
-const getPluginSeverity = (plugin: string): Severity => {
-  return riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
-};
-
 const sortPluginsBySeverity = (plugins: string[]): string[] => {
   return [...plugins].sort((a, b) => {
     return severitySortOrder[getPluginSeverity(a)] - severitySortOrder[getPluginSeverity(b)];
@@ -94,9 +91,9 @@ type CategoryBadgeVariant = 'success' | 'secondary' | 'destructive';
 const getCategoryBadgeData = (
   testedCount: number,
   nonCompliantCount: number,
-  visibleUntestedCount: number,
+  untestedCount: number,
 ): { variant: CategoryBadgeVariant; label: string } => {
-  if (testedCount === 0 && visibleUntestedCount === 0) {
+  if (testedCount === 0 && untestedCount === 0) {
     return {
       variant: nonCompliantCount === 0 ? 'success' : 'secondary',
       label: 'No Plugins',
@@ -112,7 +109,7 @@ const getCategoryBadgeData = (
 
   return {
     variant: 'secondary',
-    label: `${visibleUntestedCount} Untested`,
+    label: `${untestedCount} Untested`,
   };
 };
 
@@ -164,11 +161,12 @@ const FrameworkPluginSection = ({
 interface FrameworkCardProps {
   evalId: string;
   framework: string;
+  isTested: boolean;
   isCompliant: boolean;
   frameworkSeverity: Severity;
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
-  nonCompliantPlugins: string[];
+  pluginCategories: PluginCategories;
   showUntestedPlugins: boolean;
   idx: number;
 }
@@ -176,11 +174,12 @@ interface FrameworkCardProps {
 const FrameworkCard = ({
   evalId,
   framework,
+  isTested,
   isCompliant,
   frameworkSeverity,
   categoryStats,
   pluginPassRateThreshold,
-  nonCompliantPlugins,
+  pluginCategories,
   showUntestedPlugins,
   idx,
 }: FrameworkCardProps) => {
@@ -216,16 +215,31 @@ const FrameworkCard = ({
   );
 
   const sortedPlugins = useMemo(
-    () => sortPluginsByASR(nonCompliantPlugins),
-    [nonCompliantPlugins, sortPluginsByASR],
+    () => sortPluginsByASR(pluginCategories.nonCompliant),
+    [pluginCategories.nonCompliant, sortPluginsByASR],
   );
+
+  const sortedCompliantPlugins = useMemo(
+    () => sortPluginsByASR(pluginCategories.compliant),
+    [pluginCategories.compliant, sortPluginsByASR],
+  );
+  const sortedUntestedPlugins = useMemo(
+    () => sortPluginsBySeverity(pluginCategories.untested),
+    [pluginCategories.untested],
+  );
+  const testedPluginCount =
+    pluginCategories.compliant.length + pluginCategories.nonCompliant.length;
 
   return (
     <Card
       className={cn(
         'framework-item',
-        isCompliant ? 'compliant' : 'non-compliant',
-        isCompliant ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : 'bg-red-50/50 dark:bg-red-950/20',
+        isTested && (isCompliant ? 'compliant' : 'non-compliant'),
+        isTested
+          ? isCompliant
+            ? 'bg-emerald-50/50 dark:bg-emerald-950/20'
+            : 'bg-red-50/50 dark:bg-red-950/20'
+          : 'bg-muted/20',
         idx !== 0 && 'break-inside-avoid print:break-inside-avoid',
       )}
     >
@@ -241,22 +255,30 @@ const FrameworkCard = ({
             </Tooltip>
           </div>
           <div className="flex items-center">
-            {isCompliant ? (
-              <CheckCircle className="icon-compliant size-5 text-emerald-600 dark:text-emerald-500" />
+            {isTested ? (
+              isCompliant ? (
+                <CheckCircle className="icon-compliant size-5 text-emerald-600 dark:text-emerald-500" />
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span aria-label={severityBadgeVariants[frameworkSeverity].tooltip}>
+                      <Badge
+                        variant={severityBadgeVariants[frameworkSeverity].variant}
+                        className="font-bold"
+                      >
+                        {severityDisplayNames[frameworkSeverity]}
+                      </Badge>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {severityBadgeVariants[frameworkSeverity].tooltip}
+                  </TooltipContent>
+                </Tooltip>
+              )
             ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span aria-label={severityBadgeVariants[frameworkSeverity].tooltip}>
-                    <Badge
-                      variant={severityBadgeVariants[frameworkSeverity].variant}
-                      className="font-bold"
-                    >
-                      {severityDisplayNames[frameworkSeverity]}
-                    </Badge>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{severityBadgeVariants[frameworkSeverity].tooltip}</TooltipContent>
-              </Tooltip>
+              <Badge variant="secondary" className="font-bold">
+                Not Tested
+              </Badge>
             )}
           </div>
         </div>
@@ -294,7 +316,7 @@ const FrameworkCard = ({
                   const categoryBadge = getCategoryBadgeData(
                     testedCount,
                     nonCompliantCategoryPlugins.length,
-                    visibleUntestedItems.length,
+                    untestedPlugins.length,
                   );
 
                   return (
@@ -362,20 +384,23 @@ const FrameworkCard = ({
               <div className="flex items-center justify-between border-b border-border bg-black/5 p-2 dark:bg-white/5">
                 <span className="text-sm font-medium">Framework Results</span>
                 <Badge
-                  variant={nonCompliantPlugins.length === 0 ? 'success' : 'destructive'}
+                  variant={
+                    isTested
+                      ? pluginCategories.nonCompliant.length === 0
+                        ? 'success'
+                        : 'destructive'
+                      : 'secondary'
+                  }
                   className="h-5 whitespace-nowrap text-[0.7rem]"
                 >
-                  {nonCompliantPlugins.length} /{' '}
-                  {
-                    Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0)
-                      .length
-                  }{' '}
-                  failed
+                  {isTested
+                    ? `${pluginCategories.nonCompliant.length} / ${testedPluginCount} failed`
+                    : 'Not Tested'}
                 </Badge>
               </div>
               <div>
                 {/* Failed plugins first */}
-                {nonCompliantPlugins.length > 0 && (
+                {pluginCategories.nonCompliant.length > 0 && (
                   <div className="bg-red-50/50 px-2 py-1 dark:bg-red-950/20">
                     <span className="text-xs font-bold text-destructive">Failed:</span>
                   </div>
@@ -391,30 +416,14 @@ const FrameworkCard = ({
                 ))}
 
                 {/* Passing plugins */}
-                {(() => {
-                  const compliantPlugins = Object.keys(categoryStats).filter(
-                    (plugin) =>
-                      categoryStats[plugin].total > 0 &&
-                      categoryStats[plugin].pass / categoryStats[plugin].total >=
-                        pluginPassRateThreshold,
-                  );
-                  return compliantPlugins.length > 0 ? (
-                    <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
-                        Passed:
-                      </span>
-                    </div>
-                  ) : null;
-                })()}
-                {(() => {
-                  const compliantPlugins = Object.keys(categoryStats).filter(
-                    (plugin) =>
-                      categoryStats[plugin].total > 0 &&
-                      categoryStats[plugin].pass / categoryStats[plugin].total >=
-                        pluginPassRateThreshold,
-                  );
-                  return sortPluginsByASR(compliantPlugins);
-                })().map((plugin, index) => (
+                {sortedCompliantPlugins.length > 0 && (
+                  <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
+                      Passed:
+                    </span>
+                  </div>
+                )}
+                {sortedCompliantPlugins.map((plugin, index) => (
                   <FrameworkPluginResult
                     key={`${plugin}-${framework}-${index}`}
                     evalId={evalId}
@@ -426,43 +435,15 @@ const FrameworkCard = ({
 
                 {/* Untested plugins for this framework */}
                 {showUntestedPlugins &&
-                  Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
-                    .flatMap((categoryId) => {
-                      // Get all plugins from this category
-                      const categoryPlugins =
-                        ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
-                      // Expand plugins using the utility function
-                      return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
-                    })
-                    .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
-                    .sort((a, b) => {
-                      // Sort by severity first
-                      const severityA =
-                        riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
-                        Severity.Low;
-                      const severityB =
-                        riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
-                        Severity.Low;
-
-                      const severityOrder: Record<Severity, number> = {
-                        [Severity.Critical]: 0,
-                        [Severity.High]: 1,
-                        [Severity.Medium]: 2,
-                        [Severity.Low]: 3,
-                        [Severity.Informational]: 4,
-                      };
-
-                      return severityOrder[severityA] - severityOrder[severityB];
-                    })
-                    .map((plugin, index) => (
-                      <FrameworkPluginResult
-                        key={`${plugin}-${framework}-${index}`}
-                        evalId={evalId}
-                        plugin={plugin}
-                        getPluginASR={getPluginASR}
-                        type="untested"
-                      />
-                    ))}
+                  sortedUntestedPlugins.map((plugin, index) => (
+                    <FrameworkPluginResult
+                      key={`${plugin}-${framework}-${index}`}
+                      evalId={evalId}
+                      plugin={plugin}
+                      getPluginASR={getPluginASR}
+                      type="untested"
+                    />
+                  ))}
               </div>
             </div>
           )}

@@ -4,6 +4,7 @@ import {
   categorizePlugins,
   expandPluginCollections,
   getPluginDisplayName,
+  getPluginSeverity,
 } from './FrameworkComplianceUtils';
 
 import type { CategoryStats } from './FrameworkComplianceUtils';
@@ -39,6 +40,61 @@ describe('expandPluginCollections', () => {
 
     const expectedPlugins = new Set(['harmful:sql-injection', 'harmful:pii-detection']);
     expect(result).toEqual(expectedPlugins);
+  });
+
+  it('should preserve fully qualified harmful plugin IDs when expanding the harmful collection', () => {
+    const categoryStats: CategoryStats = {
+      'promptfoo:redteam:harmful:hate': { pass: 1, total: 1, failCount: 0 },
+    };
+
+    const result = expandPluginCollections(['harmful'], categoryStats);
+
+    expect(result).toEqual(new Set(['promptfoo:redteam:harmful:hate']));
+  });
+
+  it('should preserve aggregate harmful results when expanding the harmful collection', () => {
+    const categoryStats: CategoryStats = {
+      harmful: { pass: 1, total: 1, failCount: 0 },
+    };
+
+    const result = expandPluginCollections(['harmful'], categoryStats);
+
+    expect(result).toEqual(new Set(['harmful']));
+  });
+
+  it('should keep one key per logical harmful plugin when short and prefixed aliases coexist', () => {
+    const categoryStats: CategoryStats = {
+      'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+      'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
+      'promptfoo:redteam:harmful:self-harm': { pass: 3, total: 5, failCount: 2 },
+    };
+
+    const result = expandPluginCollections(['harmful'], categoryStats);
+
+    // Exact short key wins over its prefixed alias; plugins present only in
+    // prefixed form keep that form.
+    expect(result).toEqual(new Set(['harmful:hate', 'promptfoo:redteam:harmful:self-harm']));
+  });
+
+  it('should prefer the short harmful key regardless of categoryStats iteration order', () => {
+    const categoryStats: CategoryStats = {
+      'promptfoo:redteam:harmful:hate': { pass: 0, total: 10, failCount: 10 },
+      'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+    };
+
+    const result = expandPluginCollections(['harmful'], categoryStats);
+
+    expect(result).toEqual(new Set(['harmful:hate']));
+  });
+
+  it('should match a mapped short plugin ID to its fully qualified categoryStats key', () => {
+    const categoryStats: CategoryStats = {
+      'promptfoo:redteam:intent': { pass: 1, total: 1, failCount: 0 },
+    };
+
+    const result = expandPluginCollections(['intent'], categoryStats);
+
+    expect(result).toEqual(new Set(['promptfoo:redteam:intent']));
   });
 
   it("should effectively ignore the 'harmful' plugin when no keys in categoryStats start with 'harmful:'", () => {
@@ -244,6 +300,10 @@ describe('getPluginDisplayName', () => {
     expect(result).toBe(expectedAlias);
   });
 
+  it('should return the short display name for a fully qualified plugin ID', () => {
+    expect(getPluginDisplayName('promptfoo:redteam:intent')).toBe('Intent');
+  });
+
   it('should return the plugin string itself if the plugin key does not exist in either displayNameOverrides or categoryAliases', () => {
     const pluginKey = 'nonexistent-plugin';
     const expectedDisplayName = 'nonexistent-plugin';
@@ -262,5 +322,12 @@ describe('getPluginDisplayName', () => {
     expect(result).toBe(pluginKey);
 
     delete displayNameOverrides[pluginKey as keyof typeof displayNameOverrides];
+  });
+});
+
+describe('getPluginSeverity', () => {
+  it('should normalize fully qualified plugin IDs before looking up severity', () => {
+    expect(getPluginSeverity('promptfoo:redteam:intent')).toBe('high');
+    expect(getPluginSeverity('promptfoo:redteam:harmful:hate')).toBe('critical');
   });
 });
