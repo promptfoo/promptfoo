@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { EvaluateTableOutput } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -59,11 +60,13 @@ vi.mock('react-router-dom', async () => ({
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(
     ({
+      output,
       onRating,
       rowIndex,
       rowPositionIndex,
       searchText,
     }: {
+      output: EvaluateTableOutput;
       onRating: any;
       rowIndex?: number;
       rowPositionIndex?: number;
@@ -71,10 +74,16 @@ vi.mock('./EvalOutputCell', () => {
     }) => {
       return (
         <div
+          className="cell"
           data-testid="eval-output-cell"
           data-rowindex={rowIndex}
           data-rowpositionindex={rowPositionIndex}
           data-searchtext={searchText}
+          style={
+            output.gradingResult?.comment?.startsWith('!highlight')
+              ? { backgroundColor: 'var(--cell-highlight-color)' }
+              : undefined
+          }
         >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
@@ -438,7 +447,9 @@ describe('ResultsTable Metrics Display', () => {
       const firstBodyCell = table.querySelector('tbody td') as HTMLElement;
       expect(firstBodyCell).toBeInTheDocument();
       expect(firstBodyCell).not.toHaveClass('variable');
-      expect(within(firstBodyCell).getByTestId('eval-output-cell')).toBeInTheDocument();
+      const highlightedOutput = within(firstBodyCell).getByTestId('eval-output-cell');
+      expect(highlightedOutput).toHaveClass('cell');
+      expect(highlightedOutput).toHaveStyle('background-color: var(--cell-highlight-color)');
       firstBodyCell.focus();
       expect(document.activeElement?.tagName).toBe('TD');
       expect(document.activeElement).toHaveClass('first-prompt-col');
@@ -496,6 +507,7 @@ describe('ResultsTable Metrics Display', () => {
       expect(variableCell).toHaveTextContent('hello');
       expect(variableCellAffordance).toContain('background-image');
       expect(rowRailAffordance).toContain('z-index: 1');
+      expect(rowRailAffordance).toContain('background-color: hsl(var(--ring))');
       expect(rowRailAffordance).toContain('pointer-events: none');
 
       variableCell.focus();
