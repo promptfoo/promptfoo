@@ -13,6 +13,29 @@ import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
 
+function getMediaApiUrl(req: Request, key: string): string {
+  const baseUrl = req.baseUrl || '/api/media';
+  return `${baseUrl.replace(/\/$/, '')}/${key}`;
+}
+
+function isLocalFileUrl(url: string): boolean {
+  let schemeStart = 0;
+  while (
+    schemeStart < url.length &&
+    (url.charCodeAt(schemeStart) <= 0x20 || url.charAt(schemeStart).trim() === '')
+  ) {
+    schemeStart += 1;
+  }
+
+  // Match WHATWG preprocessing, plus Unicode whitespace, so malformed file URLs fail closed.
+  const normalizedUrl = url.slice(schemeStart).replace(/[\t\n\r]/g, '');
+  return /^file:/i.test(normalizedUrl);
+}
+
+function getBrowserSafeMediaUrl(storageUrl: string | null, apiUrl: string): string | null {
+  return storageUrl && isLocalFileUrl(storageUrl) ? apiUrl : storageUrl;
+}
+
 /**
  * Get storage stats
  * Must be defined BEFORE wildcard routes
@@ -44,6 +67,8 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  * Path format: /info/audio/abc123.mp3
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  res.setHeader('Cache-Control', 'private, no-store');
+
   const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
@@ -61,7 +86,17 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     }
 
     const storage = getMediaStorage();
-    const url = await storage.getUrl(key);
+    const apiUrl = getMediaApiUrl(req, key);
+    let storageUrl: string | null = null;
+    try {
+      storageUrl = await storage.getUrl(key);
+    } catch (error) {
+      logger.warn('[Media API] Failed to generate provider URL; using API access only', {
+        error,
+        key,
+        providerId: storage.providerId,
+      });
+    }
 
     res.json(
       MediaSchemas.Info.Response.parse({
@@ -69,7 +104,8 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
         data: {
           key,
           exists: true,
-          url,
+          url: getBrowserSafeMediaUrl(storageUrl, apiUrl),
+          apiUrl,
         },
       }),
     );
@@ -87,6 +123,8 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  * The key is constructed from type + filename, e.g., "audio/abc123.mp3"
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  res.setHeader('Cache-Control', 'private, no-store');
+
   const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
@@ -127,10 +165,16 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', data.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // 1 year cache (content-addressed)
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(data);
   } catch (error) {
     logger.error('[Media API] Error serving media', { error });
     res.status(500).json({ error: 'Failed to serve media' });
   }
+});
+
+mediaRouter.use((_req: Request, res: Response): void => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.status(404).json({ error: 'Media route not found' });
 });

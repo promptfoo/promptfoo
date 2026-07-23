@@ -29,7 +29,16 @@ export const MediaInfoResponseSchema = z.object({
   data: z.object({
     key: z.string(),
     exists: z.literal(true),
-    url: z.string().nullable(),
+    url: z
+      .string()
+      .nullable()
+      .describe('Provider URL; local file URLs are replaced with the media API URL'),
+    apiUrl: z
+      .string()
+      .optional()
+      .describe(
+        'Server-relative API path for fetching the media bytes; prepend any configured deployment base path',
+      ),
   }),
 });
 
