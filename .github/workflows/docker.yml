@@ -28,6 +28,15 @@ on:
         description: 'Optional release tag to publish (e.g., 0.121.6)'
         required: false
         type: string
+      legacy_backfill:
+        description: 'Use release-era smoke checks for historical Docker images'
+        required: false
+        default: false
+        type: boolean
+      python_version:
+        description: 'Optional Python minor required by the tagged Alpine image (e.g., 3.14)'
+        required: false
+        type: string
   release:
     types:
       - published
@@ -73,6 +82,8 @@ env:
   SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+  LEGACY_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && 'true' || 'false' }}
+  PYTHON_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.python_version || '' }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
@@ -95,6 +106,19 @@ jobs:
         run: |
           if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
             echo "::error::RELEASE_TAG '$RELEASE_TAG' is empty or invalid"
+            exit 1
+          fi
+
+      - name: Validate manual backfill options
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ "$LEGACY_BACKFILL" == 'true' && -z "$RELEASE_TAG" ]]; then
+            echo '::error::Legacy backfills require a release tag'
+            exit 1
+          fi
+
+          if [[ -n "$PYTHON_VERSION" && ! "$PYTHON_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::PYTHON_VERSION '$PYTHON_VERSION' must be a major.minor version"
             exit 1
           fi
 
@@ -139,8 +163,10 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=1
+            ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
 
       - name: Build custom Docker image for contract testing
+        if: env.LEGACY_BACKFILL != 'true'
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
@@ -154,17 +180,25 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+            ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
 
       - name: Run Docker containers for testing
         run: |
           docker run -d --name promptfoo-container -p 3000:3000 local-test-image:official
-          docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
+          if [[ "$LEGACY_BACKFILL" != 'true' ]]; then
+            docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
+          fi
 
       - name: Run health check
         run: |
           # Wait for both servers to be fully ready (including database migrations)
           # before running any CLI commands that also trigger migrations.
-          for port in 3000 3001; do
+          ports=(3000)
+          if [[ "$LEGACY_BACKFILL" != 'true' ]]; then
+            ports+=(3001)
+          fi
+
+          for port in "${ports[@]}"; do
             HEALTH_CHECK_PASS=
             for ((retry=1; retry<=10; retry++)); do
               if curl -f "http://localhost:${port}/health"; then
@@ -192,9 +226,20 @@ jobs:
           fi
 
           echo "Checking promptfoo version:"
-          if ! docker exec promptfoo-container promptfoo --version; then
+          if ! promptfoo_version="$(docker exec promptfoo-container promptfoo --version)"; then
             echo "promptfoo check failed"
             exit 1
+          fi
+          echo "$promptfoo_version"
+
+          if [[ -n "$RELEASE_TAG" && "$promptfoo_version" != "$RELEASE_TAG" ]]; then
+            echo "::error::Image version '$promptfoo_version' does not match release '$RELEASE_TAG'"
+            exit 1
+          fi
+
+          if [[ "$LEGACY_BACKFILL" == 'true' ]]; then
+            echo 'Historical releases predate the modern container update contract'
+            exit 0
           fi
 
           echo "Checking pf alias:"
@@ -334,6 +379,7 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
+            ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
