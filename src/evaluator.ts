@@ -1128,6 +1128,7 @@ async function applyRunEvalResponseOutcome({
   ret,
   test,
   testIdx,
+  timeoutMs,
   traceContext,
   vars,
 }: {
@@ -1146,6 +1147,7 @@ async function applyRunEvalResponseOutcome({
   ret: EvaluateResult;
   test: AtomicTestCase;
   testIdx: number;
+  timeoutMs?: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
@@ -1176,6 +1178,7 @@ async function applyRunEvalResponseOutcome({
     ret,
     test,
     testIdx,
+    timeoutMs,
     traceContext,
     vars,
   });
@@ -1206,6 +1209,7 @@ async function gradeRunEvalResponse({
   ret,
   test,
   testIdx,
+  timeoutMs,
   traceContext,
   vars,
 }: {
@@ -1223,6 +1227,7 @@ async function gradeRunEvalResponse({
   ret: EvaluateResult;
   test: AtomicTestCase;
   testIdx: number;
+  timeoutMs?: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
@@ -1261,6 +1266,8 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          timeoutMs,
+          abortSignal,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1281,6 +1288,8 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        timeoutMs,
+        abortSignal,
       }),
   );
   applyGradingResult(ret, checkResult);
@@ -1554,6 +1563,7 @@ async function runEvalInternal({
       ret,
       test,
       testIdx: testIndex,
+      timeoutMs: evaluateOptions?.timeoutMs ?? getEvalTimeoutMs(),
       traceContext,
       vars: persistedVars,
     });
@@ -3490,7 +3500,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return this.processEvalStep(evalStep, index, { deferGrading, providerCallQueue }, context);
@@ -4664,7 +4674,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = (options.timeoutMs ?? getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
