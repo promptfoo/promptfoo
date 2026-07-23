@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Card, CardContent } from '@app/components/ui/card';
 import {
@@ -153,6 +153,7 @@ const RiskCategoryRow = ({
   onToggle,
   onPluginClick,
 }: RiskCategoryRowProps) => {
+  const descriptionId = useId();
   const hasFailed = category.passRate < pluginPassRateThreshold;
 
   return (
@@ -162,6 +163,7 @@ const RiskCategoryRow = ({
         <button
           type="button"
           aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${category.name} category, ${category.totalPasses} of ${category.totalTests} passed, ${hasFailed ? 'failing' : 'passing'}`}
+          aria-describedby={descriptionId}
           className={cn(
             'flex w-full items-center gap-2 p-4 text-left transition-colors cursor-pointer sm:gap-4',
             'hover:bg-muted/50',
@@ -177,7 +179,10 @@ const RiskCategoryRow = ({
           {/* Category Name & Description */}
           <div className="min-w-0 flex-1">
             <span className="font-semibold">{category.name}</span>
-            <p className="hidden truncate text-sm text-muted-foreground sm:block">
+            <p
+              id={descriptionId}
+              className="hidden truncate text-sm text-muted-foreground sm:block"
+            >
               {category.description}
             </p>
           </div>

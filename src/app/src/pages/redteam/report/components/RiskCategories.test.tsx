@@ -302,6 +302,9 @@ describe('RiskCategories', () => {
       name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
     });
     expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
+    expect(collapseButton).toHaveAccessibleDescription(
+      categoryDescriptions['Security & Access Control'],
+    );
 
     await user.click(collapseButton);
 
