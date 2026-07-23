@@ -64,7 +64,16 @@ export async function updateEvalAuthor(
   });
 
   if (!response.ok) {
-    throw new Error('Failed to update eval author');
+    let errorMessage: string | undefined;
+    try {
+      const data = await response.json();
+      if (typeof data?.error === 'string') {
+        errorMessage = data.error;
+      }
+    } catch {
+      // Non-JSON error responses still use the generic message below.
+    }
+    throw new Error(errorMessage || 'Failed to update eval author');
   }
 
   return response.json();

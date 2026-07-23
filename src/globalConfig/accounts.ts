@@ -77,6 +77,22 @@ export function getUserEmail(): string | null {
   return globalConfig?.account?.email || null;
 }
 
+export async function getCloudUserEmail(): Promise<string> {
+  const apiKey = cloudConfig.getApiKey();
+  if (!apiKey) {
+    throw new Error('Cloud API key is not configured');
+  }
+
+  const { user } = await cloudConfig.validateApiToken(apiKey, cloudConfig.getApiHost());
+  const email = z.email().parse(user.email);
+
+  if (getUserEmail() !== email) {
+    setUserEmail(email);
+  }
+
+  return email;
+}
+
 export function setUserEmail(email: string) {
   const globalConfig = readGlobalConfig();
   const account = globalConfig?.account ?? {};
