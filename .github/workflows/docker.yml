@@ -160,21 +160,58 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare historical frontend production build
-        if: env.LEGACY_BACKFILL == 'true' && env.EXCLUDE_LEGACY_FRONTEND_TESTS == 'true'
+      - name: Prepare historical Docker image build
+        if: env.LEGACY_BACKFILL == 'true'
         run: |
           node -e '
             const fs = require("node:fs");
-            const file = "src/app/tsconfig.app.json";
-            const original = fs.readFileSync(file, "utf8");
-            const updated = original.replace(
-              /"include"\s*:\s*\[\s*"\.\/src"\s*\]/,
-              "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
-            );
-            if (updated === original) {
-              throw new Error(`Could not locate the historical include setting in ${file}`);
+            const dockerfilePath = "Dockerfile";
+            let dockerfile = fs.readFileSync(dockerfilePath, "utf8");
+            const oldCliLinks = "RUN npm link promptfoo && \\\n    chown promptfoo:promptfoo /app/node_modules/promptfoo && \\";
+            if (dockerfile.includes(oldCliLinks)) {
+              const packageJson = require("./package.json");
+              if (!packageJson.bin?.promptfoo || !packageJson.bin?.pf) {
+                throw new Error("Historical package does not declare promptfoo and pf binaries");
+              }
+
+              const nodeModulesCopy =
+                "COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules";
+              const packageJsonCopy =
+                "COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json";
+              if (!dockerfile.includes(nodeModulesCopy)) {
+                throw new Error("Could not locate the historical runtime dependency copy");
+              }
+              if (!dockerfile.includes(packageJsonCopy)) {
+                dockerfile = dockerfile.replace(
+                  nodeModulesCopy,
+                  `${nodeModulesCopy}\n${packageJsonCopy}`,
+                );
+              }
+
+              const localCliLinks = [
+                "RUN ln -s /app /app/node_modules/promptfoo && \\",
+                "    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\",
+                `    ln -s /app/${packageJson.bin.promptfoo} /usr/local/bin/promptfoo && \\`,
+                `    ln -s /app/${packageJson.bin.pf} /usr/local/bin/pf && \\`,
+              ].join("\n");
+              dockerfile = dockerfile.replace(oldCliLinks, localCliLinks);
+              fs.writeFileSync(dockerfilePath, dockerfile);
+              console.log("Linked the historical release CLI from local build artifacts");
             }
-            fs.writeFileSync(file, updated);
+
+            if (process.env.EXCLUDE_LEGACY_FRONTEND_TESTS === "true") {
+              const file = "src/app/tsconfig.app.json";
+              const original = fs.readFileSync(file, "utf8");
+              const updated = original.replace(
+                /"include"\s*:\s*\[\s*"\.\/src"\s*\]/,
+                "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
+              );
+              if (updated === original) {
+                throw new Error(`Could not locate the historical include setting in ${file}`);
+              }
+              fs.writeFileSync(file, updated);
+              console.log("Excluded historical test-only frontend dependencies");
+            }
           '
 
       - name: Set up QEMU
@@ -377,21 +414,58 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare historical frontend production build
-        if: env.LEGACY_BACKFILL == 'true' && env.EXCLUDE_LEGACY_FRONTEND_TESTS == 'true'
+      - name: Prepare historical Docker image build
+        if: env.LEGACY_BACKFILL == 'true'
         run: |
           node -e '
             const fs = require("node:fs");
-            const file = "src/app/tsconfig.app.json";
-            const original = fs.readFileSync(file, "utf8");
-            const updated = original.replace(
-              /"include"\s*:\s*\[\s*"\.\/src"\s*\]/,
-              "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
-            );
-            if (updated === original) {
-              throw new Error(`Could not locate the historical include setting in ${file}`);
+            const dockerfilePath = "Dockerfile";
+            let dockerfile = fs.readFileSync(dockerfilePath, "utf8");
+            const oldCliLinks = "RUN npm link promptfoo && \\\n    chown promptfoo:promptfoo /app/node_modules/promptfoo && \\";
+            if (dockerfile.includes(oldCliLinks)) {
+              const packageJson = require("./package.json");
+              if (!packageJson.bin?.promptfoo || !packageJson.bin?.pf) {
+                throw new Error("Historical package does not declare promptfoo and pf binaries");
+              }
+
+              const nodeModulesCopy =
+                "COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules";
+              const packageJsonCopy =
+                "COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json";
+              if (!dockerfile.includes(nodeModulesCopy)) {
+                throw new Error("Could not locate the historical runtime dependency copy");
+              }
+              if (!dockerfile.includes(packageJsonCopy)) {
+                dockerfile = dockerfile.replace(
+                  nodeModulesCopy,
+                  `${nodeModulesCopy}\n${packageJsonCopy}`,
+                );
+              }
+
+              const localCliLinks = [
+                "RUN ln -s /app /app/node_modules/promptfoo && \\",
+                "    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\",
+                `    ln -s /app/${packageJson.bin.promptfoo} /usr/local/bin/promptfoo && \\`,
+                `    ln -s /app/${packageJson.bin.pf} /usr/local/bin/pf && \\`,
+              ].join("\n");
+              dockerfile = dockerfile.replace(oldCliLinks, localCliLinks);
+              fs.writeFileSync(dockerfilePath, dockerfile);
+              console.log("Linked the historical release CLI from local build artifacts");
             }
-            fs.writeFileSync(file, updated);
+
+            if (process.env.EXCLUDE_LEGACY_FRONTEND_TESTS === "true") {
+              const file = "src/app/tsconfig.app.json";
+              const original = fs.readFileSync(file, "utf8");
+              const updated = original.replace(
+                /"include"\s*:\s*\[\s*"\.\/src"\s*\]/,
+                "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
+              );
+              if (updated === original) {
+                throw new Error(`Could not locate the historical include setting in ${file}`);
+              }
+              fs.writeFileSync(file, updated);
+              console.log("Excluded historical test-only frontend dependencies");
+            }
           '
 
       - name: Set up QEMU
