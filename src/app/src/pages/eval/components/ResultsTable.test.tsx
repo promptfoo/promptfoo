@@ -421,10 +421,12 @@ describe('ResultsTable Metrics Display', () => {
           ...mockTable,
           body: mockTable.body.map((row) => ({
             ...row,
-            outputs: row.outputs.map((output) => ({
-              ...output,
-              gradingResult: { pass: true, score: 1, comment: '!highlight Synthetic row' },
-            })),
+            outputs: [
+              {
+                ...row.outputs[0],
+                gradingResult: { pass: true, score: 1, comment: '!highlight Synthetic row' },
+              },
+            ],
           })),
         },
       });
