@@ -57,9 +57,16 @@ table.results-table,
   background-color: hsl(var(--accent) / 0.55);
 }
 
-.results-table tbody tr.result-row:hover > td:first-child,
-.results-table tbody tr.result-row:focus-within > td:first-child {
-  box-shadow: inset 3px 0 0 hsl(var(--ring));
+.results-table tbody tr.result-row:hover > td:first-child::after,
+.results-table tbody tr.result-row:focus-within > td:first-child::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background-color: hsl(var(--ring));
+  z-index: 1;
+  pointer-events: none;
 }
 
 .results-table tbody tr.result-row:hover > td.variable,

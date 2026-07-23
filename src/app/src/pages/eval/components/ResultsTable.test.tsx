@@ -414,12 +414,29 @@ describe('ResultsTable Metrics Display', () => {
 
   describe('Keyboard Navigation', () => {
     it('should handle keyboard navigation with Tab between cells and actions within cell', async () => {
+      const storeState = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...storeState,
+        table: {
+          ...mockTable,
+          body: mockTable.body.map((row) => ({
+            ...row,
+            outputs: row.outputs.map((output) => ({
+              ...output,
+              gradingResult: { pass: true, score: 1, comment: '!highlight Synthetic row' },
+            })),
+          })),
+        },
+      });
+
       renderWithProviders(<ResultsTable {...defaultProps} />);
       const tableContainer = document.getElementById('results-table-container');
       const table = tableContainer?.querySelector('table') as HTMLTableElement;
       expect(table).toBeInTheDocument();
       const firstBodyCell = table.querySelector('tbody td') as HTMLElement;
       expect(firstBodyCell).toBeInTheDocument();
+      expect(firstBodyCell).not.toHaveClass('variable');
+      expect(within(firstBodyCell).getByTestId('eval-output-cell')).toBeInTheDocument();
       firstBodyCell.focus();
       expect(document.activeElement?.tagName).toBe('TD');
       expect(document.activeElement).toHaveClass('first-prompt-col');
@@ -467,7 +484,7 @@ describe('ResultsTable Metrics Display', () => {
         rule.includes('.result-row:focus-within > td.variable'),
       );
       const rowRailAffordance = styles.find((rule) =>
-        rule.includes('.result-row:focus-within > td:first-child'),
+        rule.includes('.result-row:focus-within > td:first-child::after'),
       );
 
       expect(resultRow).toHaveClass('result-row');
@@ -476,7 +493,8 @@ describe('ResultsTable Metrics Display', () => {
       expect(variableCell).toHaveClass('variable');
       expect(variableCell).toHaveTextContent('hello');
       expect(variableCellAffordance).toContain('background-image');
-      expect(rowRailAffordance).toContain('box-shadow');
+      expect(rowRailAffordance).toContain('z-index: 1');
+      expect(rowRailAffordance).toContain('pointer-events: none');
 
       variableCell.focus();
       expect(variableCell).toHaveFocus();
