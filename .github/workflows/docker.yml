@@ -72,7 +72,13 @@ on:
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
   # group Docker-specific so release-please callers are not cancelled mid-release.
-  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', github.repository) }}
+  # Immutable legacy backfills can run concurrently without blocking new releases.
+  group: >-
+    ${{
+      github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) ||
+      github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && format('docker-backfill-{0}-{1}', github.repository, inputs.tag_name) ||
+      format('docker-publish-{0}', github.repository)
+    }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -369,7 +375,7 @@ jobs:
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }},mode=max
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}${{ env.LEGACY_BACKFILL == 'true' && format('-{0}', env.RELEASE_TAG) || '' }},mode=max
           context: .
           platforms: ${{ matrix.platforms.platform }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
