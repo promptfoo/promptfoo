@@ -1614,24 +1614,65 @@ describe('HttpProvider', () => {
   });
 
   describe('validateContentTypeAndBody', () => {
-    it('should not throw for valid content-type and body', () => {
+    it.each([
+      'application/json',
+      ' Application/JSON ; Charset = UTF-8',
+      'application/json; profile="a,b"',
+      'application/vnd.api+JSON; Profile="https://example.com/schema"',
+    ])('should accept JSON media type %s', (contentType) => {
       const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
       expect(() => {
-        provider['validateContentTypeAndBody'](
-          { 'content-type': 'application/json' },
-          { key: 'value' },
-        );
+        provider['validateContentTypeAndBody']({ 'content-type': contentType }, { key: 'value' });
       }).not.toThrow();
     });
 
-    it('should throw for non-json content-type with object body', () => {
+    it.each([
+      ['a non-JSON media type', { 'content-type': 'application/x-www-form-urlencoded' }],
+      ['a JSONP lookalike', { 'content-type': 'Application/JSONP' }],
+      ['JSON in a parameter', { 'content-type': 'text/plain; profile=Application/JSON' }],
+      [
+        'a prefixed header name',
+        { 'content-type': 'text/plain', 'content-type-hint': 'Application/JSON' },
+      ],
+      ['comma-combined values', { 'content-type': 'text/plain, Application/JSON' }],
+      [
+        'comma-combined values after a parameter',
+        { 'content-type': 'application/json; charset=utf-8, text/plain' },
+      ],
+      ['an unterminated quoted parameter', { 'content-type': 'application/json; profile="a,b' }],
+      ['a parameter without a value', { 'content-type': 'Application/JSON; charset' }],
+      ['an invalid parameter name', { 'content-type': 'Application/JSON; bad name=value' }],
+      [
+        'duplicate case-insensitive parameters',
+        { 'content-type': 'Application/JSON; Charset=utf-8; charset=ascii' },
+      ],
+      ['an invalid structured suffix', { 'content-type': 'application/*+json' }],
+      ['an empty value', { 'content-type': '' }],
+      ['a missing header', {}],
+    ])('should reject an object body with %s', (_name, headers) => {
       const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
       expect(() => {
-        provider['validateContentTypeAndBody'](
-          { 'content-type': 'application/x-www-form-urlencoded' },
-          { key: 'value' },
-        );
+        provider['validateContentTypeAndBody'](headers, { key: 'value' });
       }).toThrow('Content-Type is not application/json, but body is an object or array');
+    });
+
+    it('should redact invalid JSON warnings for structured JSON media types', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      const provider = new HttpProvider(mockUrl, { config: { body: 'test' } });
+      try {
+        provider['validateContentTypeAndBody'](
+          {
+            'content-type': 'application/problem+json',
+            authorization: 'Bearer sk-123456789012345678901234567890',
+          },
+          'invalid sk-123456789012345678901234567890',
+        );
+        const warning = warnSpy.mock.calls.flat().join(' ');
+        expect(warning).not.toContain('sk-123456789012345678901234567890');
+        expect(warning).toContain('[REDACTED]');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 
@@ -2357,11 +2398,15 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should render object body when content-type is application/json', async () => {
+    it.each([
+      'application/json',
+      'Application/JSON; Charset=UTF-8',
+      'application/vnd.api+JSON; Profile="https://example.com/schema"',
+    ])('should render an object body for JSON media type %s', async (contentType) => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': contentType },
           body: { key: '{{ prompt }}' },
         },
       });
@@ -2379,7 +2424,7 @@ describe('HttpProvider', () => {
         mockUrl,
         expect.objectContaining({
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': contentType },
           body: JSON.stringify({ key: 'test' }),
         }),
         expect.any(Number),
@@ -2389,7 +2434,11 @@ describe('HttpProvider', () => {
       );
     });
 
-    it('should render a stringified object body when content-type is application/json', async () => {
+    it.each([
+      ['quotes and newlines', 'test "quoted"\nline'],
+      ['a valid JSON structure injection', 'hello","admin":true,"tail":"world'],
+      ['JSON escape sequences', String.raw`literal \n and \u0041`],
+    ])('should safely render %s in a stringified JSON body', async (_name, prompt) => {
       const provider = new HttpProvider(mockUrl, {
         config: {
           method: 'POST',
@@ -2405,18 +2454,203 @@ describe('HttpProvider', () => {
       };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      await provider.callApi('test');
+      await provider.callApi(prompt);
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         mockUrl,
         expect.objectContaining({
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ key: 'test' }),
+          body: JSON.stringify({ key: prompt }),
         }),
         expect.any(Number),
         'text',
         undefined,
+        undefined,
+      );
+    });
+
+    it('should preserve typed template values in a stringified JSON body', async () => {
+      const tools = [{ type: 'function', function: { name: 'lookup' } }];
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'Application/JSON' },
+          body: JSON.stringify({ message: '{{ prompt }}', tools: '{{ tools }}' }),
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await provider.callApi('test', {
+        vars: {},
+        prompt: { raw: 'test', label: 'test', config: { tools } },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({ body: JSON.stringify({ message: 'test', tools }) }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it.each([
+      ['ordinary text', 'hello'],
+      ['a null-like string', 'null'],
+      ['JSON-looking text', '{"admin":true}'],
+      ['structure-injection text', 'hello","admin":true,"tail":"world'],
+    ])('should preserve %s in a templated JSON string scalar', async (_name, prompt) => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'Application/JSON' },
+          body: '"{{ prompt }}"',
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await provider.callApi(prompt);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({ body: JSON.stringify(prompt) }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it.each([
+      [
+        'tools without an explicit dump filter',
+        '"{{ tools }}"',
+        {},
+        [{ type: 'function', function: { name: 'lookup' } }],
+        [{ type: 'function', function: { name: 'lookup' } }],
+      ],
+      [
+        'an object rendered with the dump filter',
+        '"{{ payload | dump }}"',
+        { payload: { id: 42 } },
+        undefined,
+        { id: 42 },
+      ],
+      [
+        'a pre-serialized variable without a filter',
+        '"{{ payload }}"',
+        { payload: '{"id":42}' },
+        undefined,
+        { id: 42 },
+      ],
+    ])('should preserve %s as a typed top-level JSON value', async (_name, body, vars, tools, expectedBody) => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'Application/JSON' },
+          body,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await provider.callApi('test', {
+        vars,
+        prompt: { raw: 'test', label: 'test', config: { tools } },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({ body: JSON.stringify(expectedBody) }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it.each([
+      ['a large integer', '{"id":9007199254740993}'],
+      ['a string scalar', '"hello"'],
+      ['a null scalar', 'null'],
+    ])('should preserve %s in a pre-serialized JSON body', async (_name, body) => {
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'Application/JSON' },
+          body,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await provider.callApi('test');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({ body }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+    });
+
+    it.each([
+      ['application/problem+json', 'sk-123456789012345678901234567890', 'sk-123456'],
+      ['Application/JSON; charset', 'api_key=sk-123456789012345678901234567890', 'sk-123456'],
+      ['Application/JSON', 'az://container/blob?sv=2024-01-01&sig=TOPSECRET', 'TOPSECRET'],
+    ])('should redact a pre-serialized JSON string secret with content type %s', async (contentType, secret, sensitiveFragment) => {
+      const body = JSON.stringify(secret);
+      const provider = new HttpProvider(mockUrl, {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': contentType },
+          body,
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: 'response',
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const result = await provider.callApi('test', {
+        debug: true,
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+      });
+
+      const metadataBody = String(result.metadata?.finalRequestBody);
+      expect(metadataBody).not.toContain(sensitiveFragment);
+      expect(metadataBody).toContain('REDACTED');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        mockUrl,
+        expect.objectContaining({ body }),
+        expect.any(Number),
+        'text',
+        true,
         undefined,
       );
     });
