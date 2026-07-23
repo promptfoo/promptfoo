@@ -1,11 +1,10 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthQueryResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 const mockUpdateApplicationDefinition = vi.fn();
 const mockUpdateConfig = vi.fn();
@@ -32,7 +31,7 @@ const connectedApiHealth = {
   data: { status: 'connected', message: null },
   refetch: mockCheckHealth,
   isLoading: false,
-} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>;
+} as unknown as ApiHealthQueryResult;
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -299,7 +298,7 @@ describe('Purpose Component', () => {
         data: { status: 'blocked', message: 'Network error: Unable to check API health' },
         refetch: mockCheckHealth,
         isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      } as unknown as ApiHealthQueryResult);
 
       rerender(
         <TooltipProvider>

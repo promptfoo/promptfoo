@@ -3,7 +3,6 @@ import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -12,13 +11,9 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
 
 const renderWithProviders = (ui: React.ReactElement) => {
-  const queryClient = new QueryClient();
-
   return render(
     <MemoryRouter>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>{ui}</TooltipProvider>
-      </QueryClientProvider>
+      <TooltipProvider>{ui}</TooltipProvider>
     </MemoryRouter>,
   );
 };

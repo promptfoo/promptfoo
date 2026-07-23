@@ -1,45 +1,118 @@
-import { callApi } from '@app/utils/api';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+
+import { callApi, getApiBaseUrl } from '@app/utils/api';
+import { create } from 'zustand';
 
 export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
 
-interface HealthResponse {
-  status: string;
+export interface ApiHealthResult {
+  status: ApiHealthStatus;
   message: string;
 }
 
-export type ApiHealthResult = {
-  status: ApiHealthStatus;
-  message: string;
-};
+export interface ApiHealthQueryResult {
+  data: ApiHealthResult;
+  isLoading: boolean;
+  refetch: () => Promise<ApiHealthResult>;
+}
 
-/**
- * Checks the health of the connection to Promptfoo Cloud.
- */
-export function useApiHealth() {
-  return useQuery<ApiHealthResult, Error>({
-    queryKey: ['apiHealth'],
-    queryFn: async () => {
-      try {
-        const response = await callApi('/remote-health', { cache: 'no-store' });
-        const { status, message } = (await response.json()) as HealthResponse;
-        return {
-          status: status === 'DISABLED' ? 'disabled' : status === 'OK' ? 'connected' : 'blocked',
-          message,
-        };
-      } catch {
-        return {
-          status: 'blocked',
-          message: 'Network error: Unable to check API health',
-        };
+let pendingRequest:
+  | { apiBaseUrl: string; promise: Promise<ApiHealthResult>; requestId: number }
+  | undefined;
+let subscriberCount = 0;
+let pollingInterval: ReturnType<typeof setInterval> | undefined;
+let latestRequestId = 0;
+let lastUpdatedAt = 0;
+
+function refreshHealth(background = false): Promise<ApiHealthResult> {
+  const apiBaseUrl = getApiBaseUrl();
+
+  if (pendingRequest?.apiBaseUrl === apiBaseUrl) {
+    return pendingRequest.promise;
+  }
+
+  const requestId = ++latestRequestId;
+
+  if (!background) {
+    useApiHealthStore.setState({ isLoading: true });
+  }
+
+  const promise = callApi('/remote-health', { cache: 'no-store' })
+    .then((response) => response.json())
+    .then(
+      ({ status, message }: { status: string; message: string }): ApiHealthResult => ({
+        status: status === 'DISABLED' ? 'disabled' : status === 'OK' ? 'connected' : 'blocked',
+        message,
+      }),
+    )
+    .catch(
+      (): ApiHealthResult => ({
+        status: 'blocked',
+        message: 'Network error: Unable to check API health',
+      }),
+    )
+    .then((data) => {
+      if (requestId === latestRequestId) {
+        lastUpdatedAt = Date.now();
+        useApiHealthStore.setState({ data });
       }
-    },
-    refetchInterval: 3000, // Poll every 3 seconds
-    retry: false, // Failed queries will not be retried until the next poll
-    staleTime: 2000, // Data is fresh for 2 seconds
-    initialData: {
-      status: 'unknown',
-      message: '',
-    },
-  });
+      return data;
+    })
+    .finally(() => {
+      if (pendingRequest?.requestId === requestId) {
+        pendingRequest = undefined;
+        useApiHealthStore.setState({ isLoading: false });
+      }
+    });
+
+  pendingRequest = { apiBaseUrl, promise, requestId };
+  return promise;
+}
+
+function refreshVisiblePage(): void {
+  if (document.visibilityState !== 'hidden' && navigator.onLine) {
+    void refreshHealth(true);
+  }
+}
+
+export const useApiHealthStore = create<ApiHealthQueryResult>(() => ({
+  data: { status: 'unknown', message: '' },
+  isLoading: false,
+  refetch: () => refreshHealth(),
+}));
+
+export function useApiHealth(): ApiHealthQueryResult {
+  const { data, isLoading, refetch } = useApiHealthStore();
+
+  useEffect(() => {
+    subscriberCount++;
+
+    if (subscriberCount === 1) {
+      if (
+        useApiHealthStore.getState().data.status !== 'unknown' &&
+        Date.now() - lastUpdatedAt >= 2000
+      ) {
+        refreshVisiblePage();
+      }
+
+      pollingInterval = setInterval(refreshVisiblePage, 3000);
+      document.addEventListener('visibilitychange', refreshVisiblePage);
+      window.addEventListener('focus', refreshVisiblePage);
+      window.addEventListener('online', refreshVisiblePage);
+    }
+
+    return () => {
+      subscriberCount--;
+
+      if (subscriberCount === 0) {
+        clearInterval(pollingInterval);
+        pollingInterval = undefined;
+        document.removeEventListener('visibilitychange', refreshVisiblePage);
+        window.removeEventListener('focus', refreshVisiblePage);
+        window.removeEventListener('online', refreshVisiblePage);
+      }
+    };
+  }, []);
+
+  return { data, isLoading, refetch };
 }

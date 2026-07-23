@@ -1,11 +1,10 @@
-import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthQueryResult, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ApiSettingsModal from './ApiSettingsModal';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(),
@@ -28,7 +27,7 @@ describe('ApiSettingsModal', () => {
       data: { status: 'unknown', message: '' },
       refetch: mockCheckHealth,
       isLoading: false,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     vi.mocked(useApiConfig).mockReturnValue({
       apiBaseUrl: 'https://api.example.com',
@@ -75,10 +74,10 @@ describe('ApiSettingsModal', () => {
 
   it('shows loading state during health check', () => {
     vi.mocked(useApiHealth).mockReturnValue({
-      data: { status: 'loading', message: '' },
+      data: { status: 'unknown', message: '' },
       refetch: mockCheckHealth,
       isLoading: true,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Checking connection...')).toBeInTheDocument();
@@ -89,7 +88,7 @@ describe('ApiSettingsModal', () => {
       data: { status: 'connected', message: 'Cloud API is healthy' },
       refetch: mockCheckHealth,
       isLoading: false,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Connected to promptfoo API')).toBeInTheDocument();
@@ -101,7 +100,7 @@ describe('ApiSettingsModal', () => {
       data: { status: 'blocked', message: 'Failed to connect' },
       refetch: mockCheckHealth,
       isLoading: false,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Cannot connect to promptfoo API')).toBeInTheDocument();
@@ -113,7 +112,7 @@ describe('ApiSettingsModal', () => {
       data: { status: 'disabled', message: 'Remote generation is disabled' },
       refetch: mockCheckHealth,
       isLoading: false,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const elements = screen.getAllByText('Remote generation is disabled');
@@ -140,21 +139,27 @@ describe('ApiSettingsModal', () => {
     });
   });
 
-  it('disables form controls during health check', () => {
+  it('keeps API settings editable while a health check is pending', async () => {
+    const user = userEvent.setup();
+    mockCheckHealth.mockReturnValueOnce(new Promise(() => {}));
     vi.mocked(useApiHealth).mockReturnValue({
-      data: { status: 'loading', message: '' },
+      data: { status: 'connected', message: '' },
       refetch: mockCheckHealth,
       isLoading: true,
-    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    } as unknown as ApiHealthQueryResult);
 
     renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
-    expect(screen.getByLabelText('API Base URL')).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
-    // Find the Close button in the footer (not the dialog X button)
+    const input = screen.getByLabelText('API Base URL');
+    expect(input).toBeEnabled();
+    await user.clear(input);
+    await user.type(input, 'https://working.example.com');
+    expect(input).toHaveValue('https://working.example.com');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(screen.getByLabelText('Check connection')).toBeDisabled();
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
-    expect(footerCloseButton).toBeDisabled();
+    expect(footerCloseButton).toBeEnabled();
   });
 
   it('shows refresh button and handles click', async () => {
