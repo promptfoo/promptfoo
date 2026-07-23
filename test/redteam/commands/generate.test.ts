@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 
 import { Command } from 'commander';
@@ -5,7 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
+import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../../src/constants';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -444,7 +445,13 @@ describe('doGenerateRedteam', () => {
     await doGenerateRedteam(options);
     generatedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
     const firstHash = generatedOutput.metadata?.configHash;
-    expect(firstHash).toEqual(expect.any(String));
+    expect(firstHash).toBe(
+      createHash('sha256')
+        .update(
+          JSON.stringify({ version: VERSION, content: configContent, filters: initialFilters }),
+        )
+        .digest('hex'),
+    );
 
     vi.clearAllMocks();
     await doGenerateRedteam(options);
@@ -460,6 +467,55 @@ describe('doGenerateRedteam', () => {
     expect(synthesize).toHaveBeenCalledTimes(1);
     const changedOutput = vi.mocked(writePromptfooConfig).mock.calls[0][0];
     expect(changedOutput.metadata?.configHash).not.toBe(firstHash);
+  });
+
+  describe('legacy config hashes', () => {
+    // resetCommonMocks() does not cover the fs mocks and clearAllMocks() only clears call
+    // history, so an fs implementation set here would otherwise leak into whichever test
+    // vitest happens to run next under its randomized order.
+    afterEach(() => {
+      vi.mocked(fs.existsSync).mockReset();
+      vi.mocked(fs.readFileSync).mockReset();
+    });
+
+    it('should skip generation when an existing output carries a legacy MD5 config hash', async () => {
+      const configPath = 'config.yaml';
+      const outputPath = 'output.yaml';
+      const configContent = yaml.dump({
+        providers: ['promptfoo://provider/team-a'],
+        redteam: { plugins: ['harmful:hate'] },
+      });
+      // An output.yaml written by a promptfoo release from before the SHA-256 switch.
+      const legacyOutput: Partial<UnifiedConfig> = {
+        tests: [{ vars: { input: 'previously generated case' } }],
+        metadata: {
+          configHash: createHash('md5').update(`${VERSION}:${configContent}`).digest('hex'),
+        },
+      } as Partial<UnifiedConfig>;
+
+      vi.mocked(fs.existsSync).mockImplementation((filePath) => {
+        const path = String(filePath);
+        return path === configPath || path === outputPath;
+      });
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) =>
+        String(filePath) === outputPath ? yaml.dump(legacyOutput) : configContent,
+      );
+
+      await doGenerateRedteam({
+        output: outputPath,
+        config: configPath,
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      });
+
+      // The legacy hash must still be recognized, or the user's existing tests get overwritten.
+      expect(synthesize).not.toHaveBeenCalled();
+      expect(writePromptfooConfig).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+    });
   });
 
   it('should persist aggregate generation token usage in generated output metadata', async () => {

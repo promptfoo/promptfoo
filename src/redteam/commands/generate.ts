@@ -204,7 +204,10 @@ function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): st
   `;
 }
 
-async function getConfigHash(
+/** Config hashes written before the switch to SHA-256 are 32-character MD5 digests. */
+const LEGACY_MD5_CONFIG_HASH = /^[0-9a-f]{32}$/;
+
+async function getConfigHashInput(
   configPath: string,
   options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
 ): Promise<string> {
@@ -213,11 +216,40 @@ async function getConfigHash(
     ...(options.filterProviders ? { filterProviders: options.filterProviders } : {}),
     ...(options.filterTargets ? { filterTargets: options.filterTargets } : {}),
   };
-  const hashInput =
-    Object.keys(filters).length > 0
-      ? JSON.stringify({ version: VERSION, content, filters })
-      : `${VERSION}:${content}`;
-  return createHash('md5').update(hashInput).digest('hex');
+  return Object.keys(filters).length > 0
+    ? JSON.stringify({ version: VERSION, content, filters })
+    : `${VERSION}:${content}`;
+}
+
+async function getConfigHash(
+  configPath: string,
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): Promise<string> {
+  // MD5 is unavailable in FIPS-enabled Node/OpenSSL runtimes.
+  return createHash('sha256')
+    .update(await getConfigHashInput(configPath, options))
+    .digest('hex');
+}
+
+/**
+ * Recomputes the pre-SHA-256 MD5 digest for an existing output file.
+ *
+ * Without this, every `redteam.yaml` generated before the switch to SHA-256 would fail the
+ * no-change check on the first run after upgrading — silently regenerating and overwriting
+ * the user's existing test cases. Returns null on FIPS runtimes, where MD5 is unavailable
+ * (those runtimes could never have written a legacy hash in the first place).
+ */
+async function getLegacyMd5ConfigHash(
+  configPath: string,
+  options: Pick<RedteamCliGenerateOptions, 'filterProviders' | 'filterTargets'>,
+): Promise<string | null> {
+  try {
+    return createHash('md5')
+      .update(await getConfigHashInput(configPath, options))
+      .digest('hex');
+  } catch {
+    return null;
+  }
 }
 
 function createHeaderComments({
@@ -335,8 +367,13 @@ async function doGenerateRedteamInternal(
     ) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
     const currentHash = await getConfigHash(configPath, options);
+    const isUnchanged =
+      storedHash === currentHash ||
+      // Fall back to the legacy MD5 digest for outputs written before the SHA-256 switch.
+      (LEGACY_MD5_CONFIG_HASH.test(storedHash ?? '') &&
+        storedHash === (await getLegacyMd5ConfigHash(configPath, options)));
 
-    if (storedHash === currentHash) {
+    if (isUnchanged) {
       logger.warn(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
       );
