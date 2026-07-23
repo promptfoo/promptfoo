@@ -9,6 +9,7 @@ import {
   sanitizeRuntimeOptions,
   sanitizeUrl,
   sanitizeUrlEncodedString,
+  sanitizeUrlForLogging,
 } from '../../src/util/sanitizer';
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
@@ -1517,26 +1518,29 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe(url);
     });
 
-    it('should skip sanitization for URLs with template variables', () => {
-      // Template URLs are configuration, not runtime secrets
-      // They get rendered by Nunjucks before actual use, then sanitized
+    it('should redact literal credentials in URLs with template variables', () => {
       const url = '{{ api_base }}/api?token=secret123&user_id=42';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('{{ api_base }}/api?token=%5BREDACTED%5D&user_id=42');
     });
 
-    it('should skip sanitization for URLs with templates and credentials', () => {
+    it('should fail closed for templated URLs with userinfo credentials', () => {
       const url = 'https://user:pass@{{ host }}/api';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
-    it('should skip sanitization for mixed template and sensitive params', () => {
+    it('should redact mixed template and sensitive params', () => {
       const url = 'https://admin:secret@{{ api_base }}/api?api_key=key123&data=public';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
-    it('should skip sanitization for templates with sensitive param names', () => {
+    it('should preserve pure templates for sensitive params', () => {
       const url = 'https://example.com/{{ path }}?password={{ user_password }}&data=public';
       expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should redact env-rendered query credentials while preserving runtime templates', () => {
+      const url = 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret';
+      expect(sanitizeUrl(url)).toBe('ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D');
     });
   });
 
@@ -1738,6 +1742,24 @@ describe('sanitizeUrl', () => {
       const url = 'https://example.com/api/v1/users?token=secret123';
       const result = sanitizeUrl(url);
       expect(result).toBe('https://example.com/api/v1/users?token=%5BREDACTED%5D');
+    });
+
+    it.each([
+      'token_privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])('should redact opaque credential path segments', (credential) => {
+      const result = sanitizeUrlForLogging(`https://gateway.example/v1/${credential}/responses`);
+
+      expect(result).toBe('https://gateway.example/v1/%5BREDACTED%5D/responses');
+      expect(result).not.toContain(credential);
+    });
+
+    it('should preserve opaque resource IDs when sanitizing persisted URLs', () => {
+      const url =
+        'https://gateway.example/v1/resources/2e163f4d-28e2-4f84-b6d2-05e13058d6aa/responses';
+
+      expect(sanitizeUrl(url)).toBe(url);
     });
 
     it('should handle localhost URLs', () => {

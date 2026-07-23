@@ -1,7 +1,7 @@
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
-import { sanitizeObject } from '../util/sanitizer';
+import { sanitizeProviderObject } from './providerLogging';
 import { normalizeResponseTransformResult } from './transformResult';
 
 import type { FetchWithCacheResult } from '../cache';
@@ -157,7 +157,7 @@ export async function createTransformRequest(
         return result;
       } catch (err) {
         logger.error(
-          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeObject(context, { context: 'request transform' }))}.`,
+          `[Http Provider] Error in request transform: ${String(err)}. Prompt: ${prompt}. Vars: ${safeJsonStringify(vars)}. Context: ${safeJsonStringify(sanitizeProviderObject(context, 'request transform'))}.`,
         );
         throw new Error(`Failed to transform request: ${String(err)}`);
       }
