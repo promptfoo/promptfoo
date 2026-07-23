@@ -305,10 +305,9 @@ export async function importModule(modulePath: string, functionName?: string) {
             `  1. Rename the file to .cjs (recommended for CommonJS)\n` +
             `  2. Convert to ESM syntax (import/export)\n` +
             `  3. Ensure the file has valid JavaScript syntax`,
-        );
+        ) as Error & { cause?: { esmError: unknown; cjsError: unknown } };
 
-        // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is broken
-        (combinedError as any).cause = { esmError: err, cjsError: cjsErr };
+        combinedError.cause = { esmError: err, cjsError: cjsErr };
         throw combinedError;
       }
     }

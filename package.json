@@ -41,6 +41,7 @@
   },
   "files": [
     "dist",
+    "THIRD_PARTY_NOTICES",
     "!dist/test",
     "!dist/src/__mocks__",
     "!dist/**/*.map"

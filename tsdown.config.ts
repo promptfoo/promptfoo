@@ -132,14 +132,18 @@ export default defineConfig([
     clean: false,
     fixedExtension: true, // Use .cjs extension for CJS output
     inlineOnly: false, // Disable warning about bundling dependencies
+    deps: {
+      // Chalk is ESM-only; externalizing it breaks default imports in the CJS package.
+      alwaysBundle: ['chalk'],
+    },
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',
       'process.env.BUILD_FORMAT': '"cjs"',
     },
     external: [
-      // Externalize all bare module imports so Node resolves CJS deps natively
-      /^[a-z@][^:]*/,
+      // alwaysBundle cannot override an explicit external match.
+      /^(?!chalk(?:\/|$))[a-z@][^:]*/,
     ],
   },
 ]);
