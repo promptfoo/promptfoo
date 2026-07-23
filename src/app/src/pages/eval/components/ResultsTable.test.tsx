@@ -9,7 +9,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { EvaluateTableOutput } from '@promptfoo/types';
 
 vi.mock('./store', () => ({
   useTableStore: vi.fn(() => ({
@@ -66,7 +65,7 @@ vi.mock('./EvalOutputCell', () => {
       rowPositionIndex,
       searchText,
     }: {
-      output: EvaluateTableOutput;
+      output: { gradingResult?: { comment?: string } | null };
       onRating: any;
       rowIndex?: number;
       rowPositionIndex?: number;
