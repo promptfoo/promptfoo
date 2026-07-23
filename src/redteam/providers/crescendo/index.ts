@@ -35,10 +35,15 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyExfiltrationTracking,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
+  getExfiltrationGradingContext,
+  getProviderResponseGradingImages,
   getSessionId,
-  isBasicRefusal,
+  hasProviderResponseGradingEvidence,
+  hasTraceGradingEvidence,
+  isBacktrackableRefusal,
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
@@ -61,7 +66,7 @@ import {
   type RedteamTracingOptions,
   resolveTracingOptions,
 } from '../tracingOptions';
-import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
+import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT } from './prompts';
 
 import type {
   ApiProvider,
@@ -508,25 +513,26 @@ export class CrescendoProvider implements ApiProvider {
             `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const { response: unblockingResponse } = await this.sendPrompt(
-            unblockingResult.unblockingPrompt,
-            prompt,
-            vars,
-            filters,
-            provider,
-            roundNum,
-            context,
-            options,
-            tracingOptions,
-            shouldFetchTrace,
-            traceSnapshots,
-          );
+          const { response: unblockingResponse, transformResult: unblockingTransformResult } =
+            await this.sendPrompt(
+              unblockingResult.unblockingPrompt,
+              prompt,
+              vars,
+              filters,
+              provider,
+              roundNum,
+              context,
+              options,
+              tracingOptions,
+              shouldFetchTrace,
+              traceSnapshots,
+            );
 
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
-          // Update lastResponse to the unblocking response and continue
-          // Note: unblocking prompts don't use audio/image transforms
+          // Keep response-associated transform metadata for evidence tracking.
           lastResponse = unblockingResponse;
+          lastTransformResult = unblockingTransformResult ?? lastTransformResult;
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -544,10 +550,36 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
+        const webPageUuid = (lastTransformResult?.metadata?.webPageUuid ??
+          test?.metadata?.webPageUuid) as string | undefined;
+        let webExfilData: Awaited<ReturnType<typeof checkExfilTracking>> | undefined;
+        if (webPageUuid) {
+          const evalId =
+            context?.evaluationId ?? (test?.metadata?.evaluationId as string | undefined);
+          logger.debug('[Crescendo] Fetching exfil tracking from server API', {
+            webPageUuid,
+            evalId,
+          });
+          try {
+            webExfilData = await checkExfilTracking(webPageUuid, evalId);
+          } catch (error) {
+            logger.warn('[Crescendo] Failed to fetch exfil tracking from server', {
+              error,
+              webPageUuid,
+            });
+          }
+        }
+        const webTrackingState = classifyExfiltrationTracking(webExfilData);
+        const exfiltrationGradingContext = getExfiltrationGradingContext(
+          webExfilData,
+          lastResponse.metadata,
+        );
+        const hasTraceEvidence =
+          tracingOptions.includeInGrading && hasTraceGradingEvidence(lastResponse);
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
-          lastResponse.output,
-          options,
+          lastResponse,
+          Boolean(hasTraceEvidence || (webPageUuid && webTrackingState !== 'not_confirmed')),
         );
         logger.debug(
           `[Crescendo] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -589,61 +621,22 @@ export class CrescendoProvider implements ApiProvider {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             const gradingTraceSummary = tracingOptions.includeInGrading
-              ? (response.traceSummary ??
-                (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
+              ? (lastResponse.traceSummary ??
+                (lastResponse.traceContext
+                  ? formatTraceSummary(lastResponse.traceContext)
+                  : undefined))
               : undefined;
 
             // Build grading context with image outputs, tracing, and exfil tracking data.
-            let gradingContext: RedteamGradingContext | undefined = {
+            const responseImages = getProviderResponseGradingImages(lastResponse);
+            const gradingContext: RedteamGradingContext = {
               providerResponse: lastResponse,
-              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+              ...(responseImages.length ? { imageOutputs: responseImages } : {}),
+              ...(tracingOptions.includeInGrading
+                ? { traceContext: lastResponse.traceContext, traceSummary: gradingTraceSummary }
+                : {}),
+              ...(exfiltrationGradingContext ?? {}),
             };
-
-            // First try to get exfil data from provider response metadata (Playwright provider)
-            if (lastResponse.metadata?.wasExfiltrated === undefined) {
-              // Try to fetch exfil tracking from server API via webPageUuid
-              const webPageUuid = test.metadata?.webPageUuid as string | undefined;
-              if (webPageUuid) {
-                const evalId =
-                  context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
-                logger.debug('[Crescendo] Fetching exfil tracking from server API', {
-                  webPageUuid,
-                  evalId,
-                });
-                const exfilData = await checkExfilTracking(webPageUuid, evalId);
-                if (exfilData) {
-                  gradingContext = {
-                    ...(gradingContext ?? {}),
-                    ...(tracingOptions.includeInGrading
-                      ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                      : {}),
-                    wasExfiltrated: exfilData.wasExfiltrated,
-                    exfilCount: exfilData.exfilCount,
-                    exfilRecords: exfilData.exfilRecords,
-                  };
-                }
-              }
-            } else {
-              logger.debug('[Crescendo] Using exfil data from provider response metadata');
-              gradingContext = {
-                ...(gradingContext ?? {}),
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              };
-            }
-
-            // Fallback to just tracing context if no exfil data found
-            if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
-              gradingContext = {
-                ...(gradingContext ?? {}),
-                traceContext: response.traceContext,
-                traceSummary: gradingTraceSummary,
-              };
-            }
 
             // Provide prior turns separately from the latest assistant output
             // under test. Context-aware graders can use this to reason over
@@ -652,14 +645,13 @@ export class CrescendoProvider implements ApiProvider {
               prompt: turn.prompt,
               output: turn.output,
             }));
-            gradingContext = {
-              ...(gradingContext ?? {}),
+            Object.assign(gradingContext, {
               redteamHistory: [...redteamHistory],
               conversationHistory: conversationHistoryForGrading,
               conversationTranscript: formatRedteamHistoryAsTranscript(
                 conversationHistoryForGrading,
               ),
-            };
+            });
 
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
@@ -1103,7 +1095,12 @@ export class CrescendoProvider implements ApiProvider {
         {
           targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
           evaluationId: context?.evaluationId,
-          testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+          testCaseId:
+            context?.testCaseId ||
+            (context?.test?.metadata?.testCaseId as string | undefined) ||
+            (typeof context?.vars?.__evalStepId === 'string'
+              ? context.vars.__evalStepId
+              : undefined),
           purpose: context?.test?.metadata?.purpose as string | undefined,
           goal: context?.test?.metadata?.goal as string | undefined,
         },
@@ -1239,73 +1236,18 @@ export class CrescendoProvider implements ApiProvider {
 
   private async getRefusalScore(
     attackPrompt: string,
-    lastResponse: string,
-    options?: CallApiOptionsParams,
+    lastResponse: ProviderResponse,
+    hasExternalGradingEvidence = false,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
-      logger.debug(
-        '[Crescendo] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
-      );
-      return [true, 'The output contains a standard refusal.'];
+    if (hasExternalGradingEvidence || hasProviderResponseGradingEvidence(lastResponse)) {
+      return [false, 'The response contains non-text evidence that requires outcome grading.'];
     }
-
-    // Otherwise, use the scoring chat to grade the refusal
-    const refusalInput = JSON.stringify({
-      conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const refusalBody = JSON.stringify([
-      { role: 'system', content: refusalSystemPrompt },
-      { role: 'user', content: refusalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(
-      refusalBody,
-      {
-        prompt: {
-          raw: refusalBody,
-          label: 'refusal',
-        },
-        vars: {},
-      },
-      options,
-    );
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
-    if (scoringProvider.delay) {
-      logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
+    const responseText = String(lastResponse.output ?? '');
+    if (isBacktrackableRefusal(responseText)) {
+      return [true, 'The output contains a complete refusal.'];
     }
-    if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
-    }
-
-    logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
-
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
-
-    logger.debug('[Crescendo] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
-
-    return [parsed.value, parsed.rationale];
+    return [false, 'The output requires outcome grading.'];
   }
 
   private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {

@@ -33,10 +33,15 @@ import {
 import { Strategies } from '../../strategies';
 import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
+  classifyExfiltrationTracking,
   extractInputVarsFromPrompt,
   extractPromptFromTags,
+  getExfiltrationGradingContext,
+  getProviderResponseGradingImages,
   getSessionId,
-  isBasicRefusal,
+  hasProviderResponseGradingEvidence,
+  hasTraceGradingEvidence,
+  isBacktrackableRefusal,
 } from '../../util';
 import {
   buildGraderResultAssertion,
@@ -795,15 +800,52 @@ export class HydraProvider implements ApiProvider {
       });
 
       // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isBasicRefusal(targetResponse.output);
+      const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+      const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+      const evalId =
+        context?.evaluationId ??
+        (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+      let webExfilData: Awaited<ReturnType<typeof checkExfilTracking>> | undefined;
+      if (webPageUuid) {
+        logger.debug(`${this.logPrefix} Fetching exfil tracking from server API`, {
+          webPageUuid,
+          evalId,
+          source: 'lastTransformResult.metadata',
+        });
+        try {
+          webExfilData = await checkExfilTracking(webPageUuid, evalId);
+        } catch (error) {
+          logger.warn(`${this.logPrefix} Failed to fetch exfil tracking from server`, {
+            error,
+            webPageUuid,
+          });
+        }
+      }
+      const webTrackingState = classifyExfiltrationTracking(webExfilData);
+      const exfiltrationGradingContext = getExfiltrationGradingContext(
+        webExfilData,
+        targetResponse.metadata,
+      );
+      const hasExternalGradingEvidence = Boolean(
+        (webPageUuid && webTrackingState !== 'not_confirmed') ||
+          (tracingOptions.includeInGrading &&
+            hasTraceGradingEvidence({ traceContext, traceSummary: computedTraceSummary })),
+      );
+      const isRefusal =
+        !hasExternalGradingEvidence &&
+        !hasProviderResponseGradingEvidence(targetResponse) &&
+        isBacktrackableRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
-        logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
-          turn,
-          backtrackCount: backtrackCount + 1,
-          maxBacktracks: this.maxBacktracks,
-          conversationLengthBefore: this.conversationHistory.length,
-        });
+        logger.debug(
+          `${this.logPrefix} Response rejected (backtrackable refusal), backtracking...`,
+          {
+            turn,
+            backtrackCount: backtrackCount + 1,
+            maxBacktracks: this.maxBacktracks,
+            conversationLengthBefore: this.conversationHistory.length,
+          },
+        );
         backtrackCount++;
 
         // Remove last user + assistant messages
@@ -853,62 +895,15 @@ export class HydraProvider implements ApiProvider {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
           // Build grading context with image outputs, tracing, and exfil tracking data.
+          const responseImages = getProviderResponseGradingImages(targetResponse);
           const gradingContext: RedteamGradingContext = {
             providerResponse: targetResponse,
-            ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+            ...(responseImages.length ? { imageOutputs: responseImages } : {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: gradingTraceSummary }
               : {}),
+            ...(exfiltrationGradingContext ?? {}),
           };
-
-          // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
-          // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
-          // ONLY source for webPageUuid (set by indirect-web-pwn strategy during applyRuntimeTransforms)
-          const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
-          if (webPageUuid) {
-            // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
-            const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
-            const evalId =
-              context?.evaluationId ??
-              (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
-
-            logger.debug(`${this.logPrefix} Fetching exfil tracking from server API`, {
-              webPageUuid,
-              evalId,
-              source: 'lastTransformResult.metadata',
-            });
-
-            try {
-              const exfilData = await checkExfilTracking(webPageUuid, evalId);
-              if (exfilData) {
-                Object.assign(gradingContext, {
-                  wasExfiltrated: exfilData.wasExfiltrated,
-                  exfilCount: exfilData.exfilCount,
-                  exfilRecords: exfilData.exfilRecords,
-                });
-              }
-            } catch (error) {
-              logger.warn(`${this.logPrefix} Failed to fetch exfil tracking from server`, {
-                error,
-                webPageUuid,
-              });
-            }
-          }
-
-          // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-          if (
-            gradingContext.wasExfiltrated === undefined &&
-            targetResponse.metadata?.wasExfiltrated !== undefined
-          ) {
-            logger.debug(
-              `${this.logPrefix} Using exfil data from provider response metadata (fallback)`,
-            );
-            Object.assign(gradingContext, {
-              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
-              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            });
-          }
 
           const { grade, rubric } = await grader.getResult(
             nextMessage,

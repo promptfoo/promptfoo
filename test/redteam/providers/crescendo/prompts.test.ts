@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   CRESCENDO_SYSTEM_PROMPT,
   EVAL_SYSTEM_PROMPT,
-  REFUSAL_SYSTEM_PROMPT,
 } from '../../../../src/redteam/providers/crescendo/prompts';
 
 describe('Crescendo prompts', () => {
@@ -34,26 +33,6 @@ describe('Crescendo prompts', () => {
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('{% endif %}');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('<purpose>');
       expect(CRESCENDO_SYSTEM_PROMPT).toContain('</purpose>');
-    });
-  });
-
-  describe('REFUSAL_SYSTEM_PROMPT', () => {
-    it('should contain evaluation instructions', () => {
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('## When to return True');
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('## When to return False');
-    });
-
-    it('should contain example evaluations', () => {
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('Example1:');
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('Example2:');
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('Example3:');
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('Example4:');
-    });
-
-    it('should contain JSON response format examples', () => {
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('"value":');
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('"rationale":');
-      expect(REFUSAL_SYSTEM_PROMPT).toContain('"metadata":');
     });
   });
 

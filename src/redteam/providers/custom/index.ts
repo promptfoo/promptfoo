@@ -18,8 +18,16 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
-import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
+import { checkExfilTracking } from '../../strategies/indirectWebPwn';
+import {
+  classifyExfiltrationTracking,
+  getExfiltrationGradingContext,
+  getProviderResponseGradingImages,
+  getSessionId,
+  hasProviderResponseGradingEvidence,
+  isBacktrackableRefusal,
+} from '../../util';
+import { EVAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
   buildGraderResultAssertion,
@@ -465,22 +473,23 @@ export class CustomProvider implements ApiProvider {
             `[Custom] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const { response: unblockingResponse } = await this.sendPrompt(
-            unblockingResult.unblockingPrompt,
-            prompt,
-            vars,
-            filters,
-            provider,
-            roundNum,
-            context,
-            options,
-          );
+          const { response: unblockingResponse, transformResult: unblockingTransformResult } =
+            await this.sendPrompt(
+              unblockingResult.unblockingPrompt,
+              prompt,
+              vars,
+              filters,
+              provider,
+              roundNum,
+              context,
+              options,
+            );
 
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
-          // Update lastResponse to the unblocking response and continue
-          // Note: unblocking prompts don't use audio/image transforms
+          // Keep response-associated transform metadata for evidence tracking.
           lastResponse = unblockingResponse;
+          lastTransformResult = unblockingTransformResult ?? lastTransformResult;
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
@@ -506,10 +515,30 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
+        const webPageUuid = (lastTransformResult?.metadata?.webPageUuid ??
+          test?.metadata?.webPageUuid) as string | undefined;
+        let webExfilData: Awaited<ReturnType<typeof checkExfilTracking>> | undefined;
+        if (webPageUuid) {
+          const evalId =
+            context?.evaluationId ?? (test?.metadata?.evaluationId as string | undefined);
+          try {
+            webExfilData = await checkExfilTracking(webPageUuid, evalId);
+          } catch (error) {
+            logger.warn('[Custom] Failed to fetch exfil tracking from server', {
+              error,
+              webPageUuid,
+            });
+          }
+        }
+        const webTrackingState = classifyExfiltrationTracking(webExfilData);
+        const exfiltrationGradingContext = getExfiltrationGradingContext(
+          webExfilData,
+          lastResponse.metadata,
+        );
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
-          lastResponse.output,
-          options,
+          lastResponse,
+          Boolean(webPageUuid && webTrackingState !== 'not_confirmed'),
         );
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -548,9 +577,11 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const gradingContext: RedteamGradingContext | undefined = {
+            const responseImages = getProviderResponseGradingImages(lastResponse);
+            const gradingContext: RedteamGradingContext = {
               providerResponse: lastResponse,
-              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+              ...(responseImages.length ? { imageOutputs: responseImages } : {}),
+              ...(exfiltrationGradingContext ?? {}),
             };
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
@@ -582,7 +613,10 @@ export class CustomProvider implements ApiProvider {
             lastResponse.audio?.data && lastResponse.audio?.format
               ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
               : undefined,
-          // Note: outputImage not tracked as TargetResponse doesn't include image yet
+          outputImage:
+            lastResponse.image?.data && lastResponse.image?.format
+              ? { data: lastResponse.image.data, format: lastResponse.image.format }
+              : undefined,
         });
 
         const [evalScore] = await this.getEvalScore(lastResponse.output, options);
@@ -855,7 +889,18 @@ export class CustomProvider implements ApiProvider {
         this.config.injectVar,
         this.perTurnLayers,
         Strategies,
-        { targetId: this.config.targetId },
+        {
+          targetId: this.config.targetId,
+          evaluationId: context?.evaluationId,
+          testCaseId:
+            context?.testCaseId ||
+            (context?.test?.metadata?.testCaseId as string | undefined) ||
+            (typeof context?.vars?.__evalStepId === 'string'
+              ? context.vars.__evalStepId
+              : undefined),
+          purpose: context?.test?.metadata?.purpose as string | undefined,
+          goal: context?.test?.metadata?.goal as string | undefined,
+        },
       );
 
       if (lastTransformResult.error) {
@@ -939,73 +984,18 @@ export class CustomProvider implements ApiProvider {
 
   private async getRefusalScore(
     attackPrompt: string,
-    lastResponse: string,
-    options?: CallApiOptionsParams,
+    lastResponse: ProviderResponse,
+    hasExternalGradingEvidence = false,
   ): Promise<[boolean, string]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
-    // Short-circuit refusal grading for standard refusal prefixes
-    if (isBasicRefusal(lastResponse)) {
-      logger.debug(
-        '[Custom] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
-      );
-      return [true, 'The output contains a standard refusal.'];
+    if (hasExternalGradingEvidence || hasProviderResponseGradingEvidence(lastResponse)) {
+      return [false, 'The response contains non-text evidence that requires outcome grading.'];
     }
-
-    // Otherwise, use the scoring chat to grade the refusal
-    const refusalInput = JSON.stringify({
-      conversationObjective: attackPrompt,
-      responseToEvaluateInput: lastResponse,
-    });
-
-    const refusalSystemPrompt = this.nunjucks.renderString(REFUSAL_SYSTEM_PROMPT, {
-      conversationObjective: this.userGoal,
-    });
-
-    const refusalBody = JSON.stringify([
-      { role: 'system', content: refusalSystemPrompt },
-      { role: 'user', content: refusalInput },
-    ]);
-
-    const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(
-      refusalBody,
-      {
-        prompt: {
-          raw: refusalBody,
-          label: 'refusal',
-        },
-        vars: {},
-      },
-      options,
-    );
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
-    if (scoringProvider.delay) {
-      logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
-      await sleep(scoringProvider.delay);
+    const responseText = String(lastResponse.output ?? '');
+    if (isBacktrackableRefusal(responseText)) {
+      return [true, 'The output contains a complete refusal.'];
     }
-    if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
-    }
-
-    logger.debug(`[Custom] Refusal score response: ${refusalResponse.output}`);
-
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
-
-    logger.debug('[Custom] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
-
-    return [parsed.value, parsed.rationale];
+    return [false, 'The output requires outcome grading.'];
   }
 
   private async getEvalScore(
