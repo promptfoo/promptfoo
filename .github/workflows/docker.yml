@@ -37,6 +37,11 @@ on:
         description: 'Optional Python minor required by the tagged Alpine image (e.g., 3.14)'
         required: false
         type: string
+      exclude_legacy_frontend_tests:
+        description: 'Exclude historical frontend test files from production compilation'
+        required: false
+        default: false
+        type: boolean
   release:
     types:
       - published
@@ -90,6 +95,7 @@ env:
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   LEGACY_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && 'true' || 'false' }}
   PYTHON_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.python_version || '' }}
+  EXCLUDE_LEGACY_FRONTEND_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.exclude_legacy_frontend_tests && 'true' || 'false' }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
@@ -123,6 +129,11 @@ jobs:
             exit 1
           fi
 
+          if [[ "$EXCLUDE_LEGACY_FRONTEND_TESTS" == 'true' && "$LEGACY_BACKFILL" != 'true' ]]; then
+            echo '::error::Historical frontend test exclusions require legacy backfill mode'
+            exit 1
+          fi
+
           if [[ -n "$PYTHON_VERSION" && ! "$PYTHON_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
             echo "::error::PYTHON_VERSION '$PYTHON_VERSION' must be a major.minor version"
             exit 1
@@ -148,6 +159,23 @@ jobs:
       - name: Resolve source commit
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare historical frontend production build
+        if: env.LEGACY_BACKFILL == 'true' && env.EXCLUDE_LEGACY_FRONTEND_TESTS == 'true'
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const file = "src/app/tsconfig.app.json";
+            const original = fs.readFileSync(file, "utf8");
+            const updated = original.replace(
+              /"include"\s*:\s*\[\s*"\.\/src"\s*\]/,
+              "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
+            );
+            if (updated === original) {
+              throw new Error(`Could not locate the historical include setting in ${file}`);
+            }
+            fs.writeFileSync(file, updated);
+          '
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
@@ -348,6 +376,23 @@ jobs:
       - name: Resolve source commit
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare historical frontend production build
+        if: env.LEGACY_BACKFILL == 'true' && env.EXCLUDE_LEGACY_FRONTEND_TESTS == 'true'
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const file = "src/app/tsconfig.app.json";
+            const original = fs.readFileSync(file, "utf8");
+            const updated = original.replace(
+              /"include"\s*:\s*\[\s*"\.\/src"\s*\]/,
+              "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
+            );
+            if (updated === original) {
+              throw new Error(`Could not locate the historical include setting in ${file}`);
+            }
+            fs.writeFileSync(file, updated);
+          '
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
