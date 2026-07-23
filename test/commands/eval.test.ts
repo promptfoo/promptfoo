@@ -538,6 +538,69 @@ describe('evalCommand', () => {
     expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
   });
 
+  describe('watch paths for tests', () => {
+    // doEval derives the base path from the config file location
+    // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
+    const watchBase = path.dirname(defaultConfigPath);
+
+    async function watchedPathsFor(tests: UnifiedConfig['tests']) {
+      const config = { prompts: [], providers: [], tests } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+      // The shared chokidar mock is declared as `vi.fn(() => watcher)`, so its
+      // recorded call args type as an empty tuple. Read the first argument through
+      // `unknown` rather than widening the shared mock's signature.
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
+      return lastCall?.[0] ?? [];
+    }
+
+    it('watches a scalar tests file reference', async () => {
+      // `tests: file://cases.yaml` is valid config and evaluates fine, but the
+      // watch list was built with an Array.isArray guard, so the file was silently
+      // excluded and edits never triggered a re-run.
+      const watched = await watchedPathsFor('file://cases.yaml' as UnifiedConfig['tests']);
+      expect(watched).toContain(path.resolve(watchBase, 'cases.yaml'));
+    });
+
+    it('watches a scalar test-generator reference, without the function suffix', async () => {
+      const watched = await watchedPathsFor(
+        'file://tests.py:generate_tests' as UnifiedConfig['tests'],
+      );
+      expect(watched).toContain(path.resolve(watchBase, 'tests.py'));
+      expect(watched).not.toContain(path.resolve(watchBase, 'tests.py:generate_tests'));
+    });
+
+    it('watches test-generator entries inside the array form', async () => {
+      // The array branch only matched bare strings and `vars`, so a generator entry
+      // was dropped even though the array form is the documented shape for it.
+      const watched = await watchedPathsFor([
+        { path: 'file://gen.py:make_tests' },
+      ] as UnifiedConfig['tests']);
+      expect(watched).toContain(path.resolve(watchBase, 'gen.py'));
+    });
+
+    it('still watches the array form and vars files', async () => {
+      const watched = await watchedPathsFor([
+        'file://cases.yaml',
+        { vars: { data: 'file://vars.csv' } },
+      ] as UnifiedConfig['tests']);
+      expect(watched).toContain(path.resolve(watchBase, 'cases.yaml'));
+      expect(watched).toContain(path.resolve(watchBase, 'vars.csv'));
+    });
+
+    it('tolerates tests being absent', async () => {
+      const watched = await watchedPathsFor(undefined);
+      expect(watched).toContain(defaultConfigPath);
+    });
+  });
+
   it('should keep watching after config resolution fails on a file change', async () => {
     const config = {
       prompts: [],

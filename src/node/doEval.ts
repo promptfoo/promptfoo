@@ -221,6 +221,21 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
+/**
+ * Resolve a `file://` test reference to the path that should be watched.
+ *
+ * Test-generator references carry a `:functionName` suffix (`file://tests.py:generate`),
+ * which is not part of the filename. Strip it using the same last-colon rule as
+ * `getStandaloneTestsFileMetadata`, taking care not to mistake a Windows drive letter
+ * (`C:\\...`) for a function separator.
+ */
+export function resolveTestFilePath(basePath: string, ref: string): string {
+  const resolved = path.resolve(basePath, ref.replace(/^file:\/\//, ''));
+  const lastColonIndex = resolved.lastIndexOf(':');
+  const isWindowsDriveColon = lastColonIndex === 1 && /^[A-Za-z]:/.test(resolved);
+  return lastColonIndex > 1 && !isWindowsDriveColon ? resolved.slice(0, lastColonIndex) : resolved;
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -1121,23 +1136,33 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
-        const varPaths = Array.isArray(config.tests)
-          ? config.tests
-              .flatMap((t) => {
-                if (typeof t === 'string' && t.startsWith('file://')) {
-                  return path.resolve(basePath, t.slice('file://'.length));
-                } else if (typeof t !== 'string' && 'vars' in t && t.vars) {
-                  return Object.values(t.vars).flatMap((v) => {
-                    if (typeof v === 'string' && v.startsWith('file://')) {
-                      return path.resolve(basePath, v.slice('file://'.length));
-                    }
-                    return [];
-                  });
-                }
-                return [];
-              })
-              .filter(Boolean)
-          : [];
+        // `tests` may be a bare file reference, a test-generator object, or an array of
+        // either plus inline test cases (see TestSuiteConfig). Only the array form was
+        // collected here, so `tests: file://cases.yaml` -- valid config that evaluates
+        // fine -- was silently left unwatched, and generator entries were missed in both
+        // the scalar and array forms. Normalise to an array first, then resolve each shape.
+        const testEntries = config.tests == null ? [] : [config.tests].flat();
+        const varPaths = testEntries
+          .flatMap((t) => {
+            if (typeof t === 'string') {
+              return t.startsWith('file://') ? resolveTestFilePath(basePath, t) : [];
+            }
+            if (t && typeof t === 'object') {
+              // Test-generator entry: { path: 'file://tests.py:generate' }
+              if ('path' in t && typeof t.path === 'string' && t.path.startsWith('file://')) {
+                return resolveTestFilePath(basePath, t.path);
+              }
+              if ('vars' in t && t.vars) {
+                return Object.values(t.vars).flatMap((v) =>
+                  typeof v === 'string' && v.startsWith('file://')
+                    ? resolveTestFilePath(basePath, v)
+                    : [],
+                );
+              }
+            }
+            return [];
+          })
+          .filter(Boolean);
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
