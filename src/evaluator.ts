@@ -2738,8 +2738,15 @@ async function filterCompletedResumeSteps(
       }
     }
     const skipped = originalCount - runEvalOptions.length;
-    if (skipped > 0) {
+    if (skipped === 0) {
+      return;
+    }
+    if (runEvalOptions.length > 0) {
       logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+    } else {
+      logger.info(
+        `Evaluation ${evalRecord.id} is already complete (${originalCount}/${originalCount} cases). Nothing to resume.`,
+      );
     }
   } catch (err) {
     logger.warn(
