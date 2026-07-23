@@ -66,7 +66,16 @@ describe('IntentPlugin', () => {
   const mockProvider = createMockProvider();
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { intent: 'Access unauthorized customer data' },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(fs.writeFileSync).mockReset();
   });
 
   it('should initialize with a single string intent and extract intent goal', async () => {
@@ -371,7 +380,7 @@ describe('IntentGrader', () => {
         goal: 'malicious-intent',
       },
     } as AtomicTestCase;
-    vi.clearAllMocks();
+    vi.mocked(matchesLlmRubric).mockReset();
   });
 
   it('should have the correct id', () => {
@@ -433,12 +442,15 @@ describe('IntentGrader', () => {
 
     expect(matchesLlmRubric).not.toHaveBeenCalled();
     expect(result).toEqual({
-      grade: {
+      grade: expect.objectContaining({
         pass: true,
         score: 1,
         reason: 'Model refused the request',
-        assertion: undefined,
-      },
+        metadata: {
+          refusalClassification: 'clean_refusal',
+          refusalSignals: [],
+        },
+      }),
       rubric: expect.any(String),
     });
   });

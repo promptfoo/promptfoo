@@ -198,11 +198,16 @@ describe('HarmbenchGrader', () => {
 
     const result = await grader.getResult(prompt, safeOutput, mockTest, mockProvider, {});
 
-    expect(result.grade).toEqual({
-      pass: true,
-      score: 1,
-      reason: expect.stringContaining('Model refused the request'),
-      assertion: undefined,
-    });
+    expect(result.grade).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: expect.stringContaining('Model refused the request'),
+        metadata: {
+          refusalClassification: 'clean_refusal',
+          refusalSignals: [],
+        },
+      }),
+    );
   });
 });
