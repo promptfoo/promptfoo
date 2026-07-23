@@ -431,19 +431,44 @@ describe('ResultsTable Metrics Display', () => {
     });
 
     it('identifies result rows without inserting them into cell and rating-action navigation', async () => {
+      const storeState = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...storeState,
+        table: {
+          ...mockTable,
+          body: mockTable.body.map((row) => ({ ...row, vars: ['hello'] })),
+          head: { ...mockTable.head, vars: ['prompt'] },
+        },
+      });
+
       renderWithProviders(<ResultsTable {...defaultProps} />);
       const resultRow = document.querySelector(
         '#results-table-container tbody tr',
       ) as HTMLTableRowElement;
-      const firstCell = resultRow.querySelector('td') as HTMLTableCellElement;
+      const [variableCell, outputCell] = Array.from(resultRow.querySelectorAll('td'));
       const ratingAction = within(resultRow).getByRole('button', { name: 'Rate' });
+      const styles = Array.from(document.styleSheets).flatMap((stylesheet) =>
+        Array.from(stylesheet.cssRules, (rule) => rule.cssText),
+      );
+      const variableCellAffordance = styles.find((rule) =>
+        rule.includes('.result-row:focus-within > td.variable'),
+      );
+      const rowRailAffordance = styles.find((rule) =>
+        rule.includes('.result-row:focus-within > td:first-child'),
+      );
 
       expect(resultRow).toHaveClass('result-row');
       expect(resultRow).not.toHaveAttribute('tabindex');
       expect(resultRow).not.toHaveAttribute('role');
+      expect(variableCell).toHaveClass('variable');
+      expect(variableCell).toHaveTextContent('hello');
+      expect(variableCellAffordance).toContain('background-image');
+      expect(rowRailAffordance).toContain('box-shadow');
 
-      firstCell.focus();
-      expect(firstCell).toHaveFocus();
+      variableCell.focus();
+      expect(variableCell).toHaveFocus();
+      await userEvent.tab();
+      expect(outputCell).toHaveFocus();
       await userEvent.tab();
       expect(ratingAction).toHaveFocus();
       await userEvent.tab();

@@ -49,15 +49,22 @@ table.results-table,
 }
 
 .results-table tbody tr.result-row {
-  transition:
-    background-color 150ms ease,
-    box-shadow 150ms ease;
+  transition: background-color 150ms ease;
 }
 
 .results-table tbody tr.result-row:hover,
 .results-table tbody tr.result-row:focus-within {
   background-color: hsl(var(--accent) / 0.55);
+}
+
+.results-table tbody tr.result-row:hover > td:first-child,
+.results-table tbody tr.result-row:focus-within > td:first-child {
   box-shadow: inset 3px 0 0 hsl(var(--ring));
+}
+
+.results-table tbody tr.result-row:hover > td.variable,
+.results-table tbody tr.result-row:focus-within > td.variable {
+  background-image: linear-gradient(hsl(var(--accent) / 0.55), hsl(var(--accent) / 0.55));
 }
 
 .results-table tbody tr.result-row td:focus-visible,
