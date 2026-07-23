@@ -410,9 +410,11 @@ describe('handleToolCallF1', () => {
 
       const result = handleToolCallF1(params);
 
-      // F1=1.0 would normally pass, but inverse makes it fail
+      // F1=1.0 would normally pass, but inverse makes it fail — and the
+      // inverted score (0) must not feed the original full score into
+      // weighted/threshold aggregation.
       expect(result.pass).toBe(false);
-      expect(result.score).toBe(1);
+      expect(result.score).toBe(0);
     });
 
     it('should pass inverse assertion when F1 is below threshold', () => {
@@ -423,9 +425,32 @@ describe('handleToolCallF1', () => {
 
       const result = handleToolCallF1(params);
 
-      // F1=0 would normally fail, but inverse makes it pass
+      // F1=0 would normally fail, but inverse makes it pass with full score
       expect(result.pass).toBe(true);
-      expect(result.score).toBe(0);
+      expect(result.score).toBe(1);
+    });
+
+    it('should invert mid-range scores, not just the 0/1 extremes', () => {
+      // expected {get_weather, search}, called {get_weather, calculator, search}:
+      // precision=2/3, recall=1 -> F1=0.8
+      const output = {
+        tool_calls: [
+          { function: { name: 'get_weather', arguments: '{}' } },
+          { function: { name: 'calculator', arguments: '{}' } },
+          { function: { name: 'search', arguments: '{}' } },
+        ],
+      };
+      const params = createParams(output, ['get_weather', 'search'], {
+        inverse: true,
+        threshold: 0.5,
+      });
+
+      const result = handleToolCallF1(params);
+
+      // F1=0.8 >= 0.5 would normally pass, so the inverse fails — with the
+      // inverted score 0.2 rather than the raw 0.8.
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(0.2);
     });
   });
 
