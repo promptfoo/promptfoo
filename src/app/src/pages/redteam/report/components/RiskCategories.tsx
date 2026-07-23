@@ -181,7 +181,7 @@ const RiskCategoryRow = ({
             <span className="font-semibold">{category.name}</span>
             <p
               id={descriptionId}
-              className="hidden truncate text-sm text-muted-foreground sm:block"
+              className="sr-only truncate text-sm text-muted-foreground sm:not-sr-only"
             >
               {category.description}
             </p>

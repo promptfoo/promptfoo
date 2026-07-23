@@ -82,7 +82,12 @@ describe('RiskCategories', () => {
     const description = screen.getByText(categoryDescriptions['Security & Access Control']);
 
     expect(categoryButton).toHaveClass('gap-2', 'sm:gap-4');
-    expect(description).toHaveClass('hidden', 'sm:block');
+    expect(description).toHaveClass('sr-only', 'sm:not-sr-only', 'truncate', 'text-sm');
+    expect(description).not.toHaveClass('hidden');
+    expect(categoryButton).toHaveAttribute('aria-describedby', description.id);
+    expect(categoryButton).toHaveAccessibleDescription(
+      categoryDescriptions['Security & Access Control'],
+    );
   });
 
   it('stacks the heading summary on narrow screens', () => {
