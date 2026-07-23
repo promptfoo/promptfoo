@@ -264,7 +264,10 @@ export async function handleMeteorAssertion({
   inverse,
   outputString,
   renderedValue,
-}: AssertionParams): Promise<GradingResult> {
+}: Pick<
+  AssertionParams,
+  'assertion' | 'inverse' | 'outputString' | 'renderedValue'
+>): Promise<GradingResult> {
   // Validate inputs
   invariant(
     typeof renderedValue === 'string' ||
@@ -290,7 +293,9 @@ export async function handleMeteorAssertion({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'METEOR assertion passed'
-      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
+      : inverse
+        ? `METEOR score ${score.toFixed(4)} met threshold ${threshold} (expected it not to)`
+        : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
     assertion,
   };
 }
