@@ -447,9 +447,22 @@ describe('ResultsTable Metrics Display', () => {
       ) as HTMLTableRowElement;
       const [variableCell, outputCell] = Array.from(resultRow.querySelectorAll('td'));
       const ratingAction = within(resultRow).getByRole('button', { name: 'Rate' });
-      const styles = Array.from(document.styleSheets).flatMap((stylesheet) =>
-        Array.from(stylesheet.cssRules, (rule) => rule.cssText),
-      );
+      const unreadableStyleSheet = {
+        get cssRules(): CSSRuleList {
+          throw new DOMException('Stylesheet is not accessible', 'SecurityError');
+        },
+      } as CSSStyleSheet;
+      const stylesheets = [unreadableStyleSheet, ...Array.from(document.styleSheets)];
+      const styles = stylesheets.flatMap((stylesheet) => {
+        try {
+          return Array.from(stylesheet.cssRules, (rule) => rule.cssText);
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'SecurityError') {
+            return [];
+          }
+          throw error;
+        }
+      });
       const variableCellAffordance = styles.find((rule) =>
         rule.includes('.result-row:focus-within > td.variable'),
       );
