@@ -184,15 +184,15 @@ jobs:
               if (!dockerfile.includes(packageJsonCopy)) {
                 dockerfile = dockerfile.replace(
                   nodeModulesCopy,
-                  `${nodeModulesCopy}\n${packageJsonCopy}`,
+                  nodeModulesCopy + "\n" + packageJsonCopy,
                 );
               }
 
               const localCliLinks = [
                 "RUN ln -s /app /app/node_modules/promptfoo && \\",
                 "    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\",
-                `    ln -s /app/${packageJson.bin.promptfoo} /usr/local/bin/promptfoo && \\`,
-                `    ln -s /app/${packageJson.bin.pf} /usr/local/bin/pf && \\`,
+                "    ln -s /app/" + packageJson.bin.promptfoo + " /usr/local/bin/promptfoo && \\",
+                "    ln -s /app/" + packageJson.bin.pf + " /usr/local/bin/pf && \\",
               ].join("\n");
               dockerfile = dockerfile.replace(oldCliLinks, localCliLinks);
               fs.writeFileSync(dockerfilePath, dockerfile);
@@ -207,7 +207,7 @@ jobs:
                 "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
               );
               if (updated === original) {
-                throw new Error(`Could not locate the historical include setting in ${file}`);
+                throw new Error("Could not locate the historical include setting in " + file);
               }
               fs.writeFileSync(file, updated);
               console.log("Excluded historical test-only frontend dependencies");
@@ -297,11 +297,13 @@ jobs:
           fi
 
           echo "Checking promptfoo version:"
-          if ! promptfoo_version="$(docker exec promptfoo-container promptfoo --version)"; then
+          if ! promptfoo_output="$(docker exec promptfoo-container promptfoo --version)"; then
             echo "promptfoo check failed"
             exit 1
           fi
-          echo "$promptfoo_version"
+          echo "$promptfoo_output"
+          # Historical CLIs print their update notice on stdout before the version.
+          promptfoo_version="$(printf '%s\n' "$promptfoo_output" | tail -n 1)"
 
           if [[ -n "$RELEASE_TAG" && "$promptfoo_version" != "$RELEASE_TAG" ]]; then
             echo "::error::Image version '$promptfoo_version' does not match release '$RELEASE_TAG'"
@@ -438,15 +440,15 @@ jobs:
               if (!dockerfile.includes(packageJsonCopy)) {
                 dockerfile = dockerfile.replace(
                   nodeModulesCopy,
-                  `${nodeModulesCopy}\n${packageJsonCopy}`,
+                  nodeModulesCopy + "\n" + packageJsonCopy,
                 );
               }
 
               const localCliLinks = [
                 "RUN ln -s /app /app/node_modules/promptfoo && \\",
                 "    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\",
-                `    ln -s /app/${packageJson.bin.promptfoo} /usr/local/bin/promptfoo && \\`,
-                `    ln -s /app/${packageJson.bin.pf} /usr/local/bin/pf && \\`,
+                "    ln -s /app/" + packageJson.bin.promptfoo + " /usr/local/bin/promptfoo && \\",
+                "    ln -s /app/" + packageJson.bin.pf + " /usr/local/bin/pf && \\",
               ].join("\n");
               dockerfile = dockerfile.replace(oldCliLinks, localCliLinks);
               fs.writeFileSync(dockerfilePath, dockerfile);
@@ -461,7 +463,7 @@ jobs:
                 "\"include\": [\"./src\"],\n  \"exclude\": [\"**/*.test.ts\", \"**/*.test.tsx\"]",
               );
               if (updated === original) {
-                throw new Error(`Could not locate the historical include setting in ${file}`);
+                throw new Error("Could not locate the historical include setting in " + file);
               }
               fs.writeFileSync(file, updated);
               console.log("Excluded historical test-only frontend dependencies");
