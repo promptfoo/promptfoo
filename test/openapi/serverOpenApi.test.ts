@@ -87,6 +87,7 @@ describe('server OpenAPI generation', () => {
     const listBlobLibraryOperation = paths['/api/blobs/library']?.get as any;
     const modelAuditScanOperation = paths['/api/model-audit/scan']?.post as any;
     const shareResultOperation = paths['/api/results/share']?.post as any;
+    const submitRatingOperation = paths['/api/eval/{evalId}/results/{id}/rating']?.post as any;
     const userEmailStatusOperation = paths['/api/user/email/status']?.get as any;
     const includeProvidersParam = paths['/api/results']?.get?.parameters?.find(
       (param: any) => param.name === 'includeProviders',
@@ -156,6 +157,28 @@ describe('server OpenAPI generation', () => {
       listBlobLibraryOperation?.responses['200']?.content?.['application/json']?.schema?.properties
         ?.data?.properties?.items?.items?.properties?.hash,
     ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
+    expect(
+      submitRatingOperation?.requestBody?.content?.['application/json']?.schema?.properties
+        ?.ratingAction,
+    ).toEqual(
+      expect.objectContaining({
+        description: 'Rating intent. Omit for the legacy inferred-rating behavior.',
+        enum: ['rate', 'clear', 'update'],
+      }),
+    );
+    expect(
+      submitRatingOperation?.requestBody?.content?.['application/json']?.schema?.properties
+        ?.ratingUpdate,
+    ).toEqual(
+      expect.objectContaining({
+        description: 'Field to update; required only when ratingAction is update.',
+        enum: ['score', 'comment'],
+      }),
+    );
+    expect(
+      submitRatingOperation?.responses['200']?.content?.['application/json']?.schema?.properties
+        ?.gradingResult,
+    ).toEqual(expect.objectContaining({ type: ['object', 'null'] }));
   });
 
   it('emits representative inline DTO schemas', () => {

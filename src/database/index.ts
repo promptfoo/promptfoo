@@ -202,7 +202,7 @@ const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
  * releases its lock. drizzle re-wraps the libsql error (its own message is just
  * `Failed query: ...`), so walk the cause chain and match on code/message.
  */
-function isTransientDatabaseLockError(error: unknown): boolean {
+function hasDatabaseLockError(error: unknown, includeBusy: boolean): boolean {
   for (
     let current = error as {
         code?: unknown;
@@ -216,18 +216,21 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   ) {
     const code = typeof current.code === 'string' ? current.code : '';
     const extendedCode = typeof current.extendedCode === 'string' ? current.extendedCode : '';
-    if (
-      code.startsWith('SQLITE_BUSY') ||
-      code.startsWith('SQLITE_LOCKED') ||
-      extendedCode.startsWith('SQLITE_BUSY') ||
-      extendedCode.startsWith('SQLITE_LOCKED')
-    ) {
+    const lockedCode = code.startsWith('SQLITE_LOCKED') || extendedCode.startsWith('SQLITE_LOCKED');
+    const busyCode = code.startsWith('SQLITE_BUSY') || extendedCode.startsWith('SQLITE_BUSY');
+    if (lockedCode || (includeBusy && busyCode)) {
       return true;
     }
     const message = typeof current.message === 'string' ? current.message : '';
     if (
-      /\bSQLITE_(?:BUSY|LOCKED)\b/.test(message) ||
-      /database (?:is|table is) locked/i.test(message)
+      /\bSQLITE_LOCKED(?:_[A-Z]+)?\b/.test(message) ||
+      /database table is locked/i.test(message)
+    ) {
+      return true;
+    }
+    if (
+      includeBusy &&
+      (/\bSQLITE_BUSY(?:_[A-Z]+)?\b/.test(message) || /database is locked/i.test(message))
     ) {
       return true;
     }
@@ -235,12 +238,23 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   return false;
 }
 
-async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
+function isDatabaseLockError(error: unknown): boolean {
+  return hasDatabaseLockError(error, true);
+}
+
+function isRetryableDatabaseLockError(error: unknown): boolean {
+  // busy_timeout already gives SQLITE_BUSY one bounded acquisition window. Retrying BUSY here
+  // would multiply that timeout for every attempt; only shared-cache SQLITE_LOCKED needs JS retry.
+  return hasDatabaseLockError(error, false);
+}
+
+/** @internal Exported only for deterministic lock-retry regression tests. */
+export async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await operation();
     } catch (error) {
-      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
+      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isRetryableDatabaseLockError(error)) {
         throw error;
       }
       await sleep(
@@ -250,8 +264,10 @@ async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T
   }
 }
 
-function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
+function serializeTopLevelOperations(client: Client, db: Drizzle, skipWalMode: boolean): Drizzle {
   const transaction = db.transaction.bind(db);
+  const execute = client.execute.bind(client);
+  const beginTransaction = client.transaction.bind(client);
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
@@ -265,6 +281,15 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
       () => undefined,
     );
     return result;
+  };
+
+  const configureReplacementConnection = async () => {
+    await execute('PRAGMA foreign_keys = ON');
+    await execute('PRAGMA busy_timeout = 5000');
+    if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+      await execute('PRAGMA wal_autocheckpoint = 1000');
+      await execute('PRAGMA synchronous = NORMAL');
+    }
   };
 
   const serializeClientMethod = <TArgs extends unknown[], TResult>(
@@ -291,10 +316,29 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   // libSQL opens a new logical connection for top-level statements and interactive
   // transactions, so an ordinary write started while a transaction owns the write lock
   // fails with SQLITE_BUSY unless root-handle operations are serialized.
-  client.execute = serializeClientMethod(client.execute.bind(client)) as typeof client.execute;
+  client.execute = serializeClientMethod(execute) as typeof client.execute;
   client.batch = serializeClientMethod(client.batch.bind(client));
   client.migrate = serializeClientMethod(client.migrate.bind(client));
   client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client));
+  // A transaction acquires its write lock before Drizzle invokes the callback. Retrying
+  // only that acquisition is safe: a failed BEGIN applied no statements, while retrying an
+  // arbitrary callback could duplicate external side effects. Reconnect after a failed
+  // BEGIN because libSQL otherwise retains the busy statement on its current connection.
+  client.transaction = (async (mode) => {
+    return withTransientLockRetry(async () => {
+      try {
+        // A completed libSQL transaction detaches its connection. Reapply all
+        // connection-local settings before BEGIN on the replacement connection.
+        await configureReplacementConnection();
+        return await beginTransaction(mode);
+      } catch (error) {
+        if (isDatabaseLockError(error)) {
+          await client.reconnect();
+        }
+        throw error;
+      }
+    });
+  }) as typeof client.transaction;
 
   db.transaction = ((callback, config) => {
     const currentTransaction = activeTransaction.getStore();
@@ -304,9 +348,21 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
       return callback(currentTransaction);
     }
 
-    return runSerialized(() =>
-      transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
-    );
+    return runSerialized(async () => {
+      try {
+        return await transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config);
+      } finally {
+        // libSQL detaches the transaction connection after commit/rollback. Configure the
+        // fresh root connection before releasing the serialized queue to later statements.
+        try {
+          await configureReplacementConnection();
+        } catch (error) {
+          // The transaction outcome is already final. Do not turn a committed write into an
+          // ambiguous application error solely because replacement-connection tuning failed.
+          logger.warn('Failed to configure the post-transaction database connection', { error });
+        }
+      }
+    });
   }) as typeof db.transaction;
 
   return db;
@@ -338,7 +394,11 @@ export async function getDb() {
       await configureDatabase(client, isTesting);
 
       const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-      dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }));
+      dbInstance = serializeTopLevelOperations(
+        client,
+        drizzle(client, { logger: drizzleLogger }),
+        isTesting,
+      );
       return dbInstance;
     })().catch((error) => {
       if (sqliteInstance) {

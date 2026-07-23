@@ -5,6 +5,7 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import { getNonstandardScoringBaseline } from '../../src/types/internal';
 
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
@@ -267,6 +268,11 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0.9);
       expect(result.reason).toBe('Custom scoring');
+      expect(getNonstandardScoringBaseline(result)).toEqual({
+        pass: true,
+        score: 0.9,
+      });
+      expect(result.metadata).toBeUndefined();
       expect(scoringFunction).toHaveBeenCalledWith(
         {},
         {
@@ -287,6 +293,11 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toBe('Scoring function error: Scoring failed');
+      expect(getNonstandardScoringBaseline(result)).toEqual({
+        pass: false,
+        score: 0,
+      });
+      expect(result.metadata).toBeUndefined();
     });
 
     it('should handle failed content safety checks', async () => {

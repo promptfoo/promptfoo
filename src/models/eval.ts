@@ -540,6 +540,7 @@ export default class Eval {
             opts.results?.map((r) => ({
               ...r,
               metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              manualRatingState: null,
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -923,13 +924,15 @@ export default class Eval {
     } else if (mode === 'highlights') {
       conditions.push(sql`json_extract(grading_result, '$.comment') LIKE ${'!highlight%'}`);
     } else if (mode === 'user-rated') {
-      // Check if componentResults array contains an entry with assertion.type = 'human'
-      // Uses EXISTS + json_each for accurate JSON querying (avoids false positives from LIKE)
+      // Match canonical component ratings and legacy top-level human assertions.
       conditions.push(sql`
-        EXISTS (
-          SELECT 1
-          FROM json_each(grading_result, '$.componentResults')
-          WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+        (
+          json_extract(grading_result, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+          OR EXISTS (
+            SELECT 1
+            FROM json_each(grading_result, '$.componentResults')
+            WHERE json_extract(value, '$.assertion.type') = ${HUMAN_ASSERTION_TYPE}
+          )
         )
       `);
     }
@@ -1366,6 +1369,7 @@ export default class Eval {
           results.map((r) => ({
             ...r,
             metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            manualRatingState: null,
             evalId: this.id,
           })),
         )

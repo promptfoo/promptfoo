@@ -35,6 +35,13 @@ interface EvalOptions {
 /** Payload the view-server socket emits on its 'init' / 'update' events. */
 type EvalRefreshSignal = { deletedEvalIds?: string[]; evalId?: string } | null;
 
+type EvalLoadGeneration = {
+  backgroundPending: number;
+  foregroundFailed: boolean;
+  foregroundPending: boolean;
+  succeeded: boolean;
+};
+
 function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null {
   if (!filtersParam) {
     return [];
@@ -90,6 +97,12 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
   const currentEvalIdRef = useRef(evalId);
+  const loadStateRef = useRef<EvalLoadGeneration>({
+    backgroundPending: 0,
+    foregroundFailed: false,
+    foregroundPending: false,
+    succeeded: table !== null,
+  });
   currentEvalIdRef.current = evalId;
 
   // ================================
@@ -123,13 +136,47 @@ export default function Eval({ fetchId }: EvalOptions) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
+      const isSameEvalBackgroundUpdate =
+        isBackgroundUpdate && useTableStore.getState().evalId === id;
+      const loadState = isBackgroundUpdate
+        ? loadStateRef.current
+        : {
+            backgroundPending: 0,
+            foregroundFailed: false,
+            foregroundPending: true,
+            succeeded: false,
+          };
+      if (isBackgroundUpdate) {
+        loadState.backgroundPending += 1;
+      } else {
+        loadStateRef.current = loadState;
+      }
+      const isCurrentLoad = () => loadStateRef.current === loadState;
+      const reportFailureIfSettled = () => {
+        if (
+          !isCurrentLoad() ||
+          loadState.succeeded ||
+          loadState.foregroundPending ||
+          loadState.backgroundPending > 0
+        ) {
+          return;
+        }
+        if (loadState.foregroundFailed || useTableStore.getState().table === null) {
+          setFailed(true);
+        }
+      };
+      let succeeded = false;
       try {
-        setEvalId(id);
+        // A root-route refresh for a different eval is committed by fetchEvalData only after
+        // its response succeeds; eagerly changing evalId would pair the old table with a new id.
+        if (!isBackgroundUpdate || isSameEvalBackgroundUpdate) {
+          setEvalId(id);
+        }
 
         const { filters } = useTableStore.getState();
 
         const data = await fetchEvalData(id, {
-          skipSettingEvalId: true,
+          skipSettingEvalId: !isBackgroundUpdate || isSameEvalBackgroundUpdate,
           skipLoadingState: isBackgroundUpdate,
           filterMode,
           filters: Object.values(filters.values).filter((filter) =>
@@ -138,16 +185,23 @@ export default function Eval({ fetchId }: EvalOptions) {
               : Boolean(filter.value),
           ),
         });
-
-        if (!data) {
-          setFailed(true);
-          return false;
-        }
-        return true;
+        succeeded = data !== null;
+        return succeeded;
       } catch (error) {
         console.error('Error loading eval:', error);
-        setFailed(true);
         return false;
+      } finally {
+        if (isBackgroundUpdate) {
+          loadState.backgroundPending = Math.max(0, loadState.backgroundPending - 1);
+        } else {
+          loadState.foregroundPending = false;
+          loadState.foregroundFailed = !succeeded;
+        }
+        if (succeeded && isCurrentLoad()) {
+          loadState.succeeded = true;
+          setFailed(false);
+        }
+        reportFailureIfSettled();
       }
     },
     [fetchEvalData, setFailed, setEvalId, filterMode],
@@ -168,6 +222,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * down and reopen the connection when this handler's dependencies (e.g. filterMode via
    * loadEvalById, or fetchId on navigation) change.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing routing distinguishes pinned, latest, scoped, and deletion signals
   const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
       logger.debug('[Eval] No eval data available', {});
