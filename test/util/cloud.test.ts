@@ -64,6 +64,37 @@ describe('cloud utils', () => {
       });
     });
 
+    it('suppresses fetch logging for privacy-sensitive probes', async () => {
+      await makeRequest('/users/me/teams', 'GET', undefined, { silent: true });
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/teams',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: {
+            Authorization: 'Bearer test-api-key',
+            'Content-Type': 'application/json',
+            'x-promptfoo-silent': 'true',
+          },
+        },
+      );
+    });
+
+    it('forwards cancellation to Cloud requests', async () => {
+      const controller = new AbortController();
+
+      await makeRequest('/users/me/teams', 'GET', undefined, {
+        signal: controller.signal,
+        silent: true,
+      });
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/teams',
+        expect.objectContaining({ signal: controller.signal }),
+      );
+    });
+
     it('should make GET request without body', async () => {
       const path = 'test/path';
       const method = 'GET';
@@ -1195,6 +1226,58 @@ describe('cloud utils', () => {
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
+    });
+
+    it('does not start the permission request after feature detection is cancelled', async () => {
+      const controller = new AbortController();
+      let featureSignal: AbortSignal | undefined;
+      mockCheckServerFeatureSupport.mockImplementation((_feature, _date, signal) => {
+        if (!signal) {
+          throw new Error('Expected a permission-check signal');
+        }
+        featureSignal = signal;
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      });
+
+      const permissionCheck = checkCloudPermissions(
+        { providers: ['test-provider'] },
+        controller.signal,
+      );
+      const rejection = expect(permissionCheck).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.waitFor(() => expect(featureSignal).toBe(controller.signal));
+
+      controller.abort();
+
+      await rejection;
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('propagates cancellation from the permission request', async () => {
+      const controller = new AbortController();
+      let requestSignal: AbortSignal | undefined;
+      mockFetchWithProxy.mockImplementation((_url, options) => {
+        const signal = options?.signal;
+        if (!signal) {
+          throw new Error('Expected a permission-request signal');
+        }
+        requestSignal = signal;
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      });
+
+      const permissionCheck = checkCloudPermissions(
+        { providers: ['test-provider'] },
+        controller.signal,
+      );
+      const rejection = expect(permissionCheck).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.waitFor(() => expect(requestSignal).toBe(controller.signal));
+
+      controller.abort();
+
+      await rejection;
     });
 
     it('should throw ConfigPermissionError when response is 403', async () => {

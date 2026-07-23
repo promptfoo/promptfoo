@@ -285,6 +285,41 @@ describe('Server Utilities', () => {
       );
     });
 
+    it('does not cache an aborted feature check', async () => {
+      const controller = new AbortController();
+      let requestSignal: AbortSignal | undefined;
+      mockFetchWithProxy
+        .mockImplementationOnce((_url, options) => {
+          const signal = options?.signal;
+          if (!signal) {
+            throw new Error('Expected a feature-check signal');
+          }
+          requestSignal = signal;
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        })
+        .mockResolvedValueOnce({
+          json: async () => ({ buildDate: '2024-06-15T10:30:00Z', version: '1.0.0' }),
+        } as Response);
+
+      const firstCheck = checkServerFeatureSupport(
+        featureName,
+        '2024-01-01T00:00:00Z',
+        controller.signal,
+      );
+      const rejection = expect(firstCheck).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.waitFor(() => expect(requestSignal).toBe(controller.signal));
+
+      controller.abort();
+      await rejection;
+
+      await expect(checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z')).resolves.toBe(
+        true,
+      );
+      expect(mockFetchWithProxy).toHaveBeenCalledTimes(2);
+    });
+
     it('should cache results to avoid repeated API calls', async () => {
       const requiredDate = '2024-01-01T00:00:00Z';
       const serverBuildDate = '2024-06-15T10:30:00Z';

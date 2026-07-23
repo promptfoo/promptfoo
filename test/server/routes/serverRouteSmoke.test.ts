@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   checkEmailStatus: vi.fn(),
   checkModelAuditInstalled: vi.fn(),
   checkRemoteHealth: vi.fn(),
+  checkCloudShareAuthentication: vi.fn(),
   clearUserEmail: vi.fn(),
   cloudConfig: {
     delete: vi.fn(),
@@ -57,12 +58,15 @@ const mocks = vi.hoisted(() => ({
   getPrompts: vi.fn(),
   getPromptsForTestCasesHash: vi.fn(),
   getStandaloneEvals: vi.fn(),
+  getSharingDisabledReason: vi.fn(),
   getTestCases: vi.fn(),
   getTraceStore: vi.fn(),
   getUpdateCommands: vi.fn(),
   getUserEmail: vi.fn(),
   getUserId: vi.fn(),
   isBlobStorageEnabled: vi.fn(),
+  isSelfHostedShareViewConfigured: vi.fn(),
+  isSharingEnabled: vi.fn(),
   isRunningUnderNpx: vi.fn(),
   loadApiProvider: vi.fn(),
   mediaExists: vi.fn(),
@@ -165,11 +169,21 @@ vi.mock('../../../src/redteam/shared', () => ({
   doRedteamRun: mocks.doRedteamRun,
 }));
 
-vi.mock('../../../src/share', () => ({
-  createShareableUrl: mocks.createShareableUrl,
-  determineShareDomain: mocks.determineShareDomain,
-  stripAuthFromUrl: mocks.stripAuthFromUrl,
-}));
+vi.mock('../../../src/share', () => {
+  class ConfigPermissionError extends Error {}
+  return {
+    checkCloudShareAuthentication: mocks.checkCloudShareAuthentication,
+    ConfigPermissionError,
+    createShareableUrl: mocks.createShareableUrl,
+    determineShareDomain: mocks.determineShareDomain,
+    getSharingDisabledReason: mocks.getSharingDisabledReason,
+    isAbortError: (error: unknown) =>
+      error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException'),
+    isSelfHostedShareViewConfigured: mocks.isSelfHostedShareViewConfigured,
+    isSharingEnabled: mocks.isSharingEnabled,
+    stripAuthFromUrl: mocks.stripAuthFromUrl,
+  };
+});
 
 vi.mock('../../../src/storage', () => ({
   getMediaStorage: mocks.getMediaStorage,
@@ -316,6 +330,7 @@ function setupDefaultMocks() {
   mocks.getPrompts.mockResolvedValue([]);
   mocks.getPromptsForTestCasesHash.mockResolvedValue([]);
   mocks.getStandaloneEvals.mockResolvedValue([]);
+  mocks.getSharingDisabledReason.mockReturnValue('Sharing is unavailable.');
   mocks.getTestCases.mockResolvedValue([]);
   mocks.getTraceStore.mockReturnValue({
     getTrace: vi.fn().mockResolvedValue(null),
@@ -329,6 +344,8 @@ function setupDefaultMocks() {
   mocks.getUserEmail.mockReturnValue('');
   mocks.getUserId.mockReturnValue('user-1');
   mocks.isBlobStorageEnabled.mockReturnValue(false);
+  mocks.isSelfHostedShareViewConfigured.mockReturnValue(true);
+  mocks.isSharingEnabled.mockReturnValue(false);
   mocks.isRunningUnderNpx.mockReturnValue(false);
   mocks.mediaExists.mockResolvedValue(false);
   mocks.modelAudit.count.mockResolvedValue(0);

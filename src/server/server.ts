@@ -26,7 +26,17 @@ import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
-import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
+import {
+  ConfigPermissionError,
+  checkCloudShareAuthentication,
+  createShareableUrl,
+  determineShareDomain,
+  getSharingDisabledReason,
+  isAbortError,
+  isSelfHostedShareViewConfigured,
+  isSharingEnabled,
+  stripAuthFromUrl,
+} from '../share';
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { ServerSchemas } from '../types/api/server';
@@ -61,6 +71,108 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
 const REQUEST_SIZE_LIMIT = '100mb';
+
+function describeCloudSharingFailure(status: number): {
+  sharingDisabledReason: string;
+  isRetryable: boolean;
+} {
+  if (status === 401) {
+    return {
+      sharingDisabledReason:
+        'Authentication failed (HTTP 401). Run `promptfoo auth login` to re-authenticate.',
+      isRetryable: false,
+    };
+  }
+  if (status === 403) {
+    return {
+      sharingDisabledReason: 'Your Promptfoo Cloud account cannot share evaluations (HTTP 403).',
+      isRetryable: false,
+    };
+  }
+  if (status === 408 || status === 429 || status >= 500) {
+    return {
+      sharingDisabledReason: `Promptfoo Cloud is temporarily unavailable (HTTP ${status}). Try again.`,
+      isRetryable: true,
+    };
+  }
+  return {
+    sharingDisabledReason: `Promptfoo Cloud could not validate sharing (HTTP ${status}).`,
+    isRetryable: false,
+  };
+}
+
+interface ShareAvailability {
+  domain: string;
+  isCloudEnabled: boolean;
+  sharingEnabled: boolean;
+  sharingDisabledReason?: string;
+  isRetryable: boolean;
+}
+
+async function loadEvalForShareAvailability(
+  id: string,
+  res: Response,
+  signal: AbortSignal,
+): Promise<Eval | null> {
+  let eval_: Eval | undefined;
+  try {
+    eval_ = await Eval.findById(id);
+  } catch (error) {
+    if (!signal.aborted) {
+      sendError(res, 500, 'Failed to load eval for share availability', error);
+    }
+    return null;
+  }
+  if (signal.aborted) {
+    return null;
+  }
+  if (!eval_) {
+    logger.warn('Eval not found for share check-domain', { id });
+    res.status(404).json({ error: 'Eval not found' });
+    return null;
+  }
+  return eval_;
+}
+
+async function getShareAvailability(
+  eval_: Eval,
+  signal: AbortSignal,
+): Promise<ShareAvailability | null> {
+  const { domain } = determineShareDomain(eval_);
+  const isCloudEnabled = cloudConfig.isEnabled();
+  let sharingEnabled = isSharingEnabled(eval_);
+  let sharingDisabledReason: string | undefined;
+  let isRetryable = false;
+
+  if (sharingEnabled && !isCloudEnabled && !isSelfHostedShareViewConfigured(eval_)) {
+    sharingEnabled = false;
+  }
+  if (!sharingEnabled) {
+    sharingDisabledReason = getSharingDisabledReason(eval_);
+  }
+
+  if (isCloudEnabled && sharingEnabled) {
+    try {
+      const response = await checkCloudShareAuthentication(signal);
+      signal.throwIfAborted();
+      if (!response.ok) {
+        sharingEnabled = false;
+        ({ sharingDisabledReason, isRetryable } = describeCloudSharingFailure(response.status));
+      }
+    } catch (error) {
+      if (signal.aborted) {
+        return null;
+      }
+      logger.debug('[share check-domain] Failed to validate cloud auth', { error });
+      sharingEnabled = false;
+      sharingDisabledReason =
+        'Could not connect to Promptfoo Cloud. Check your network connection and try again.';
+      isRetryable = true;
+    }
+  }
+
+  return { domain, isCloudEnabled, sharingEnabled, sharingDisabledReason, isRetryable };
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -121,6 +233,7 @@ export function findStaticDir(): string {
 
 export function createApp() {
   const app = express();
+  const shareQueues = new Map<string, Promise<unknown>>();
 
   const staticDir = findStaticDir();
 
@@ -239,6 +352,10 @@ export function createApp() {
     );
   });
 
+  // Share availability is intentionally unthrottled for local-server workflows. Opening the
+  // actions menu can legitimately probe this route repeatedly, and a per-IP limiter would block
+  // the local operator without changing the trust boundary. See src/server/AGENTS.md for the
+  // codified policy; CodeQL js/missing-rate-limiting is an accepted exception here.
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
     const queryResult = ServerSchemas.ShareCheckDomain.Query.safeParse(req.query);
     if (!queryResult.success) {
@@ -251,16 +368,34 @@ export function createApp() {
     }
     const { id } = queryResult.data;
 
-    const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      logger.warn('Eval not found for share check-domain', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
+    const availabilityController = new AbortController();
+    const abortAvailability = () => {
+      if (!res.writableEnded && !availabilityController.signal.aborted) {
+        availabilityController.abort();
+      }
+    };
+    req.once('aborted', abortAvailability);
+    res.once('close', abortAvailability);
 
-    const { domain } = determineShareDomain(eval_);
-    const isCloudEnabled = cloudConfig.isEnabled();
-    res.json(ServerSchemas.ShareCheckDomain.Response.parse({ domain, isCloudEnabled }));
+    try {
+      if (req.aborted || res.destroyed) {
+        abortAvailability();
+        return;
+      }
+
+      const eval_ = await loadEvalForShareAvailability(id, res, availabilityController.signal);
+      if (!eval_) {
+        return;
+      }
+
+      const availability = await getShareAvailability(eval_, availabilityController.signal);
+      if (availability) {
+        res.json(ServerSchemas.ShareCheckDomain.Response.parse(availability));
+      }
+    } finally {
+      req.off('aborted', abortAvailability);
+      res.off('close', abortAvailability);
+    }
   });
 
   // Share URL creation is intentionally unthrottled for local-server workflows. UI and CLI
@@ -276,32 +411,87 @@ export function createApp() {
     const { id } = bodyResult.data;
     logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
-    // `Eval.findById` returns `undefined` only for a missing row and otherwise
-    // throws on real DB errors (lock contention, schema drift, etc.). Branch
-    // on the throw to distinguish 500 from 404 — `readResult` cannot serve
-    // that role because it catches its own exceptions and also returns
-    // `undefined` (`src/util/database.ts`), which would silently classify
-    // every load failure as "not found". A separate preflight via
-    // `readResult` would also double the per-request DB load.
-    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
-    try {
-      eval_ = await Eval.findById(id);
-    } catch (error) {
-      sendError(res, 500, 'Failed to load eval for share', error);
-      return;
-    }
-    if (!eval_) {
-      logger.warn('Eval not found for share request', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
+    const shareController = new AbortController();
+    const abortShare = () => {
+      if (!res.writableEnded && !shareController.signal.aborted) {
+        shareController.abort();
+      }
+    };
+    req.once('aborted', abortShare);
+    res.once('close', abortShare);
 
     try {
-      const url = await createShareableUrl(eval_, { showAuth: true });
-      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
+      // `Eval.findById` returns `undefined` only for a missing row and otherwise
+      // throws on real DB errors (lock contention, schema drift, etc.). Branch
+      // on the throw to distinguish 500 from 404 — `readResult` cannot serve
+      // that role because it catches its own exceptions and also returns
+      // `undefined` (`src/util/database.ts`), which would silently classify
+      // every load failure as "not found". A separate preflight via
+      // `readResult` would also double the per-request DB load.
+      let eval_: Awaited<ReturnType<typeof Eval.findById>>;
+      try {
+        eval_ = await Eval.findById(id);
+      } catch (error) {
+        if (!shareController.signal.aborted) {
+          sendError(res, 500, 'Failed to load eval for share', error);
+        }
+        return;
+      }
+      if (!eval_) {
+        if (!shareController.signal.aborted) {
+          logger.warn('Eval not found for share request', { id });
+          res.status(404).json({ error: 'Eval not found' });
+        }
+        return;
+      }
+      if (req.aborted || res.destroyed) {
+        abortShare();
+        return;
+      }
+
+      // Serialize shares for the same eval so cancellation rollback cannot race a retry.
+      const previousShare = shareQueues.get(id) ?? Promise.resolve();
+      const shareOperation = previousShare
+        .catch(() => {})
+        .then(() =>
+          createShareableUrl(eval_, {
+            showAuth: true,
+            silent: true,
+            throwOnError: true,
+            signal: shareController.signal,
+          }),
+        );
+      shareQueues.set(id, shareOperation);
+      void shareOperation
+        .finally(() => {
+          if (shareQueues.get(id) === shareOperation) {
+            shareQueues.delete(id);
+          }
+        })
+        .catch(() => {});
+
+      const url = await shareOperation;
+      if (!url) {
+        res.status(422).json({
+          error: 'Sharing is disabled or this evaluation has no results to share',
+        });
+        return;
+      }
+      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url) });
       res.json(ServerSchemas.Share.Response.parse({ url }));
     } catch (error) {
+      if (shareController.signal.aborted && isAbortError(error)) {
+        logger.debug('Share request cancelled after client disconnect', { id });
+        return;
+      }
+      if (error instanceof ConfigPermissionError) {
+        sendError(res, 403, 'Cloud permissions do not allow sharing this evaluation', error);
+        return;
+      }
       sendError(res, 500, 'Failed to generate share URL', error);
+    } finally {
+      req.off('aborted', abortShare);
+      res.off('close', abortShare);
     }
   });
 
