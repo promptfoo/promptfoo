@@ -4,7 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -428,6 +428,27 @@ describe('ResultsTable Metrics Display', () => {
       expect(document.activeElement).toHaveClass('action');
       await userEvent.tab();
       expect(document.activeElement?.tagName).toBe('TD');
+    });
+
+    it('identifies result rows without inserting them into cell and rating-action navigation', async () => {
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const resultRow = document.querySelector(
+        '#results-table-container tbody tr',
+      ) as HTMLTableRowElement;
+      const firstCell = resultRow.querySelector('td') as HTMLTableCellElement;
+      const ratingAction = within(resultRow).getByRole('button', { name: 'Rate' });
+
+      expect(resultRow).toHaveClass('result-row');
+      expect(resultRow).not.toHaveAttribute('tabindex');
+      expect(resultRow).not.toHaveAttribute('role');
+
+      firstCell.focus();
+      expect(firstCell).toHaveFocus();
+      await userEvent.tab();
+      expect(ratingAction).toHaveFocus();
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('TD');
+      expect(resultRow).not.toHaveFocus();
     });
   });
 

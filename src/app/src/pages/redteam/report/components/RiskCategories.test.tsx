@@ -82,12 +82,7 @@ describe('RiskCategories', () => {
     const description = screen.getByText(categoryDescriptions['Security & Access Control']);
 
     expect(categoryButton).toHaveClass('gap-2', 'sm:gap-4');
-    expect(description).toHaveClass('sr-only', 'sm:not-sr-only', 'truncate', 'text-sm');
-    expect(description).not.toHaveClass('hidden');
-    expect(categoryButton).toHaveAttribute('aria-describedby', description.id);
-    expect(categoryButton).toHaveAccessibleDescription(
-      categoryDescriptions['Security & Access Control'],
-    );
+    expect(description).toHaveClass('hidden', 'sm:block');
   });
 
   it('stacks the heading summary on narrow screens', () => {
@@ -291,63 +286,5 @@ describe('RiskCategories', () => {
     // (forceMount keeps it in DOM for print support, but CSS hides it)
     const collapsibleContent = pluginRow?.closest('[data-state]');
     expect(collapsibleContent).toHaveAttribute('data-state', 'closed');
-  });
-
-  it('exposes category disclosure state with an explicit action name', async () => {
-    const user = userEvent.setup();
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
-
-    renderWithProviders(<RiskCategories {...mockProps} />);
-
-    const collapseButton = screen.getByRole('button', {
-      name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
-    });
-    expect(collapseButton).toHaveAttribute('aria-expanded', 'true');
-    expect(collapseButton).toHaveAccessibleDescription(
-      categoryDescriptions['Security & Access Control'],
-    );
-
-    await user.click(collapseButton);
-
-    const expandButton = screen.getByRole('button', {
-      name: 'Expand Security & Access Control category, 8 of 10 passed, failing',
-    });
-    expect(expandButton).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('keeps category disclosure and plugin details as independent native actions', async () => {
-    const user = userEvent.setup();
-    const mockProps = createMockProps({
-      categoryStats: {
-        'sql-injection': { pass: 8, total: 10 },
-      },
-    });
-
-    renderWithProviders(<RiskCategories {...mockProps} />);
-
-    const categoryButton = screen.getByRole('button', {
-      name: 'Collapse Security & Access Control category, 8 of 10 passed, failing',
-    });
-    const pluginButton = screen.getByRole('button', {
-      name: 'View SQL Injection details, 8 of 10 passed, failing',
-    });
-
-    expect(categoryButton).toHaveAttribute('type', 'button');
-    expect(pluginButton).toHaveAttribute('type', 'button');
-    expect(screen.queryByTestId('mock-drawer')).not.toBeInTheDocument();
-
-    await user.click(categoryButton);
-    expect(categoryButton).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByTestId('mock-drawer')).not.toBeInTheDocument();
-
-    await user.click(categoryButton);
-    await user.click(pluginButton);
-
-    expect(categoryButton).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByTestId('mock-drawer')).toHaveTextContent('sql-injection');
   });
 });

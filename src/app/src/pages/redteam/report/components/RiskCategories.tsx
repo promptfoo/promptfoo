@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 
 import { Card, CardContent } from '@app/components/ui/card';
 import {
@@ -72,7 +72,6 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
     <button
       key={test.name}
       type="button"
-      aria-label={`View ${displayName} details, ${test.numPassed} of ${test.total} passed, ${isPassing ? 'passing' : 'failing'}`}
       onClick={(e) => {
         e.stopPropagation();
         onPluginClick(test.name);
@@ -80,7 +79,6 @@ const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowPr
       className={cn(
         'group flex w-full items-center gap-4 px-4 py-2.5 text-left text-sm transition-all cursor-pointer',
         'hover:bg-accent dark:hover:bg-accent/50',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
       )}
     >
       {/* Spacer to align with category chevron */}
@@ -153,7 +151,6 @@ const RiskCategoryRow = ({
   onToggle,
   onPluginClick,
 }: RiskCategoryRowProps) => {
-  const descriptionId = useId();
   const hasFailed = category.passRate < pluginPassRateThreshold;
 
   return (
@@ -162,12 +159,9 @@ const RiskCategoryRow = ({
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${category.name} category, ${category.totalPasses} of ${category.totalTests} passed, ${hasFailed ? 'failing' : 'passing'}`}
-          aria-describedby={descriptionId}
           className={cn(
             'flex w-full items-center gap-2 p-4 text-left transition-colors cursor-pointer sm:gap-4',
             'hover:bg-muted/50',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
             isExpanded && 'bg-muted/30',
           )}
         >
@@ -179,10 +173,7 @@ const RiskCategoryRow = ({
           {/* Category Name & Description */}
           <div className="min-w-0 flex-1">
             <span className="font-semibold">{category.name}</span>
-            <p
-              id={descriptionId}
-              className="sr-only truncate text-sm text-muted-foreground sm:not-sr-only"
-            >
+            <p className="hidden truncate text-sm text-muted-foreground sm:block">
               {category.description}
             </p>
           </div>
@@ -228,7 +219,7 @@ const RiskCategoryRow = ({
 
       {/* Expanded Plugin List */}
       <CollapsibleContent forceMount className={cn('data-[state=closed]:hidden print:!block')}>
-        <div className="divide-y divide-border/60 border-t border-border bg-muted/20">
+        <div className="border-t border-border bg-muted/20">
           {category.testTypes.map((test) => (
             <PluginRow
               key={test.name}
