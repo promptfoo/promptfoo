@@ -625,6 +625,115 @@ describe('JSON Schema validation (AJV)', () => {
     }
     expect(valid).toBe(true);
   });
+
+  it('should validate assertionTemplates and $ref entries in assertion arrays', () => {
+    const schemaPath = path.join(__dirname, '../../site/static/config-schema.json');
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+
+    const ajv = new Ajv({ strict: false, allErrors: true });
+    const validate = ajv.compile(schema);
+
+    const config = {
+      prompts: ['test prompt'],
+      providers: ['echo'],
+      assertionTemplates: {
+        containsPirate: {
+          type: 'icontains',
+          value: 'arrr',
+        },
+        groupedChecks: {
+          type: 'assert-set',
+          assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
+        },
+      },
+      tests: [
+        {
+          vars: { input: 'test' },
+          assert: [
+            { $ref: '#/assertionTemplates/containsPirate' },
+            { $ref: '#/assertionTemplates/groupedChecks' },
+            {
+              type: 'assert-set',
+              assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(validate(config)).toBe(true);
+  });
+
+  it('should only add JSON reference alternatives to assertion arrays', () => {
+    const schemaPath = path.join(__dirname, '../../site/static/config-schema.json');
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+    const refAlternativePaths: string[] = [];
+
+    function walk(node: unknown, pathParts: string[]) {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+
+      if (
+        Array.isArray((node as { anyOf?: unknown }).anyOf) &&
+        ((node as { anyOf: unknown[] }).anyOf as unknown[]).some(
+          (option) =>
+            option &&
+            typeof option === 'object' &&
+            Array.isArray((option as { required?: unknown }).required) &&
+            ((option as { required: unknown[] }).required as unknown[]).includes('$ref'),
+        )
+      ) {
+        refAlternativePaths.push(pathParts.join('.'));
+      }
+
+      for (const [key, value] of Object.entries(node)) {
+        walk(value, [...pathParts, key]);
+      }
+    }
+
+    walk(schema, []);
+
+    expect(refAlternativePaths).toHaveLength(2);
+
+    const definitions = schema.definitions as Record<string, { required?: unknown[] }>;
+    const getRequired = (option: unknown): unknown[] => {
+      if (!option || typeof option !== 'object') {
+        return [];
+      }
+      if (Array.isArray((option as { required?: unknown }).required)) {
+        return (option as { required: unknown[] }).required;
+      }
+      const ref = (option as { $ref?: unknown }).$ref;
+      if (typeof ref === 'string') {
+        return definitions[ref.split('/').pop()!]?.required ?? [];
+      }
+      return [];
+    };
+    const refAlternativeNodes = refAlternativePaths.map((refPath) =>
+      refPath
+        .split('.')
+        .reduce<unknown>(
+          (node, key) =>
+            node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined,
+          schema,
+        ),
+    );
+    const assertionArrayItems = refAlternativeNodes.find((node) =>
+      (node as { anyOf?: unknown[] }).anyOf?.some((option) =>
+        getRequired(option).includes('assert'),
+      ),
+    );
+    const anyOf = (assertionArrayItems as { anyOf?: unknown[] } | undefined)?.anyOf;
+    const acceptsAssertion = anyOf?.some((option) => {
+      const required = getRequired(option);
+      return required.includes('type') && !required.includes('assert');
+    });
+    const acceptsAssertionSet = anyOf?.some((option) => getRequired(option).includes('assert'));
+
+    expect(acceptsAssertion).toBe(true);
+    expect(acceptsAssertionSet).toBe(true);
+  });
 });
 
 describe('CommandLineOptionsSchema', () => {
@@ -1018,6 +1127,45 @@ describe('TestSuiteConfigSchema', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('assertionTemplates field', () => {
+    it('should accept referenced assert-set templates after dereferencing', async () => {
+      const config = {
+        providers: ['echo'],
+        prompts: ['hello'],
+        assertionTemplates: {
+          containsHello: {
+            type: 'contains',
+            value: 'hello',
+          },
+          groupedChecks: {
+            type: 'assert-set',
+            assert: [{ $ref: '#/assertionTemplates/containsHello' }],
+          },
+        },
+        tests: [{ assert: [{ $ref: '#/assertionTemplates/groupedChecks' }] }],
+      };
+
+      const dereferencedConfig = await dereferenceConfig(config as unknown as TestSuiteConfig);
+      const result = TestSuiteConfigSchema.safeParse(dereferencedConfig);
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toMatchObject({
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [{ type: 'contains', value: 'hello' }],
+                },
+              ],
+            },
+          ],
+        });
+      }
     });
   });
 
