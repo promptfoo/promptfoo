@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-description: Benchmark RAG pipeline performance by evaluating document retrieval accuracy and LLM output quality with factuality and context adherence metrics for 2-step analysis
+description: Benchmark RAG pipeline performance by evaluating document retrieval accuracy and LLM output quality with factuality and context faithfulness metrics for 2-step analysis
 ---
 
 # Evaluating RAG pipelines
@@ -20,12 +20,12 @@ There are several criteria used to evaluate RAG applications:
   - **Factuality** (also called Correctness): Measures whether the LLM outputs are based on the provided ground truth. See the [`factuality`](/docs/configuration/expected-outputs/model-graded/) metric.
   - **Answer relevance**: Measures how directly the answer addresses the question. See [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/) or [`similar`](/docs/configuration/expected-outputs/similar/) metric.
 - Context-based
-  - **Context adherence** (also called Grounding or Faithfulness): Measures whether LLM outputs are based on the provided context. See [`context-adherence`](/docs/configuration/expected-outputs/model-graded/) metric.
+  - **Context faithfulness** (also called Grounding): Measures whether LLM outputs are based on the provided context. See [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/) metric.
   - **Context recall**: Measures whether the context contains the correct information, compared to a provided ground truth, in order to produce an answer. See [`context-recall`](/docs/configuration/expected-outputs/model-graded/) metric.
   - **Context relevance**: Measures how much of the context is necessary to answer a given query. See [`context-relevance`](/docs/configuration/expected-outputs/model-graded/) metric.
 - **Custom metrics**: You know your application better than anyone else. Create test cases that focus on things that matter to you (examples include: whether a certain document is cited, whether the response is too long, etc.)
 
-This guide shows how to use promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started).
+This guide shows how to use promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started). If you are debugging specific RAG breakages, see the companion [RAG failure modes](/docs/guides/rag-failure-modes) checklist.
 
 You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag-full) on GitHub.
 
@@ -105,6 +105,10 @@ tests:
           - 'reimbursement.md'
           - 'hr-policies.html'
           - 'Employee Reimbursement Policy'
+      - type: context-recall
+        value: 'Employees are reimbursed for approved expenses within 30 days of submission.'
+        contextTransform: 'output' # retrieve.py returns the joined documents as `output`
+        threshold: 0.8
   - vars:
       query: How many weeks is maternity leave?
     assert:
@@ -113,9 +117,13 @@ tests:
           - 'parental-leave.md'
           - 'hr-policies.html'
           - 'Maternity Leave'
+      - type: context-recall
+        value: 'Maternity leave is 16 weeks.'
+        contextTransform: 'output'
+        threshold: 0.8
 ```
 
-In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertions use an LLM model to ensure that the retrieval performs well.
+In the above example, the `contains-all` assertion ensures that the output from `retrieve.py` contains all the listed substrings. The `context-recall` assertion uses an LLM to check whether the retrieved documents actually contain the information needed to answer the query — since `retrieve.py` returns the joined documents as the provider's `output` (not a separate `context` var), you must set `contextTransform: 'output'` so the assertion grades the retrieved documents rather than the query prompt. Without that wiring, copying this config as-is will silently grade the wrong field.
 
 **You will get the most value out of this eval if you set up your own evaluation test cases.** View other [assertion types](/docs/configuration/expected-outputs) that you can use.
 
