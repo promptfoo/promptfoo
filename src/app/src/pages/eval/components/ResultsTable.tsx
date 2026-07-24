@@ -198,6 +198,98 @@ function estimateMetadataColumnSize(header: string, values: unknown[]): number {
   );
 }
 
+function getMetadataColumnSizeValues<Row>(
+  sampleRows: Row[],
+  currentRows: Row[],
+  getValue: (row: Row) => unknown,
+): unknown[] {
+  const sampleValues = sampleRows.map(getValue);
+  return sampleValues.some((value) => getLongestMetadataLineLength(value) > 0)
+    ? sampleValues
+    : currentRows.map(getValue);
+}
+
+/**
+ * Returns a row sample for estimating metadata column widths that stays stable
+ * as the user paginates.
+ *
+ * The eval results store paginates server-side, so `tableBody` only ever holds
+ * the current page. Estimating column widths directly from it makes unresized
+ * columns visibly jump page-to-page. This captures the first non-empty page
+ * seen for a result set and reuses it until the result set changes.
+ */
+export function useStableColumnSampleBody(
+  resultSetKey: string | null,
+  tableBody: ExtendedEvaluateTableRow[],
+): ExtendedEvaluateTableRow[] {
+  const previousResultSetKeyRef = useRef(resultSetKey);
+  const previousTableBodyRef = useRef(tableBody);
+  const [sample, setSample] = React.useState<{
+    resultSetKey: string | null;
+    body: ExtendedEvaluateTableRow[];
+  } | null>(() => (tableBody.length > 0 ? { resultSetKey, body: tableBody } : null));
+
+  useEffect(() => {
+    const resultSetChanged = previousResultSetKeyRef.current !== resultSetKey;
+    const tableBodyChanged = previousTableBodyRef.current !== tableBody;
+
+    previousResultSetKeyRef.current = resultSetKey;
+    previousTableBodyRef.current = tableBody;
+
+    setSample((currentSample) => {
+      if (resultSetChanged) {
+        // The result-set inputs update before the next page arrives. Wait for
+        // fresh rows instead of adopting the previous result set as this sample.
+        return tableBodyChanged && tableBody.length > 0 ? { resultSetKey, body: tableBody } : null;
+      }
+
+      if (currentSample?.resultSetKey === resultSetKey || tableBody.length === 0) {
+        return currentSample;
+      }
+
+      return { resultSetKey, body: tableBody };
+    });
+  }, [resultSetKey, tableBody]);
+
+  return sample?.resultSetKey === resultSetKey ? sample.body : tableBody;
+}
+
+function useStableDynamicColumnSizes(
+  resultSetKey: string | null,
+  currentSizes: Record<string, number>,
+): Record<string, number> {
+  const [cachedSizes, setCachedSizes] = React.useState<{
+    resultSetKey: string | null;
+    sizes: Record<string, number>;
+  }>(() => ({ resultSetKey, sizes: currentSizes }));
+
+  useEffect(() => {
+    setCachedSizes((current) => {
+      if (current.resultSetKey !== resultSetKey) {
+        return { resultSetKey, sizes: currentSizes };
+      }
+
+      const newlyDiscoveredSizes = Object.fromEntries(
+        Object.entries(currentSizes).filter(
+          ([key]) => !Object.prototype.hasOwnProperty.call(current.sizes, key),
+        ),
+      );
+      if (Object.keys(newlyDiscoveredSizes).length === 0) {
+        return current;
+      }
+
+      return {
+        resultSetKey,
+        sizes: { ...current.sizes, ...newlyDiscoveredSizes },
+      };
+    });
+  }, [currentSizes, resultSetKey]);
+
+  return cachedSizes.resultSetKey === resultSetKey
+    ? { ...currentSizes, ...cachedSizes.sizes }
+    : currentSizes;
+}
+
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
   if (output == null) {
     return output;
@@ -1602,6 +1694,7 @@ function ResultsTable({
     evalId,
     table,
     setTable,
+    tableRefreshVersion,
     config,
     version,
     filteredResultsCount,
@@ -1755,75 +1848,7 @@ function ResultsTable({
 
   const injectVarName = config?.redteam?.injectVar || 'prompt';
 
-  const variableColumnSizes = React.useMemo(
-    () =>
-      head.vars.map((varName, idx) =>
-        estimateMetadataColumnSize(
-          varName,
-          tableBody.map((row) =>
-            getVariableCellValue({
-              row,
-              varName,
-              injectVarName,
-              fallbackValue: row.vars[idx],
-            }),
-          ),
-        ),
-      ),
-    [head.vars, injectVarName, tableBody],
-  );
-
-  const transformDisplayVarColumnSizes = React.useMemo(() => {
-    return Object.fromEntries(
-      transformDisplayVarKeys.map((varName) => [
-        varName,
-        estimateMetadataColumnSize(
-          varName.replace(/^__/, ''),
-          tableBody.map((row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
-              | Record<string, string>
-              | undefined;
-            return transformVars?.[varName] || '';
-          }),
-        ),
-      ]),
-    ) as Record<string, number>;
-  }, [tableBody, transformDisplayVarKeys]);
-
-  const descriptionColumnSize = React.useMemo(
-    () =>
-      estimateMetadataColumnSize(
-        'Description',
-        hasDescriptionColumn ? body.map((row) => row.test.description || '') : [],
-      ),
-    [body, hasDescriptionColumn],
-  );
-
-  const parseQueryParams = (queryString: string) => {
-    return Object.fromEntries(new URLSearchParams(queryString));
-  };
-
-  // Clear both deep-link forms in the browser URL before synchronizing React Router.
-  // The row-jump effect below reads the live URL in this same effect cycle.
-  const clearRowDeepLink = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    const hasDetailsHash = parseEvalOutputPromptHash(url.hash) !== null;
-    if (!url.searchParams.has('rowId') && !hasDetailsHash) {
-      return;
-    }
-
-    url.searchParams.delete('rowId');
-    if (hasDetailsHash) {
-      setEvalDetailsHash('');
-      url.hash = '';
-    } else {
-      window.history.replaceState(window.history.state, '', url);
-    }
-
-    navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
-  }, [navigate]);
-
-  // Create a stable reference for applied filters to avoid unnecessary re-renders
+  // Create a stable representation of the applied filters for result-set changes.
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
       .filter((filter) => {
@@ -1859,6 +1884,121 @@ function ResultsTable({
       })),
     );
   }, [filters.values]);
+
+  // Estimate metadata column widths from a page sample that is stable across
+  // pagination, so unresized columns do not jump as the user pages.
+  const columnSizeSampleKey = React.useMemo(
+    () =>
+      JSON.stringify({
+        evalId,
+        pageSize: pagination.pageSize,
+        filteredResultsCount,
+        filterMode,
+        searchText: debouncedSearchText,
+        filters: appliedFiltersString,
+        comparisonEvalIds,
+        tableRefreshVersion,
+      }),
+    [
+      evalId,
+      pagination.pageSize,
+      filteredResultsCount,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+      comparisonEvalIds,
+      tableRefreshVersion,
+    ],
+  );
+  const columnSizeSampleBody = useStableColumnSampleBody(columnSizeSampleKey, tableBody);
+
+  const variableColumnSizes = React.useMemo(
+    () =>
+      head.vars.map((varName, idx) =>
+        estimateMetadataColumnSize(
+          varName,
+          columnSizeSampleBody.map((row) =>
+            getVariableCellValue({
+              row,
+              varName,
+              injectVarName,
+              fallbackValue: row.vars[idx],
+            }),
+          ),
+        ),
+      ),
+    [head.vars, injectVarName, columnSizeSampleBody],
+  );
+
+  const currentDynamicColumnSizes = React.useMemo(() => {
+    const sizes = Object.fromEntries(
+      transformDisplayVarKeys.map((varName) => [
+        `transform:${varName}`,
+        estimateMetadataColumnSize(
+          varName.replace(/^__/, ''),
+          getMetadataColumnSizeValues(columnSizeSampleBody, tableBody, (row) => {
+            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+              | Record<string, string>
+              | undefined;
+            return transformVars?.[varName] || '';
+          }),
+        ),
+      ]),
+    ) as Record<string, number>;
+
+    if (hasDescriptionColumn) {
+      sizes.description = estimateMetadataColumnSize(
+        'Description',
+        getMetadataColumnSizeValues(
+          columnSizeSampleBody,
+          tableBody,
+          (row) => row.test.description || '',
+        ),
+      );
+    }
+
+    return sizes;
+  }, [columnSizeSampleBody, hasDescriptionColumn, tableBody, transformDisplayVarKeys]);
+  const stableDynamicColumnSizes = useStableDynamicColumnSizes(
+    columnSizeSampleKey,
+    currentDynamicColumnSizes,
+  );
+  const transformDisplayVarColumnSizes = React.useMemo(
+    () =>
+      Object.fromEntries(
+        transformDisplayVarKeys.map((varName) => [
+          varName,
+          stableDynamicColumnSizes[`transform:${varName}`],
+        ]),
+      ) as Record<string, number>,
+    [stableDynamicColumnSizes, transformDisplayVarKeys],
+  );
+  const descriptionColumnSize =
+    stableDynamicColumnSizes.description ?? estimateMetadataColumnSize('Description', []);
+
+  const parseQueryParams = (queryString: string) => {
+    return Object.fromEntries(new URLSearchParams(queryString));
+  };
+
+  // Clear both deep-link forms in the browser URL before synchronizing React Router.
+  // The row-jump effect below reads the live URL in this same effect cycle.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    const hasDetailsHash = parseEvalOutputPromptHash(url.hash) !== null;
+    if (!url.searchParams.has('rowId') && !hasDetailsHash) {
+      return;
+    }
+
+    url.searchParams.delete('rowId');
+    if (hasDetailsHash) {
+      setEvalDetailsHash('');
+      url.hash = '';
+    } else {
+      window.history.replaceState(window.history.state, '', url);
+    }
+
+    navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+  }, [navigate]);
 
   const isFilteringActive =
     Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
