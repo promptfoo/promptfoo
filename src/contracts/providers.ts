@@ -131,6 +131,17 @@ export interface ProviderResponse {
     resolution?: string; // '720p' or '1080p' (Veo)
   };
   images?: ImageOutput[];
+  /**
+   * Timing captured while consuming a streaming HTTP response (text modality).
+   * See `StreamingMetrics` in `src/util/fetch/index.ts` for field semantics.
+   */
+  streamingMetrics?: {
+    timeToFirstToken?: number;
+    totalStreamTime?: number;
+    completionChars?: number;
+    tokensPerSecond?: number;
+    multiChunkDelivery?: boolean;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
