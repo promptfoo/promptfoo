@@ -2,10 +2,11 @@ import { EventEmitter } from 'events';
 
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
-import { withFetchRetryContext } from '../util/fetch/retryContext';
+import { canSchedulerRetry, withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
+import { DEFAULT_RETRY_POLICY } from './retryPolicy';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -46,12 +47,14 @@ export class RateLimitRegistry extends EventEmitter {
     provider: ApiProvider,
     callFn: () => Promise<T>,
     options?: {
+      abortSignal?: AbortSignal;
+      maxRetries?: number;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
     },
   ): Promise<T> {
-    const providerMaxRetries = getProviderMaxRetries(provider);
+    const providerMaxRetries = getProviderMaxRetries(provider, options?.maxRetries);
 
     // Even when the scheduler is disabled, propagate the retry context so
     // `fetchWithRetries` picks up the provider's `maxRetries` as its default
@@ -74,6 +77,8 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
+        ...(options?.abortSignal && { abortSignal: options.abortSignal }),
+        canRetry: canSchedulerRetry,
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
@@ -81,7 +86,9 @@ export class RateLimitRegistry extends EventEmitter {
       });
 
     try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
+      const result = await withFetchRetryContext(providerMaxRetries, run, {
+        schedulerOwnsRetries: true,
+      });
 
       this.emit('request:completed', {
         rateLimitKey,
@@ -109,6 +116,11 @@ export class RateLimitRegistry extends EventEmitter {
         maxConcurrency: this.maxConcurrency,
         minConcurrency: this.minConcurrency,
         queueTimeoutMs: this.queueTimeoutMs,
+        retryPolicy: {
+          ...DEFAULT_RETRY_POLICY,
+          baseDelayMs: getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', DEFAULT_RETRY_POLICY.baseDelayMs),
+          retryAllServerErrors: getEnvBool('PROMPTFOO_RETRY_5XX'),
+        },
       });
 
       // Forward events
@@ -163,11 +175,16 @@ export function createRateLimitRegistry(options: RateLimitRegistryOptions): Rate
  * means "disable retries". Invalid user-supplied values (negatives, floats,
  * non-numeric strings) are logged so config typos aren't silently ignored.
  */
-function getProviderMaxRetries(provider: ApiProvider): number | undefined {
+function getProviderMaxRetries(
+  provider: ApiProvider,
+  requestMaxRetries?: unknown,
+): number | undefined {
   const raw: unknown =
-    provider.config && typeof provider.config === 'object'
-      ? (provider.config as { maxRetries?: unknown }).maxRetries
-      : undefined;
+    requestMaxRetries === undefined
+      ? provider.config && typeof provider.config === 'object'
+        ? (provider.config as { maxRetries?: unknown }).maxRetries
+        : undefined
+      : requestMaxRetries;
 
   if (raw === undefined) {
     return undefined;

@@ -94,12 +94,9 @@ PROMPTFOO_DELAY_MS=1000 promptfoo eval
 
 ### Backoff Configuration
 
-Promptfoo has two retry layers:
+The adaptive scheduler owns provider retries, using a 1-second base backoff and up to 3 retries by default. Set the provider's `maxRetries` to override this budget, including `0` to disable retries. Nested HTTP requests do not retry independently unless a successful non-idempotent request prevents the entire provider call from being retried.
 
-1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times by default. If a provider config sets `maxRetries`, the scheduler uses that value (including `0` to disable scheduler retries entirely).
-2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set.
-
-When a provider config includes `maxRetries`, promptfoo propagates that value to both layers. Explicit per-call overrides (e.g. a provider that passes a specific `maxRetries` to `fetchWithRetries`) still take precedence. For direct `fetchWithProxy` calls, transient retries (502/503/504/524) are disabled when the provider sets `maxRetries: 0`.
+When the adaptive scheduler is disabled, the HTTP transport owns retries instead. It defaults to 4 retries and honors the provider's `maxRetries` or an explicit per-call override.
 
 Example — disable retries for a provider to fail fast on rate limits:
 
@@ -120,10 +117,10 @@ Environment variables for the scheduler:
 
 Environment variables for HTTP-level retry:
 
-| Environment Variable           | Description                       | Default |
-| ------------------------------ | --------------------------------- | ------- |
-| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base delay for HTTP retry backoff | 5000ms  |
-| `PROMPTFOO_RETRY_5XX`          | Retry on HTTP 500 errors          | false   |
+| Environment Variable           | Description                                               | Default                            |
+| ------------------------------ | --------------------------------------------------------- | ---------------------------------- |
+| `PROMPTFOO_REQUEST_BACKOFF_MS` | Base retry delay (scheduler or standalone HTTP transport) | 1000ms scheduler; 5000ms transport |
+| `PROMPTFOO_RETRY_5XX`          | Retry on HTTP 500 errors                                  | false                              |
 
 Example:
 
@@ -131,7 +128,7 @@ Example:
 PROMPTFOO_REQUEST_BACKOFF_MS=10000 PROMPTFOO_RETRY_5XX=true promptfoo eval
 ```
 
-The scheduler's retry handles most rate limiting automatically. The HTTP-level retry provides additional resilience for network issues.
+The adaptive scheduler handles rate limits and transient network failures. HTTP-level retries provide the same resilience when the scheduler is disabled.
 
 ## Provider-Specific Notes
 

@@ -8,6 +8,7 @@
 import { parseRetryAfter } from './headerParser';
 import {
   getProviderResponseHeaders,
+  isHttpRateLimitError,
   isProviderResponseRateLimited,
   type RateLimitExecuteOptions,
 } from './types';
@@ -43,11 +44,22 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+  maxRetries?: number,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    ...(abortSignal && { abortSignal }),
+    ...(maxRetries !== undefined && { maxRetries }),
     getHeaders: getProviderResponseHeaders,
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
+      if (isHttpRateLimitError(error)) {
+        return (
+          error.retryAfterMs ??
+          (error.resetAt === undefined ? undefined : Math.max(0, error.resetAt - Date.now()))
+        );
+      }
       const rawHeaders = getProviderResponseHeaders(result);
       if (rawHeaders) {
         // Normalize header keys to lowercase for consistent access
@@ -114,7 +126,7 @@ export function wrapProviderWithRateLimiting(
       return registry.execute(
         provider,
         () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(options?.abortSignal, context?.prompt?.config?.maxRetries),
       );
     },
   };

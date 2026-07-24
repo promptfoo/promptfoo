@@ -5,6 +5,7 @@ export interface RetryPolicy {
   baseDelayMs: number;
   maxDelayMs: number;
   jitterFactor: number; // 0-1, adds randomness to prevent thundering herd
+  retryAllServerErrors?: boolean;
 }
 
 export const DEFAULT_RETRY_POLICY: RetryPolicy = {
@@ -73,14 +74,34 @@ export function shouldRetry(
   // that are distinct from those low-level connection errors.
   if (error) {
     const message = (error.message ?? '').toLowerCase();
+    const httpError = message.match(
+      /\b(?:https?|(?:status\s+)?code|status|(?:api(?:\s+call)?|server)\s+error)\s*[:=]?\s*(?:[a-z]+_error\s+)?(\d{3})\b([\s\S]*)/,
+    );
+    const httpStatus = httpError?.[1];
+
+    if (httpStatus) {
+      if (policy.retryAllServerErrors === true && httpStatus.startsWith('5')) {
+        return true;
+      }
+
+      const expectedStatusText: Record<string, string> = {
+        '502': 'bad gateway',
+        '503': 'service unavailable',
+        '504': 'gateway timeout',
+        '524': 'timeout',
+      };
+      const expectedText = expectedStatusText[httpStatus];
+      const statusText = httpError[2].trim();
+      return expectedText !== undefined && (!statusText || statusText.includes(expectedText));
+    }
+
     return (
       isTransientConnectionError(error) ||
       message.includes('timeout') ||
+      message.includes('timed out') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
-      message.includes('503') ||
-      message.includes('502') ||
-      message.includes('504')
+      /\b(?:enotfound|eai_again|epipe)\b/.test(message)
     );
   }
 

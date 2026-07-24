@@ -180,6 +180,7 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 3,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
     });
 
@@ -197,6 +198,7 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 2,
         queueTimeoutMs: 2,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 2, retryAllServerErrors: false }),
       });
     });
 
@@ -261,6 +263,7 @@ describe('RateLimitRegistry', () => {
         expect.stringContaining('test-provider-'),
         callFn,
         {
+          canRetry: expect.any(Function),
           getHeaders: undefined,
           isRateLimited: undefined,
           getRetryAfter: undefined,
@@ -286,6 +289,7 @@ describe('RateLimitRegistry', () => {
       });
 
       expect(mockState.executeWithRetry).toHaveBeenCalledWith(expect.any(String), callFn, {
+        canRetry: expect.any(Function),
         getHeaders,
         isRateLimited,
         getRetryAfter,
@@ -311,6 +315,30 @@ describe('RateLimitRegistry', () => {
         expect.any(String),
         expect.any(Function),
         expect.objectContaining({ maxRetriesOverride: expected }),
+      );
+    });
+
+    it.each([
+      { configured: 0, requested: 2 },
+      { configured: 5, requested: 1 },
+      { configured: 2, requested: 0 },
+    ])('should prefer request maxRetries=$requested over provider maxRetries=$configured', async ({
+      configured,
+      requested,
+    }) => {
+      mockState.executeWithRetry.mockResolvedValue('result');
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const provider = {
+        ...mockProvider,
+        config: { ...mockProvider.config, maxRetries: configured },
+      } as ApiProvider;
+
+      await registry.execute(provider, vi.fn(), { maxRetries: requested });
+
+      expect(mockState.executeWithRetry).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.any(Function),
+        expect.objectContaining({ maxRetriesOverride: requested }),
       );
     });
 
@@ -423,6 +451,7 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 1,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
     });
 
@@ -496,12 +525,14 @@ describe('RateLimitRegistry', () => {
         maxConcurrency: 10,
         minConcurrency: 1,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
       expect(mockProviderRateLimitStateConstructor).toHaveBeenNthCalledWith(2, {
         rateLimitKey: 'provider-2[def456]',
         maxConcurrency: 10,
         minConcurrency: 1,
         queueTimeoutMs: 1,
+        retryPolicy: expect.objectContaining({ baseDelayMs: 1, retryAllServerErrors: false }),
       });
     });
   });
