@@ -1,8 +1,8 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditResult from './ModelAuditResult';
 
@@ -60,6 +60,8 @@ describe('ModelAuditResult', () => {
   const mockFetchScanById = vi.fn();
   const mockDeleteHistoricalScan = vi.fn();
   const mockStartNewScan = vi.fn();
+  const originalTitle = document.title;
+  let descriptionMetaTag: HTMLMetaElement;
 
   const getDefaultHistoryState = () => ({
     historicalScans: [],
@@ -82,10 +84,20 @@ describe('ModelAuditResult', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    descriptionMetaTag = document.createElement('meta');
+    descriptionMetaTag.name = 'description';
+    descriptionMetaTag.content = 'Initial description';
+    document.head.appendChild(descriptionMetaTag);
+    document.title = 'Initial Title';
     mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
     mockUseConfigStore.mockImplementation((selector: any) =>
       selector({ startNewScan: mockStartNewScan }),
     );
+  });
+
+  afterEach(() => {
+    descriptionMetaTag.remove();
+    document.title = originalTitle;
   });
 
   const renderComponent = (scanId: string = 'test-scan-id') => {
@@ -133,6 +145,19 @@ describe('ModelAuditResult', () => {
     // Now check for the scan name (use heading role since it's an h4)
     expect(screen.getByRole('heading', { name: 'My Test Scan' })).toBeInTheDocument();
     expect(screen.getByTestId('results-tab')).toBeInTheDocument();
+  });
+
+  it('should expose scan-specific document metadata after the result loads', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Metadata Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
+    await waitFor(() => {
+      expect(document.title).toBe('Metadata Scan | promptfoo');
+    });
+
+    expect(descriptionMetaTag).toHaveAttribute('content', 'View model audit scan results');
   });
 
   it('should display error when scan not found', async () => {
@@ -266,6 +291,46 @@ describe('ModelAuditResult', () => {
       expect(mockDeleteHistoricalScan).toHaveBeenCalledWith('test-scan-id');
       expect(mockNavigate).toHaveBeenCalledWith('/model-audits');
     });
+  });
+
+  it('clears the previously loaded scan when the route id changes so the title never shows a stale name', async () => {
+    const scanA = createMockScan('scan-a', 'Scan A');
+    mockFetchScanById.mockImplementation(async (scanId: string) => {
+      if (scanId === 'scan-a') {
+        return scanA;
+      }
+      // scan-b is missing; without clearing the prior scan the title would keep
+      // identifying "Scan A" even though the page now shows a different (missing) scan.
+      return null;
+    });
+
+    const router = createMemoryRouter(
+      [{ path: '/model-audit/:id', element: <ModelAuditResult /> }],
+      { initialEntries: ['/model-audit/scan-a'] },
+    );
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <RouterProvider router={router} />
+      </TooltipProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.title).toBe('Scan A | promptfoo');
+    });
+    expect(screen.getByRole('heading', { name: 'Scan A' })).toBeInTheDocument();
+
+    // React Router keeps ModelAuditResult mounted across this navigation.
+    await act(async () => {
+      await router.navigate('/model-audit/scan-b');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Scan not found')).toBeInTheDocument();
+    });
+    // The title must reflect the new (missing) scan id, not the stale prior scan name.
+    expect(document.title).not.toBe('Scan A | promptfoo');
+    expect(document.title).toBe('scan-b | promptfoo');
   });
 
   it('should have back to history navigation', async () => {

@@ -11,6 +11,7 @@ import type { MediaItem } from '../types';
 
 interface MediaGridProps {
   items: MediaItem[];
+  total?: number;
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
@@ -56,6 +57,7 @@ function MediaCardSkeleton() {
 
 export function MediaGrid({
   items,
+  total,
   isLoading,
   isLoadingMore,
   hasMore,
@@ -69,6 +71,10 @@ export function MediaGrid({
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLUListElement>(null);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const mediaLibraryLabel =
+    total !== undefined && total > items.length
+      ? `Media library - showing ${items.length} of ${total} items`
+      : `Media library - ${items.length} items`;
 
   // Handle keyboard navigation within the grid
   const handleKeyDown = useCallback(
@@ -191,7 +197,7 @@ export function MediaGrid({
       <ul
         ref={gridRef}
         role="list"
-        aria-label={`Media library - ${items.length} items`}
+        aria-label={mediaLibraryLabel}
         onKeyDown={handleKeyDown}
         className={cn(
           'grid gap-4 list-none p-0 m-0',
