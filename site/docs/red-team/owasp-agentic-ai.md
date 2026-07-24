@@ -38,7 +38,7 @@ redteam:
   plugins:
     - owasp:agentic
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
     - crescendo
 ```
@@ -75,7 +75,7 @@ redteam:
     - indirect-prompt-injection
     - intent
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
     - jailbreak:composite
 ```
@@ -99,7 +99,7 @@ redteam:
     - mcp
     - tool-discovery
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -123,7 +123,7 @@ redteam:
     - bola
     - imitation
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -168,7 +168,7 @@ redteam:
     - harmful:cybercrime:malicious-code
     - ssrf
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -191,7 +191,7 @@ redteam:
     - cross-session-leak
     - indirect-prompt-injection
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - crescendo
 ```
 
@@ -236,7 +236,7 @@ redteam:
     - harmful:misinformation-disinformation
     - divergent-repetition
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -282,7 +282,7 @@ redteam:
     - rbac
     - goal-misalignment
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - crescendo
 ```
 
@@ -307,7 +307,7 @@ redteam:
     - owasp:agentic
     - owasp:llm
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
     - crescendo
 ```

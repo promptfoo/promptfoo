@@ -13,7 +13,7 @@ These prompts are specifically crafted to test various aspects of LLM behavior, 
 
 The prompts are dynamically fetched from the repository. Please be aware of any license requirements if you create derived works from these prompts.
 
-## How it works
+## How It Works
 
 For each test, the plugin:
 
@@ -31,7 +31,7 @@ redteam:
     - pliny
 ```
 
-You can control the number of injections using the `config.numTests` parameter (defaults to 5):
+You can control the number of injections using the `numTests` parameter (defaults to 5):
 
 ```yaml
 redteam:
@@ -43,7 +43,7 @@ redteam:
 ## Related Concepts
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-- [Prompt Injection](../strategies/prompt-injection.md)
+- [Jailbreak Templates](../strategies/jailbreak-templates.md)
 - [Jailbreak strategies](../strategies/composite-jailbreaks.md)
 
 ## License

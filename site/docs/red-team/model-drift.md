@@ -11,7 +11,7 @@ Model drift occurs when an LLM's behavior changes over time. This can happen due
 
 Red teaming provides a systematic way to detect these changes by running consistent adversarial tests over time and comparing results.
 
-![Model Drift Detection](/img/docs/model-drift-detection.svg)
+![Model-drift flow showing a baseline, repeated tests, attack-success comparison, and CI response](/img/docs/model-drift-detection.svg)
 
 ## Why Red Team for Drift Detection
 
@@ -355,14 +355,15 @@ targets:
     label: gpt-4.1-baseline
   - id: openai:gpt-4.1-mini
     label: gpt-4.1-mini-comparison
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-6
     label: claude-sonnet-comparison
 
 redteam:
   plugins:
     - harmful
-    - jailbreak
     - prompt-extraction
+  strategies:
+    - jailbreak:meta
 ```
 
 This reveals which models are more resistant to specific attack types and helps inform model selection decisions.

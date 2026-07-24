@@ -13,13 +13,16 @@ vi.mock('../../src/logger', () => ({
 import {
   type BasePlugin,
   COLLECTIONS,
+  ECOMMERCE_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
   type PIIPlugin,
+  REALESTATE_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
+  TELECOM_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   CODING_AGENT_CORE_PLUGINS,
@@ -1084,6 +1087,29 @@ describe('RedteamConfigSchema transform', () => {
       true,
     );
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it.each([
+    ['ecommerce', ECOMMERCE_PLUGINS],
+    ['telecom', TELECOM_PLUGINS],
+    ['realestate', REALESTATE_PLUGINS],
+  ])('should expand the %s collection into every configured plugin', (collection, plugins) => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: [collection],
+    });
+
+    expect(result.plugins?.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining([...plugins]),
+    );
+    expect(result.plugins).toHaveLength(plugins.length);
+    expect(result.plugins?.every((plugin) => plugin.numTests === 5)).toBe(true);
+  });
+
+  it.each(COLLECTIONS)('should not silently drop the %s collection', (collection) => {
+    const result = RedteamConfigSchema.parse({ plugins: [collection] });
+
+    expect(result.plugins?.length ?? 0).toBeGreaterThan(0);
   });
 
   it('should expand coding-agent collections correctly', () => {

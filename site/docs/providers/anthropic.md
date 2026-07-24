@@ -51,33 +51,25 @@ This also enables [model-graded assertions](#model-graded-tests) such as `llm-ru
 
 ## Models
 
-The `anthropic` provider supports the following models via the messages API:
+The `anthropic` provider supports the following current models via the messages API. For lifecycle updates and replacement recommendations, see Anthropic's [model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations).
 
-| Model ID                                                                   | Description            |
-| -------------------------------------------------------------------------- | ---------------------- |
-| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
-| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
-| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
-| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
-| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
-| `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
-| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
-| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
-| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus        |
-| `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Claude 4 Opus          |
-| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet      |
-| `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Claude 4 Sonnet        |
-| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Claude 4.5 Haiku       |
-| `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Claude 3.7 Sonnet      |
-| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Claude 3.5 Sonnet (v2) |
-| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Claude 3.5 Sonnet (v1) |
-| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Claude 3.5 Haiku       |
-| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus          |
-| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku         |
+| Model ID                                                                   | Description                                      |
+| -------------------------------------------------------------------------- | ------------------------------------------------ |
+| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5                                   |
+| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5                                  |
+| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus                                  |
+| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus                                  |
+| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5                                  |
+| `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet                                |
+| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus                                  |
+| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus                                  |
+| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus (deprecated; retires 2026-08-05) |
+| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet                                |
+| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Claude 4.5 Haiku                                 |
 
 ### Cross-Platform Model Availability
 
-Claude models are available across multiple platforms. Here's how the model names map across different providers:
+Claude models are available across multiple platforms. Here's how current model names map across different providers. Partner platforms can use different retirement schedules.
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
@@ -92,13 +84,6 @@ Claude models are available across multiple platforms. Here's how the model name
 | Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
 | Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5-latest)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
 | Claude 4.1 Opus   | claude-opus-4-1-20250805                              | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
-| Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
-| Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
-| Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
-| Claude 3 Opus     | claude-3-opus-20240229 (claude-3-opus-latest)         | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
-| Claude 3 Haiku    | claude-3-haiku-20240307                               | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
 
 ### Supported Parameters
 

@@ -1,12 +1,12 @@
 ---
 title: VLGuard
-description: Test multi-modal models with potentially unsafe imagery from the VLGuard dataset to evaluate content moderation capabilities
-keywords: [red team, multi-modal, image, safety, content moderation, unsafe content, vlguard]
+description: Test multimodal models with potentially unsafe imagery from the VLGuard dataset to evaluate content moderation capabilities
+keywords: [red team, multimodal, image, safety, content moderation, unsafe content, vlguard]
 ---
 
 # VLGuard Plugin
 
-The VLGuard plugin tests multi-modal models with potentially unsafe images from the [VLGuard dataset](https://huggingface.co/datasets/ys-zong/VLGuard), a safety evaluation benchmark for Vision Large Language Models published at ICML 2024.
+The VLGuard plugin tests multimodal models with potentially unsafe images from the [VLGuard dataset](https://huggingface.co/datasets/ys-zong/VLGuard), a safety evaluation benchmark for Vision Large Language Models published at ICML 2024.
 
 The plugin helps evaluate how well models:
 
@@ -30,13 +30,13 @@ redteam:
   plugins:
     - vlguard # Use all categories
     # OR with specific categories:
-    - name: vlguard
+    - id: vlguard
       config:
         categories:
           - Deception
           - Risky Behavior
     # OR with specific subcategories:
-    - name: vlguard
+    - id: vlguard
       config:
         subcategories:
           - Violence
@@ -49,7 +49,7 @@ Unlike text-based plugins, the VLGuard plugin should not be used with any redtea
 
 ## Available Categories and Subcategories
 
-The dataset contains ~1,000 unsafe images organized into the following categories:
+The combined train and test splits contain about 1,400 unsafe images organized into the following categories:
 
 ### Main Categories (4)
 
@@ -132,7 +132,7 @@ providers:
 
 redteam:
   plugins:
-    - name: vlguard
+    - id: vlguard
       config:
         categories:
           - Deception
@@ -140,10 +140,10 @@ redteam:
         subcategories:
           - Violence
           - Disinformation
-  num_tests: 5
+  numTests: 5
 ```
 
-## How it Works
+## How It Works
 
 1. The plugin connects to the Hugging Face Datasets API to fetch images from the VLGuard dataset
 2. It filters for specific categories and/or subcategories if configured
@@ -172,10 +172,10 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 - **MIT licensed**: Open dataset from the original VLGuard research at ICML 2024
 - **Hugging Face hosted**: Requires dataset access approval and HF_TOKEN
 
-## See Also
+## Related Concepts
 
 - [Red Team Plugins Overview](../plugins/index.md)
 - [UnsafeBench Plugin](./unsafebench.md) - Alternative dataset with academic licensing
-- [Beavertails Plugin](./beavertails.md) - Text-based harmful content testing
+- [BeaverTails Plugin](./beavertails.md) - Text-based harmful content testing
 - [Multi-Modal Model Testing](../../providers/openai.md#images)
 - [Image Jailbreaking Strategy](../strategies/image.md)

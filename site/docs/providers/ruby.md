@@ -173,7 +173,7 @@ For `call_api`, this provides information about the current test case:
     'vars' => { ... },
     'metadata' => {
       'pluginId' => '...',   # Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
-      'strategyId' => '...',  # Redteam strategy (e.g. "jailbreak", "jailbreak-templates")
+      'strategyId' => '...',  # Redteam strategy (e.g. "jailbreak:meta", "jailbreak-templates")
     },
   },
 }

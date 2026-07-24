@@ -7,22 +7,16 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
-  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
-  HARM_PLUGINS,
-  INSURANCE_PLUGINS,
-  MEDICAL_PLUGINS,
-  PHARMACY_PLUGINS,
-  PII_PLUGINS,
+  PLUGIN_CATEGORIES,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
-  TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
@@ -428,22 +422,11 @@ export const RedteamConfigSchema = z
       numTests: number | undefined,
       severity?: Severity,
     ) => {
-      if (id === 'foundation') {
+      const category = PLUGIN_CATEGORIES[id as keyof typeof PLUGIN_CATEGORIES];
+      if (category) {
+        expandCollection([...category], config, numTests, severity);
+      } else if (id === 'foundation') {
         expandCollection([...FOUNDATION_PLUGINS], config, numTests, severity);
-      } else if (id === 'harmful') {
-        expandCollection(Object.keys(HARM_PLUGINS), config, numTests, severity);
-      } else if (id === 'pii') {
-        expandCollection([...PII_PLUGINS], config, numTests, severity);
-      } else if (id === 'medical') {
-        expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
-      } else if (id === 'pharmacy') {
-        expandCollection([...PHARMACY_PLUGINS], config, numTests, severity);
-      } else if (id === 'insurance') {
-        expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
-      } else if (id === 'financial') {
-        expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
-      } else if (id === 'teen-safety') {
-        expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {

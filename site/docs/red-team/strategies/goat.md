@@ -1,14 +1,14 @@
 ---
 sidebar_label: GOAT
 title: GOAT Jailbreaking Strategy
-description: Apply GOAT (Generative Offensive Agent Tester) for sophisticated multi-turn jailbreaking using adversarial agent dialogues
+description: Apply GOAT (Generative Offensive Agent Tester) for adaptive multi-turn jailbreaking using adversarial agent dialogues
 ---
 
 # GOAT Technique for Jailbreaking LLMs
 
-The GOAT (Generative Offensive Agent Tester) strategy is an advanced automated red teaming technique that uses an "attacker" LLM to dynamically generate **multi-turn** conversations aimed at bypassing a target model's safety measures.
+The GOAT (Generative Offensive Agent Tester) strategy uses an attacker LLM to generate **multi-turn** conversations that probe a target model's safety measures.
 
-It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and achieves high success rates against modern LLMs by simulating how real users interact with AI systems, with an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
+It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 2024 and simulates how real users interact with AI systems. The paper reports an Attack Success Rate (ASR@10) of 97% against Llama 3.1 and 88% against GPT-4-Turbo on the JailbreakBench dataset.
 
 ## Implementation
 
@@ -20,6 +20,7 @@ strategies:
     config:
       maxTurns: 5 # Maximum conversation turns (default)
       stateful: false # Sends the entire conversation history with each turn (Default)
+      continueAfterSuccess: false # Stop after the first successful attack (default)
 ```
 
 :::info
@@ -28,7 +29,7 @@ If your system maintains a conversation history and only expects the latest mess
 
 ## How It Works
 
-![GOAT LLM attack](/img/docs/goat.svg)
+![GOAT reasoning loop that observes a target response, plans an approach, and generates the next turn](/img/docs/goat.svg)
 
 GOAT uses an attacker LLM that engages in multi-turn conversations with a target model.
 
@@ -40,17 +41,15 @@ Each conversation turn follows a structured three-step reasoning process:
 2. **Strategic Planning**: Reflects on conversation progress and develops the next approach
 3. **Attack Generation**: Selects and combines appropriate techniques to generate the next prompt
 
-![GOAT attack flow](/img/docs/goat-attack-flow.svg)
+![GOAT attack flow showing target calls, response grading, adaptation, and stop conditions](/img/docs/goat-attack-flow.svg)
 
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 
-GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication.
-
-Instead of relying on brute-force approaches or static prompts, its dynamic conversation and reasoning make it particularly effective at identifying vulnerabilities in LLM applications.
+GOAT changes tactics based on the target's responses instead of repeating a static prompt. This helps it find conversational paths that a single-turn test can miss.
 
 ## Related Concepts
 
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Tree-based Jailbreaks](tree.md)
-- [Iterative Jailbreaks](iterative.md)
+- [Meta-Agent Jailbreaks](meta.md)
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

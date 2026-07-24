@@ -25,7 +25,7 @@ redteam:
     - id: basic
       config:
         enabled: false # Only run tests with strategies applied
-    - id: jailbreak
+    - id: jailbreak:meta
     - id: base64
 ```
 

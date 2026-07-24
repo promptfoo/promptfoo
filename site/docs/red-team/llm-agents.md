@@ -44,7 +44,7 @@ redteam:
     - 'bfla' # Tests for Broken Function Level Authorization issues
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
 ```
 
 The RBAC plugin tests whether the agent respects predefined access control policies. The BOLA and BFLA plugins check if the agent can be tricked into accessing or modifying resources or functions beyond its intended scope.
@@ -79,7 +79,7 @@ redteam:
     - 'rag-document-exfiltration' # Checks if sensitive documents can be extracted from RAG systems
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
     - 'jailbreak:tree' # Uses a tree-based approach to test complex jailbreak attempts
 ```
 
@@ -112,7 +112,7 @@ redteam:
   plugins:
     - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
   strategies:
-    - 'jailbreak'
+    - 'jailbreak:meta'
     - 'crescendo' # Multi-turn strategy that gradually builds up an attack
     - 'mischievous-user'
 ```
@@ -148,7 +148,7 @@ redteam:
     - 'excessive-agency' # Checks if the agent exceeds its intended capabilities
     - 'rbac' # Ensures proper access control across multiple actions
   strategies:
-    - 'jailbreak' # Generates complex attack scenarios
+    - 'jailbreak:meta' # Generates complex attack scenarios
 ```
 
 ## Tool and API Manipulation
@@ -185,7 +185,7 @@ redteam:
     - 'mcp' # Tests Model Context Protocol implementations for security vulnerabilities
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
 ```
 
 ## Objective Function Exploitation
@@ -210,7 +210,7 @@ redteam:
     - 'harmful' # Checks for harmful or malicious behavior
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
 ```
 
 ## Prompt Leak
@@ -238,7 +238,7 @@ redteam:
         policy: 'The agent must not reveal any information from its prompt or context.'
   strategies:
     - 'jailbreak-templates'
-    - 'jailbreak'
+    - 'jailbreak:meta'
 ```
 
 This example use a custom policy plugin that generates test cases based on specific rules.
@@ -251,7 +251,7 @@ A multi-layered testing approach is necessary for all but the simplest agents. Y
 
 Our goal is to identify and mitigate agent-specific risks like goal hijacking, tool chain attacks, and privilege escalation.
 
-![Layered Testing for LLM Agents](/img/docs/layered-testing-agents.svg)
+![Black-box, component, and trace-based testing layers for LLM agents](/img/docs/layered-testing-agents.svg)
 
 Imagine your agent is a car:
 
@@ -312,7 +312,7 @@ This creates an evidence loop:
 4. The summary is available to grading, investigation, and optionally the next attack iteration.
 5. You use the final output plus trajectory evidence to classify and reproduce the finding.
 
-![Red Team Tracing Feedback Loop](/img/docs/redteam-tracing-feedback-loop.svg)
+![Trace feedback connecting an attack strategy, agent behavior, and the next red team attempt](/img/docs/redteam-tracing-feedback-loop.svg)
 
 #### What Adversaries Can Observe
 

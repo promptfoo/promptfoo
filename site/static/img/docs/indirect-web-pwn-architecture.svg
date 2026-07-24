@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 390" role="img" aria-labelledby="title desc">
+  <title id="title">Indirect Web Pwn architecture</title>
+  <desc id="desc">The Promptfoo CLI requests an injected web page, the service hosts it, the target fetches it, and the strategy detects prompt injection or data exfiltration.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#64748b" /></marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; }
+      .title { font-size: 24px; font-weight: 700; }
+      .heading { font-size: 17px; font-weight: 600; }
+      .body { font-size: 14px; fill: #475569; }
+      .label { font-size: 14px; font-weight: 600; }
+      .arrow { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="920" height="390" fill="#ffffff" />
+  <text class="title" x="460" y="42" text-anchor="middle">Indirect Web Pwn architecture</text>
+  <rect x="35" y="105" width="190" height="96" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" />
+  <text class="heading" x="130" y="136" text-anchor="middle">1. Promptfoo CLI</text>
+  <text class="body" x="130" y="162" text-anchor="middle">Requests an attack</text>
+  <text class="body" x="130" y="182" text-anchor="middle">web page</text>
+  <path class="arrow" d="M225 153H270" />
+  <rect x="270" y="105" width="200" height="96" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2" />
+  <text class="heading" x="370" y="136" text-anchor="middle">2. Promptfoo service</text>
+  <text class="body" x="370" y="162" text-anchor="middle">Generates and hosts</text>
+  <text class="body" x="370" y="182" text-anchor="middle">the injected page</text>
+  <path class="arrow" d="M470 153H515" />
+  <rect x="515" y="105" width="175" height="96" rx="10" fill="#fff7ed" stroke="#ea580c" stroke-width="2" />
+  <text class="heading" x="602" y="136" text-anchor="middle">3. Hosted page</text>
+  <text class="body" x="602" y="162" text-anchor="middle">Contains realistic</text>
+  <text class="body" x="602" y="182" text-anchor="middle">injected content</text>
+  <path class="arrow" d="M690 153H735" />
+  <rect x="735" y="105" width="150" height="96" rx="10" fill="#f5f3ff" stroke="#7c3aed" stroke-width="2" />
+  <text class="heading" x="810" y="136" text-anchor="middle">4. Target</text>
+  <text class="body" x="810" y="162" text-anchor="middle">Fetches the</text>
+  <text class="body" x="810" y="182" text-anchor="middle">public URL</text>
+  <path class="arrow" d="M810 201V250H370" />
+  <text class="label" x="594" y="241" text-anchor="middle" fill="#6d28d9">Web-fetch or browser tool call</text>
+  <rect x="270" y="250" width="200" height="96" rx="10" fill="#fef2f2" stroke="#dc2626" stroke-width="2" />
+  <text class="heading" x="370" y="281" text-anchor="middle">5. Detection</text>
+  <text class="body" x="370" y="307" text-anchor="middle">Records injection or</text>
+  <text class="body" x="370" y="327" text-anchor="middle">data exfiltration</text>
+</svg>

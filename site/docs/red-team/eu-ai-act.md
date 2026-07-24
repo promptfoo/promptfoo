@@ -53,7 +53,7 @@ redteam:
   plugins:
     - eu:ai-act
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -99,7 +99,7 @@ redteam:
     - intent
     - excessive-agency
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:tree
     - jailbreak:composite
     - jailbreak-templates
@@ -296,7 +296,7 @@ redteam:
     - ssrf
     - excessive-agency
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -479,7 +479,7 @@ redteam:
   plugins:
     - eu:ai-act
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -548,7 +548,7 @@ redteam:
     - gdpr
     - iso:42001
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 

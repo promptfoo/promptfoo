@@ -668,7 +668,7 @@ redteam:
     - harmful:violence
   strategies:
     - id: jailbreak-templates
-    - id: jailbreak
+    - id: jailbreak:meta
     - id: translation # Test evasion through different languages
     - id: misspelling # Test evasion through character substitution
 

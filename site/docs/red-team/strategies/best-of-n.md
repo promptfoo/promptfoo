@@ -1,17 +1,17 @@
 ---
 sidebar_label: Best-of-N
 title: Best-of-N Jailbreaking Strategy
-description: Execute black-box jailbreaking by testing multiple prompt variations simultaneously to maximize bypass success probability
+description: Generate and test text variations against a target using the Best-of-N strategy
 ---
 
 # Best-of-N (BoN) Jailbreaking Strategy
 
-Best-of-N (BoN) is a simple but effective black-box jailbreaking algorithm that works by repeatedly sampling variations of a prompt with modality-specific augmentations until a harmful response is elicited.
+Best-of-N (BoN) generates text variations of a prompt and tests them against your target. Promptfoo returns the first target response that does not produce an error, then grades that response with the configured assertion.
 
-Introduced by [Hughes et al. (2024)](https://arxiv.org/abs/2412.03556), it achieves high attack success rates across text, vision, and audio modalities.
+The strategy is inspired by [Hughes et al. (2024)](https://arxiv.org/abs/2412.03556). The paper repeatedly samples text, vision, and audio variations until a harmful response is found; Promptfoo currently generates text variations only and does not grade each candidate while selecting a response.
 
 :::tip
-While this technique achieves high attack success rates - 89% on GPT-4o and 78% on Claude 3.5 Sonnet - it generally requires a very large number of samples to achieve this.
+The paper reports 89% ASR on GPT-4o and 78% on Claude 3.5 Sonnet with 10,000 text samples. These results use a different attempt loop and should not be read as expected Promptfoo results.
 :::
 
 Use it like so in your `promptfooconfig.yaml`:
@@ -22,26 +22,23 @@ strategies:
     config:
       useBasicRefusal: false
       maxConcurrency: 3 # Maximum concurrent API calls (default)
-      nSteps: 10000 # Maximum number of attempts (optional)
-      maxCandidatesPerStep: 1 # Maximum candidates per batch (optional)
+      nSteps: 10000 # Candidate-generation steps (default: 5, maximum: 20000)
+      maxCandidatesPerStep: 1 # Candidates generated per step (default: 1, maximum: 100)
 ```
 
 ## How It Works
 
-![BoN Overview](/img/docs/best-of-n-cycle.svg)
+![Best-of-N flow showing candidate generation, target errors, grading, and both stop conditions](/img/docs/best-of-n-cycle.svg)
 
-BoN Jailbreaking works through a simple three-step process:
+Promptfoo's BoN strategy works in three steps:
 
-1. **Generate Variations**: Creates multiple versions of the input prompt using modality-specific augmentations:
-   - Text: Random capitalization, character scrambling, character noising
-   - Vision: Font variations, background colors, text positioning
-   - Audio: Speed, pitch, volume, background noise modifications
+1. **Generate variations**: Creates text candidates using random capitalization, character scrambling, and ASCII noising.
 
-2. **Concurrent Testing**: Tests multiple variations simultaneously against the target model
+2. **Test candidates**: Sends candidates to the target with the configured concurrency limit.
 
-3. **Success Detection**: Monitors responses until a harmful output is detected or the maximum attempts are reached
+3. **Grade the selected response**: Returns the first response without a target error and applies the configured assertion. A normal refusal is still a valid response and stops candidate selection.
 
-The strategy's effectiveness comes from exploiting the stochastic nature of LLM outputs and their sensitivity to small input variations.
+Small input changes can still produce different target behavior, so review the final assertion result before interpreting the test.
 
 ## Configuration Parameters
 
@@ -50,9 +47,9 @@ The strategy's effectiveness comes from exploiting the stochastic nature of LLM 
 **Type:** `boolean`  
 **Default:** `false`
 
-When enabled, uses a simple refusal check instead of LLM-as-a-judge assertions. This is much faster and cheaper than using an LLM judge, making it ideal for testing when the typical response of an LLM to a prompt is a refusal.
+When enabled, replaces the final LLM-as-a-judge assertion with a simple refusal check. This lowers grading cost, but it does not make BoN continue testing candidates after a refusal.
 
-We recommend using this setting whenever possible if the default response to your original prompts is a "Sorry, I can't do that"-style refusal.
+Use this option when the expected safe response is a clear refusal and a lightweight final check is sufficient.
 
 ### maxConcurrency
 
@@ -64,44 +61,43 @@ Maximum number of prompt variations to test simultaneously. Higher values increa
 ### nSteps
 
 **Type:** `number`  
-**Default:** `undefined`
+**Default:** `5`
 
-Maximum number of total attempts before giving up. Each step generates `maxCandidatesPerStep` variations. Higher values increase success rate but also cost. The original paper achieved best results with 10,000 steps.
+Number of candidate-generation steps. Each step generates `maxCandidatesPerStep` variations. The hosted service accepts up to `20000` steps. Generating more candidates does not guarantee that the target will receive them, because selection stops after the first response without an error.
 
 ### maxCandidatesPerStep
 
 **Type:** `number`  
 **Default:** `1`
 
-Number of prompt variations to generate in each batch. Lower values provide more fine-grained control, while higher values are more efficient but may waste API calls if a successful variation is found early in the batch.
+Number of text variations generated per step. The hosted service accepts up to `100` candidates per step. Higher values increase the candidate pool, but concurrent calls already in progress may still complete after a response is selected.
 
-Usually best to set this to `1` and increase `nSteps` until you get a successful jailbreak.
+Start with `1`. A larger candidate pool is useful only when earlier target calls return errors, because a normal response stops selection.
 
 :::tip
-For initial testing, we recommend starting with `useBasicRefusal: true` and relatively low values for `nSteps` and `maxCandidatesPerStep`. This allows you to quickly validate the strategy's effectiveness for your use case before scaling up to more comprehensive testing.
+Start with `useBasicRefusal: true` and low candidate counts to confirm that the target accepts the transformed input and that the final grade matches expectations.
 :::
 
 ## Performance
 
-BoN achieves impressive attack success rates across different models and modalities:
+The original BoN paper reports the following research results:
 
-- Text: 89% on GPT-4, 78% on Claude 3.5 Sonnet (10,000 samples)
-- Vision: 56% on GPT-4 Vision
-- Audio: 72% on GPT-4 Audio
+- Text: 89% on GPT-4o and 78% on Claude 3.5 Sonnet with 10,000 samples
+- Vision and audio: the paper also demonstrates attacks against GPT-4o vision and Gemini 1.5 Pro audio using modality-specific augmentations
 
-The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested. This illustrates why [ASR comparisons must account for attempt budget](/blog/asr-not-portable-metric): a 1% per-attempt method becomes 98% with 392 tries.
+The paper finds that attack success rate improves as more variations are tested. This illustrates why [ASR comparisons must account for attempt budget](/blog/asr-not-portable-metric). Promptfoo does not currently reproduce the paper's per-candidate harm-classification loop.
 
 ## Key Features
 
 - **Simple Implementation**: No need for gradients or model internals
-- **Multi-modal Support**: Works across text, vision, and audio inputs
+- **Text Variations**: Applies capitalization, scrambling, and ASCII-noise augmentations
 - **Highly Parallelizable**: Can test multiple variations concurrently
-- **Predictable Scaling**: Success rate follows power-law behavior
+- **Hosted Generation**: Requires remote generation for candidate creation
 
 ## Related Concepts
 
 - [GOAT Strategy](goat.md)
-- [Iterative Jailbreaks](iterative.md)
+- [Meta-Agent Jailbreaks](meta.md)
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Best of N configuration example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-bestOfN-strategy)
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
