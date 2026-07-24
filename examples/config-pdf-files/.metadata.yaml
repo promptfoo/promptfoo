@@ -1,0 +1,5 @@
+title: 'PDF Document Analysis with Vision Models'
+description: 'Analyzing PDF documents using vision-capable LLMs across multiple providers (Gemini, Claude, GPT)'
+tags:
+  - Multimodal
+  - Python

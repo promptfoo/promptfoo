@@ -1,0 +1,7 @@
+title: 'OpenAI Realtime API'
+description: 'Test OpenAI Realtime API with WebSocket-based text and audio interactions, multi-turn conversations, and function calling'
+tags:
+  - OpenAI
+  - Audio
+  - Multi-turn
+  - Tool Use

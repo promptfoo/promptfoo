@@ -1,0 +1,4 @@
+title: 'Search Rubric Fact-Checking'
+description: 'Verify LLM outputs contain accurate, current information using web search-based assertions'
+tags:
+  - Evaluation

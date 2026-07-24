@@ -1,0 +1,6 @@
+title: 'DALL-E Image Generation Red Team'
+description: "Automatically discover jailbreaks in OpenAI's DALL-E image generation model using iterative red team techniques"
+tags:
+  - Red Teaming
+  - Multimodal
+  - OpenAI
