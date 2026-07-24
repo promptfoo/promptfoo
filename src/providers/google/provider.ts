@@ -548,11 +548,18 @@ export class GoogleProvider extends GoogleGenericProvider {
             datum.promptFeedback.blockReasonMessage ||
             `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
 
-          const tokenUsage = {
-            total: datum.usageMetadata?.totalTokenCount || 0,
-            prompt: datum.usageMetadata?.promptTokenCount || 0,
-            completion: datum.usageMetadata?.candidatesTokenCount || 0,
-          };
+          const tokenUsage = cached
+            ? {
+                cached: datum.usageMetadata?.totalTokenCount || 0,
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                numRequests: 0,
+              }
+            : {
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                prompt: datum.usageMetadata?.promptTokenCount || 0,
+                completion: datum.usageMetadata?.candidatesTokenCount || 0,
+                numRequests: 1,
+              };
 
           const guardrails: GuardrailResponse = {
             flagged: true,
@@ -565,6 +572,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             output: blockReasonMessage,
             tokenUsage,
             guardrails,
+            cached,
             metadata: {
               modelArmor: isModelArmor
                 ? {
@@ -594,11 +602,18 @@ export class GoogleProvider extends GoogleGenericProvider {
 
         if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
           const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
-          const tokenUsage = {
-            total: datum.usageMetadata?.totalTokenCount || 0,
-            prompt: datum.usageMetadata?.promptTokenCount || 0,
-            completion: datum.usageMetadata?.candidatesTokenCount || 0,
-          };
+          const tokenUsage = cached
+            ? {
+                cached: datum.usageMetadata?.totalTokenCount || 0,
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                numRequests: 0,
+              }
+            : {
+                total: datum.usageMetadata?.totalTokenCount || 0,
+                prompt: datum.usageMetadata?.promptTokenCount || 0,
+                completion: datum.usageMetadata?.candidatesTokenCount || 0,
+                numRequests: 1,
+              };
           const guardrails: GuardrailResponse = {
             flagged: true,
             flaggedInput: false,
@@ -641,7 +656,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
             total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 1,
+            numRequests: 0,
             ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
                 reasoning: lastData.usageMetadata.thoughtsTokenCount,

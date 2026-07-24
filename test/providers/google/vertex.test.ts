@@ -254,10 +254,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const mockCachedResponse = {
       cached: true,
       output: 'cached response text',
+      cost: 0.00001,
       tokenUsage: {
         total: 10,
         prompt: 5,
         completion: 5,
+        numRequests: 1,
       },
     };
 
@@ -267,10 +269,26 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(response).toEqual({
       ...mockCachedResponse,
+      cost: undefined,
       tokenUsage: {
         ...mockCachedResponse.tokenUsage,
         cached: mockCachedResponse.tokenUsage.total,
+        numRequests: 0,
       },
+    });
+  });
+
+  it('should initialize request usage for a legacy cached response without token usage', async () => {
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ cached: true, output: 'legacy cached response text' }),
+    );
+
+    const response = await provider.callGeminiApi('test prompt');
+
+    expect(response).toEqual({
+      cached: true,
+      output: 'legacy cached response text',
+      tokenUsage: { numRequests: 0 },
     });
   });
 
@@ -845,8 +863,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockCacheGet).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
-    expect(result.cost).toBe(0.00045);
+    expect(result.tokenUsage).toEqual({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      cached: 15,
+      numRequests: 0,
+    });
+    expect(result.cost).toBeUndefined();
     expect(result.metadata).toEqual({
       groundingMetadata: {
         test: true,
@@ -966,7 +990,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const result = await provider.callApi('Call the error function');
 
     expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
-    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+    expect(result.tokenUsage).toEqual({
+      total: 5,
+      prompt: 2,
+      completion: 3,
+      cached: 5,
+      numRequests: 0,
+    });
   });
 
   describe('External Function Callbacks', () => {
@@ -1033,7 +1063,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
       expect(result.output).toBe('External function result');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+      expect(result.tokenUsage).toEqual({
+        total: 15,
+        prompt: 10,
+        completion: 5,
+        cached: 15,
+        numRequests: 0,
+      });
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
@@ -1969,6 +2005,21 @@ describe('VertexChatProvider.callPalm2Api', () => {
     vi.clearAllMocks();
   });
 
+  it('does not count a Palm2 cache hit as an upstream request when usage is absent', async () => {
+    const provider = new VertexChatProvider('chat-bison');
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ output: 'cached Palm2 response', cached: false }),
+    );
+
+    const result = await provider.callPalm2Api('test prompt');
+
+    expect(result).toEqual({
+      output: 'cached Palm2 response',
+      cached: true,
+      tokenUsage: { numRequests: 0 },
+    });
+  });
+
   it('hashes Palm2 request body cache keys without leaking prompts', async () => {
     const prompt = 'palm2-secret-prompt-value';
     const provider = new VertexChatProvider('chat-bison', {
@@ -2152,6 +2203,27 @@ describe('VertexChatProvider.callLlamaApi', () => {
         }),
       }),
     );
+  });
+
+  it('should not count a cached Llama response as an upstream request', async () => {
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: { region: 'us-central1' },
+    });
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: false,
+        output: 'cached Llama response',
+        tokenUsage: { total: 35, prompt: 15, completion: 20, numRequests: 1 },
+      }),
+    );
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response).toEqual({
+      cached: true,
+      output: 'cached Llama response',
+      tokenUsage: { total: 35, prompt: 15, completion: 20, cached: 35, numRequests: 0 },
+    });
   });
 
   it('hashes Llama request body cache keys without leaking prompts', async () => {
@@ -2431,6 +2503,27 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('should clear the original cost from a cached Claude response', async () => {
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: false,
+        output: 'cached Claude response',
+        cost: 0.00045,
+        tokenUsage: { total: 50, prompt: 20, completion: 30, numRequests: 1 },
+      }),
+    );
+
+    const response = await provider.callClaudeApi('test prompt');
+
+    expect(response).toEqual({
+      cached: true,
+      output: 'cached Claude response',
+      cost: undefined,
+      tokenUsage: { total: 50, prompt: 20, completion: 30, cached: 50, numRequests: 0 },
+    });
   });
 
   it('should accept anthropicVersion parameter', async () => {

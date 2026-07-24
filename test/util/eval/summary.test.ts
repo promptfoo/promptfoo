@@ -300,6 +300,30 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Eval: 1,000 (cached)');
     });
 
+    it('should show zero probes for a fully cached redteam evaluation', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'redteam-cached',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 1000, cached: 1000, numRequests: 0 },
+        successes: 5,
+        failures: 0,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const output = stripAnsi(generateEvalSummary(params).join('\n'));
+
+      expect(output).toContain('Probes: 0');
+      expect(output).toContain('Eval: 1,000 (cached)');
+    });
+
     it('should show partial cached tokens', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-partial-cache',
