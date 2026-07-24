@@ -7,9 +7,11 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import { __resetPromptConversationCacheForTests, evaluate, runEval } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import {
   type ApiProvider,
@@ -20,6 +22,8 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
+import { mockProcessEnv } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -413,6 +417,54 @@ describeEvaluator('evaluator execution control', () => {
     expect(firstRenderedPrompt).not.toContain('prior=');
     expect(secondRenderedPrompt).toContain('prior=');
     expect(secondRenderedPrompt).toContain('now=Turn 2');
+  });
+
+  it('does not let late aborted provider responses mutate shared eval state', async () => {
+    const prompt = toPrompt('{{ topic }}');
+    const conversations = {};
+    const registers = {};
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('late-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'late output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const rows = await runEval({
+      abortSignal: abortController.signal,
+      conversations,
+      delay: 0,
+      isRedteam: false,
+      prompt,
+      promptIdx: 0,
+      provider,
+      registers,
+      repeatIndex: 0,
+      test: {
+        options: { storeOutputAs: 'lateValue' },
+        vars: { topic: 'first' },
+      },
+      testIdx: 0,
+      testSuite: {
+        providers: [provider],
+        prompts: [prompt],
+        tests: [],
+      },
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+      }),
+    );
+    expect(rows[0].error).toContain('Operation cancelled');
+    expect(conversations).toEqual({});
+    expect(registers).toEqual({});
   });
 
   it('persists updated prompt metrics between serial eval steps for live result refreshes', async () => {
@@ -901,7 +953,612 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('should honor external abortSignal when timeoutMs is set', async () => {
+  it('persists per-test timeout rows without streaming intermediate jsonl output', async () => {
+    vi.useFakeTimers();
+    const outputPath = `/tmp/pr6344-per-test-timeout-${randomUUID()}.jsonl`;
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('hanging-provider'),
+      callApi: vi.fn(
+        () =>
+          new Promise<ProviderResponse>(() => {
+            // Keep the provider pending so the per-test timeout path persists the row.
+          }),
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({ outputPath }, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 0,
+        timeoutMs: 50,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      expect(fs.existsSync(outputPath)).toBe(false);
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+      vi.useRealTimers();
+    }
+  });
+
+  it('should honor timeoutMs: 0 when the default eval timeout is configured', async () => {
+    vi.useFakeTimers();
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '5' });
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn(
+        () =>
+          new Promise<ProviderResponse>((resolve) => {
+            setTimeout(() => {
+              resolve({
+                output: 'Slow response',
+                tokenUsage: createEmptyTokenUsage(),
+              });
+            }, 25);
+          }),
+      ),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 1,
+          failures: 0,
+          errors: 0,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    try {
+      const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, {
+        timeoutMs: 0,
+        maxEvalTimeMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(25);
+      await evalPromise;
+
+      expect(mockAddResult).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response: expect.objectContaining({ output: 'Slow response' }),
+          success: true,
+        }),
+      );
+      expect(mockAddResult).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation timed out after 5ms'),
+        }),
+      );
+    } finally {
+      restoreEnv();
+      vi.useRealTimers();
+    }
+  });
+
+  it('honors maxEvalTimeMs values larger than Node single-timer limits', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        return new Promise(() => {});
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://never-finishes.js:beforeAll'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const maxEvalTimeMs = 2_147_483_647 + 1_000;
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs,
+        timeoutMs: 0,
+      });
+      let settled = false;
+      void evalPromise.then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(2_147_483_647);
+      expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 2_147_483_647)).toBe(true);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await evalPromise;
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 1_000)).toBe(true);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining(`Evaluation exceeded max duration of ${maxEvalTimeMs}ms`),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the max eval timer when evaluation throws before finalization', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await expect(
+        evaluate(testSuite, evalRecord, {
+          maxEvalTimeMs: 10_000,
+          progressCallback: () => {
+            throw new Error('progress callback failed');
+          },
+          timeoutMs: 0,
+        }),
+      ).rejects.toThrow('progress callback failed');
+
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      const maxEvalTimerResult = setTimeoutSpy.mock.results.find(
+        (_result, index) => setTimeoutSpy.mock.calls[index]?.[1] === 10_000,
+      );
+      expect(maxEvalTimerResult?.value).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(maxEvalTimerResult?.value);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts explicit maxEvalTimeMs before setup hooks finish', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        return new Promise(() => {});
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://slow-setup.js:beforeAll'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+
+      await evalPromise;
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not persist raw vars when setup times out during transformVars', async () => {
+    vi.useFakeTimers();
+    vi.mocked(transform).mockImplementationOnce(
+      async () => new Promise<Record<string, string>>(() => {}),
+    );
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ derived }}')],
+      defaultTest: {
+        options: {
+          transformVars: 'vars',
+        },
+      },
+      tests: [{ vars: { raw: 'untransformed' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(0);
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not duplicate completed resume rows when setup timeout precedes resume filtering', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Completed output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxEvalTimeMs: 0, timeoutMs: 0 });
+    const completedIndexSpy = vi
+      .spyOn(EvalResult, 'getCompletedIndexPairs')
+      .mockImplementation(() => new Promise<Set<string>>(() => {}));
+
+    try {
+      cliState.resume = true;
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          response: expect.objectContaining({ output: 'Completed output' }),
+          success: true,
+        }),
+      );
+    } finally {
+      cliState.resume = false;
+      completedIndexSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('protects setup with an automatic max timeout before row sizing completes', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        return new Promise(() => {});
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://never-finishes.js:beforeAll'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, { timeoutMs: 0 });
+      await vi.advanceTimersByTimeAsync(240_000);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 240000ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns completed rows when an afterAll hook exceeds maxEvalTimeMs', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'afterAll') {
+        return new Promise(() => {});
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://never-finishes.js:afterAll'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          response: expect.objectContaining({ output: 'Test output' }),
+          success: true,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not persist rows whose afterEach hook finishes after maxEvalTimeMs', async () => {
+    vi.useFakeTimers();
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve(context), 100);
+        });
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Late afterEach output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://slow-after-each.js:afterEach'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.runOnlyPendingTimersAsync();
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 1, failures: 0, successes: 0 }),
+      );
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+      expect(summary.results[0].response?.output).not.toBe('Late afterEach output');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses longer redteam timeout defaults for direct redteam suite evaluation', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 1,
+          failures: 0,
+          errors: 0,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      redteam: {} as TestSuite['redteam'],
+    };
+
+    try {
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxConcurrency: 1,
+      });
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'per-test=4500000ms, max=4560000ms, steps=1, serialSteps=0, concurrency=1',
+        ),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('uses redteam timeout defaults for exported generated redteam tests', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ metadata: { pluginId: 'harmful:privacy', goal: 'Protect user data' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'per-test=4500000ms, max=4560000ms, steps=1, serialSteps=0, concurrency=1',
+        ),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('counts runSerially steps in automatically calculated max eval duration', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ options: { runSerially: true } }, { options: { runSerially: true } }, {}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 4, timeoutMs: 0 });
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('per-test=0ms, max=600000ms, steps=3, serialSteps=2'),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('does not persist a row cancelled by an external abortSignal when timeoutMs is set', async () => {
     vi.useFakeTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
@@ -977,13 +1634,7 @@ describeEvaluator('evaluator execution control', () => {
       await vi.advanceTimersByTimeAsync(10);
       await evalPromise;
 
-      expect(mockAddResult).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('aborted'),
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-        }),
-      );
+      expect(mockAddResult).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -995,7 +1646,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('should abort when exceeding maxEvalTimeMs', async () => {
+  it('writes max-duration results when abort-aware providers are cancelled', async () => {
     vi.useFakeTimers();
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
@@ -1061,7 +1712,7 @@ describeEvaluator('evaluator execution control', () => {
 
       expect(mockAddResult).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.stringContaining('aborted'),
+          error: expect.stringContaining('Evaluation exceeded max duration of 100ms'),
           success: false,
           failureReason: ResultFailureReason.ERROR,
         }),
@@ -1074,7 +1725,473 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
+  it('returns max-duration results when a provider ignores abort signals', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('non-cooperative-provider'),
+      callApi: vi.fn(() => new Promise<ProviderResponse>(() => {})),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('writes max-duration timeout rows to jsonl output', async () => {
+    vi.useFakeTimers();
+    const outputPath = path.join(os.tmpdir(), `pr6344-max-duration-timeout-${randomUUID()}.jsonl`);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('non-cooperative-provider'),
+      callApi: vi.fn(() => new Promise<ProviderResponse>(() => {})),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({ outputPath }, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n');
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0])).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      fs.rmSync(outputPath, { force: true });
+      vi.useRealTimers();
+    }
+  });
+
+  it('converts a row to max-duration failure when JSONL finalization crosses the deadline', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('completed-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Completed output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create(
+      { outputPath: '/tmp/pr6344-timeout-row.jsonl' },
+      testSuite.prompts,
+      { id: randomUUID() },
+    );
+    let releaseFileWrite!: () => void;
+    let notifyFileWrite!: () => void;
+    const fileWriteStarted = new Promise<void>((resolve) => {
+      notifyFileWrite = resolve;
+    });
+    const writeSpy = vi.spyOn(JsonlFileWriter.prototype, 'write').mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          notifyFileWrite();
+          releaseFileWrite = resolve;
+        }),
+    );
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await fileWriteStarted;
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 1, failures: 0, successes: 0 }),
+      );
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      releaseFileWrite?.();
+      writeSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns max-duration results when grouped grading ignores abort signals', async () => {
+    vi.useFakeTimers();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('non-cooperative-judge'),
+      callApi: vi.fn(() => new Promise<ProviderResponse>(() => {})),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'Judge output', provider: judge }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxConcurrency: 1,
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(judge.callApi).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(50);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toEqual(
+        expect.objectContaining({
+          error: expect.stringContaining('Evaluation exceeded max duration of 50ms'),
+          failureReason: ResultFailureReason.ERROR,
+          success: false,
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('applies maxEvalTimeMs to select-best comparison grading', async () => {
+    vi.useFakeTimers();
+
+    const matchers = await import('../../src/matchers/comparison');
+    const { getProviderCallExecutionContext } = await import(
+      '../../src/scheduler/providerCallExecutionContext'
+    );
+
+    let comparisonTimer: NodeJS.Timeout | null = null;
+    let evalPromise: Promise<Eval> | undefined;
+    let observedComparisonAbortSignal: AbortSignal | undefined;
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockImplementation(() => {
+      observedComparisonAbortSignal = getProviderCallExecutionContext()?.abortSignal;
+      return new Promise((resolve, reject) => {
+        comparisonTimer = setTimeout(() => {
+          resolve([
+            { pass: true, score: 1, reason: 'Selected as best' },
+            { pass: false, score: 0, reason: 'Not selected' },
+          ]);
+        }, 1_000);
+
+        observedComparisonAbortSignal?.addEventListener(
+          'abort',
+          () => {
+            if (comparisonTimer) {
+              clearTimeout(comparisonTimer);
+            }
+            reject(new Error('comparison aborted'));
+          },
+          { once: true },
+        );
+      });
+    });
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [targetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Target', metric: 'target_contains' },
+            { type: 'select-best', value: 'pick the best response' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      evalPromise = evaluate(testSuite, evalRecord, { maxEvalTimeMs: 50 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(matchesSelectBestSpy).toHaveBeenCalledTimes(1);
+      expect(observedComparisonAbortSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(observedComparisonAbortSignal?.aborted).toBe(true);
+
+      await evalPromise;
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 2, failures: 0, successes: 0 }),
+      );
+      expect(
+        summary.results.every(
+          (result) =>
+            result.error?.includes('during comparison grading') &&
+            result.failureReason === ResultFailureReason.ERROR &&
+            !result.success &&
+            result.score === 0 &&
+            Object.keys(result.namedScores).length === 0 &&
+            result.gradingResult === null,
+        ),
+      ).toBe(true);
+      if (!('prompts' in summary)) {
+        throw new Error('Expected V3 summary with prompt metrics');
+      }
+      expect(summary.prompts.map((prompt) => prompt.metrics)).toEqual([
+        expect.objectContaining({
+          assertFailCount: 0,
+          assertPassCount: 0,
+          namedScores: {},
+          namedScoresCount: {},
+          namedScoreWeights: {},
+          score: 0,
+          testErrorCount: 1,
+          testFailCount: 0,
+          testPassCount: 0,
+        }),
+        expect.objectContaining({
+          assertFailCount: 0,
+          assertPassCount: 0,
+          namedScores: {},
+          namedScoresCount: {},
+          namedScoreWeights: {},
+          score: 0,
+          testErrorCount: 1,
+          testFailCount: 0,
+          testPassCount: 0,
+        }),
+      ]);
+    } finally {
+      await vi.runOnlyPendingTimersAsync();
+      await evalPromise?.catch(() => undefined);
+      matchesSelectBestSpy.mockRestore();
+      if (comparisonTimer) {
+        clearTimeout(comparisonTimer);
+      }
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps late select-best grading pending for max-duration timeout conversion', async () => {
+    vi.useFakeTimers();
+
+    const matchers = await import('../../src/matchers/comparison');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve([
+              { pass: true, score: 1, reason: 'Selected as best' },
+              { pass: false, score: 0, reason: 'Not selected' },
+            ]);
+          }, 100);
+        }),
+    );
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [targetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Target' },
+            { type: 'select-best', value: 'pick the best response' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    let evalPromise: Promise<Eval> | undefined;
+
+    try {
+      evalPromise = evaluate(testSuite, evalRecord, { maxEvalTimeMs: 50 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(matchesSelectBestSpy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 2, failures: 0, successes: 0 }),
+      );
+      expect(
+        summary.results.every(
+          (result) =>
+            result.error?.includes('during comparison grading') &&
+            result.failureReason === ResultFailureReason.ERROR &&
+            !result.success,
+        ),
+      ).toBe(true);
+    } finally {
+      await vi.runOnlyPendingTimersAsync();
+      await evalPromise?.catch(() => undefined);
+      matchesSelectBestSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps late max-score grading pending for max-duration timeout conversion', async () => {
+    vi.useFakeTimers();
+
+    const matchers = await import('../../src/matchers/comparison');
+    const selectMaxScoreSpy = vi.spyOn(matchers, 'selectMaxScore').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve([
+              { pass: true, score: 1, reason: 'Selected as highest scoring output' },
+              { pass: false, score: 0, reason: 'Not selected' },
+            ]);
+          }, 100);
+        }),
+    );
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [targetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Target' },
+            { type: 'max-score', value: { method: 'average' } },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    let evalPromise: Promise<Eval> | undefined;
+
+    try {
+      evalPromise = evaluate(testSuite, evalRecord, { maxEvalTimeMs: 50 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(selectMaxScoreSpy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 2, failures: 0, successes: 0 }),
+      );
+      expect(
+        summary.results.every(
+          (result) =>
+            result.error?.includes('during comparison grading') &&
+            result.failureReason === ResultFailureReason.ERROR &&
+            !result.success,
+        ),
+      ).toBe(true);
+    } finally {
+      await vi.runOnlyPendingTimersAsync();
+      await evalPromise?.catch(() => undefined);
+      selectMaxScoreSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('budgets select-best comparison rows in automatic max timeout sizing', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const matchers = await import('../../src/matchers/comparison');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: false, score: 0, reason: 'Not selected' },
+    ]);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [{ assert: [{ type: 'select-best', value: 'pick the best response' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 2,
+        timeoutMs: 0,
+      });
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'per-test=0ms, max=420000ms, steps=2, serialSteps=0, concurrency=2, comparisonSteps=1',
+        ),
+      );
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('does not persist queued grouped grading after the max-duration deadline', async () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
@@ -1143,6 +2260,7 @@ describeEvaluator('evaluator execution control', () => {
       const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
         maxConcurrency: 1,
         maxEvalTimeMs: 55,
+        timeoutMs: 0,
       });
       await vi.advanceTimersByTimeAsync(40);
       await vi.advanceTimersByTimeAsync(15);
@@ -1153,16 +2271,15 @@ describeEvaluator('evaluator execution control', () => {
 
     const resultByTopic = new Map(results.map((result) => [result.vars.topic, result]));
 
-    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(3);
+    expect(judge.callApi).not.toHaveBeenCalled();
     expect(resultByTopic.get('alpha')).toEqual(
       expect.objectContaining({
-        success: true,
-        response: expect.objectContaining({
-          output: 'Target output for Test prompt alpha',
-        }),
+        error: expect.stringContaining('Evaluation exceeded max duration'),
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
       }),
     );
-    expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
 });

@@ -87,6 +87,52 @@ export function accumulateNamedMetric(
     (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
 }
 
+function subtractRecordValue(
+  record: Record<string, number>,
+  metricName: string,
+  value: number,
+  { clampAtZero = false }: { clampAtZero?: boolean } = {},
+): void {
+  const nextValue = (record[metricName] ?? 0) - value;
+  if ((clampAtZero && nextValue <= 0) || Math.abs(nextValue) <= Number.EPSILON) {
+    delete record[metricName];
+    return;
+  }
+  record[metricName] = nextValue;
+}
+
+export function subtractNamedMetric(
+  accumulator: NamedMetricAccumulator,
+  {
+    metricName,
+    metricValue,
+    gradingResult,
+    testVars,
+  }: {
+    metricName: string;
+    metricValue: number;
+    gradingResult: GradingResult | null | undefined;
+    testVars?: Vars;
+  },
+): void {
+  const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
+    metricName,
+    metricValue,
+    gradingResult,
+    testVars,
+  });
+
+  subtractRecordValue(accumulator.namedScores, metricName, weightedScoreTotal);
+  subtractRecordValue(accumulator.namedScoresCount, metricName, assertionCount, {
+    clampAtZero: true,
+  });
+
+  accumulator.namedScoreWeights ||= {};
+  subtractRecordValue(accumulator.namedScoreWeights, metricName, metricWeightTotal, {
+    clampAtZero: true,
+  });
+}
+
 export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {
   accumulator.namedScoreWeights ||= {};
 

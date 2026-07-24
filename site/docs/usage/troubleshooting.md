@@ -351,14 +351,34 @@ When running evals, you may encounter timeout errors, especially when using loca
 - Handle custom providers or providers that get stuck
 - Prevent runaway costs from long-running evaluations
 
-You can control two settings: timeout for individual test cases and timeout for the entire evaluation.
-
 ### Quick fixes
 
-**Set timeouts for individual requests and total evaluation time:**
+Promptfoo provides layered timeout protection by default:
+
+**Per-test timeout (`PROMPTFOO_EVAL_TIMEOUT_MS`):**
+
+- Defaults to 5× the HTTP request timeout for standard evals (25 minutes with default settings)
+- Defaults to 15× the HTTP request timeout for redteam evals (75 minutes by default) so multi-turn strategies such as iterative, GOAT, and Crescendo can complete
+- Generated/exported redteam test cases retain redteam defaults even if the exported configuration no longer includes a top-level `redteam` block
+- Set to `0` to disable per-test timeouts
+
+**Total evaluation timeout (`PROMPTFOO_MAX_EVAL_TIME_MS`):**
+
+- Automatically calculated based on your eval's size, concurrency, and whether it's a redteam eval
+- Allows at least one active batch to run for the configured per-test timeout, and accounts for tests marked `runSerially`
+- Starts protecting setup work before generated rows and transformed variables are resolved, then uses exact row-based sizing through execution and teardown hooks
+- Acts as a safety net to prevent evaluations from running indefinitely
+- Preserves explicitly configured long durations by scheduling them in safe timer chunks when needed
+- Set to `0` to disable the total evaluation timeout
+
+Per-test timeout enforcement disables grouped local-judge grading, since queued grading work cannot
+honor an end-to-end timeout per row. Set `PROMPTFOO_EVAL_TIMEOUT_MS=0` only when you intentionally
+prefer grouped grading and have another bound on runtime.
+
+**Override the defaults for stricter limits:**
 
 ```bash
-export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per test
 export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
 
 npx promptfoo eval
