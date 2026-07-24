@@ -1,18 +1,14 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
 
@@ -46,12 +42,8 @@ async function generateCitations(
 
       const payload = {
         task: 'citation',
-        testCases: [testCase],
-        injectVar,
         topic: testCase.vars[injectVar],
-        config,
         ...remoteGenerationContextPayload(config.targetId),
-        email: getUserEmail(),
       };
 
       interface CitationGenerationResponse {
@@ -64,15 +56,7 @@ async function generateCitations(
         };
       }
 
-      const { data } = await fetchWithCache<CitationGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-      );
+      const { data } = await postRemoteGenerationTask<CitationGenerationResponse>(payload);
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,

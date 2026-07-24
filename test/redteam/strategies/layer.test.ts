@@ -89,6 +89,40 @@ describe('addLayerTestCases', () => {
     vi.clearAllMocks();
   });
 
+  it('passes runtime provider context to nested strategies', async () => {
+    const runtimeContext = {
+      generationProviderSelection: {
+        provider: { id: () => 'request-provider', callApi: vi.fn() } as any,
+        source: 'explicit' as const,
+      },
+    };
+    const nestedAction = vi.fn(async (testCases: TestCaseWithPlugin[]) => testCases);
+    const strategies: Strategy[] = [{ id: 'math-prompt', action: nestedAction }];
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { input: 'test' },
+        metadata: { pluginId: 'test-plugin' },
+      },
+    ];
+
+    await addLayerTestCases(
+      testCases,
+      'input',
+      { steps: ['math-prompt'] },
+      strategies,
+      mockLoadStrategy,
+      runtimeContext,
+    );
+
+    expect(nestedAction).toHaveBeenCalledWith(
+      testCases,
+      'input',
+      expect.objectContaining({ steps: ['math-prompt'] }),
+      undefined,
+      runtimeContext,
+    );
+  });
+
   it('should return empty array when no steps are provided', async () => {
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -640,6 +674,44 @@ describe('addLayerTestCases', () => {
           }),
         );
       }
+    });
+
+    it('persists provider IDs only for layer attack providers that consume them', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'test' },
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ];
+      const runtimeContext = {
+        generationProviderSelection: {
+          provider: {} as any,
+          source: 'explicit' as const,
+          persistableId: 'anthropic:claude-sonnet-4',
+        },
+      };
+
+      const crescendo = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['crescendo'] },
+        mockStrategies,
+        mockLoadStrategy,
+        runtimeContext,
+      );
+      const hydra = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:hydra'] },
+        mockStrategies,
+        mockLoadStrategy,
+        runtimeContext,
+      );
+
+      expect((crescendo[0].provider as any)?.config?.redteamProvider).toBe(
+        'anthropic:claude-sonnet-4',
+      );
+      expect((hydra[0].provider as any)?.config).not.toHaveProperty('redteamProvider');
     });
 
     it('should handle multiple per-turn layers', async () => {

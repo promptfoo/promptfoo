@@ -1,16 +1,13 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
 
@@ -49,8 +46,7 @@ async function generateLikertPrompts(
         prompt: testCase.vars[injectVar],
         index,
         plugin: testCase.metadata?.plugins?.join(',') ?? testCase.metadata?.pluginId,
-        ...config,
-        email: getUserEmail(),
+        ...remoteGenerationContextPayload(config.targetId),
       };
 
       interface LikertGenerationResponse {
@@ -58,15 +54,7 @@ async function generateLikertPrompts(
         modifiedPrompts?: string[];
       }
 
-      const { data } = await fetchWithCache<LikertGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-      );
+      const { data } = await postRemoteGenerationTask<LikertGenerationResponse>(payload);
 
       logger.debug(
         `Got Likert jailbreak generation result for case ${Number(index) + 1}: ${JSON.stringify(
