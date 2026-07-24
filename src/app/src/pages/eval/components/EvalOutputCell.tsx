@@ -4,6 +4,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import {
+  type CostDisplayUnit,
+  calculateRunsPerCostUnit,
+  formatRunsPerCostUnit,
+  formatUsdCost,
+} from '@app/utils/cost';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -839,8 +845,27 @@ function getTokensPerSecondDisplay({
   return <span>{WHOLE_NUMBER_FORMATTER.format(tokPerSec)}</span>;
 }
 
-function getCostDisplay(cost?: number): React.ReactNode | undefined {
-  return cost ? <span>${cost.toPrecision(2)}</span> : undefined;
+function getCostDisplay({
+  cost,
+  costDisplayUnit,
+  showRunsPerCostUnit,
+}: {
+  cost?: number;
+  costDisplayUnit: CostDisplayUnit;
+  showRunsPerCostUnit: boolean;
+}): React.ReactNode | undefined {
+  if (!cost || !Number.isFinite(cost) || cost <= 0) {
+    return undefined;
+  }
+
+  const runs = showRunsPerCostUnit ? calculateRunsPerCostUnit(cost, costDisplayUnit) : undefined;
+
+  return (
+    <span>
+      {formatUsdCost(cost, costDisplayUnit)}
+      {runs === undefined ? null : <> · {formatRunsPerCostUnit(runs, costDisplayUnit)}</>}
+    </span>
+  );
 }
 
 function getCellStyles({
@@ -1296,6 +1321,8 @@ function EvalOutputCell({
     showPassReasons,
     maxImageWidth,
     maxImageHeight,
+    costDisplayUnit = 'dollars',
+    showRunsPerCostUnit = false,
   } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
@@ -1561,7 +1588,11 @@ function EvalOutputCell({
     tokenUsage,
     latencyMs: output.latencyMs,
   });
-  const costDisplay = getCostDisplay(output.cost);
+  const costDisplay = getCostDisplay({
+    cost: output.cost,
+    costDisplayUnit,
+    showRunsPerCostUnit,
+  });
   const commentIsHighlighted = commentText.startsWith('!highlight');
   const { cellStyle, contentStyle } = getCellStyles({
     isHighlighted: commentIsHighlighted,
