@@ -27,7 +27,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.12.0",
     "esbuild": "^0.28.0",
-    "typescript": "^6.0.2"
+    "typescript": "^7.0.0"
   },
   "overrides": {
     "undici": "^7.28.0"

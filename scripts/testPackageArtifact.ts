@@ -632,8 +632,10 @@ async function main(): Promise<void> {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    const tsc6Path = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc6');
+    const tsc7Path = path.join(ROOT, 'node_modules', '@typescript', 'native', 'bin', 'tsc');
     for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+      const tscPath = tsconfig === 'tsconfig.legacy.json' ? tsc6Path : tsc7Path;
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
