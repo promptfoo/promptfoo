@@ -199,6 +199,43 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
+    it('should preserve explicit false for json_schema strict mode', async () => {
+      // For inline schemas, maybeLoadResponseFormatFromExternalFile should return the object unchanged
+      mockMaybeLoadResponseFormatFromExternalFile.mockImplementation(function (input: any) {
+        return input;
+      });
+
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'loose_schema',
+              strict: false,
+              schema: {
+                type: 'object',
+                properties: { result: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.text.format).toMatchObject({
+        type: 'json_schema',
+        name: 'loose_schema',
+        schema: {
+          type: 'object',
+          properties: { result: { type: 'string' } },
+          additionalProperties: false,
+        },
+        strict: false,
+      });
+    });
+
     it('should not include temperature for reasoning models', async () => {
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { temperature: 0.7 },
