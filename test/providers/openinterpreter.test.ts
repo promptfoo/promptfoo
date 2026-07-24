@@ -619,6 +619,48 @@ describe('OpenInterpreterProvider', () => {
     await expect(defaultPromise).resolves.toMatchObject({ output: 'temporary' });
   });
 
+  it('renders prompt-level config templates before validating structured input paths', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-rendered-config-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'fake image');
+
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const providerId = vi.fn(() => 'attached-provider');
+    const attachedProvider: Record<string, unknown> = { id: providerId };
+    attachedProvider.self = attachedProvider;
+    const provider = new OpenInterpreterProvider();
+
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
+      {
+        vars: { envValue: 'rendered-env', workspaceDir: workspace },
+        prompt: {
+          raw: 'Rendered structured input',
+          config: {
+            working_dir: '{{ workspaceDir }}',
+            skip_git_repo_check: true,
+            provider: attachedProvider,
+            cli_env: { RENDERED_VALUE: '{{ envValue }}' },
+          },
+        },
+      } as any,
+    );
+
+    const { threadStart, turnStart } = await startTurn(server);
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
+    ]);
+    expect(mocks.spawn.mock.calls[0][2].env.RENDERED_VALUE).toBe('rendered-env');
+    expect(providerId).not.toHaveBeenCalled();
+    completeTurn(server, 'rendered structured input');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'rendered structured input' });
+  });
+
   it.each([
     ['native', 'harness=""'],
     ['claude-code', 'harness="claude-code"'],

@@ -4,6 +4,7 @@ import path from 'path';
 
 import { z } from 'zod';
 import cliState from '../cliState';
+import { renderVarsInObject } from '../util/render';
 import {
   CodexAppServerConfigSchema,
   OpenAICodexAppServerProvider,
@@ -355,21 +356,26 @@ export class OpenInterpreterProvider implements ApiProvider {
         cli_config: mergeRecords(this.config.cli_config, promptConfig?.cli_config),
         cli_env: { ...(this.config.cli_env ?? {}), ...(promptConfig?.cli_env ?? {}) },
       };
-      validateThreadPersistence(effectiveConfig);
+      // Prompt-level config can reference test vars. Render before this wrapper
+      // resolves/validates paths, but avoid traversing an attached provider object.
+      const configToRender = { ...effectiveConfig };
+      delete configToRender.provider;
+      const renderedConfig = renderVarsInObject(configToRender, context?.vars);
+      validateThreadPersistence(renderedConfig);
 
-      if (!effectiveConfig.working_dir) {
+      if (!renderedConfig.working_dir) {
         temporaryWorkspace = fs.mkdtempSync(
           path.join(os.tmpdir(), 'promptfoo-openinterpreter-workspace-'),
         );
       }
-      const interpreterHome = resolveInterpreterHome(effectiveConfig) ?? this.interpreterHome;
-      const normalized = normalizePrompt(prompt, effectiveConfig, temporaryWorkspace);
+      const interpreterHome = resolveInterpreterHome(renderedConfig) ?? this.interpreterHome;
+      const normalized = normalizePrompt(prompt, renderedConfig, temporaryWorkspace);
       if (normalized.error) {
         return { error: normalized.error };
       }
 
       const mappedConfig = toCodexAppServerConfig(
-        effectiveConfig,
+        renderedConfig,
         interpreterHome,
         temporaryWorkspace,
       );
@@ -412,7 +418,7 @@ export class OpenInterpreterProvider implements ApiProvider {
           ...restMetadata,
           openInterpreter: {
             ...(isRecord(codexMetadata) ? codexMetadata : {}),
-            harness: effectiveConfig.harness,
+            harness: renderedConfig.harness,
           },
         },
       };
