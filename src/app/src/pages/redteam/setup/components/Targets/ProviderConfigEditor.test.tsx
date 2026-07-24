@@ -12,10 +12,85 @@ const mockA2AConfigState = vi.hoisted(() => ({
 }));
 
 vi.mock('./HttpEndpointConfiguration', () => ({
-  default: () => <div data-testid="http-config" />,
+  default: ({
+    updateCustomTarget,
+    bodyError,
+    urlError,
+  }: {
+    updateCustomTarget: (field: string, value: unknown) => void;
+    bodyError: string | React.ReactNode | null;
+    urlError: string | null;
+  }) => (
+    <div data-testid="http-config">
+      <button
+        data-testid="update-http-url"
+        onClick={() => updateCustomTarget('url', 'https://updated.example.com/chat')}
+      >
+        Update HTTP URL
+      </button>
+      <button
+        data-testid="replace-http-config"
+        onClick={() =>
+          updateCustomTarget('config', {
+            url: 'https://replacement.example.com/chat',
+            method: 'PUT',
+          })
+        }
+      >
+        Replace HTTP Config
+      </button>
+      <button
+        data-testid="replace-http-config-with-invalid-body"
+        onClick={() =>
+          updateCustomTarget('config', {
+            url: 'https://replacement.example.com/chat',
+            body: '{"message":"hello"}',
+          })
+        }
+      >
+        Replace HTTP Config Without Prompt
+      </button>
+      <button
+        data-testid="replace-http-config-with-invalid-request"
+        onClick={() =>
+          updateCustomTarget('config', {
+            request: 'POST /chat HTTP/1.1\n\n{"message":"hello"}',
+          })
+        }
+      >
+        Replace HTTP Request Without Prompt
+      </button>
+      <button
+        data-testid="replace-http-config-with-invalid-url"
+        onClick={() =>
+          updateCustomTarget('config', {
+            url: 'not-a-url',
+            body: '{"message":"{{prompt}}"}',
+          })
+        }
+      >
+        Replace HTTP Config With Invalid URL
+      </button>
+      {bodyError && <div data-testid="http-body-error">{bodyError}</div>}
+      {urlError && <div data-testid="http-url-error">{urlError}</div>}
+    </div>
+  ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
-  default: () => <div data-testid="ws-config" />,
+  default: ({
+    updateWebSocketTarget,
+  }: {
+    updateWebSocketTarget: (field: string, value: unknown) => void;
+  }) => (
+    <div data-testid="ws-config">
+      <button
+        data-testid="update-ws-url"
+        onClick={() => updateWebSocketTarget('url', 'wss://updated.example.com/ws')}
+      >
+        Update WebSocket URL
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
   default: () => <div data-testid="custom-config" />,
@@ -988,6 +1063,165 @@ describe('ProviderConfigEditor', () => {
 
       expect(shouldClearBodyError).toBe(false);
       // When false, body error should be set requiring {{prompt}}
+    });
+  });
+
+  describe('config cloning during provider updates', () => {
+    it('clones the HTTP config before changing a field', () => {
+      const mockSetProvider = vi.fn();
+      const originalConfig = {
+        url: 'https://api.example.com',
+        method: 'POST',
+      };
+      const httpProvider: ProviderOptions = {
+        id: 'http',
+        config: originalConfig,
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={httpProvider}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      act(() => {
+        screen.getByTestId('update-http-url').click();
+      });
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            url: 'https://updated.example.com/chat',
+            method: 'POST',
+          }),
+        }),
+      );
+      const updatedProvider = mockSetProvider.mock.calls[0][0] as ProviderOptions;
+      expect(updatedProvider.config).not.toBe(originalConfig);
+      expect(originalConfig.url).toBe('https://api.example.com');
+    });
+
+    it('replaces the HTTP config without mutating the prior object', () => {
+      const mockSetProvider = vi.fn();
+      const originalConfig = {
+        url: 'https://api.example.com',
+        method: 'POST',
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'http', config: originalConfig }}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      act(() => {
+        screen.getByTestId('replace-http-config').click();
+      });
+
+      const updatedProvider = mockSetProvider.mock.calls[0][0] as ProviderOptions;
+      expect(updatedProvider.config).toEqual({
+        url: 'https://replacement.example.com/chat',
+        method: 'PUT',
+      });
+      expect(updatedProvider.config).not.toBe(originalConfig);
+      expect(originalConfig).toEqual({
+        url: 'https://api.example.com',
+        method: 'POST',
+      });
+    });
+
+    it('validates prompt placeholders after replacing the HTTP config', () => {
+      const mockSetProvider = vi.fn();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com',
+              body: '{"message":"{{prompt}}"}',
+            },
+          }}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      act(() => {
+        screen.getByTestId('replace-http-config-with-invalid-body').click();
+      });
+
+      expect(screen.getByTestId('http-body-error')).toHaveTextContent(
+        'Request body must contain {{prompt}}',
+      );
+
+      act(() => {
+        screen.getByTestId('replace-http-config-with-invalid-request').click();
+      });
+
+      expect(screen.getByTestId('http-body-error')).toHaveTextContent(
+        'Raw request must contain {{prompt}} template variable',
+      );
+    });
+
+    it('validates the URL after replacing the structured HTTP config', () => {
+      const mockSetProvider = vi.fn();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com',
+              body: '{"message":"{{prompt}}"}',
+            },
+          }}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      act(() => {
+        screen.getByTestId('replace-http-config-with-invalid-url').click();
+      });
+
+      expect(screen.getByTestId('http-url-error')).toHaveTextContent('Invalid URL format');
+    });
+
+    it('clones the WebSocket config before changing a field', () => {
+      const mockSetProvider = vi.fn();
+      const originalConfig = {
+        url: 'wss://example.com/ws',
+        transformResponse: 'json.data',
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'websocket', config: originalConfig }}
+          setProvider={mockSetProvider}
+          providerType="websocket"
+        />,
+      );
+
+      act(() => {
+        screen.getByTestId('update-ws-url').click();
+      });
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            url: 'wss://updated.example.com/ws',
+            transformResponse: 'json.data',
+          }),
+        }),
+      );
+      const updatedProvider = mockSetProvider.mock.calls[0][0] as ProviderOptions;
+      expect(updatedProvider.config).not.toBe(originalConfig);
+      expect(originalConfig.url).toBe('wss://example.com/ws');
     });
   });
 });

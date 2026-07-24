@@ -76,6 +76,30 @@ interface GeneratedConfig {
   };
 }
 
+const toHeaderFields = (
+  headers: Record<string, string> | undefined,
+): Array<{ key: string; value: string }> =>
+  Object.entries(headers ?? {}).map(([key, value]) => ({
+    key,
+    value: String(value),
+  }));
+
+const formatGeneratedBody = (body: unknown): string => {
+  if (!body) {
+    return '';
+  }
+  return typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+};
+
+const getStructuredGeneratedOverrides = (
+  config: GeneratedConfig['config'],
+): Record<string, unknown> => ({
+  ...(config.url ? { url: config.url } : {}),
+  ...(config.method ? { method: config.method } : {}),
+  ...(config.headers ? { headers: config.headers } : {}),
+  ...(config.body ? { body: config.body } : {}),
+});
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -251,36 +275,39 @@ Content-Type: application/json
   }, []);
 
   const resetState = useCallback(
-    (isRawMode: boolean) => {
+    (isRawMode: boolean, configOverrides: Record<string, unknown> = {}) => {
       setBodyError(null);
       setUrlError(null);
 
       if (isRawMode) {
-        // Reset to empty raw request
-        updateCustomTarget('request', '');
-
-        // Clear structured mode fields
-        updateCustomTarget('url', undefined);
-        updateCustomTarget('method', undefined);
-        updateCustomTarget('headers', undefined);
-        updateCustomTarget('body', undefined);
+        // Switch to raw mode: clear structured fields, apply overrides
+        updateCustomTarget('config', {
+          ...selectedTarget.config,
+          request: '',
+          url: undefined,
+          method: undefined,
+          headers: undefined,
+          body: undefined,
+          ...configOverrides,
+        });
       } else {
-        // Reset to empty structured fields
+        // Switch to structured mode: clear raw request, apply overrides
         setHeaders([]);
         setRequestBody('');
 
-        // Clear raw request
-        updateCustomTarget('request', undefined);
-
-        // Reset structured fields
-        updateCustomTarget('url', '');
-        updateCustomTarget('method', 'POST');
-        updateCustomTarget('headers', {});
-        updateCustomTarget('body', '');
-        updateCustomTarget('useHttps', false);
+        updateCustomTarget('config', {
+          ...selectedTarget.config,
+          request: undefined,
+          url: '',
+          method: 'POST',
+          headers: {},
+          body: '',
+          useHttps: false,
+          ...configOverrides,
+        });
       }
     },
-    [updateCustomTarget, setBodyError, setUrlError],
+    [updateCustomTarget, selectedTarget.config, setBodyError, setUrlError],
   );
 
   // Header management
@@ -463,44 +490,33 @@ ${exampleRequest}`;
   };
 
   const handleApply = () => {
-    if (generatedConfig) {
-      if (generatedConfig.config.request) {
-        resetState(true);
-        updateCustomTarget('request', generatedConfig.config.request);
-      } else {
-        resetState(false);
-        if (generatedConfig.config.url) {
-          updateCustomTarget('url', generatedConfig.config.url);
-        }
-        if (generatedConfig.config.method) {
-          updateCustomTarget('method', generatedConfig.config.method);
-        }
-        if (generatedConfig.config.headers) {
-          updateCustomTarget('headers', generatedConfig.config.headers);
-          setHeaders(
-            Object.entries(generatedConfig.config.headers).map(([key, value]) => ({
-              key,
-              value: String(value),
-            })),
-          );
-        }
-        if (generatedConfig.config.body) {
-          // First update the internal state
-          const formattedBody =
-            typeof generatedConfig.config.body === 'string'
-              ? generatedConfig.config.body
-              : JSON.stringify(generatedConfig.config.body, null, 2);
-          setRequestBody(formattedBody);
-
-          // Then update the target config with the original value
-          updateCustomTarget('body', generatedConfig.config.body);
-        }
-      }
-      updateCustomTarget('transformRequest', generatedConfig.config.transformRequest);
-      updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
-      updateCustomTarget('sessionParser', generatedConfig.config.sessionParser);
-      setConfigDialogOpen(false);
+    if (!generatedConfig) {
+      return;
     }
+
+    const { config } = generatedConfig;
+    const commonOverrides = {
+      transformRequest: config.transformRequest,
+      transformResponse: config.transformResponse,
+      sessionParser: config.sessionParser,
+    };
+
+    if (config.request) {
+      resetState(true, {
+        request: config.request,
+        ...commonOverrides,
+      });
+      setConfigDialogOpen(false);
+      return;
+    }
+
+    resetState(false, {
+      ...getStructuredGeneratedOverrides(config),
+      ...commonOverrides,
+    });
+    setHeaders(toHeaderFields(config.headers));
+    setRequestBody(formatGeneratedBody(config.body));
+    setConfigDialogOpen(false);
   };
 
   const handlePostmanImport = (config: {
@@ -509,11 +525,13 @@ ${exampleRequest}`;
     headers: Record<string, string>;
     body: string;
   }) => {
-    // Apply the configuration
-    resetState(false);
-    updateCustomTarget('url', config.url);
-    updateCustomTarget('method', config.method);
-    updateCustomTarget('headers', config.headers);
+    // Apply the configuration in a single batched update
+    resetState(false, {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      ...(config.body ? { body: config.body } : {}),
+    });
     setHeaders(
       Object.entries(config.headers).map(([key, value]) => ({
         key,
@@ -523,7 +541,6 @@ ${exampleRequest}`;
 
     if (config.body) {
       setRequestBody(config.body);
-      updateCustomTarget('body', config.body);
     }
   };
 
@@ -535,10 +552,7 @@ ${exampleRequest}`;
             id="use-raw-request"
             checked={Boolean(selectedTarget.config.request)}
             onCheckedChange={(checked) => {
-              resetState(checked);
-              if (checked) {
-                updateCustomTarget('request', exampleRequest);
-              }
+              resetState(checked, checked ? { request: exampleRequest } : {});
             }}
           />
           <Label htmlFor="use-raw-request">Use Raw HTTP Request</Label>
