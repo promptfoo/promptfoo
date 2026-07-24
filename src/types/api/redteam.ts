@@ -106,6 +106,81 @@ export const RedteamStatusResponseSchema = z.object({
 
 export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
+// Configuration agent endpoints
+
+const ConfigAgentMessageSchema = z.unknown();
+const ConfigAgentSessionSchema = z.unknown();
+
+export const ConfigAgentStartRequestSchema = z.object({
+  baseUrl: z.string().trim().min(1, 'URL is required').max(4096, 'URL is too long'),
+});
+
+const ConfigAgentSessionIdSchema = z.string().min(1).max(128);
+const ConfigAgentFieldSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z][A-Za-z0-9_-]*$/)
+  .optional();
+
+export const ConfigAgentInputRequestSchema = z.discriminatedUnion('type', [
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('message'),
+    value: z.string().max(100_000),
+    field: ConfigAgentFieldSchema,
+  }),
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('option'),
+    value: z.string().min(1).max(128),
+    field: ConfigAgentFieldSchema,
+  }),
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('api_key'),
+    value: z.string().max(32_768),
+    field: ConfigAgentFieldSchema,
+  }),
+  z.object({
+    sessionId: ConfigAgentSessionIdSchema,
+    type: z.literal('confirmation'),
+    value: z.boolean(),
+    field: ConfigAgentFieldSchema,
+  }),
+]);
+
+export const ConfigAgentStartResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    sessionId: z.string(),
+    messages: z.array(ConfigAgentMessageSchema),
+  }),
+});
+
+export const ConfigAgentInputResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    messages: z.array(ConfigAgentMessageSchema),
+    session: ConfigAgentSessionSchema,
+  }),
+});
+
+export const ConfigAgentSessionResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    messages: z.array(ConfigAgentMessageSchema),
+    session: ConfigAgentSessionSchema,
+    config: z.unknown().optional(),
+    isComplete: z.boolean(),
+  }),
+});
+
+export const ConfigAgentDeleteResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({}),
+});
+
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
   GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
@@ -117,4 +192,14 @@ export const RedteamSchemas = {
     Response: RedteamTaskResponseSchema,
   },
   Status: { Response: RedteamStatusResponseSchema },
+  ConfigAgentStart: {
+    Request: ConfigAgentStartRequestSchema,
+    Response: ConfigAgentStartResponseSchema,
+  },
+  ConfigAgentInput: {
+    Request: ConfigAgentInputRequestSchema,
+    Response: ConfigAgentInputResponseSchema,
+  },
+  ConfigAgentSession: { Response: ConfigAgentSessionResponseSchema },
+  ConfigAgentDelete: { Response: ConfigAgentDeleteResponseSchema },
 } as const;

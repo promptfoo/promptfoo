@@ -43,13 +43,44 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import { ConfigAgentDrawer } from '../ConfigAgent';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
 
+import type { DiscoveredConfig } from '../../hooks/useConfigAgent';
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
+
+function joinEndpointUrl(baseUrl: string, path?: string): string {
+  if (!path) {
+    return baseUrl;
+  }
+
+  const base = new URL(baseUrl);
+  const requested = new URL(path, base.origin);
+  const normalizePathname = (pathname: string) => pathname.replace(/\/+$/, '') || '/';
+  if (normalizePathname(base.pathname) === normalizePathname(requested.pathname)) {
+    for (const [key, value] of requested.searchParams) {
+      if (!base.searchParams.has(key)) {
+        base.searchParams.append(key, value);
+      }
+    }
+    return base.toString();
+  }
+
+  const basePath = base.pathname.replace(/\/+$/, '');
+  const requestedPath = requested.pathname.replace(/^\/+/, '');
+  base.pathname = `${basePath}/${requestedPath}`.replace(/\/{2,}/g, '/');
+  for (const [key, value] of requested.searchParams) {
+    if (!base.searchParams.has(key)) {
+      base.searchParams.append(key, value);
+    }
+  }
+  base.hash = requested.hash;
+  return base.toString();
+}
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -140,6 +171,7 @@ Content-Type: application/json
 
   // Import menu state
   const [postmanDialogOpen, setPostmanDialogOpen] = useState(false);
+  const [configAgentOpen, setConfigAgentOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Test Target state
@@ -527,6 +559,37 @@ ${exampleRequest}`;
     }
   };
 
+  const handleConfigAgentDiscovered = useCallback(
+    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
+      const fullUrl = joinEndpointUrl(baseUrl, discoveredConfig.path);
+      const headers = discoveredConfig.headers ?? {};
+      const body = discoveredConfig.body ?? '';
+
+      setBodyError(null);
+      setUrlError(null);
+      setHeaders(
+        Object.entries(headers).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+      updateCustomTarget('config', {
+        ...selectedTarget.config,
+        request: undefined,
+        url: fullUrl,
+        method: discoveredConfig.method,
+        headers,
+        body,
+        transformResponse: discoveredConfig.transformResponse,
+        useHttps: false,
+      });
+
+      setConfigAgentOpen(false);
+    },
+    [selectedTarget.config, setBodyError, setUrlError, updateCustomTarget],
+  );
+
   return (
     <div className="min-w-0">
       <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -551,8 +614,12 @@ ${exampleRequest}`;
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
+            <DropdownMenuItem onClick={() => setConfigAgentOpen(true)}>
               <Sparkles className="mr-2 size-4" />
+              Auto-Configure from URL
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
+              <AlignLeft className="mr-2 size-4" />
               Auto-fill from Example
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
@@ -951,6 +1018,14 @@ ${exampleRequest}`;
         onClose={() => setResponseTestOpen(false)}
         currentTransform={selectedTarget.config.transformResponse || ''}
         onApply={(code) => updateCustomTarget('transformResponse', code)}
+      />
+
+      {/* Config Agent Drawer */}
+      <ConfigAgentDrawer
+        open={configAgentOpen}
+        onClose={() => setConfigAgentOpen(false)}
+        initialUrl={selectedTarget.config.url || ''}
+        onConfigDiscovered={handleConfigAgentDiscovered}
       />
     </div>
   );
