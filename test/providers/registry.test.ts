@@ -359,6 +359,43 @@ describe('Provider Registry', () => {
       expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
     });
 
+    it('should handle edenai providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('edenai:openai/gpt-4o-mini'));
+      expect(factory).toBeDefined();
+
+      const edenaiOptions: ProviderOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { temperature: 0.42, apiKey: 'edenai-test-key' },
+      };
+      const provider = await factory!.create(
+        'edenai:openai/gpt-4o-mini',
+        edenaiOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('edenai:openai/gpt-4o-mini');
+      const config = (provider as any).config;
+      expect(config.temperature).toBe(0.42);
+      expect(config.apiKey).toBe('edenai-test-key');
+      expect(config.apiBaseUrl).toBe('https://api.edenai.run/v3');
+      expect(config.apiKeyEnvar).toBe('EDENAI_API_KEY');
+    });
+
+    it('throws for unsupported edenai subtypes', async () => {
+      const factory = providerMap.find((f) =>
+        f.test('edenai:embeddings:openai/text-embedding-3-small'),
+      );
+      expect(factory).toBeDefined();
+      await expect(
+        factory!.create(
+          'edenai:embeddings:openai/text-embedding-3-small',
+          mockProviderOptions,
+          mockContext,
+        ),
+      ).rejects.toThrow(/only supports chat completions/);
+    });
+
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
       expect(factory).toBeDefined();
