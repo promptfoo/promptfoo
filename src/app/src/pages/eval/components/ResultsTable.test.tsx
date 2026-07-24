@@ -4,7 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -59,11 +59,13 @@ vi.mock('react-router-dom', async () => ({
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(
     ({
+      output,
       onRating,
       rowIndex,
       rowPositionIndex,
       searchText,
     }: {
+      output: { gradingResult?: { comment?: string } | null };
       onRating: any;
       rowIndex?: number;
       rowPositionIndex?: number;
@@ -71,10 +73,16 @@ vi.mock('./EvalOutputCell', () => {
     }) => {
       return (
         <div
+          className="cell"
           data-testid="eval-output-cell"
           data-rowindex={rowIndex}
           data-rowpositionindex={rowPositionIndex}
           data-searchtext={searchText}
+          style={
+            output.gradingResult?.comment?.startsWith('!highlight')
+              ? { backgroundColor: 'var(--cell-highlight-color)' }
+              : undefined
+          }
         >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
@@ -414,12 +422,33 @@ describe('ResultsTable Metrics Display', () => {
 
   describe('Keyboard Navigation', () => {
     it('should handle keyboard navigation with Tab between cells and actions within cell', async () => {
+      const storeState = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...storeState,
+        table: {
+          ...mockTable,
+          body: mockTable.body.map((row) => ({
+            ...row,
+            outputs: [
+              {
+                ...row.outputs[0],
+                gradingResult: { pass: true, score: 1, comment: '!highlight Synthetic row' },
+              },
+            ],
+          })),
+        },
+      });
+
       renderWithProviders(<ResultsTable {...defaultProps} />);
       const tableContainer = document.getElementById('results-table-container');
       const table = tableContainer?.querySelector('table') as HTMLTableElement;
       expect(table).toBeInTheDocument();
       const firstBodyCell = table.querySelector('tbody td') as HTMLElement;
       expect(firstBodyCell).toBeInTheDocument();
+      expect(firstBodyCell).not.toHaveClass('variable');
+      const highlightedOutput = within(firstBodyCell).getByTestId('eval-output-cell');
+      expect(highlightedOutput).toHaveClass('cell');
+      expect(highlightedOutput).toHaveStyle('background-color: var(--cell-highlight-color)');
       firstBodyCell.focus();
       expect(document.activeElement?.tagName).toBe('TD');
       expect(document.activeElement).toHaveClass('first-prompt-col');
@@ -428,6 +457,76 @@ describe('ResultsTable Metrics Display', () => {
       expect(document.activeElement).toHaveClass('action');
       await userEvent.tab();
       expect(document.activeElement?.tagName).toBe('TD');
+    });
+
+    it('identifies result rows without inserting them into cell and rating-action navigation', async () => {
+      const storeState = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...storeState,
+        table: {
+          ...mockTable,
+          body: mockTable.body.map((row) => ({ ...row, vars: ['hello'] })),
+          head: { ...mockTable.head, vars: ['prompt'] },
+        },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const resultRow = document.querySelector(
+        '#results-table-container tbody tr',
+      ) as HTMLTableRowElement;
+      const [variableCell, outputCell] = Array.from(resultRow.querySelectorAll('td'));
+      const ratingAction = within(resultRow).getByRole('button', { name: 'Rate' });
+      const unreadableStyleSheet = {
+        get cssRules(): CSSRuleList {
+          throw new DOMException('Stylesheet is not accessible', 'SecurityError');
+        },
+      } as CSSStyleSheet;
+      const stylesheets = [unreadableStyleSheet, ...Array.from(document.styleSheets)];
+      const styles = stylesheets.flatMap((stylesheet) => {
+        try {
+          return Array.from(stylesheet.cssRules)
+            .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule)
+            .map((rule) => ({
+              selector: rule.selectorText.replace(/\s*>\s*/g, '>'),
+              style: rule.style,
+            }));
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'SecurityError') {
+            return [];
+          }
+          throw error;
+        }
+      });
+      const variableCellAffordance = styles.find((rule) =>
+        rule.selector.includes('.result-row:focus-within>td.variable'),
+      );
+      const rowRailAffordance = styles.find((rule) =>
+        rule.selector.includes('.result-row:focus-within>td:first-child::after'),
+      );
+
+      expect(resultRow).toHaveClass('result-row');
+      expect(resultRow).not.toHaveAttribute('tabindex');
+      expect(resultRow).not.toHaveAttribute('role');
+      expect(variableCell).toHaveClass('variable');
+      expect(variableCell).toHaveTextContent('hello');
+      expect(variableCellAffordance?.style.getPropertyValue('background-image')).toContain(
+        'linear-gradient',
+      );
+      expect(rowRailAffordance?.style.getPropertyValue('z-index')).toBe('1');
+      expect(rowRailAffordance?.style.getPropertyValue('background-color')).toBe(
+        'hsl(var(--ring))',
+      );
+      expect(rowRailAffordance?.style.getPropertyValue('pointer-events')).toBe('none');
+
+      variableCell.focus();
+      expect(variableCell).toHaveFocus();
+      await userEvent.tab();
+      expect(outputCell).toHaveFocus();
+      await userEvent.tab();
+      expect(ratingAction).toHaveFocus();
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('TD');
+      expect(resultRow).not.toHaveFocus();
     });
   });
 
