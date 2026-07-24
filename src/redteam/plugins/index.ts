@@ -57,6 +57,7 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { MCPToolResponsePoisoningPlugin } from './mcpToolResponsePoisoning';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -516,6 +517,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory<{ intent: string }>(IntentPlugin, 'intent', (config: { intent: string }) =>
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
+  createPluginFactory(MCPToolResponsePoisoningPlugin, 'mcp:tool-response-poisoning'),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
   createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory<{ policy: any }>(PolicyPlugin, 'policy', (config: { policy: any }) =>
