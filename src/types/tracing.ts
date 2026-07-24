@@ -1,3 +1,9 @@
+export interface TraceSpanEvent {
+  name: string;
+  timestamp: number;
+  attributes?: Record<string, any>;
+}
+
 export interface TraceSpan {
   spanId: string;
   parentSpanId?: string;
@@ -5,6 +11,7 @@ export interface TraceSpan {
   startTime: number;
   endTime?: number;
   attributes?: Record<string, any>;
+  events?: TraceSpanEvent[];
   statusCode?: number;
   statusMessage?: string;
 }
