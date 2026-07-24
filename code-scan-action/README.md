@@ -81,7 +81,7 @@ The hardening below applies to releases after v0.1.8; earlier releases resolve `
 
   Additionally, every release PR in this repository is validated by a workflow that rebuilds `dist/` from the pinned monorepo source commit and fails on any byte difference.
 
-- **Don't run untrusted PR code before the scan in the same job.** The scanner install strips npm config and `NODE_OPTIONS` from its environment and isolates its npm config files, but a step that executes pull-request-controlled code earlier in the same job (for example `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and such a step already runs with the job's token. Keep the scan in a job that only checks out the PR and scans it, or run untrusted build steps in a separate job.
+- **Don't run untrusted PR code before the scan in the same job.** Scanner installation applies npm and environment hardening, but it is not an adversarial-repository sandbox. A step that executes pull-request-controlled code earlier in the same job (for example `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and such a step already runs with the job's token. Keep the scan in an isolated job with scoped credentials, and run untrusted build steps separately.
 
 ## Contributing
 

@@ -210,7 +210,7 @@ The hardening below applies to code-scan-action releases after v0.1.8; earlier r
 
 - The action installs an exact, release-pinned version of the `promptfoo` CLI with npm lifecycle scripts disabled (`--ignore-scripts`); it does not resolve `promptfoo@latest` at runtime. Use the `promptfoo-version` input to override the pin with another exact version.
 - The `dist/` bundle and `action.yml` committed to [promptfoo/code-scan-action](https://github.com/promptfoo/code-scan-action) are built and exported by the promptfoo monorepo release workflow, which publishes a signed build-provenance attestation for the exact artifact bytes. Verify a checkout with `gh attestation verify dist/index.js --repo promptfoo/promptfoo` (and likewise for `action.yml`).
-- The scanner install strips npm config and `NODE_OPTIONS` from its environment and isolates its npm config files, but a step that runs pull-request-controlled code earlier in the same job (such as `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and it already runs with the job's token. Keep the scan in a job that only checks out and scans the PR; run untrusted build steps in a separate job.
+- Scanner installation applies npm and environment hardening, but it is not an adversarial-repository sandbox. A step that runs pull-request-controlled code earlier in the same job (such as `npm ci` or a build) can persist state — `$GITHUB_PATH`, `$GITHUB_ENV`, or `$HOME` writes — that later steps inherit, and it already runs with the job's token. Keep the scan in an isolated job with scoped credentials, and run untrusted build steps separately.
 
 ## See Also
 
