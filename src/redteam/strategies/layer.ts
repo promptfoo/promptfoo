@@ -1,11 +1,18 @@
 import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { wouldUnicodeNormalizationChange } from './unicodeNormalization';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy } from './types';
+
+interface LayerTestCaseState {
+  testCase: TestCaseWithPlugin;
+  /** Whether at least one step has materially transformed this path. */
+  transformed: boolean;
+}
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -57,7 +64,10 @@ export async function addLayerTestCases(
     return [];
   }
 
-  let current: TestCaseWithPlugin[] = testCases;
+  let current: LayerTestCaseState[] = testCases.map((testCase) => ({
+    testCase,
+    transformed: false,
+  }));
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -72,28 +82,42 @@ export async function addLayerTestCases(
         `layer strategy: detected attack provider '${stepObj.id}' at step ${i}, remaining steps will be per-turn transforms`,
       );
 
-      // Collect remaining steps as per-turn layer configs
+      // Collect remaining steps. Applicability is resolved per test case below so
+      // plugin-level exclusions (including coding-agent canary protection) cannot
+      // be bypassed by nesting a strategy after an attack provider.
       const remainingSteps = steps.slice(i + 1);
-      const perTurnLayers: LayerConfig[] = remainingSteps.map((s) =>
-        typeof s === 'string' ? s : { id: s.id, config: s.config },
-      );
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
       const metricSuffix = getMetricSuffix(stepObj.id);
       const label = typeof config?.label === 'string' ? config.label : undefined;
-      const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
       const scanId = crypto.randomUUID();
 
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,
-        perTurnLayers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+        perTurnLayers: remainingSteps.map((layer) =>
+          typeof layer === 'string' ? layer : layer.id,
+        ),
         testCaseCount: current.length,
       });
 
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
-      return current.map((testCase) => {
+      return current.map(({ testCase }) => {
+        const applicablePerTurnSteps = remainingSteps.filter((layer) => {
+          const layerObj = typeof layer === 'string' ? { id: layer } : layer;
+          const layerTargets =
+            (layerObj.config as Record<string, unknown> | undefined)?.plugins ?? config?.plugins;
+          return pluginMatchesStrategyTargets(
+            testCase,
+            layerObj.id,
+            layerTargets as string[] | undefined,
+          );
+        });
+        const perTurnLayers: LayerConfig[] = applicablePerTurnSteps.map((layer) =>
+          typeof layer === 'string' ? layer : { id: layer.id, config: layer.config },
+        );
+        const strategyId = getStrategyId(stepObj.id, perTurnLayers, label);
         const originalText = String(testCase.vars?.[injectVar] ?? '');
         return {
           ...testCase,
@@ -154,20 +178,57 @@ export async function addLayerTestCases(
     // Determine applicable test cases for this step using the same targeting rules
     const stepTargets =
       (stepObj.config as Record<string, unknown>)?.plugins ?? (config?.plugins as unknown);
-    const applicable = current.filter((t) =>
-      pluginMatchesStrategyTargets(t, stepObj.id, stepTargets as string[] | undefined),
+    const applicable = current.filter(({ testCase }) =>
+      pluginMatchesStrategyTargets(testCase, stepObj.id, stepTargets as string[] | undefined),
     );
 
-    const next = await stepAction(applicable, injectVar, {
-      ...(stepObj.config || {}),
-      ...(config || {}),
-    });
+    if (stepObj.id === 'unicode-normalization') {
+      const stepConfig = {
+        ...(stepObj.config || {}),
+        ...(config || {}),
+      };
+      const changeMask = applicable.map(({ testCase }) =>
+        wouldUnicodeNormalizationChange(testCase, injectVar, stepConfig),
+      );
+      const changeCandidates = applicable
+        .filter((_, index) => changeMask[index])
+        .map(({ testCase }) => testCase);
+      const transformedCases = await stepAction(changeCandidates, injectVar, stepConfig);
+      let transformedIndex = 0;
+
+      // Unicode deliberately filters byte-for-byte no-ops. Keep those paths only
+      // inside the layer pipeline so a later step can still transform them. They
+      // are removed from the final output if no step ever changes them.
+      current = applicable.flatMap((state, index): LayerTestCaseState[] => {
+        if (!changeMask[index]) {
+          return [state];
+        }
+
+        const transformedCase = transformedCases[transformedIndex++];
+        return transformedCase
+          ? [{ testCase: transformedCase as TestCaseWithPlugin, transformed: true }]
+          : [];
+      });
+      continue;
+    }
+
+    const next = await stepAction(
+      applicable.map(({ testCase }) => testCase),
+      injectVar,
+      {
+        ...(stepObj.config || {}),
+        ...(config || {}),
+      },
+    );
 
     // Feed output to next step. If a step yields nothing, subsequent steps operate on empty set.
-    current = next as TestCaseWithPlugin[];
+    current = next.map((testCase) => ({
+      testCase: testCase as TestCaseWithPlugin,
+      transformed: true,
+    }));
   }
 
-  return current;
+  return current.filter(({ transformed }) => transformed).map(({ testCase }) => testCase);
 }
 
 /**

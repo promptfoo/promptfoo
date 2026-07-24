@@ -85,6 +85,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   hijacking: 'Tests for unauthorized resource usage and purpose deviation',
   homoglyph:
     'Tests handling of homoglyph (visually similar Unicode characters) encoding to bypass filters',
+  'unicode-normalization':
+    'Tests handling of canonically or compatibility-equivalent Unicode sequences',
   image: 'Tests handling of image content',
   imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
@@ -369,6 +371,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   hex: 'Hex Encoding',
   hijacking: 'Resource Hijacking',
   homoglyph: 'Homoglyph Encoding',
+  'unicode-normalization': 'Unicode Normalization',
   image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
@@ -1291,6 +1294,8 @@ export const strategyDescriptions: Record<Strategy, string> = {
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
+  'unicode-normalization':
+    'Tests detection and handling of canonically or compatibility-equivalent Unicode sequences',
   image: 'Tests detection and handling of image-based malicious payloads',
   jailbreak:
     '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
@@ -1339,6 +1344,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'indirect-web-pwn': 'Indirect Web Prompt Injection',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
+  'unicode-normalization': 'Unicode Normalization',
   image: 'Image',
   jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',

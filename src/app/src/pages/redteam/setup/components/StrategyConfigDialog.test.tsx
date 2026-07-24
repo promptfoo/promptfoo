@@ -1070,6 +1070,56 @@ describe('StrategyConfigDialog', () => {
       });
     });
 
+    it.each([
+      'NFC',
+      'NFD',
+      'NFKC',
+      'NFKD',
+    ] as const)('should preserve the configured %s Unicode normalization form when adding it as a step', async (form) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'unicode-normalization', config: { form } }]}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'unicode-normalization' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        steps: [{ id: 'unicode-normalization', config: { form } }],
+      });
+    });
+
+    it('should keep an unconfigured Unicode normalization step as a string', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(await screen.findByRole('option', { name: 'unicode-normalization' }));
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        steps: ['unicode-normalization'],
+      });
+    });
+
     it('should disable save button when no steps are configured', () => {
       renderWithProviders(
         <StrategyConfigDialog
@@ -1309,6 +1359,83 @@ describe('StrategyConfigDialog', () => {
 
       // The autocomplete should show that multi-modal must be last
       expect(screen.getByText(/Multi-modal strategies must be the last step/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Unicode normalization strategy', () => {
+    it('uses and saves the backend default when no form is configured', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="unicode-normalization"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'unicode-normalization',
+            name: 'Unicode Normalization',
+            description: 'Unicode normalization strategy',
+          }}
+        />,
+      );
+
+      expect(screen.getByRole('combobox', { name: 'Normalization form' })).toHaveTextContent(
+        'NFKD — Compatibility decomposition',
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('unicode-normalization', { form: 'NFKD' });
+    });
+
+    it('round-trips the selected normalization form through save and reopen', async () => {
+      const user = userEvent.setup();
+      const { rerender } = renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="unicode-normalization"
+          config={{ form: 'NFD' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'unicode-normalization',
+            name: 'Unicode Normalization',
+            description: 'Unicode normalization strategy',
+          }}
+        />,
+      );
+
+      const formSelect = screen.getByRole('combobox', { name: 'Normalization form' });
+      expect(formSelect).toHaveTextContent('NFD — Canonical decomposition');
+
+      await user.click(formSelect);
+      await user.click(
+        await screen.findByRole('option', { name: 'NFKC — Compatibility composition' }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('unicode-normalization', { form: 'NFKC' });
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <StrategyConfigDialog
+          open={true}
+          strategy="unicode-normalization"
+          config={{ form: 'NFKC' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'unicode-normalization',
+            name: 'Unicode Normalization',
+            description: 'Unicode normalization strategy',
+          }}
+        />,
+      );
+
+      expect(screen.getByRole('combobox', { name: 'Normalization form' })).toHaveTextContent(
+        'NFKC — Compatibility composition',
+      );
     });
   });
 });

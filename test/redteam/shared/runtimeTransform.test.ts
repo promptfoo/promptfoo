@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+import { addUnicodeNormalization } from '../../../src/redteam/strategies/unicodeNormalization';
 
 import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
@@ -57,6 +58,12 @@ describe('runtimeTransform', () => {
     ),
   };
 
+  const unicodeNormalizationStrategy: Strategy = {
+    id: 'unicode-normalization',
+    action: async (testCases, injectVar, config) =>
+      addUnicodeNormalization(testCases, injectVar, config),
+  };
+
   const mockStrategies: Strategy[] = [
     mockBase64Strategy,
     mockAudioStrategy,
@@ -109,6 +116,46 @@ describe('runtimeTransform', () => {
 
       expect(mockBase64Strategy.action).toHaveBeenCalledTimes(1);
       expect(mockSecondStrategy.action).toHaveBeenCalledTimes(1);
+    });
+
+    it('should treat a Unicode no-op as an explicit per-turn passthrough', async () => {
+      const result = await applyRuntimeTransforms(
+        'plain ASCII',
+        'input',
+        ['unicode-normalization'],
+        [...mockStrategies, unicodeNormalizationStrategy],
+      );
+
+      expect(result.prompt).toBe('plain ASCII');
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.strategyId).toBeUndefined();
+    });
+
+    it('should continue after a Unicode no-op when a later per-turn layer applies', async () => {
+      const result = await applyRuntimeTransforms(
+        'plain ASCII',
+        'input',
+        ['unicode-normalization', 'base64'],
+        [...mockStrategies, unicodeNormalizationStrategy],
+      );
+
+      expect(result.prompt).toBe('cGxhaW4gQVNDSUk=');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should record Unicode when it changes a per-turn prompt', async () => {
+      const result = await applyRuntimeTransforms(
+        'Ａdmin',
+        'input',
+        [{ id: 'unicode-normalization', config: { form: 'NFKC' } }],
+        [...mockStrategies, unicodeNormalizationStrategy],
+      );
+
+      expect(result.prompt).toBe('Admin');
+      expect(result.metadata).toMatchObject({
+        strategyId: 'unicode-normalization',
+        normalizationForm: 'NFKC',
+      });
     });
 
     it('should extract audio data from data URL', async () => {

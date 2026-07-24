@@ -453,6 +453,61 @@ describe('Redteam Routes', () => {
         expect(response.body.error).toContain('Invalid strategy ID');
       });
 
+      it('should return 400 for an invalid Unicode normalization form', async () => {
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'unicode-normalization',
+              config: { form: 'nfkd' },
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain(
+          'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
+        );
+        expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
+      });
+
+      it('should return 400 for an invalid Unicode normalization form nested in Layer', async () => {
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'layer',
+              config: {
+                steps: [{ id: 'unicode-normalization', config: { form: 'nfkd' } }],
+              },
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain(
+          'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
+        );
+        expect(response.body.error).toContain('strategy.config.steps[0].config.form');
+        expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
+      });
+
       it('should return 400 for plugin configuration error', async () => {
         mockedGetPluginConfigurationError.mockReturnValue(
           'Plugin requires additional configuration',
@@ -478,6 +533,71 @@ describe('Redteam Routes', () => {
 
         expect(response.status).toBe(400);
         expect(response.body.error).toBe('Plugin requires additional configuration');
+      });
+    });
+
+    describe('strategy no-op responses', () => {
+      it.each([
+        1, 2,
+      ])('should return an empty batch instead of the baseline when count is %i', async (count) => {
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'plain ascii' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'unicode-normalization',
+              config: { form: 'NFKD' },
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+            count,
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ testCases: [], count: 0 });
+        expect(mockedExtractGeneratedPrompt).not.toHaveBeenCalled();
+      });
+
+      it('should preserve the baseline fallback for an empty non-Unicode strategy result', async () => {
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'plain ascii' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'layer',
+              config: { steps: [] },
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body.prompt).toBe('generated test prompt');
+        expect(mockedExtractGeneratedPrompt).toHaveBeenCalled();
       });
     });
   });

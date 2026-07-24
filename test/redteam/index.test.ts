@@ -890,6 +890,80 @@ describe('synthesize', () => {
       expect(strategyIds).toContain('piglatin');
     });
 
+    it('should report an all-noop Unicode normalization strategy as skipped', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'plain ascii' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const unicodeStrategy: (typeof Strategies)[number] = {
+        action: vi.fn().mockResolvedValue([]),
+        id: 'unicode-normalization',
+      };
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return [unicodeStrategy].find(predicate);
+      });
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'unicode-normalization', config: { form: 'NFKD' } }],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+      const cleanReport = stripAnsi(reportMessage || '');
+      const unicodeRow = cleanReport
+        .split('\n')
+        .find((line) => line.includes('unicode-normalization (NFKD)'));
+
+      expect(unicodeRow).toBeDefined();
+      expect(unicodeRow).toContain('Skipped');
+      expect(unicodeRow).not.toContain('Failed');
+    });
+
+    it('should report an all-noop Unicode-only Layer strategy as skipped', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'plain ascii' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const layerStrategy: (typeof Strategies)[number] = {
+        action: vi.fn().mockResolvedValue([]),
+        id: 'layer',
+      };
+      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+        return [layerStrategy].find(predicate);
+      });
+
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'layer', config: { steps: ['unicode-normalization'] } }],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+      const cleanReport = stripAnsi(reportMessage || '');
+      const layerRow = cleanReport
+        .split('\n')
+        .find((line) => line.includes('layer(unicode-normalization)'));
+
+      expect(layerRow).toBeDefined();
+      expect(layerRow).toContain('Skipped');
+      expect(layerRow).not.toContain('Failed');
+    });
+
     it('should handle missing strategy collections gracefully', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
