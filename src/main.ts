@@ -3,6 +3,7 @@ import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
+import registerCanaryCommand from './commands/canary';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -98,6 +99,7 @@ async function main() {
   // Alphabetical order
   authCommand(program);
   cacheCommand(program);
+  registerCanaryCommand(program, defaultConfig, defaultConfigPath);
   codeScansCommand(program);
   configCommand(program);
   debugCommand(program, defaultConfig, defaultConfigPath);
