@@ -134,6 +134,7 @@ describe('index.ts exports', () => {
     'CompletedPromptSchema',
     'CompletionTokenDetailsSchema',
     'ConversationMessageSchema',
+    'DefaultColumnVisibilitySchema',
     'DerivedMetricSchema',
     'DocumentMediaInjectionPlacementSchema',
     'DocumentMediaInjectionPlacementValues',
