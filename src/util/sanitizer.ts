@@ -139,7 +139,6 @@ export const SECRET_FIELD_NAMES = new Set([
   'xcsrftoken', // x-csrf-token
   'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
-  'sessionid', // session-id
   'session', // session
   'cookie',
   'setcookie', // set-cookie
