@@ -1,4 +1,6 @@
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesSearchRubric } from '../matchers/search';
+import { invertScore } from '../matchers/shared';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -26,11 +28,20 @@ export async function handleSearchRubric({
     providerCallContext,
   );
 
+  if (isGraderFailure(result)) {
+    return result;
+  }
+
   if (inverse) {
-    result.pass = !result.pass;
-    result.reason = result.pass
-      ? `Output does not require web search verification: ${result.reason}`
-      : `Output requires web search verification: ${result.reason}`;
+    const pass = !result.pass;
+    return {
+      ...result,
+      pass,
+      score: invertScore(result.score),
+      reason: pass
+        ? `Output does not require web search verification: ${result.reason}`
+        : `Output requires web search verification: ${result.reason}`,
+    };
   }
 
   return result;
