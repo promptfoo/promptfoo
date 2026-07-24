@@ -15,6 +15,7 @@ describe('getRiskCategorySeverityMap', () => {
     const result = getRiskCategorySeverityMap();
     expect(result).toBeDefined();
     expect(result['contracts']).toBe(Severity.Medium);
+    expect(result['openai-guardrails']).toBe(Severity.High);
   });
 
   it('should override default severities with plugin severities', () => {
