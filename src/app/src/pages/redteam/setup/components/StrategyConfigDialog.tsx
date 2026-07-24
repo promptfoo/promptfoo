@@ -27,6 +27,9 @@ import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
+  FLIP_ATTACK_MODES,
+  type FlipAttackMode,
+  isFlipAttackMode,
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
@@ -49,6 +52,14 @@ type StepType = string | { id: string; config?: Partial<StrategyConfig> };
 // Helper to extract step ID from either format
 const getStepId = (step: StepType): string => {
   return typeof step === 'string' ? step : step.id;
+};
+
+// Labels for the flipattack `mode` options. Keyed by FlipAttackMode so adding a
+// mode to FLIP_ATTACK_MODES fails to compile until a label is supplied here.
+const FLIP_ATTACK_MODE_LABELS: Record<FlipAttackMode, string> = {
+  char_in_sentence: 'Reverse all characters (default)',
+  word_order: 'Reverse word order',
+  char_in_word: 'Reverse characters within each word',
 };
 
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
@@ -325,24 +336,16 @@ export default function StrategyConfigDialog({
         const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
         if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
+          const strategyConfig = allStrategies.find((s) => {
+            const id = typeof s === 'string' ? s : s.id;
+            return id === trimmedValue;
+          });
+          const step =
+            strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config
+              ? { id: trimmedValue, config: strategyConfig.config }
+              : trimmedValue;
 
-            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
-              // Add step with its config
-              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
-            } else {
-              // Shouldn't reach here due to filtering, but add as string fallback
-              setSteps((prev) => [...prev, trimmedValue]);
-            }
-          } else {
-            // Regular strategy without config requirements
-            setSteps((prev) => [...prev, trimmedValue]);
-          }
+          setSteps((prev) => [...prev, step]);
           setNewStep('');
         }
       }
@@ -435,7 +438,8 @@ export default function StrategyConfigDialog({
       strategy === 'custom' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
-      strategy === 'mischievous-user'
+      strategy === 'mischievous-user' ||
+      strategy === 'flipattack'
     ) {
       if (!isCustomStrategyValid()) {
         return;
@@ -1306,6 +1310,38 @@ export default function StrategyConfigDialog({
     </div>
   );
 
+  const renderFlipAttackStrategyConfig = () => {
+    const rawMode = localConfig.mode;
+    const mode: FlipAttackMode = isFlipAttackMode(rawMode) ? rawMode : 'char_in_sentence';
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Flip the words or characters of the request and instruct the target to recover and answer
+          it.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="flipattack-mode">Flip mode</Label>
+          <Select
+            value={mode}
+            onValueChange={(value) => setLocalConfig({ ...localConfig, mode: value })}
+          >
+            <SelectTrigger id="flipattack-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FLIP_ATTACK_MODES.map((flipMode) => (
+                <SelectItem key={flipMode} value={flipMode}>
+                  {FLIP_ATTACK_MODE_LABELS[flipMode]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    );
+  };
+
   const renderStrategyConfig = () => {
     switch (strategy) {
       case 'basic':
@@ -1329,6 +1365,8 @@ export default function StrategyConfigDialog({
         return renderGcgStrategyConfig();
       case 'citation':
         return renderCitationStrategyConfig();
+      case 'flipattack':
+        return renderFlipAttackStrategyConfig();
       case 'layer':
         return renderLayerStrategyConfig();
       default:

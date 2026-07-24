@@ -669,6 +669,32 @@ describe('addLayerTestCases', () => {
       }
     });
 
+    it('should filter excluded per-turn layers for coding-agent plugins', async () => {
+      const result = await addLayerTestCases(
+        [
+          {
+            vars: { input: 'test' },
+            metadata: {
+              pluginId: 'coding-agent:secret-env-read',
+              pluginConfig: { excludeStrategies: ['flipattack'] },
+            },
+          },
+        ],
+        'input',
+        { steps: ['jailbreak:hydra', 'flipattack'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result).toHaveLength(1);
+      const provider = result[0].provider;
+      expect(typeof provider).toBe('object');
+      if (typeof provider === 'object' && provider !== null && 'config' in provider) {
+        expect((provider.config as Record<string, unknown>)._perTurnLayers).toBeUndefined();
+      }
+      expect(result[0].metadata?.strategyId).not.toContain('flipattack');
+    });
+
     it('should generate correct metric suffix for each attack provider', async () => {
       const testCasesWithAssert: TestCaseWithPlugin[] = [
         {

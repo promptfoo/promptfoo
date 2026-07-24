@@ -10,6 +10,7 @@ import { addBestOfNTestCases } from './bestOfN';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
+import { addFlipAttack } from './flipAttack';
 import { addGcgTestCases } from './gcg';
 import { addGoatTestCases } from './goat';
 import { addGoblin } from './goblin';
@@ -275,6 +276,15 @@ export const Strategies: Strategy[] = [
       logger.debug(`Adding video encoding to ${testCases.length} test cases`);
       const newTestCases = await addVideoToBase64(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} video encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'flipattack',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding FlipAttack to ${testCases.length} test cases`);
+      const newTestCases = addFlipAttack(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} FlipAttack test cases`);
       return newTestCases;
     },
   },
