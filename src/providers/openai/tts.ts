@@ -28,7 +28,6 @@ import type { OpenAiSharedOptions } from './types';
 
 const VALID_RESPONSE_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
 const MAX_INPUT_CHARACTERS = 4096;
-const inFlightRequests = new Map<string, Promise<ProviderResponse>>();
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
@@ -166,6 +165,7 @@ function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24_000): Buffer {
 }
 
 async function coalesceRequest(
+  inFlightRequests: Map<string, Promise<ProviderResponse>>,
   cacheKey: string,
   request: () => Promise<ProviderResponse>,
 ): Promise<ProviderResponse> {
@@ -201,6 +201,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
   static OPENAI_TTS_MODEL_NAMES = OPENAI_TTS_MODELS.map((model) => model.id);
 
   config: OpenAiTtsOptions;
+  private readonly inFlightRequests = new Map<string, Promise<ProviderResponse>>();
 
   constructor(
     modelName: string,
@@ -281,6 +282,12 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
     const hasSensitiveBody = hasSensitiveCacheValue(body);
     const hasTenantDiscriminator = Object.entries(cacheHeaders).some(
       ([key, value]) =>
+        /(?:^|[-_])(?:project|tenant|account|organization)(?:[-_]|$)/i.test(key) &&
+        typeof value === 'string' &&
+        value.trim().length > 0,
+    );
+    const hasProjectTenantOrAccountDiscriminator = Object.entries(cacheHeaders).some(
+      ([key, value]) =>
         /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key) &&
         typeof value === 'string' &&
         value.trim().length > 0,
@@ -299,16 +306,26 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       hasSensitiveUrlCredentials = true;
       hasSensitiveUrlPath = true;
     }
-    const usesAuthenticatedCustomEndpoint =
-      !sendsToOpenAiApi &&
-      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
-    const cacheEnabled =
+    const hasAuthentication =
+      hasSensitiveUrlCredentials ||
+      Object.entries(requestHeaders).some(
+        ([key, value]) => isSensitiveCacheHeader(key) && value.trim().length > 0,
+      );
+    const usesAuthenticatedCustomEndpoint = !sendsToOpenAiApi && hasAuthentication;
+    const usesAuthenticatedOpenAiApiWithoutTenantDiscriminator =
+      sendsToOpenAiApi && hasAuthentication && !hasTenantDiscriminator;
+    const persistentCacheEnabled =
       isCacheEnabled() &&
       !hasSensitiveBody &&
       !hasSensitiveHeaderValue &&
       !hasSensitiveUrlPath &&
       !usesAuthenticatedCustomEndpoint &&
-      !(typeof body.voice === 'object' && body.voice !== null && !hasTenantDiscriminator);
+      !usesAuthenticatedOpenAiApiWithoutTenantDiscriminator &&
+      !(
+        typeof body.voice === 'object' &&
+        body.voice !== null &&
+        !hasProjectTenantOrAccountDiscriminator
+      );
     const cacheKey = `openai:tts:${sha256(
       JSON.stringify(
         canonicalizeCacheValue({
@@ -318,9 +335,20 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
         }),
       ),
     )}`;
+    const inFlightRequestKey = `openai:tts:in-flight:${sha256(
+      JSON.stringify(
+        canonicalizeCacheValue({
+          url,
+          body,
+          headers: requestHeaders,
+        }),
+      ),
+    )}`;
 
-    const useCache = cacheEnabled && !this.shouldBustCache(context);
-    if (useCache) {
+    const bustCache = this.shouldBustCache(context);
+    const usePersistentCache = persistentCacheEnabled && !bustCache;
+    const useInFlightCoalescing = isCacheEnabled() && !bustCache;
+    if (usePersistentCache) {
       const cachedResponse = await getCachedResponse(cacheKey, startedAt);
       if (cachedResponse) {
         return cachedResponse;
@@ -369,7 +397,7 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
           latencyMs: Date.now() - startedAt,
         };
 
-        if (useCache) {
+        if (usePersistentCache) {
           await cacheResponse(cacheKey, result);
         }
 
@@ -398,9 +426,10 @@ export class OpenAiTtsProvider extends OpenAiGenericProvider {
       }
     };
 
-    return useCache
+    return useInFlightCoalescing
       ? coalesceRequest(
-          getInFlightCacheKey(getScopedCacheKey(cacheKey), callApiOptions?.abortSignal),
+          this.inFlightRequests,
+          getInFlightCacheKey(getScopedCacheKey(inFlightRequestKey), callApiOptions?.abortSignal),
           requestSpeech,
         )
       : requestSpeech();

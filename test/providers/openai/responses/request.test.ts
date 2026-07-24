@@ -1784,6 +1784,61 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(deleteFromCache).toHaveBeenCalledOnce();
   });
 
+  it('should cancel a non-persistable coalesced background job after its sole subscriber aborts', async () => {
+    const controller = new AbortController();
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    let acceptCreation: ((value: any) => void) | undefined;
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+      if (String(url).endsWith('/responses') && options?.method === 'POST') {
+        return await new Promise<any>((resolve) => {
+          acceptCreation = resolve;
+        });
+      }
+      if (String(url).endsWith('/responses/resp_coalesced/cancel')) {
+        return { data: {}, cached: false, status: 200, statusText: 'OK' };
+      }
+      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+    });
+    const provider = new OpenAiResponsesProvider('gpt-4.1', {
+      config: { apiKey: 'default-key', background: true, maxRetries: 0 },
+    });
+
+    const pending = provider.callApi('Accept and then cancel', undefined, {
+      abortSignal: controller.signal,
+    });
+    await vi.waitFor(() => expect(acceptCreation).toBeDefined());
+    controller.abort(new Error('sole subscriber cancelled creation'));
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+      expect.stringContaining('/cancel'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+
+    acceptCreation?.({
+      data: { id: 'resp_coalesced', status: 'queued', output: [], usage: null },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      deleteFromCache,
+    });
+    await vi.waitFor(() =>
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/responses/resp_coalesced/cancel'),
+        expect.objectContaining({ method: 'POST' }),
+        expect.any(Number),
+        'json',
+        true,
+        0,
+      ),
+    );
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
+
   it('should bound polling retries by the overall background deadline', async () => {
     setOpenAiEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '20' });
     const deleteFromCache = vi.fn().mockResolvedValue(undefined);
