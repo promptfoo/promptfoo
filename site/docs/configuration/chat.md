@@ -226,7 +226,16 @@ The prompt inserts the previous conversation into the test case, creating a full
 Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn).
 
 :::info
-When a prompt references `_conversation` as a Nunjucks variable, the eval will run single-threaded (concurrency of 1).
+When a prompt references `_conversation` as a Nunjucks variable, steps that share the
+same conversation history run sequentially. Different `conversationId` values can run
+in parallel up to your configured max concurrency.
+Each repeat index has a separate history, so repeated runs do not continue one another
+and may also run in parallel.
+Providers that maintain their own persistent session or thread state continue to run globally
+serially so that provider-managed context is not interleaved.
+
+A step with `options.disableConversationVar: true` does not receive the history variable,
+but its response remains part of the conversation for later turns.
 :::
 
 ## Separating Chat Conversations
