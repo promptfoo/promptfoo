@@ -46,9 +46,10 @@ function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
   }
 
   const isSafeTransportCode = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(sourceCode ?? '');
+  const transportErrorMessage = sourceError.message.replace(/\b(?:wss?|https?):\/\/\S+/gi, '');
   const isPermanentProtocolError =
     /wrong version number|self signed|unable to verify|unknown ca|cert|alert protocol version|unsupported protocol/i.test(
-      sourceError.message,
+      transportErrorMessage,
     );
   let safeReason: string | undefined;
 

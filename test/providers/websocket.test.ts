@@ -497,6 +497,57 @@ describe('WebSocketProvider', () => {
     }
   });
 
+  it('should retry transient TLS failures when the rendered URL contains certificate text', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const renderedUrl =
+      'ws://certificate-service.invalid/sessions/private-session-123?token=runtime-query-secret';
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+        maxRetries: 1,
+      },
+    });
+    emitWebSocketEvents({
+      type: 'error',
+      error: Object.assign(new Error(`write EPROTO transient TLS failure ${renderedUrl}`), {
+        code: 'EPROTO',
+      }),
+    });
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callApi = vi.fn(() =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {
+          tenant: 'certificate-service',
+          sessionId: 'private-session-123',
+          token: 'runtime-query-secret',
+        },
+      }),
+    );
+
+    try {
+      await expect(
+        registry.execute(provider, callApi, {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        }),
+      ).rejects.toThrow('WebSocket connection failed (EPROTO)');
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        retriedRequests: 1,
+        rateLimitHits: 0,
+        failedRequests: 1,
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('certificate-service');
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-query-secret');
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it.each([
     new Error('getaddrinfo ENOTFOUND runtime-secret-tenant.invalid'),
     Object.assign(new Error('getaddrinfo ENOTFOUND tenant-429.invalid'), { code: 'ENOTFOUND' }),
