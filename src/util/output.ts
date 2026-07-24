@@ -556,6 +556,98 @@ async function writeJsonOutputSafely(
   }
 }
 
+async function renderEvalHtmlReport(evalRecord: Eval): Promise<string> {
+  const table = await evalRecord.getTable();
+  invariant(table, 'Table is required');
+  const summary = await evalRecord.toEvaluateSummary();
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const metadata = createOutputMetadata(evalRecord);
+  const template = await fsPromises.readFile(
+    path.join(getDirectory(), 'tableOutput.html'),
+    'utf-8',
+  );
+  const htmlTable = [
+    [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ],
+    ...table.body.map((row, rowIndex) => [
+      ...row.vars.map((value, variableIndex) => ({
+        kind: 'variable',
+        name: table.head.vars[variableIndex],
+        text: value,
+      })),
+      ...row.outputs.map((output, outputIndex) => ({
+        kind: 'output',
+        detailId: `result-detail-${rowIndex}-${outputIndex}`,
+        detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
+        description: row.description || row.test?.description || '',
+        ...outputToHtmlReportCell(output),
+      })),
+    ]),
+  ];
+  const reportOutputs = table.body.flatMap((row) => row.outputs);
+  const totalResults = reportOutputs.length;
+  const successes = reportOutputs.filter((output) => output.pass).length;
+  const errors = reportOutputs.filter(
+    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+  ).length;
+  const failures = totalResults - successes - errors;
+  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+  return getNunjucksEngine().renderString(template, {
+    config: redactedConfig,
+    table: htmlTable,
+    results: summary,
+    metadata,
+    report: {
+      totalResults,
+      totalRows: table.body.length,
+      promptCount: table.head.prompts.length,
+      variableCount: table.head.vars.length,
+      successes,
+      failures,
+      errors,
+      passRateDisplay: `${passRate.toFixed(1)}%`,
+    },
+  });
+}
+
+async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<void> {
+  let chromium;
+  try {
+    ({ chromium } = await import('playwright'));
+  } catch (error) {
+    throw new Error(
+      `PDF output requires the playwright package. Install it with: npm install playwright && npx playwright install chromium\n${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const htmlOutput = await renderEvalHtmlReport(evalRecord);
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    throw new Error(
+      `Failed to launch Chromium for PDF output: ${error instanceof Error ? error.message : String(error)}\nIf the browser is not installed, run: npx playwright install chromium`,
+    );
+  }
+  try {
+    const page = await browser.newPage();
+    await page.setContent(htmlOutput, { waitUntil: 'networkidle' });
+    await page.pdf({
+      path: outputPath,
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '12mm', bottom: '12mm', left: '10mm', right: '10mm' },
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to render PDF output from ${htmlOutput.length} bytes of HTML: ${error instanceof Error ? error.message : String(error)}\nVery large reports can exceed Chromium's rendering limits. Try exporting HTML instead: --output report.html`,
+    );
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -614,60 +706,9 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-    const metadata = createOutputMetadata(evalRecord);
-    const template = await fsPromises.readFile(
-      path.join(getDirectory(), 'tableOutput.html'),
-      'utf-8',
-    );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value, variableIndex) => ({
-          kind: 'variable',
-          name: table.head.vars[variableIndex],
-          text: value,
-        })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
-      ]),
-    ];
-    const reportOutputs = table.body.flatMap((row) => row.outputs);
-    const totalResults = reportOutputs.length;
-    const successes = reportOutputs.filter((output) => output.pass).length;
-    const errors = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-    ).length;
-    const failures = totalResults - successes - errors;
-    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
-      table: htmlTable,
-      results: summary,
-      metadata,
-      report: {
-        totalResults,
-        totalRows: table.body.length,
-        promptCount: table.head.prompts.length,
-        variableCount: table.head.vars.length,
-        successes,
-        failures,
-        errors,
-        passRateDisplay: `${passRate.toFixed(1)}%`,
-      },
-    });
-    await fsPromises.writeFile(outputPath, htmlOutput);
+    await fsPromises.writeFile(outputPath, await renderEvalHtmlReport(evalRecord));
+  } else if (outputExtension === 'pdf') {
+    await writePdfOutput(outputPath, evalRecord);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {
