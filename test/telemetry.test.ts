@@ -154,11 +154,12 @@ describe('Telemetry', () => {
     });
   });
 
-  it('should not track events with PostHog when telemetry is disabled', () => {
+  it('should not send events when telemetry is disabled', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
-    expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    expect(sendEventSpy).not.toHaveBeenCalled();
+    expect(fetchWithProxySpy).not.toHaveBeenCalled();
   });
 
   it('should defer identity until explicit initialization when requested', () => {
@@ -313,10 +314,12 @@ describe('Telemetry', () => {
     );
   });
 
-  it('should not send user events when telemetry is disabled', async () => {
+  it('should not send any telemetry events when telemetry is disabled', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
-    resetModulesAndMockFetch();
+    const fetchWithProxyMock = vi.fn().mockResolvedValue({ ok: true });
+
+    resetModulesAndMockFetch({ fetchWithProxy: fetchWithProxyMock });
 
     const telemetryModule = await import('../src/telemetry');
     const { Telemetry: TelemetryClass, default: telemetryInstance } = telemetryModule;
@@ -326,12 +329,8 @@ describe('Telemetry', () => {
 
     telemetryInstance.record('eval_ran', { foo: 'bar' });
 
-    // When telemetry is disabled, sendEvent is called with the "telemetry disabled" event
-    // but NOT with the user's event ('eval_ran')
-    expect(localSendEventSpy).toHaveBeenCalledWith('feature_used', {
-      feature: 'telemetry disabled',
-    });
-    expect(localSendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+    expect(localSendEventSpy).not.toHaveBeenCalled();
+    expect(fetchWithProxyMock).not.toHaveBeenCalled();
     localSendEventSpy.mockRestore();
   });
 
@@ -719,18 +718,16 @@ describe('Telemetry', () => {
     });
   });
 
-  describe('telemetry disabled recording', () => {
-    it('should record telemetry disabled event only once', () => {
+  describe('telemetry disabled opt-out', () => {
+    it('should not record telemetry disabled events', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
       const telemetry = new Telemetry();
 
       telemetry.record('eval_ran', { foo: 'bar' });
-      expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
-      expect(sendEventSpy).toHaveBeenCalledTimes(1);
-
-      sendEventSpy.mockClear();
       telemetry.record('command_used', { name: 'test' });
+
       expect(sendEventSpy).not.toHaveBeenCalled();
+      expect(fetchWithProxySpy).not.toHaveBeenCalled();
     });
   });
 
