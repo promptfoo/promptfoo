@@ -54,6 +54,7 @@
     "js-yaml": "5.2.1",
     "jsdom": "^29.0.0",
     "lucide-react": "^1.0.0",
+    "mdast-util-from-markdown": "^2.0.3",
     "postcss": "^8.5.10",
     "posthog-js": "1.379.1",
     "prismjs": "^1.30.0",
