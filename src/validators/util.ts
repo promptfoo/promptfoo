@@ -117,6 +117,6 @@ export function determineEffectiveSessionSource({
   return (
     sessionConfig?.sessionSource ||
     provider.config?.sessionSource ||
-    (provider.config.sessionParser ? 'server' : 'client')
+    (provider.config?.sessionParser ? 'server' : 'client')
   );
 }
