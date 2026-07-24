@@ -766,6 +766,14 @@ function parseJsonGradingResponse(
     };
   }
 
+  if (jsonObjects.length !== 1) {
+    return {
+      failure: failWithTokens(
+        `${label} produced multiple JSON objects; expected exactly one grading verdict`,
+      ),
+    };
+  }
+
   const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
