@@ -72,6 +72,7 @@ Most commands support the following common options:
 | Option                          | Description                                                                              |
 | ------------------------------- | ---------------------------------------------------------------------------------------- |
 | `--env-file, --env-path <path>` | Path to a `.env` file. Repeat the flag or use comma-separated values for multiple files. |
+| `--log-file <path>`             | Write logs to a specified file in addition to the default logs.                          |
 | `-v, --verbose`                 | Show debug logs                                                                          |
 | `--help`                        | Display help                                                                             |
 
