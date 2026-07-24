@@ -42,7 +42,7 @@ import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateTokenUsage, getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { isUuid } from '../../util/uuid';
 import { loadYaml } from '../../util/yamlLoad';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
@@ -677,127 +677,6 @@ async function doGenerateRedteamInternal(
     total: 0,
   };
 
-  if (contexts && contexts.length > 0) {
-    // Multi-context mode: generate tests for each context
-    logger.info(`Generating tests for ${contexts.length} contexts...`);
-
-    // Collect failed plugins across all contexts
-    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
-    let firstContextPurpose: string | undefined;
-
-    for (const context of contexts) {
-      logger.info(`  Generating tests for context: ${context.id}`);
-
-      const contextPurpose = resolveEffectivePurpose({
-        contextPurpose: context.purpose,
-        contextVars: context.vars,
-        extraDetails: purposeDetails,
-        rootPurpose,
-        testSuite,
-      });
-
-      const contextResult = await withGenerationConcurrency(
-        config.maxConcurrency,
-        config.delay,
-        () =>
-          synthesize({
-            ...parsedConfig.data,
-            inputs: targetInputs,
-            purpose: contextPurpose,
-            numTests: config.numTests,
-            prompts: testSuite.prompts.map((prompt) => prompt.raw),
-            maxConcurrency: config.maxConcurrency,
-            delay: config.delay,
-            abortSignal: options.abortSignal,
-            redteamGenerationContext,
-            cloudTargetDatabaseId,
-            targetIds,
-            showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: augmentedTestGenerationInstructions,
-          } as SynthesizeOptions),
-      );
-
-      // Collect failed plugins from this context
-      if (contextResult.failedPlugins.length > 0) {
-        allFailedPlugins.push(...contextResult.failedPlugins);
-      }
-      accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
-      firstContextPurpose ??= contextResult.purpose;
-
-      // Tag each test with context metadata and merge context vars
-      // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
-          ...test.metadata,
-          purpose: contextResult.purpose,
-          contextId: context.id,
-          contextVars: context.vars,
-        },
-      }));
-
-      redteamTests = redteamTests.concat(taggedTests);
-
-      // Keep track of entities and injectVar from first context
-      if (!entities.length) {
-        entities = contextResult.entities;
-      }
-      if (!finalInjectVar) {
-        finalInjectVar = contextResult.injectVar;
-      }
-    }
-
-    // Store failed plugins for handling after the try block starts
-    failedPlugins = allFailedPlugins;
-
-    // Use the first generated context purpose for backward compatibility in shared metadata.
-    purpose = firstContextPurpose || '';
-    logger.info(
-      `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
-    );
-  } else {
-    // Single purpose mode (existing behavior)
-    const effectivePurpose = resolveEffectivePurpose({
-      extraDetails: purposeDetails,
-      rootPurpose,
-      testSuite,
-    });
-    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
-      synthesize({
-        ...parsedConfig.data,
-        inputs: targetInputs,
-        purpose: effectivePurpose,
-        numTests: config.numTests,
-        prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
-        abortSignal: options.abortSignal,
-        redteamGenerationContext,
-        cloudTargetDatabaseId,
-        targetIds,
-        showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
-      } as SynthesizeOptions),
-    );
-
-    redteamTests = result.testCases;
-    purpose = result.purpose;
-    entities = result.entities;
-    finalInjectVar = result.injectVar;
-    failedPlugins = result.failedPlugins;
-    accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
-  }
-
-  /**
-   * Cleans up the provider after redteam generation completes.
-   * This should always be called before returning, since providers are
-   * re-initialized when running the red team. Cleanup is particularly
-   * important for MCP servers to release resources and prevent memory leaks.
-   */
   const cleanupProvider = async (): Promise<void> => {
     try {
       logger.debug('Cleaning up provider');
@@ -813,9 +692,157 @@ async function doGenerateRedteamInternal(
     }
   };
 
+  const reportGenerationTokenUsage = (): boolean => {
+    const generationRequestCount = generationTokenUsage.numRequests ?? 0;
+    const hasReportedGenerationTokens =
+      (generationTokenUsage.total ?? 0) > 0 ||
+      (generationTokenUsage.prompt ?? 0) > 0 ||
+      (generationTokenUsage.completion ?? 0) > 0 ||
+      (generationTokenUsage.cached ?? 0) > 0 ||
+      Object.values(generationTokenUsage.completionDetails ?? {}).some(
+        (value) => typeof value === 'number' && value > 0,
+      );
+    const hasGenerationUsage = generationRequestCount > 0 || hasReportedGenerationTokens;
+    if (hasGenerationUsage) {
+      logger.info(
+        hasReportedGenerationTokens
+          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
+              `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
+              `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
+              `${generationRequestCount.toLocaleString()} request(s)`
+          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
+      );
+    }
+    return hasGenerationUsage;
+  };
+
+  try {
+    if (contexts && contexts.length > 0) {
+      // Multi-context mode: generate tests for each context
+      logger.info(`Generating tests for ${contexts.length} contexts...`);
+
+      // Collect failed plugins across all contexts
+      const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+      let firstContextPurpose: string | undefined;
+
+      for (const context of contexts) {
+        logger.info(`  Generating tests for context: ${context.id}`);
+
+        const contextPurpose = resolveEffectivePurpose({
+          contextPurpose: context.purpose,
+          contextVars: context.vars,
+          extraDetails: purposeDetails,
+          rootPurpose,
+          testSuite,
+        });
+
+        const contextResult = await withGenerationConcurrency(
+          config.maxConcurrency,
+          config.delay,
+          () =>
+            synthesize({
+              ...parsedConfig.data,
+              inputs: targetInputs,
+              purpose: contextPurpose,
+              numTests: config.numTests,
+              prompts: testSuite.prompts.map((prompt) => prompt.raw),
+              maxConcurrency: config.maxConcurrency,
+              delay: config.delay,
+              abortSignal: options.abortSignal,
+              redteamGenerationContext,
+              cloudTargetDatabaseId,
+              targetIds,
+              showProgressBar: options.progressBar !== false,
+              testGenerationInstructions: augmentedTestGenerationInstructions,
+            } as SynthesizeOptions),
+        );
+
+        // Collect failed plugins from this context
+        if (contextResult.failedPlugins.length > 0) {
+          allFailedPlugins.push(...contextResult.failedPlugins);
+        }
+        accumulateTokenUsage(generationTokenUsage, contextResult.generationTokenUsage);
+        firstContextPurpose ??= contextResult.purpose;
+
+        // Tag each test with context metadata and merge context vars
+        // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
+        const taggedTests = contextResult.testCases.map((test: any) => ({
+          ...test,
+          vars: {
+            ...test.vars,
+            ...(context.vars || {}),
+          },
+          metadata: {
+            ...test.metadata,
+            purpose: contextResult.purpose,
+            contextId: context.id,
+            contextVars: context.vars,
+          },
+        }));
+
+        redteamTests = redteamTests.concat(taggedTests);
+
+        // Keep track of entities and injectVar from first context
+        if (!entities.length) {
+          entities = contextResult.entities;
+        }
+        if (!finalInjectVar) {
+          finalInjectVar = contextResult.injectVar;
+        }
+      }
+
+      // Store failed plugins for handling after the try block starts
+      failedPlugins = allFailedPlugins;
+
+      // Use the first generated context purpose for backward compatibility in shared metadata.
+      purpose = firstContextPurpose || '';
+      logger.info(
+        `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
+      );
+    } else {
+      // Single purpose mode (existing behavior)
+      const effectivePurpose = resolveEffectivePurpose({
+        extraDetails: purposeDetails,
+        rootPurpose,
+        testSuite,
+      });
+      const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+        synthesize({
+          ...parsedConfig.data,
+          inputs: targetInputs,
+          purpose: effectivePurpose,
+          numTests: config.numTests,
+          prompts: testSuite.prompts.map((prompt) => prompt.raw),
+          maxConcurrency: config.maxConcurrency,
+          delay: config.delay,
+          abortSignal: options.abortSignal,
+          redteamGenerationContext,
+          cloudTargetDatabaseId,
+          targetIds,
+          showProgressBar: options.progressBar !== false,
+          testGenerationInstructions: augmentedTestGenerationInstructions,
+        } as SynthesizeOptions),
+      );
+
+      redteamTests = result.testCases;
+      purpose = result.purpose;
+      entities = result.entities;
+      finalInjectVar = result.injectVar;
+      failedPlugins = result.failedPlugins;
+      accumulateTokenUsage(generationTokenUsage, result.generationTokenUsage);
+    }
+  } catch (error) {
+    accumulateTokenUsage(generationTokenUsage, getErrorTokenUsage(error));
+    reportGenerationTokenUsage();
+    await cleanupProvider();
+    throw error;
+  }
+
   // Use try/finally to ensure cleanup runs even if an exception is thrown
   // (e.g., --strict mode failures, write errors)
   try {
+    const hasGenerationUsage = reportGenerationTokenUsage();
+
     // Check for failed plugins - warn by default, throw with --strict
     handleFailedPlugins(failedPlugins, options.strict ?? false);
 
@@ -838,23 +865,6 @@ async function doGenerateRedteamInternal(
       sharing: config.sharing,
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
-    const generationRequestCount = generationTokenUsage.numRequests ?? 0;
-    if (generationRequestCount > 0) {
-      const hasReportedGenerationTokens =
-        (generationTokenUsage.total ?? 0) > 0 ||
-        (generationTokenUsage.prompt ?? 0) > 0 ||
-        (generationTokenUsage.completion ?? 0) > 0 ||
-        (generationTokenUsage.cached ?? 0) > 0;
-      logger.info(
-        hasReportedGenerationTokens
-          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
-              `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
-              `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
-              `${generationRequestCount.toLocaleString()} request(s)`
-          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
-      );
-    }
-
     let ret: Partial<UnifiedConfig> | undefined;
     if (options.output && options.output.endsWith('.burp')) {
       // Write in Burp Intruder compatible format
@@ -900,7 +910,7 @@ async function doGenerateRedteamInternal(
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath, options) }
             : { configHash: 'force-regenerate' }),
-          ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          ...(hasGenerationUsage && { generationTokenUsage }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -967,7 +977,7 @@ async function doGenerateRedteamInternal(
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
-        ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        ...(hasGenerationUsage && { generationTokenUsage }),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -1008,9 +1018,7 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
-          ...((generationTokenUsage.numRequests ?? 0) > 0
-            ? { metadata: { generationTokenUsage } }
-            : {}),
+          ...(hasGenerationUsage ? { metadata: { generationTokenUsage } } : {}),
           tests: redteamTests,
         },
         'redteam.yaml',

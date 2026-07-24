@@ -12,6 +12,7 @@ import {
   materializeInputVariables,
   materializeInputVariablesWithMetadata,
 } from './inputVariables';
+import { trackGenerationFetch } from './providers/generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -19,7 +20,7 @@ import {
 } from './remoteGeneration';
 import { remoteGenerationContextPayload } from './remoteGenerationContext';
 
-import type { CallApiContextParams, ProviderResponse } from '../types/index';
+import type { CallApiContextParams, PluginActionParams, ProviderResponse } from '../types/index';
 
 /**
  * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
@@ -348,6 +349,7 @@ export async function extractGoalFromPrompt(
   pluginId?: string,
   policy?: string,
   targetId?: string,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<string | null> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
@@ -380,17 +382,22 @@ export async function extractGoalFromPrompt(
 
   interface ExtractIntentResponse {
     intent?: string;
+    tokenUsage?: unknown;
   }
 
   try {
-    const { data, status, statusText } = await fetchWithCache<ExtractIntentResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(requestBody),
-      },
-      getRequestTimeoutMs(),
+    const { data, status, statusText } = await trackGenerationFetch(
+      () =>
+        fetchWithCache<ExtractIntentResponse>(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(requestBody),
+          },
+          getRequestTimeoutMs(),
+        ),
+      trackTokenUsage,
     );
 
     logger.debug(

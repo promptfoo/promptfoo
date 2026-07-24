@@ -6,6 +6,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -56,6 +57,7 @@ async function generateCitations(
 
       interface CitationGenerationResponse {
         error?: string;
+        tokenUsage?: unknown;
         result?: {
           citation: {
             type: string;
@@ -64,14 +66,18 @@ async function generateCitations(
         };
       }
 
-      const { data } = await fetchWithCache<CitationGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await trackGenerationFetch(
+        () =>
+          fetchWithCache<CitationGenerationResponse>(
+            getRemoteGenerationUrl(),
+            {
+              method: 'POST',
+              headers: getRemoteGenerationHeaders(),
+              body: JSON.stringify(payload),
+            },
+            getRequestTimeoutMs(),
+          ),
+        config.__trackGenerationTokenUsage,
       );
 
       logger.debug(

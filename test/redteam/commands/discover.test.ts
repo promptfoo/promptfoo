@@ -8,6 +8,7 @@ import {
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
   resolveDiscoveryProviderContext,
+  TargetPurposeDiscoveryTaskResponseSchema,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
@@ -93,6 +94,44 @@ describe('resolveDiscoveryProviderContext', () => {
 });
 
 describe('normalizeTargetPurposeDiscoveryResult', () => {
+  it('preserves reported discovery token usage through response parsing and normalization', () => {
+    const parsed = TargetPurposeDiscoveryTaskResponseSchema.parse({
+      done: true,
+      state: { currentQuestionIndex: 0, answers: [] },
+      purpose: {
+        purpose: 'Book travel',
+        limitations: null,
+        user: null,
+        tools: [],
+        tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
+      },
+    });
+
+    expect(normalizeTargetPurposeDiscoveryResult(parsed.purpose!)).toMatchObject({
+      tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
+    });
+  });
+
+  it('ignores malformed optional discovery token usage', () => {
+    const parsed = TargetPurposeDiscoveryTaskResponseSchema.parse({
+      done: true,
+      state: { currentQuestionIndex: 0, answers: [] },
+      purpose: {
+        purpose: 'Book travel',
+        limitations: null,
+        user: null,
+        tools: [],
+        tokenUsage: { total: '10' },
+      },
+    });
+
+    expect(normalizeTargetPurposeDiscoveryResult(parsed.purpose!)).toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
   it('should handle null-like values', () => {
     const result = normalizeTargetPurposeDiscoveryResult({
       purpose: null,
@@ -251,6 +290,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: { numRequests: 3 },
     });
   });
 
@@ -282,6 +322,76 @@ describe('doTargetPurposeDiscovery', () => {
     expect(JSON.parse(request!.body as string)).toMatchObject({
       task: 'target-purpose-discovery',
       targetId: 'cloud-target-123',
+    });
+  });
+
+  it('accumulates top-level task and target token usage across discovery turns', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: { currentQuestionIndex: 0, answers: [] },
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Book travel',
+          limitations: null,
+          tools: [],
+          user: null,
+          tokenUsage: { total: 2, prompt: 1, completion: 1 },
+        },
+        state: { currentQuestionIndex: 1, answers: ['I book travel'] },
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
+      },
+    ];
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const target = createMockProvider({
+      id: 'test',
+      response: {
+        output: 'I book travel',
+        tokenUsage: { total: 11, prompt: 6, completion: 5 },
+      },
+    });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result).toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      tools: [],
+      user: null,
+      tokenUsage: { total: 25, prompt: 14, completion: 11, cached: 0, numRequests: 4 },
+    });
+  });
+
+  it('counts a successful unmetered discovery request', async () => {
+    mockedFetchWithProxy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: { purpose: 'Book travel', limitations: null, tools: [], user: null },
+          state: { currentQuestionIndex: 0, answers: [] },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ id: 'test', response: { output: 'unused' } });
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).resolves.toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      tools: [],
+      user: null,
+      tokenUsage: { numRequests: 1 },
     });
   });
 
@@ -422,6 +532,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: { numRequests: 3 },
     });
   });
 
@@ -471,6 +582,7 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
+      tokenUsage: { numRequests: 3 },
     });
   });
 
@@ -620,6 +732,7 @@ describe('doTargetPurposeDiscovery', () => {
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
+      tokenUsage: { numRequests: 3 },
     });
   });
 });

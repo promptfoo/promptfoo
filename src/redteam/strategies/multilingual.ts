@@ -9,6 +9,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { loadYaml } from '../../util/yamlLoad';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -137,14 +138,18 @@ async function processRemoteChunk(
     email: getUserEmail(),
   };
 
-  const resp = await fetchWithCache(
-    getRemoteGenerationUrl(),
-    {
-      method: 'POST',
-      headers: getRemoteGenerationHeaders(),
-      body: JSON.stringify(payload),
-    },
-    getRequestTimeoutMs(),
+  const resp = await trackGenerationFetch(
+    () =>
+      fetchWithCache(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: getRemoteGenerationHeaders(),
+          body: JSON.stringify(payload),
+        },
+        getRequestTimeoutMs(),
+      ),
+    config.__trackGenerationTokenUsage,
   );
   const { data, status, statusText } = resp as any;
   const result = (data as any)?.result;

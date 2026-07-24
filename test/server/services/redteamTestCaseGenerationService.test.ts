@@ -52,7 +52,7 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
     '../../../src/server/services/redteamTestCaseGenerationService'
   );
 
-  await generateMultiTurnPrompt({
+  return generateMultiTurnPrompt({
     pluginId: 'harmful:hate',
     strategyId,
     strategyConfigRecord: {},
@@ -99,9 +99,10 @@ describe('redteamTestCaseGenerationService', () => {
         tokenUsage: { total: 100 },
       });
 
-      await generatePromptForStrategy('goat');
+      const result = await generatePromptForStrategy('goat');
 
       await expectTaskRequest(fetchWithRetries, 'goat');
+      expect(result.tokenUsage).toEqual({ total: 100 });
     });
 
     it('should propagate remote generation failures', async () => {
@@ -110,6 +111,66 @@ describe('redteamTestCaseGenerationService', () => {
 
       await expect(generatePromptForStrategy('goat')).rejects.toThrow('remote generation failed');
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      'goat',
+      'mischievous-user',
+      'crescendo',
+      'custom',
+      'jailbreak:hydra',
+      'jailbreak:goblin',
+    ] as const)('preserves usage from a failed %s generation response', async (strategyId) => {
+      const tokenUsage = { total: 19, prompt: 12, completion: 7, numRequests: 1 };
+      const fetchWithRetries = vi.fn().mockResolvedValueOnce(
+        createMockResponse({
+          status: 500,
+          text: async () =>
+            JSON.stringify({ error: 'generation failed after inference', tokenUsage }),
+        }),
+      );
+      vi.doMock('../../../src/util/fetch/index', () => ({ fetchWithRetries }));
+      vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
+        getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+        getRemoteGenerationHeaders: vi.fn((extra) => ({
+          'Content-Type': 'application/json',
+          ...extra,
+        })),
+        neverGenerateRemote: vi.fn().mockReturnValue(false),
+      }));
+      vi.doMock('../../../src/providers/shared', () => ({
+        getRequestTimeoutMs: () => TEST_REQUEST_TIMEOUT_MS,
+      }));
+      vi.doMock('../../../src/constants', () => ({ VERSION: '0.0.0-test' }));
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({ tokenUsage });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      'goat',
+      'mischievous-user',
+      'crescendo',
+      'custom',
+      'jailbreak:hydra',
+      'jailbreak:goblin',
+    ] as const)('preserves usage from a malformed successful %s generation response', async (strategyId) => {
+      const tokenUsage = { total: 19, prompt: 12, completion: 7, numRequests: 1 };
+      const fetchWithRetries = mockRemoteGeneration({ message: {}, result: {}, tokenUsage });
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({ tokenUsage });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should ignore malformed remote generation token usage', async () => {
+      mockRemoteGeneration({
+        message: { content: 'test prompt' },
+        tokenUsage: { total: '100' },
+      });
+
+      const result = await generatePromptForStrategy('goat');
+
+      expect(result.tokenUsage).toBeUndefined();
     });
 
     it('should call fetchWithRetries with correct parameters for Crescendo strategy', async () => {

@@ -6,6 +6,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -33,7 +34,12 @@ export interface TextToAudioResult {
 export async function textToAudio(
   text: string,
   language: string = 'en',
-  options?: { evalId?: string; storeToStorage?: boolean; targetId?: string },
+  options?: {
+    evalId?: string;
+    storeToStorage?: boolean;
+    targetId?: string;
+    trackTokenUsage?: (response: { tokenUsage?: unknown; cached?: boolean }) => void;
+  },
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
@@ -55,16 +61,21 @@ export async function textToAudio(
     interface AudioGenerationResponse {
       error?: string;
       audioBase64?: string;
+      tokenUsage?: unknown;
     }
 
-    const { data } = await fetchWithCache<AudioGenerationResponse>(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(payload),
-      },
-      getRequestTimeoutMs(),
+    const { data } = await trackGenerationFetch(
+      () =>
+        fetchWithCache<AudioGenerationResponse>(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(payload),
+          },
+          getRequestTimeoutMs(),
+        ),
+      options?.trackTokenUsage,
     );
 
     if (data.error || !data.audioBase64) {
@@ -150,6 +161,7 @@ export async function addAudioToBase64(
     const audioResult = await textToAudio(originalText, language, {
       evalId,
       targetId: typeof config.targetId === 'string' ? config.targetId : undefined,
+      trackTokenUsage: config.__trackGenerationTokenUsage,
     });
 
     audioTestCases.push({

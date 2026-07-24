@@ -34,6 +34,29 @@ describe('tokenUsageUtils', () => {
       expect(
         getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: null })),
       ).toBeUndefined();
+      expect(getErrorTokenUsage({ tokenUsage: { usage: 10 } })).toBeUndefined();
+    });
+
+    it('does not replace the original provider error when token usage access throws', () => {
+      const error = Object.defineProperty(new Error('original failure'), 'tokenUsage', {
+        get() {
+          throw new Error('usage getter failed');
+        },
+      });
+
+      expect(getErrorTokenUsage(error)).toBeUndefined();
+      expect(
+        getErrorTokenUsage(
+          new Proxy(
+            {},
+            {
+              has() {
+                throw new Error('usage proxy failed');
+              },
+            },
+          ),
+        ),
+      ).toBeUndefined();
     });
   });
 
@@ -309,6 +332,14 @@ describe('tokenUsageUtils', () => {
   });
 
   describe('accumulateGenerationTokenUsage', () => {
+    it('does not report usage when completion details contain only undefined values', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(
+        accumulateGenerationTokenUsage(target, { completionDetails: { reasoning: undefined } }),
+      ).toBe(false);
+      expect(target.total).toBe(0);
+    });
     it('adds generation totals without inflating target request counts', () => {
       const target = createEmptyTokenUsage();
       target.numRequests = 2;

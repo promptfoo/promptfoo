@@ -16,9 +16,12 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import {
   extractGeneratedPrompt,
+  generateMultiTurnPrompt,
   getPluginConfigurationError,
+  RemoteGenerationDisabledError,
 } from '../../../src/server/services/redteamTestCaseGenerationService';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
@@ -26,6 +29,7 @@ const mockedPlugins = vi.mocked(Plugins);
 const mockedRedteamProviderManager = vi.mocked(redteamProviderManager);
 const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError);
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
+const mockedGenerateMultiTurnPrompt = vi.mocked(generateMultiTurnPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
@@ -404,6 +408,328 @@ describe('Redteam Routes', () => {
 
     afterEach(() => {
       vi.resetAllMocks();
+    });
+
+    describe('generation token usage', () => {
+      it.each([1, 3])('returns plugin generation usage for count %s', async (count) => {
+        const callApi = vi.fn().mockResolvedValue({
+          output: 'Prompt: generated test prompt',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        });
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi,
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate tests');
+            return Array.from({ length: count }, () => ({ vars: { query: 'test' } }));
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+            count,
+          });
+
+        expect(response.status).toBe(200);
+        expect(callApi).toHaveBeenCalledTimes(1);
+        expect(response.body.tokenUsage).toEqual({
+          total: 3,
+          prompt: 2,
+          completion: 1,
+          cached: 0,
+          numRequests: 1,
+        });
+      });
+
+      it('returns combined plugin and multi-turn generation usage', async () => {
+        const callApi = vi.fn().mockResolvedValue({
+          output: 'Prompt: generated test prompt',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        });
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi,
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate test');
+            return [{ vars: { query: 'test' }, metadata: { goal: 'test goal' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        mockedGenerateMultiTurnPrompt.mockResolvedValue({
+          prompt: 'next prompt',
+          metadata: { mischievousUser: { tokenUsage: { total: 7 } } },
+          tokenUsage: { total: 7, prompt: 4, completion: 3 },
+        } as any);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body.prompt).toBe('next prompt');
+        expect(response.body.tokenUsage).toEqual({
+          total: 10,
+          prompt: 6,
+          completion: 4,
+          cached: 0,
+          numRequests: 2,
+        });
+      });
+
+      it('includes provider usage from a generation-time strategy', async () => {
+        const pluginCallApi = vi.fn().mockResolvedValue({
+          output: 'Prompt: generated test prompt',
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        });
+        const strategyCallApi = vi.fn().mockResolvedValue({
+          output: 'strategy output',
+          tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+        });
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'plugin-provider',
+          callApi: pluginCallApi,
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate test');
+            return [{ vars: { query: 'test' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyFindSpy = vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'math-prompt',
+          action: vi.fn().mockImplementation(async (testCases, _injectVar, config) => {
+            const provider = config.__wrapGenerationProvider({
+              id: () => 'strategy-provider',
+              callApi: strategyCallApi,
+            });
+            await provider.callApi('transform test');
+            return testCases;
+          }),
+        } as any);
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'harmful:hate', config: {} },
+              strategy: { id: 'math-prompt', config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+            });
+
+          expect(response.status).toBe(200);
+          expect(pluginCallApi).toHaveBeenCalledTimes(1);
+          expect(strategyCallApi).toHaveBeenCalledTimes(1);
+          expect(response.body.tokenUsage).toEqual({
+            total: 12,
+            prompt: 7,
+            completion: 5,
+            cached: 0,
+            numRequests: 2,
+          });
+        } finally {
+          strategyFindSpy.mockRestore();
+        }
+      });
+
+      it.each([
+        'empty plugin result',
+        'plugin throw',
+        'strategy throw',
+        'multi-turn failure',
+      ])('preserves tracked usage when generation fails with %s', async (failureMode) => {
+        const usage = { total: 17, prompt: 10, completion: 7, numRequests: 1 };
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi: vi.fn().mockResolvedValue({ output: 'generated', tokenUsage: usage }),
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('generate test');
+            if (failureMode === 'plugin throw') {
+              throw new Error('plugin failed after generation');
+            }
+            return failureMode === 'empty plugin result'
+              ? []
+              : [{ vars: { query: 'generated prompt' }, metadata: { goal: 'test goal' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        const strategyId =
+          failureMode === 'strategy throw'
+            ? 'math-prompt'
+            : failureMode === 'multi-turn failure'
+              ? 'mischievous-user'
+              : 'basic';
+        const strategyFindSpy =
+          failureMode === 'strategy throw'
+            ? vi.spyOn(Strategies, 'find').mockReturnValue({
+                id: 'math-prompt',
+                action: vi.fn().mockImplementation(async (_testCases, _injectVar, config) => {
+                  const provider = config.__wrapGenerationProvider({
+                    id: () => 'strategy-provider',
+                    callApi: vi.fn().mockResolvedValue({ output: 'strategy', tokenUsage: usage }),
+                  });
+                  await provider.callApi('transform test');
+                  throw new Error('strategy failed after generation');
+                }),
+              } as any)
+            : undefined;
+        if (failureMode === 'multi-turn failure') {
+          mockedGenerateMultiTurnPrompt.mockRejectedValueOnce(
+            Object.assign(new Error('multi-turn failed after generation'), { tokenUsage: usage }),
+          );
+        }
+
+        try {
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'harmful:hate', config: {} },
+              strategy: { id: strategyId, config: {} },
+              config: { applicationDefinition: { purpose: 'test assistant' } },
+            });
+
+          expect(response.status).toBe(500);
+          expect(response.body.tokenUsage).toEqual({
+            total:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 34 : 17,
+            prompt:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 20 : 10,
+            completion:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 14 : 7,
+            cached: 0,
+            numRequests:
+              failureMode === 'strategy throw' || failureMode === 'multi-turn failure' ? 2 : 1,
+          });
+        } finally {
+          strategyFindSpy?.mockRestore();
+        }
+      });
+
+      it('counts a successful multi-turn request when the remote reports zero requests', async () => {
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'harmful:hate',
+          action: vi
+            .fn()
+            .mockResolvedValue([
+              { vars: { query: 'generated prompt' }, metadata: { goal: 'goal' } },
+            ]),
+        });
+        mockedGenerateMultiTurnPrompt.mockResolvedValueOnce({
+          prompt: 'next prompt',
+          metadata: {},
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 0 },
+        } as any);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body.tokenUsage).toEqual({
+          total: 7,
+          prompt: 4,
+          completion: 3,
+          cached: 0,
+          numRequests: 1,
+        });
+      });
+
+      it('counts an unmetered failed multi-turn request', async () => {
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'harmful:hate',
+          action: vi
+            .fn()
+            .mockResolvedValue([
+              { vars: { query: 'generated prompt' }, metadata: { goal: 'goal' } },
+            ]),
+        });
+        mockedGenerateMultiTurnPrompt.mockRejectedValueOnce(new Error('multi-turn request failed'));
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body.tokenUsage).toMatchObject({ numRequests: 1 });
+      });
+
+      it('does not count a multi-turn request when remote generation is disabled', async () => {
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'harmful:hate',
+          action: vi
+            .fn()
+            .mockResolvedValue([
+              { vars: { query: 'generated prompt' }, metadata: { goal: 'goal' } },
+            ]),
+        });
+        mockedGenerateMultiTurnPrompt.mockRejectedValueOnce(new RemoteGenerationDisabledError());
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'mischievous-user', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.tokenUsage?.numRequests ?? 0).toBe(0);
+      });
+
+      it('preserves validated usage carried by an unwrapped plugin error', async () => {
+        mockedPlugins.find = vi.fn().mockReturnValue({
+          key: 'harmful:hate',
+          action: vi.fn().mockRejectedValue(
+            Object.assign(new Error('remote plugin failed'), {
+              tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+            }),
+          ),
+        });
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: { id: 'harmful:hate', config: {} },
+            strategy: { id: 'basic', config: {} },
+            config: { applicationDefinition: { purpose: 'test assistant' } },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body.tokenUsage).toEqual({
+          total: 17,
+          prompt: 10,
+          completion: 7,
+          cached: 0,
+          numRequests: 1,
+        });
+      });
     });
 
     describe('validation', () => {

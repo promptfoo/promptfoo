@@ -82,6 +82,9 @@ describe('redteamProviderFactories', () => {
 
     const provider = await factory!.create(path, mockProviderOptions, mockContext);
     expect(provider.id()).toEqual(expectedId);
+    if (path === 'promptfoo:redteam:goblin') {
+      expect((provider as any).providerOptions.strategyId).toBe('jailbreak:goblin');
+    }
   });
 
   it('rejects unknown redteam paths', async () => {

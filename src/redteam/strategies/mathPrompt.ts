@@ -7,6 +7,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getRemoteGenerationHeaders,
@@ -67,16 +68,21 @@ export async function generateMathPrompt(
 
       interface MathPromptGenerationResponse {
         result?: TestCase[];
+        tokenUsage?: unknown;
       }
 
-      const { data } = await fetchWithCache<MathPromptGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await trackGenerationFetch(
+        () =>
+          fetchWithCache<MathPromptGenerationResponse>(
+            getRemoteGenerationUrl(),
+            {
+              method: 'POST',
+              headers: getRemoteGenerationHeaders(),
+              body: JSON.stringify(payload),
+            },
+            getRequestTimeoutMs(),
+          ),
+        config.__trackGenerationTokenUsage,
       );
 
       logger.debug(

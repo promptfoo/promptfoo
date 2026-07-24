@@ -12,7 +12,7 @@ import {
   normalizeInputDefinition,
 } from '../types/shared';
 
-import type { ApiProvider } from '../types/index';
+import type { ApiProvider, PluginActionParams } from '../types/index';
 
 const SVG_WIDTH = 1200;
 const SVG_LINE_HEIGHT = 32;
@@ -30,6 +30,7 @@ export type InputMaterializationContext = {
   pluginId?: string;
   provider?: ApiProvider;
   purpose?: string;
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'];
 };
 
 export type MaterializedInputMetadata = {
@@ -725,9 +726,27 @@ export async function materializeInputValueWithMetadata(
 
   let output: unknown;
   try {
-    ({ output } = await context.provider.callApi(
+    const response = await context.provider.callApi(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
-    ));
+    );
+    output = response.output;
+    let tokenUsage: unknown;
+    let cached = false;
+    try {
+      tokenUsage = response.tokenUsage;
+    } catch {
+      tokenUsage = undefined;
+    }
+    try {
+      cached = Boolean(response.cached);
+    } catch {
+      cached = false;
+    }
+    try {
+      context.trackTokenUsage?.({ tokenUsage, cached });
+    } catch (error) {
+      logger.debug('[inputVariables] Failed to track DOCX wrapper token usage', { error });
+    }
   } catch (error) {
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,

@@ -558,6 +558,62 @@ describe('doGenerateRedteam', () => {
     expect(generatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
   });
 
+  it('should preserve cache-only generation token usage in generated output metadata', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({ prompts: [{ raw: 'Test prompt' }], providers: [], tests: [] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'redteam' } },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: { cached: 50, completion: 0, numRequests: 0, prompt: 0, total: 50 },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].metadata).toMatchObject({
+      generationTokenUsage: { cached: 50, numRequests: 0, total: 50 },
+    });
+  });
+
+  it('should preserve reasoning-only generation token usage in generated output metadata', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({ tests: [] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'redteam' } },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: { completionDetails: { reasoning: 25 } },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].metadata).toMatchObject({
+      generationTokenUsage: { completionDetails: { reasoning: 25 } },
+    });
+  });
+
   it('should write to config file when write option is true', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',
@@ -1162,6 +1218,7 @@ describe('doGenerateRedteam', () => {
       entities: ['Test entity'],
       injectVar: 'input',
       failedPlugins: [],
+      generationTokenUsage: { cached: 50, completion: 0, numRequests: 0, prompt: 0, total: 50 },
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -1176,6 +1233,9 @@ describe('doGenerateRedteam', () => {
     const result = await doGenerateRedteam(options);
 
     expect(result).toBeNull();
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Observed generation token usage: 50 total'),
+    );
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 
@@ -3565,6 +3625,58 @@ describe('doGenerateRedteam', () => {
       expect(logger.info).toHaveBeenCalledWith('  Generating tests for context: ctx1');
       expect(logger.info).toHaveBeenCalledWith('  Generating tests for context: ctx2');
       expect(logger.info).toHaveBeenCalledWith('Generated 2 total test cases across 2 contexts');
+    });
+
+    it('reports earlier context usage and cleans up when a later context rejects', async () => {
+      const cleanup = vi.fn();
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' }, cleanup })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'ctx1', purpose: 'Purpose 1' },
+              { id: 'ctx2', purpose: 'Purpose 2' },
+            ],
+          },
+        },
+      });
+      vi.mocked(synthesize)
+        .mockResolvedValueOnce({
+          testCases: [{ vars: { input: 'Test input' }, metadata: { pluginId: 'harmful:hate' } }],
+          purpose: 'Purpose 1',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+          generationTokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        })
+        .mockRejectedValueOnce(
+          Object.assign(new Error('second context failed'), {
+            tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+          }),
+        );
+
+      await expect(
+        doGenerateRedteam({
+          output: 'output.yaml',
+          config: 'config.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: true,
+        }),
+      ).rejects.toThrow('second context failed');
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Observed generation token usage: 28 total'),
+      );
+      expect(cleanup).toHaveBeenCalledOnce();
     });
   });
 });
