@@ -21,22 +21,28 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (parsedJson !== undefined && renderedValue) {
+  if (parsedJson !== undefined && renderedValue !== undefined) {
     let validate: ValidateFunction;
     if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
         // Reference the JSON schema from external file
         const schema = valueFromScript;
-        invariant(schema, 'is-json references a file that does not export a JSON schema');
-        validate = getAjv().compile(schema as object);
+        invariant(
+          schema !== undefined && schema !== null,
+          'is-json references a file that does not export a JSON schema',
+        );
+        validate = getAjv().compile(schema as object | boolean);
       } else {
         const scheme = loadYaml(renderedValue) as object;
         validate = getAjv().compile(scheme);
       }
-    } else if (typeof renderedValue === 'object') {
+    } else if (
+      typeof renderedValue === 'boolean' ||
+      (renderedValue !== null && typeof renderedValue === 'object')
+    ) {
       validate = getAjv().compile(renderedValue);
     } else {
-      throw new Error('is-json assertion must have a string or object value');
+      throw new Error('is-json assertion must have a string, object, or boolean value');
     }
     const valid = validate(parsedJson);
     pass = inverse ? !valid : valid;
@@ -73,22 +79,28 @@ export function handleContainsJson({
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {
-    if (renderedValue) {
+    if (renderedValue !== undefined) {
       let validate: ValidateFunction;
       if (typeof renderedValue === 'string') {
         if (renderedValue.startsWith('file://')) {
           // Reference the JSON schema from external file
           const schema = valueFromScript;
-          invariant(schema, 'contains-json references a file that does not export a JSON schema');
-          validate = getAjv().compile(schema as object);
+          invariant(
+            schema !== undefined && schema !== null,
+            'contains-json references a file that does not export a JSON schema',
+          );
+          validate = getAjv().compile(schema as object | boolean);
         } else {
           const scheme = loadYaml(renderedValue) as object;
           validate = getAjv().compile(scheme);
         }
-      } else if (typeof renderedValue === 'object') {
+      } else if (
+        typeof renderedValue === 'boolean' ||
+        (renderedValue !== null && typeof renderedValue === 'object')
+      ) {
         validate = getAjv().compile(renderedValue);
       } else {
-        throw new Error('contains-json assertion must have a string or object value');
+        throw new Error('contains-json assertion must have a string, object, or boolean value');
       }
       const valid = validate(jsonObject);
       pass = inverse ? !valid : valid;
