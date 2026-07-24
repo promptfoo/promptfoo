@@ -1,6 +1,5 @@
+import { calculateCost, type ProviderConfig } from '../shared';
 import { getOpenAICacheWriteInputTokens, OPENAI_BILLING_MODELS } from './util';
-
-import type { ProviderConfig } from '../shared';
 
 type OpenAITextRates = {
   input: number;
@@ -750,6 +749,47 @@ function getNumericValue(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+function getExplicitTokenCount(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function getUnknownModelTextUsage(
+  { usage, inputDetails, outputDetails }: OpenAIUsageParts,
+  allowMissingOutputTokens = false,
+): { inputTokens: number; outputTokens: number } | undefined {
+  const rawInputTokens = usage.prompt_tokens ?? usage.input_tokens;
+  const rawOutputTokens =
+    usage.completion_tokens ?? usage.output_tokens ?? (allowMissingOutputTokens ? 0 : undefined);
+  const inputTokens = getExplicitTokenCount(rawInputTokens);
+  const outputTokens = getExplicitTokenCount(rawOutputTokens);
+
+  if (inputTokens === undefined || outputTokens === undefined) {
+    return undefined;
+  }
+
+  const nonTextTokenCounts = [
+    inputDetails.audio_tokens,
+    inputDetails.image_tokens,
+    inputDetails.cached_tokens_details?.audio_tokens,
+    inputDetails.cached_tokens_details?.image_tokens,
+    outputDetails.audio_tokens,
+    outputDetails.image_tokens,
+    usage.audio_prompt_tokens,
+    usage.audio_input_tokens,
+    usage.audio_completion_tokens,
+    usage.audio_output_tokens,
+  ];
+  if (
+    // Reject any present non-text token count that is not exactly 0: `!== 0` subsumes
+    // negatives/positives/NaN/Infinity/non-numbers, while -0 === 0 keeps the accept-zero case.
+    nonTextTokenCounts.some((value) => value !== undefined && value !== 0)
+  ) {
+    return undefined;
+  }
+
+  return { inputTokens, outputTokens };
+}
+
 export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
   const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
 
@@ -909,6 +949,7 @@ export function calculateOpenAIUsageCost(
   options: {
     serviceTier?: string | null;
     cachedResponse?: boolean;
+    allowMissingOutputTokens?: boolean;
     apiUrl?: string;
   } = {},
 ): number | undefined {
@@ -921,7 +962,18 @@ export function calculateOpenAIUsageCost(
   const tier = normalizeServiceTier(options.serviceTier);
   const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
   if (!modelRates) {
-    return undefined;
+    const textUsage = getUnknownModelTextUsage(usageParts, options.allowMissingOutputTokens);
+    if (!textUsage) {
+      return undefined;
+    }
+    const customCost = calculateCost(
+      modelName,
+      config,
+      textUsage.inputTokens,
+      textUsage.outputTokens,
+      [],
+    );
+    return customCost === undefined || !options.cachedResponse ? customCost : 0;
   }
 
   const rates =

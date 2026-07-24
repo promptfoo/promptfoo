@@ -64,6 +64,7 @@ export const ProviderEnvOverridesSchema = z.object({
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LITELLM_API_BASE: z.string().optional(),
+  LITELLM_API_KEY: z.string().optional(),
   LLAMA_BASE_URL: z.string().optional(),
   LOCALAI_BASE_URL: z.string().optional(),
   MISTRAL_API_BASE_URL: z.string().optional(),
