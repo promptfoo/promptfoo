@@ -20,6 +20,7 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -677,6 +678,174 @@ describeEvaluator('evaluator execution control', () => {
       }),
     );
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves cost, tokenUsage, and metadata when provider returns error response', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider-error-metrics'),
+      callApi: vi.fn().mockResolvedValue({
+        error: 'error_max_turns',
+        cost: 0.05,
+        tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 0, numRequests: 1 },
+        metadata: { numTurns: 5, toolCalls: ['search', 'read'] },
+        raw: '{"subtype":"error_max_turns"}',
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            error: 'error_max_turns',
+            cost: 0.05,
+            metadata: expect.objectContaining({
+              numTurns: 5,
+              toolCalls: ['search', 'read'],
+            }),
+            response: expect.objectContaining({
+              error: 'error_max_turns',
+              cost: 0.05,
+              tokenUsage: expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
+              raw: '{"subtype":"error_max_turns"}',
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('preserves response metrics when post-provider processing throws', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider-transform-error-metrics'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Untransformed provider output',
+        raw: 'Sensitive raw provider response',
+        cached: true,
+        cost: 0.05,
+        latencyMs: 321,
+        sessionId: 'provider-response-session',
+        tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 7, numRequests: 1 },
+        metadata: {
+          numTurns: 5,
+          sessionId: 'provider-session',
+          tags: ['provider-tag'],
+        },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          metadata: {
+            numTurns: 1,
+            sessionId: 'test-session',
+            tags: ['test-tag'],
+          },
+          options: {
+            transform: 'output + " postprocessed"',
+          },
+        },
+      ],
+    };
+
+    vi.mocked(transform).mockRejectedValueOnce(new Error('transform failed'));
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats).toEqual(
+      expect.objectContaining({
+        successes: 0,
+        failures: 0,
+        errors: 1,
+        tokenUsage: expect.objectContaining({
+          total: 100,
+          prompt: 80,
+          completion: 20,
+          cached: 7,
+          numRequests: 1,
+        }),
+      }),
+    );
+    const result = summary.results[0];
+    expect(result).toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining('transform failed'),
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        score: 0,
+        namedScores: {},
+        latencyMs: 321,
+        cost: 0.05,
+        tokenUsage: expect.objectContaining({
+          total: 100,
+          prompt: 80,
+          completion: 20,
+          cached: 7,
+          numRequests: 1,
+        }),
+        metadata: expect.objectContaining({
+          numTurns: 5,
+          sessionId: 'provider-session',
+          tags: ['provider-tag'],
+          errorContext: expect.objectContaining({
+            providerId: 'test-provider-transform-error-metrics',
+          }),
+        }),
+        response: expect.objectContaining({
+          cached: true,
+          cost: 0.05,
+          latencyMs: 321,
+          sessionId: 'provider-response-session',
+          tokenUsage: expect.objectContaining({
+            total: 100,
+            prompt: 80,
+            completion: 20,
+            cached: 7,
+            numRequests: 1,
+          }),
+          metadata: expect.objectContaining({
+            numTurns: 5,
+            sessionId: 'provider-session',
+            tags: ['provider-tag'],
+          }),
+        }),
+      }),
+    );
+    expect(result.response).not.toHaveProperty('output');
+    expect(result.response).not.toHaveProperty('raw');
+    expect(evalRecord.prompts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metrics: expect.objectContaining({
+            testPassCount: 0,
+            testFailCount: 0,
+            testErrorCount: 1,
+            totalLatencyMs: 321,
+            cost: 0.05,
+            tokenUsage: expect.objectContaining({
+              total: 100,
+              prompt: 80,
+              completion: 20,
+              cached: 7,
+              numRequests: 1,
+            }),
+          }),
+        }),
+      ]),
+    );
   });
 
   it('should handle evaluation timeout without tearing down the shared provider', async () => {
