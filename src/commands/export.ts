@@ -116,6 +116,12 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
   });
 }
 
+function isStringSizeRangeError(error: unknown): error is RangeError {
+  return (
+    error instanceof RangeError && /Invalid string length|ERR_STRING_TOO_LONG/i.test(error.message)
+  );
+}
+
 export function exportCommand(program: Command) {
   const exportCmd = program.command('export').description('Export eval records or logs');
 
@@ -146,14 +152,25 @@ export function exportCommand(program: Command) {
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          const jsonData = JSON.stringify(
-            await createOutputData(result, null, {
-              includeMedia: Boolean(cmdObj.includeMedia),
-            }),
-            null,
-            2,
-          );
-          logger.info(jsonData);
+          try {
+            const jsonData = JSON.stringify(
+              await createOutputData(result, null, {
+                includeMedia: Boolean(cmdObj.includeMedia),
+              }),
+              null,
+              2,
+            );
+            logger.info(jsonData);
+          } catch (error) {
+            if (isStringSizeRangeError(error)) {
+              logger.error(
+                `Eval too large to output to console. Use -o to export to a file instead:\n\n  promptfoo export eval ${evalId} -o output.jsonl\n`,
+              );
+              process.exitCode = 1;
+              return;
+            }
+            throw error;
+          }
         }
 
         telemetry.record('command_used', {

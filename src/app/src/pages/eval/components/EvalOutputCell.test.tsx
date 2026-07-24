@@ -1,5 +1,6 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { fetchCellDetail } from '@app/utils/api';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -16,11 +17,13 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata, onClose }) => (
+  default: vi.fn(({ gradingResults, metadata, onClose, prompt, variables }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
+      data-prompt={prompt}
+      data-variables={JSON.stringify(variables)}
     >
       Mocked Dialog Component
       <button type="button" onClick={onClose}>
@@ -29,6 +32,16 @@ vi.mock('./EvalOutputPromptDialog', () => ({
     </div>
   )),
 }));
+
+vi.mock('@app/utils/api', async (importOriginal) => {
+  const api = await importOriginal<typeof import('@app/utils/api')>();
+  return {
+    ...api,
+    fetchCellDetail: vi.fn(),
+  };
+});
+
+const mockFetchCellDetail = vi.mocked(fetchCellDetail);
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return baseRender(<ShiftKeyProvider>{ui}</ShiftKeyProvider>);
@@ -275,6 +288,109 @@ describe('EvalOutputCell', () => {
 
     expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
     expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('lazy-loads trimmed detail for hash-opened prompt dialogs', async () => {
+    mockFetchCellDetail.mockResolvedValue({
+      prompt: 'Expanded prompt from result detail',
+      response: { output: 'Expanded output' },
+      testCase: { vars: { city: 'Denver' } },
+    });
+    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="page-eval-id"
+        output={{
+          ...defaultProps.output,
+          evalId: 'cell-eval-id',
+          isTruncated: true,
+          prompt: '',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockFetchCellDetail).toHaveBeenCalledWith('cell-eval-id', 'test-id');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
+        'data-prompt',
+        'Expanded prompt from result detail',
+      );
+    });
+  });
+
+  it('lazy-loads trimmed detail when the prompt dialog opens from the cell action', async () => {
+    const user = userEvent.setup();
+    mockFetchCellDetail.mockResolvedValue({
+      prompt: 'Expanded prompt after click',
+      response: { output: 'Expanded output' },
+      testCase: { vars: { city: 'Denver' } },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="page-eval-id"
+        output={{
+          ...defaultProps.output,
+          isTruncated: true,
+          prompt: '',
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(mockFetchCellDetail).toHaveBeenCalledWith('page-eval-id', 'test-id');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
+        'data-prompt',
+        'Expanded prompt after click',
+      );
+    });
+  });
+
+  it('uses lazy-loaded test variables for trimmed comparison cells', async () => {
+    const user = userEvent.setup();
+    mockFetchCellDetail.mockResolvedValue({
+      prompt: 'Expanded prompt after click',
+      response: { output: 'Expanded output' },
+      testCase: { vars: { city: 'Boulder', source: 'comparison-eval' } },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="page-eval-id"
+        testVars={{ city: 'Denver', source: 'base-eval' }}
+        output={{
+          ...defaultProps.output,
+          evalId: 'comparison-eval-id',
+          isTruncated: true,
+          prompt: '',
+          testCase: { provider: 'comparison-provider' },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
+        'data-prompt',
+        'Expanded prompt after click',
+      );
+    });
+
+    const passedVariables = JSON.parse(
+      screen.getByTestId('dialog-component').getAttribute('data-variables') || '{}',
+    );
+    expect(passedVariables).toEqual({ city: 'Boulder', source: 'comparison-eval' });
   });
 
   it('clears the row hint when closing a deep-linked prompt dialog', async () => {
