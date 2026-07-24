@@ -8,7 +8,9 @@ keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team s
 
 Share your eval results with others using the `share` command or the web interface.
 
-Sharing uploads the eval/report snapshot needed to view the result. This can include prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Do not put secrets in prompts, datasets, provider config fields, metadata, or other shareable inputs unless that field is documented as redacted. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for what counts as a configured sharing destination.
+Sharing uploads the snapshot needed to view an eval. That snapshot may contain prompts, test vars, model outputs, traces, metadata, configuration, media, and other results. Depending on your Cloud account and config, evals may also be shared automatically.
+
+`PROMPTFOO_STRIP_*` flags reduce data in some results and exports. They do not turn off sharing or guarantee that shared snapshots omit those fields. Keep secrets out of evals you plan to share. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for details.
 
 ## Quick Start (Cloud)
 
@@ -164,10 +166,9 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 ## Disabling Sharing
 
-To disable sharing completely, use any of the controls below. These controls prevent both the
-eval snapshot and referenced media/blob data from being uploaded to a sharing destination. Media
-blobs are still stored locally, so they remain available in the local viewer and are included if
-you later run an explicit `promptfoo share` command.
+Use `--no-share` to stop sharing for one eval or model-audit run. Set `sharing: false` to turn off automatic sharing and any self-hosted destination defined by that setting. You can share the results later after signing in to Cloud or configuring a self-hosted destination.
+
+To block all eval and model-audit sharing while a process runs, set `PROMPTFOO_DISABLE_SHARING=true`. This also prevents associated media from being uploaded. Media remains available locally and can be shared later if you remove the setting.
 
 ### Disable for One Eval
 

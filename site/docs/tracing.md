@@ -332,6 +332,8 @@ keys (`authorization`, `api_key`, `token`, `password`, `cookie`, …) when trace
 but custom keys you add to `redactAttributes` are only enforced on the HTTP ingest path.
 Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
 
+Trace redaction applies only to the ingestion and display paths described above. It does not guarantee that the same data is removed from diagnostics, exports, or shared evals.
+
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
