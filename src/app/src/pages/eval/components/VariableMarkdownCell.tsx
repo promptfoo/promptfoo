@@ -1,13 +1,22 @@
 import React from 'react';
 
 import ReactMarkdown from 'react-markdown';
+import DataImagePreviewText from './DataImagePreviewText';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { REMARK_PLUGINS } from './markdown-config';
+import MarkdownImage from './MarkdownImage';
+import {
+  extractRenderableMarkdownImages,
+  IMAGE_DATA_URL_TRANSFORM,
+  isInlineDataImage,
+  REMARK_PLUGINS,
+} from './markdown-config';
 import TruncatedText from './TruncatedText';
 
 interface VariableMarkdownCellProps {
   value: string;
   maxTextLength: number;
+  dataImagesOnly?: boolean;
+  onImageClick?: (src?: string) => void;
 }
 
 /**
@@ -24,12 +33,58 @@ interface VariableMarkdownCellProps {
 const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
   value,
   maxTextLength,
+  dataImagesOnly = false,
+  onImageClick,
 }: VariableMarkdownCellProps) {
+  const markdownComponents = React.useMemo(
+    () => ({
+      img: ({ src, alt }: { src?: string; alt?: string }) => (
+        <MarkdownImage
+          src={src}
+          alt={alt}
+          onImageClick={onImageClick}
+          className="max-h-48 max-w-full object-contain"
+        />
+      ),
+    }),
+    [onImageClick],
+  );
+  const renderableMarkdownImages = React.useMemo(
+    () => (value.includes('![') ? extractRenderableMarkdownImages(value) : []),
+    [value],
+  );
+  const dataImages = React.useMemo(
+    () => renderableMarkdownImages.filter(isInlineDataImage),
+    [renderableMarkdownImages],
+  );
+  const hasRenderedImage = dataImagesOnly
+    ? dataImages.length > 0
+    : renderableMarkdownImages.length > 0;
+
   return (
     <MarkdownErrorBoundary fallback={value}>
       <TruncatedText
-        text={<ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{value}</ReactMarkdown>}
-        maxLength={maxTextLength}
+        text={
+          dataImagesOnly && dataImages.length > 0 ? (
+            <DataImagePreviewText
+              text={value}
+              images={dataImages}
+              imageClassName="max-h-48 max-w-full object-contain"
+              onImageClick={onImageClick}
+            />
+          ) : dataImagesOnly ? (
+            value
+          ) : (
+            <ReactMarkdown
+              components={markdownComponents}
+              remarkPlugins={REMARK_PLUGINS}
+              urlTransform={IMAGE_DATA_URL_TRANSFORM}
+            >
+              {value}
+            </ReactMarkdown>
+          )
+        }
+        maxLength={hasRenderedImage ? 0 : maxTextLength}
       />
     </MarkdownErrorBoundary>
   );

@@ -294,8 +294,8 @@ function getVariableCellValue({
   row: EvaluateTableRow;
   varName: string;
   injectVarName: string;
-  fallbackValue: string | object;
-}): string | object {
+  fallbackValue: unknown;
+}): unknown {
   let value = fallbackValue;
 
   if (varName === injectVarName) {
@@ -335,7 +335,7 @@ function renderMediaVariableCell({
 }: {
   output: EvaluateTableOutput | null;
   mediaMetadata?: { path: string; type: string; format?: string };
-  value: string | object;
+  value: unknown;
   lightboxOpen: boolean;
   lightboxImage: string | null;
   maxTextLength: number;
@@ -413,7 +413,7 @@ function renderDecodedVariableCell({
   maxTextLength,
   cellContent,
 }: {
-  value: string | object;
+  value: string;
   varName: string;
   row: EvaluateTableRow;
   injectVarName: string;
@@ -488,6 +488,7 @@ function renderVariableCell({
   lightboxOpen,
   lightboxImage,
   toggleLightbox,
+  toggleMarkdownLightbox,
 }: {
   info: CellContext<EvaluateTableRow, string>;
   varName: string;
@@ -497,9 +498,10 @@ function renderVariableCell({
   lightboxOpen: boolean;
   lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
+  toggleMarkdownLightbox: (url?: string) => void;
 }): React.ReactNode {
   const row = info.row.original;
-  let value = getVariableCellValue({
+  const value: unknown = getVariableCellValue({
     row,
     varName,
     injectVarName,
@@ -524,21 +526,29 @@ function renderVariableCell({
     return mediaCell;
   }
 
-  if (typeof value === 'object') {
-    value = JSON.stringify(value, null, 2);
-    if (renderMarkdown) {
-      value = `\`\`\`json\n${value}\n\`\`\``;
-    }
+  const isObjectValue = typeof value === 'object';
+  let displayValue = value === undefined ? '' : String(value);
+  if (isObjectValue) {
+    displayValue = JSON.stringify(value, null, 2) ?? String(value);
+  }
+  if (renderMarkdown && isObjectValue) {
+    displayValue = `\`\`\`json\n${displayValue}\n\`\`\``;
   }
 
-  const cellContent = renderMarkdown ? (
-    <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+  const shouldUseMarkdownCell = renderMarkdown || displayValue.includes('![');
+  const cellContent = shouldUseMarkdownCell ? (
+    <VariableMarkdownCell
+      value={displayValue}
+      maxTextLength={maxTextLength}
+      dataImagesOnly={!renderMarkdown}
+      onImageClick={toggleMarkdownLightbox}
+    />
   ) : (
-    <TruncatedText text={value} maxLength={maxTextLength} />
+    <TruncatedText text={displayValue} maxLength={maxTextLength} />
   );
 
   return renderDecodedVariableCell({
-    value,
+    value: displayValue,
     varName,
     row,
     injectVarName,
@@ -1628,8 +1638,9 @@ function ResultsTable({
     [head.prompts, columnVisibility],
   );
 
-  const [lightboxOpen, setLightboxOpen] = React.useState(false);
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
+  const lightboxOpen = lightboxImage !== null;
+  const [markdownLightboxImage, setMarkdownLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
@@ -1650,10 +1661,27 @@ function ResultsTable({
     });
   }, [filteredResultsCount]);
 
-  const toggleLightbox = (url?: string) => {
+  const toggleLightbox = React.useCallback((url?: string) => {
     setLightboxImage(url || null);
-    setLightboxOpen(!lightboxOpen);
-  };
+  }, []);
+
+  const toggleMarkdownLightbox = React.useCallback((url?: string) => {
+    setMarkdownLightboxImage(url || null);
+  }, []);
+
+  useEffect(() => {
+    if (!markdownLightboxImage) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        toggleMarkdownLightbox();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [markdownLightboxImage, toggleMarkdownLightbox]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
@@ -1989,7 +2017,6 @@ function ResultsTable({
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
@@ -2012,6 +2039,7 @@ function ResultsTable({
                   lightboxOpen,
                   lightboxImage,
                   toggleLightbox,
+                  toggleMarkdownLightbox,
                 }),
               size: variableColumnSizes[idx],
             }),
@@ -2030,6 +2058,8 @@ function ResultsTable({
     lightboxImage,
     injectVarName,
     variableColumnSizes,
+    toggleLightbox,
+    toggleMarkdownLightbox,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
@@ -2512,6 +2542,16 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
+      {markdownLightboxImage && (
+        <button
+          type="button"
+          className="lightbox border-0 p-0"
+          aria-label="Close image preview"
+          onClick={() => toggleMarkdownLightbox()}
+        >
+          <img src={markdownLightboxImage} alt="Lightbox" />
+        </button>
+      )}
       <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}
