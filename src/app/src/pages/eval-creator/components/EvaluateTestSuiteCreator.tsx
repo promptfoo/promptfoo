@@ -17,6 +17,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
+import deepEqual from 'fast-deep-equal';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -28,7 +29,20 @@ import { StepSection } from './StepSection';
 import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { UnifiedConfig } from '@promptfoo/types';
+import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+
+// Local view of the /api/providers response. Kept app-local deliberately:
+// importing @promptfoo/types/api/providers here is a restricted app ->
+// legacy-contracts edge that fails the architecture boundary check.
+type ProviderCatalogResponse =
+  | {
+      success: true;
+      data: {
+        providers: ProviderOptions[];
+        hasCustomConfig: boolean;
+      };
+    }
+  | { success: false; error: string };
 
 type SetupStepId = 1 | 2 | 3 | 4;
 type EditorTab = 'ui' | 'yaml';
@@ -80,11 +94,16 @@ function ErrorFallback({
 const EvaluateTestSuiteCreator = () => {
   const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [hasCustomConfig, setHasCustomConfig] = useState(false);
+  const [hasCustomConfig, setHasCustomConfig] = useState<boolean | null>(null);
+  const [availableProviders, setAvailableProviders] = useState<ProviderOptions[] | null>(null);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
+  const [isYamlEditorDirty, setIsYamlEditorDirty] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const pendingYamlEditorReset = React.useRef(false);
 
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
@@ -95,35 +114,111 @@ const EvaluateTestSuiteCreator = () => {
     useStore.persist.rehydrate();
   }, []);
 
-  // Fetch config status to determine if ConfigureEnvButton should be shown
+  useEffect(() => {
+    if (hasCustomConfig !== true || availableProviders === null) {
+      return;
+    }
+
+    const approvedProviders = normalizedProviders.flatMap((provider) => {
+      const matchingProviders = availableProviders.filter(
+        (availableProvider) => availableProvider.id === provider.id,
+      );
+      if (matchingProviders.length === 0) {
+        return [];
+      }
+
+      return [
+        matchingProviders.find(
+          (availableProvider) =>
+            availableProvider === provider || deepEqual(availableProvider, provider),
+        ) ?? matchingProviders[0],
+      ];
+    });
+
+    if (
+      approvedProviders.length === normalizedProviders.length &&
+      approvedProviders.every((provider, index) => provider === normalizedProviders[index])
+    ) {
+      return;
+    }
+
+    const removedUnapprovedProviders = approvedProviders.length !== normalizedProviders.length;
+    const restoredProviderSettings =
+      !removedUnapprovedProviders &&
+      approvedProviders.some((provider, index) => !deepEqual(provider, normalizedProviders[index]));
+
+    updateConfig({ providers: approvedProviders });
+
+    if (removedUnapprovedProviders || restoredProviderSettings) {
+      if (isYamlEditorDirty) {
+        pendingYamlEditorReset.current = true;
+      } else {
+        setResetKey((key) => key + 1);
+      }
+    }
+
+    if (removedUnapprovedProviders) {
+      showToast('Removed providers that are not in the administrator-configured catalog.', 'error');
+    } else if (restoredProviderSettings) {
+      showToast('Restored administrator-configured provider settings.', 'error');
+    }
+  }, [
+    availableProviders,
+    hasCustomConfig,
+    isYamlEditorDirty,
+    normalizedProviders,
+    showToast,
+    updateConfig,
+  ]);
+
+  useEffect(() => {
+    if (!isYamlEditorDirty && pendingYamlEditorReset.current) {
+      pendingYamlEditorReset.current = false;
+      setResetKey((key) => key + 1);
+    }
+  }, [isYamlEditorDirty]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     let isMounted = true;
 
-    const fetchConfigStatus = async () => {
+    const fetchProviderCatalog = async () => {
       try {
-        const response = await callApi('/providers/config-status');
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) {
-            setHasCustomConfig(data.hasCustomConfig || false);
-          }
+        const response = await callApi('/providers');
+        if (!response.ok) {
+          throw new Error('Failed to load providers from server');
+        }
+        const result = (await response.json()) as ProviderCatalogResponse;
+        if (!result.success) {
+          throw new Error(result.error || 'Unexpected response from server');
+        }
+        if (isMounted) {
+          setHasCustomConfig(result.data.hasCustomConfig);
+          setAvailableProviders(result.data.hasCustomConfig ? result.data.providers : null);
+          setCatalogError(false);
         }
       } catch (err) {
-        console.error('Failed to fetch provider config status:', err);
+        console.error('Failed to fetch provider catalog:', err);
         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-        showToast(`Failed to load configuration status: ${errorMessage}`, 'error');
         if (isMounted) {
-          setHasCustomConfig(false);
+          setCatalogError(true);
+          showToast(`Failed to load provider configuration: ${errorMessage}`, 'error');
         }
       }
     };
 
-    fetchConfigStatus();
+    fetchProviderCatalog();
 
     return () => {
       isMounted = false;
     };
+  }, [catalogReloadKey]);
+
+  // The catalog gate stays closed on failure (an unrestricted selector could bypass an
+  // administrator's ui-providers.yaml), so a transient error needs an explicit retry.
+  const handleRetryProviderCatalog = React.useCallback(() => {
+    setCatalogError(false);
+    setCatalogReloadKey((key) => key + 1);
   }, []);
 
   const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
@@ -241,7 +336,7 @@ const EvaluateTestSuiteCreator = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {!hasCustomConfig && <ConfigureEnvButton />}
+                {hasCustomConfig === false && <ConfigureEnvButton />}
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="size-4 mr-2" />
                   Upload YAML
@@ -477,6 +572,11 @@ const EvaluateTestSuiteCreator = () => {
                       <ProvidersListSection
                         providers={normalizedProviders}
                         onChange={(p) => updateConfig({ providers: p })}
+                        availableProviders={availableProviders}
+                        isProviderCatalogReady={hasCustomConfig !== null}
+                        onRetryProviderCatalog={
+                          catalogError ? handleRetryProviderCatalog : undefined
+                        }
                       />
                     </ErrorBoundary>
                   </StepSection>
@@ -653,6 +753,7 @@ const EvaluateTestSuiteCreator = () => {
                       delay={config.evaluateOptions?.delay}
                       maxConcurrency={config.evaluateOptions?.maxConcurrency}
                       isReadyToRun={isReadyToRun}
+                      isProviderCatalogReady={hasCustomConfig !== null}
                       onChange={(options) => {
                         const { description: newDesc, ...evalOptions } = options;
                         updateConfig({
@@ -674,7 +775,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor key={resetKey} />
+            <YamlEditor key={resetKey} onDirtyChange={setIsYamlEditorDirty} />
           </div>
         </TabsContent>
       </Tabs>

@@ -13,13 +13,29 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders } from '../config/serverConfig';
+import { getAvailableProviders, getServerConfigPath } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ProviderOptions } from '../../types/providers';
 
 export const providersRouter = Router();
+
+/** Returns the administrator-configured provider catalog for the eval creator. */
+providersRouter.get('/', (_req: Request, res: Response): void => {
+  try {
+    const providers = getAvailableProviders();
+
+    res.json(
+      ProviderSchemas.Catalog.Response.parse({
+        success: true,
+        data: { providers, hasCustomConfig: getServerConfigPath() !== null },
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to load providers', error);
+  }
+});
 
 /**
  * GET /api/providers/config-status
@@ -35,8 +51,8 @@ export const providersRouter = Router();
  */
 providersRouter.get('/config-status', (_req: Request, res: Response): void => {
   try {
-    const serverProviders = getAvailableProviders();
-    const hasCustomConfig = serverProviders.length > 0;
+    getAvailableProviders();
+    const hasCustomConfig = getServerConfigPath() !== null;
 
     res.json(
       ProviderSchemas.ConfigStatus.Response.parse({ success: true, data: { hasCustomConfig } }),

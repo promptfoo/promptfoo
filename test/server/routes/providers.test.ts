@@ -28,7 +28,10 @@ import { testProviderConnectivity, testProviderSession } from '../../../src/node
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import {
+  getAvailableProviders,
+  getServerConfigPath,
+} from '../../../src/server/config/serverConfig';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
@@ -36,6 +39,7 @@ const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
+const mockedGetServerConfigPath = vi.mocked(getServerConfigPath);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
@@ -68,10 +72,70 @@ describe('Providers Routes', () => {
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    mockedGetServerConfigPath.mockReturnValue(null);
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  describe('GET /providers', () => {
+    it('returns the configured provider catalog', async () => {
+      const customProviders = [
+        { id: 'openai:gpt-5.1-mini' },
+        {
+          id: 'http://llm-gateway.internal/v1',
+          label: 'Internal Gateway',
+          config: { method: 'POST' },
+        },
+      ];
+      mockedGetAvailableProviders.mockReturnValue(customProviders);
+      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: customProviders, hasCustomConfig: true },
+      });
+    });
+
+    it('returns an empty catalog when no custom config exists', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: [], hasCustomConfig: false },
+      });
+    });
+
+    it('keeps an existing custom catalog restricted when every provider is invalid', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: [], hasCustomConfig: true },
+      });
+    });
+
+    it('returns a standardized error when the catalog cannot be loaded', async () => {
+      mockedGetAvailableProviders.mockImplementation(() => {
+        throw new Error('config unavailable');
+      });
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load providers' });
+    });
   });
 
   describe('GET /providers/config-status', () => {
@@ -95,6 +159,20 @@ describe('Providers Routes', () => {
       ];
 
       mockedGetAvailableProviders.mockReturnValue(customProviders);
+      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
+
+      const response = await api.get('/api/providers/config-status');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { hasCustomConfig: true },
+      });
+    });
+
+    it('reports an existing custom catalog even when no configured providers are valid', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+      mockedGetServerConfigPath.mockReturnValue('/configured/ui-providers.yaml');
 
       const response = await api.get('/api/providers/config-status');
 

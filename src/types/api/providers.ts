@@ -10,6 +10,10 @@ const ProviderOptionsWithIdSchema = ProviderOptionsSchema.extend({
   id: z.string().min(1, 'Provider ID is required'),
 });
 
+const ProviderCatalogEntrySchema = ProviderOptionsWithIdSchema.extend({
+  label: z.string().optional(),
+});
+
 // POST /api/providers/test
 
 /** Request body for testing provider connectivity. */
@@ -34,6 +38,17 @@ export const ConfigStatusResponseSchema = z.union([
   z.object({
     success: z.literal(true),
     data: z.object({
+      hasCustomConfig: z.boolean(),
+    }),
+  }),
+  ErrorResponseSchema,
+]);
+
+export const ProviderCatalogResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    data: z.object({
+      providers: z.array(ProviderCatalogEntrySchema),
       hasCustomConfig: z.boolean(),
     }),
   }),
@@ -140,6 +155,7 @@ export const TestSessionResponseSchema = z
 
 export type TestSessionRequest = z.infer<typeof TestSessionRequestSchema>;
 export type ConfigStatusResponse = z.infer<typeof ConfigStatusResponseSchema>;
+export type ProviderCatalogResponse = z.infer<typeof ProviderCatalogResponseSchema>;
 export type DiscoverResponse = z.infer<typeof DiscoverResponseSchema>;
 export type HttpGeneratorResponse = z.infer<typeof HttpGeneratorResponseSchema>;
 export type TestRequestTransformResponse = z.infer<typeof TestRequestTransformResponseSchema>;
@@ -148,6 +164,7 @@ export type TestSessionResponse = z.infer<typeof TestSessionResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const ProviderSchemas = {
+  Catalog: { Response: ProviderCatalogResponseSchema },
   ConfigStatus: { Response: ConfigStatusResponseSchema },
   Test: { Request: TestProviderRequestSchema, Response: TestProviderResponseSchema },
   Discover: { Request: ProviderOptionsWithIdSchema, Response: DiscoverResponseSchema },

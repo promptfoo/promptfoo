@@ -18,6 +18,10 @@ import type { ProviderOptions } from '@promptfoo/types';
 interface ProvidersListSectionProps {
   providers: ProviderOptions[];
   onChange: (providers: ProviderOptions[]) => void;
+  availableProviders?: ProviderOptions[] | null;
+  isProviderCatalogReady?: boolean;
+  /** Provided only when the catalog request failed, so the user can recover without a reload. */
+  onRetryProviderCatalog?: () => void;
 }
 
 function getProviderLabel(provider: ProviderOptions): string {
@@ -70,10 +74,17 @@ function getProviderType(provider: ProviderOptions): string {
   return 'Custom';
 }
 
-export function ProvidersListSection({ providers, onChange }: ProvidersListSectionProps) {
+export function ProvidersListSection({
+  providers,
+  onChange,
+  availableProviders = null,
+  isProviderCatalogReady = true,
+  onRetryProviderCatalog,
+}: ProvidersListSectionProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
+  const hasEmptyCustomCatalog = availableProviders !== null && availableProviders.length === 0;
 
   const handleAddProvider = (provider: ProviderOptions) => {
     onChange([...providers, provider]);
@@ -97,6 +108,35 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
   const cancelDeleteProvider = () => {
     setProviderToDelete(null);
   };
+
+  // Rendered in both the empty state and below an existing list; defined once so the
+  // catalog gating cannot drift between the two call sites.
+  const addProviderControls = (
+    <div className="space-y-2">
+      <Button
+        onClick={() => setIsAddDialogOpen(true)}
+        className="w-full"
+        variant="outline"
+        disabled={!isProviderCatalogReady || hasEmptyCustomCatalog}
+      >
+        <Plus className="size-4 mr-2" />
+        Add Provider
+      </Button>
+      {!isProviderCatalogReady && onRetryProviderCatalog && (
+        <div className="flex flex-wrap items-center justify-center gap-1 text-sm text-muted-foreground">
+          <span>Could not load the provider catalog.</span>
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={onRetryProviderCatalog}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {hasEmptyCustomCatalog && (
+        <p className="text-center text-sm text-muted-foreground">
+          No valid providers are configured.
+        </p>
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -133,6 +173,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                     onClick={() => setEditingIndex(index)}
                     className="size-8 p-0"
                     aria-label={`Edit ${label}`}
+                    disabled={!isProviderCatalogReady || hasEmptyCustomCatalog}
                   >
                     <Settings className="size-4" />
                   </Button>
@@ -152,10 +193,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         </div>
       ) : (
         <div className="space-y-4">
-          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
-            <Plus className="size-4 mr-2" />
-            Add Provider
-          </Button>
+          {addProviderControls}
           <Card className="p-8 text-center bg-muted/30 border-dashed">
             <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
             <p className="text-xs text-muted-foreground">
@@ -166,18 +204,14 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
       )}
 
       {/* Add provider button */}
-      {providers.length > 0 && (
-        <Button onClick={() => setIsAddDialogOpen(true)} className="w-full" variant="outline">
-          <Plus className="size-4 mr-2" />
-          Add Provider
-        </Button>
-      )}
+      {providers.length > 0 && addProviderControls}
 
       {/* Add provider dialog */}
       <AddProviderDialog
         open={isAddDialogOpen}
         onClose={() => setIsAddDialogOpen(false)}
         onSave={handleAddProvider}
+        availableProviders={availableProviders}
       />
 
       {/* Edit provider dialog */}
@@ -187,6 +221,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           onClose={() => setEditingIndex(null)}
           onSave={(provider) => handleEditProvider(editingIndex, provider)}
           initialProvider={providers[editingIndex]}
+          availableProviders={availableProviders}
         />
       )}
 
