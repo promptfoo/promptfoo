@@ -21,6 +21,7 @@ export async function handleContextFaithfulness({
   prompt,
   providerResponse,
   providerCallContext,
+  inverse,
 }: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion requires a test with variables');
   invariant(
@@ -41,17 +42,35 @@ export async function handleContextFaithfulness({
     providerResponse,
   );
 
+  const threshold = assertion.threshold ?? 0.7;
+
+  const result = await matchesContextFaithfulness(
+    test.vars.query,
+    output,
+    context,
+    threshold,
+    test.options,
+    test.vars,
+    providerCallContext,
+  );
+
+  // `not-context-faithfulness` routes to this handler with `inverse: true`. The
+  // matcher already applied the threshold (`pass` is true when faithfulness is
+  // above it), so invert its verdict for the `not-` variant: an unfaithful
+  // answer (faithfulness below the threshold) should pass the inverted
+  // assertion. This mirrors the other matcher-based assertions (meteor, gleu).
+  const pass = inverse ? !result.pass : result.pass;
+
   return {
     assertion,
-    ...(await matchesContextFaithfulness(
-      test.vars.query,
-      output,
-      context,
-      assertion.threshold ?? 0,
-      test.options,
-      test.vars,
-      providerCallContext,
-    )),
+    ...result,
+    pass,
+    score: inverse ? 1 - result.score : result.score,
+    reason: inverse
+      ? pass
+        ? 'Assertion passed'
+        : `Faithfulness ${result.score.toFixed(2)} is >= ${threshold}`
+      : result.reason,
     metadata: {
       context,
     },
