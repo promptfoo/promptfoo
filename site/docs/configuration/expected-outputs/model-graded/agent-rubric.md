@@ -38,6 +38,29 @@ tests:
 
 Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk) before using the implicit default.
 
+## Per-test-case workspaces
+
+String fields inside the grading provider's `config` are rendered with the same Nunjucks templating that powers `prompts` and `assert.value`, so you can bind `working_dir` (or any other config string) to a per-test-case path:
+
+```yaml
+tests:
+  - vars:
+      trace_id: abc123
+
+assert:
+  - type: agent-rubric
+    value: Check whether the change described in `summary.md` matches the diff.
+    provider:
+      id: anthropic:claude-agent-sdk
+      config:
+        working_dir: ./evidence/{{trace_id}}
+        sandbox_mode: read-only
+        approval_policy: never
+        skip_git_repo_check: true
+```
+
+This pattern is useful for batch evaluations where each case has its own artifact (a captured trace, a rendered output, a fixture project). Non-string fields and unrelated strings are passed through unchanged.
+
 ## Supported agent providers
 
 `agent-rubric` accepts the coding-agent runtimes that promptfoo can run as providers:
