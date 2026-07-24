@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.20](https://github.com/promptfoo/promptfoo/compare/0.121.19...0.121.20) (2026-07-24)
+
+
+### Features
+
+* **providers:** add current Azure, Claude, and Gemini models ([#10128](https://github.com/promptfoo/promptfoo/issues/10128)) ([5c216a1](https://github.com/promptfoo/promptfoo/commit/5c216a1bc33104bb507a9e57952b81a0fb27d06f))
+* **providers:** add Kimi K3 support to Moonshot provider ([#10132](https://github.com/promptfoo/promptfoo/issues/10132)) ([a1168b6](https://github.com/promptfoo/promptfoo/commit/a1168b62ef31a6c061f16ecdf2bfd76514e2a852))
+* **websocket:** support URL templating ([#10171](https://github.com/promptfoo/promptfoo/issues/10171)) ([a9aaced](https://github.com/promptfoo/promptfoo/commit/a9aacede5c3f84150d999bfbeadbbf39834370ea))
+
+
+### Bug Fixes
+
+* **assertions:** default conversation-relevance threshold to 0.5 ([#10142](https://github.com/promptfoo/promptfoo/issues/10142)) ([2812d76](https://github.com/promptfoo/promptfoo/commit/2812d7622b2e14f59753ac04e28b1ca63257263b))
+* **azure:** avoid crash on empty completion choices ([#10124](https://github.com/promptfoo/promptfoo/issues/10124)) ([17d8d03](https://github.com/promptfoo/promptfoo/commit/17d8d036420a63e4a9205084f096b82591b3b608))
+* **deps:** align Renovate npm registry ([#10115](https://github.com/promptfoo/promptfoo/issues/10115)) ([688a905](https://github.com/promptfoo/promptfoo/commit/688a90561180a6045ce3c8e8805d04bc23811bd7))
+* **deps:** update anthropic packages ([#10146](https://github.com/promptfoo/promptfoo/issues/10146)) ([cfa9bee](https://github.com/promptfoo/promptfoo/commit/cfa9bee146bd38fcabc1c4241ede8889fa95e302))
+* **integrations:** migrate Langfuse prompts to SDK v5 ([#10131](https://github.com/promptfoo/promptfoo/issues/10131)) ([08b3f50](https://github.com/promptfoo/promptfoo/commit/08b3f5084d5cd36e9187ac3c79e3fda03d6eefd7))
+* **providers:** align OpenAI models and capabilities ([#10125](https://github.com/promptfoo/promptfoo/issues/10125)) ([e17ce87](https://github.com/promptfoo/promptfoo/commit/e17ce87b380d7c5e807a622d86c859206e1e1ffb))
+* **providers:** preserve WebSocket retries for certificate-like URLs ([#10197](https://github.com/promptfoo/promptfoo/issues/10197)) ([85e0710](https://github.com/promptfoo/promptfoo/commit/85e07103ae7f47462d70e3e02154c1fafaeef2f1))
+* **providers:** reject Vertex Omni passthrough follow-ups ([#10135](https://github.com/promptfoo/promptfoo/issues/10135)) ([8482570](https://github.com/promptfoo/promptfoo/commit/84825702e935332e236426f29fb0dc99c3c162f8))
+* **providers:** restore secret-safe WebSocket retries ([#10176](https://github.com/promptfoo/promptfoo/issues/10176)) ([6d89cbb](https://github.com/promptfoo/promptfoo/commit/6d89cbbd609895fb31062a1fbbe94db8b08260f3))
+* **python:** keep worker control markers on their own line ([#10097](https://github.com/promptfoo/promptfoo/issues/10097)) ([6bc2b95](https://github.com/promptfoo/promptfoo/commit/6bc2b95da1c75ce81ff9047ae599af90222ac676))
+* **redteam:** improve risk-category report row accessibility ([b163738](https://github.com/promptfoo/promptfoo/commit/b16373873b095ab5abb00dbd57fd10e864d3f6fe))
+
 ## [0.121.19](https://github.com/promptfoo/promptfoo/compare/0.121.18...0.121.19) (2026-07-14)
 
 ### Features
