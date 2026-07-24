@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { accumulateNamedMetric, backfillNamedScoreWeights } from '../../src/util/namedMetrics';
+import {
+  accumulateNamedMetric,
+  backfillNamedScoreWeights,
+  subtractNamedMetric,
+} from '../../src/util/namedMetrics';
+
+import type { GradingResult } from '../../src/types/index';
 
 describe('accumulateNamedMetric', () => {
   it('preserves weighted totals from grading results while keeping assertion counts', () => {
@@ -71,6 +77,53 @@ describe('accumulateNamedMetric', () => {
       namedScores: { 'accuracy:alpha': 0.8 },
       namedScoresCount: { 'accuracy:alpha': 1 },
       namedScoreWeights: { 'accuracy:alpha': 1 },
+    });
+  });
+});
+
+describe('subtractNamedMetric', () => {
+  it('reverses weighted totals and removes empty metric buckets', () => {
+    const gradingResult: GradingResult = {
+      pass: false,
+      score: 0.75,
+      reason: 'weighted metric',
+      namedScoreWeights: { accuracy: 4 },
+      componentResults: [
+        {
+          pass: true,
+          score: 1,
+          reason: 'critical passed',
+          assertion: { type: 'contains', value: 'critical', metric: 'accuracy' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'optional failed',
+          assertion: { type: 'contains', value: 'missing', metric: 'accuracy' },
+        },
+      ],
+    };
+    const metrics = {
+      namedScores: {},
+      namedScoresCount: {},
+      namedScoreWeights: {},
+    };
+
+    accumulateNamedMetric(metrics, {
+      metricName: 'accuracy',
+      metricValue: 0.75,
+      gradingResult,
+    });
+    subtractNamedMetric(metrics, {
+      metricName: 'accuracy',
+      metricValue: 0.75,
+      gradingResult,
+    });
+
+    expect(metrics).toEqual({
+      namedScores: {},
+      namedScoresCount: {},
+      namedScoreWeights: {},
     });
   });
 });

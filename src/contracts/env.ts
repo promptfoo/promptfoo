@@ -141,6 +141,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AWS_SAGEMAKER_TOP_P: z.string().optional(),
   AWS_SAGEMAKER_MAX_RETRIES: z.string().optional(),
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
+  PROMPTFOO_MAX_EVAL_TIME_MS: z.string().optional(),
 });
 
 // The runtime schema silently strips unknown keys at parse time (zod's default
