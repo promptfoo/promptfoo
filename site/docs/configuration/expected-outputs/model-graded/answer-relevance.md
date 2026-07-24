@@ -17,6 +17,8 @@ assert:
     threshold: 0.7 # Score between 0 and 1
 ```
 
+If `threshold` is omitted, it defaults to `0.5`.
+
 ### How it works
 
 The answer relevance checker:

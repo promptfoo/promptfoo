@@ -1,6 +1,7 @@
 import { matchesContextRecall } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -35,7 +36,7 @@ export const handleContextRecall = async ({
   const result = await matchesContextRecall(
     context, // context parameter (used as {{context}} in prompt)
     renderedValue, // ground truth parameter (used as {{groundTruth}} in prompt)
-    (assertion.threshold as number) ?? 0,
+    (assertion.threshold as number) ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
     test.options,
     test.vars,
     providerCallContext,
