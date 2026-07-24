@@ -57,7 +57,10 @@ import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateTokenUsagePreservingUnknown,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
@@ -938,7 +941,7 @@ export async function doEval(
       if (prompt.metrics?.testErrorCount) {
         errors += prompt.metrics.testErrorCount;
       }
-      accumulateTokenUsage(tokenUsage, prompt.metrics?.tokenUsage);
+      accumulateTokenUsagePreservingUnknown(tokenUsage, prompt.metrics?.tokenUsage);
     }
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;

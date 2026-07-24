@@ -237,6 +237,38 @@ describe('generateEvalSummary', () => {
       expect(output).not.toContain('Eval:');
     });
 
+    it('does not present grading tokens as the total when eval token usage is unknown', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-unknown-usage',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          numRequests: 1,
+          assertions: {
+            total: 500,
+            prompt: 200,
+            completion: 300,
+          },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      };
+
+      const output = stripAnsi(generateEvalSummary(params).join('\n'));
+
+      expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
+      expect(output).not.toContain('Total Tokens:');
+      expect(output).not.toContain('Eval:');
+    });
+
     it('should display both eval and grading tokens', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-both',

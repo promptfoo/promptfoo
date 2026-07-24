@@ -135,16 +135,17 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     } else {
       resultText = outputTextDisplay;
     }
+    const { cost, ...resultWithoutCost } = result;
 
     row.outputs[result.promptIdx] = {
       id: result.id || `${result.testIdx}-${result.promptIdx}`,
-      ...result,
+      ...resultWithoutCost,
       text: resultText || '',
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',
       pass: result.success,
       failureReason: result.failureReason,
-      cost: result.cost || 0,
+      ...(cost === undefined ? {} : { cost }),
       tokenUsage: result.tokenUsage,
       audio: result.response?.audio
         ? {

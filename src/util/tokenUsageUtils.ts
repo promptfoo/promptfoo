@@ -158,6 +158,66 @@ export function accumulateTokenUsage(
 }
 
 /**
+ * Accumulate usage while treating a counted request with no reported token counts as unknown.
+ *
+ * Unlike {@link accumulateTokenUsage}, this helper does not turn an omitted count into zero.
+ * Once any counted request has an unknown count, that aggregate count remains unknown.
+ */
+export function accumulateTokenUsagePreservingUnknown(
+  target: TokenUsage,
+  update: Partial<TokenUsage> | undefined,
+  incrementRequests = false,
+): void {
+  if (!update) {
+    return;
+  }
+
+  const priorRequests = target.numRequests ?? 0;
+  const updateRequests = update.numRequests ?? (incrementRequests ? 1 : 0);
+  const priorCompletionDetails = target.completionDetails;
+  const priorCounts = {
+    prompt: target.prompt,
+    completion: target.completion,
+    cached: target.cached,
+    total: target.total,
+  };
+  const hasReportedTokenCounts =
+    update.prompt !== undefined ||
+    update.completion !== undefined ||
+    update.cached !== undefined ||
+    update.total !== undefined;
+
+  accumulateTokenUsage(target, update, incrementRequests);
+
+  if (updateRequests === 0) {
+    for (const field of ['prompt', 'completion', 'cached', 'total'] as const) {
+      if (priorCounts[field] === undefined) {
+        delete target[field];
+      }
+    }
+    if (priorCompletionDetails === undefined) {
+      delete target.completionDetails;
+    }
+    return;
+  }
+
+  if (updateRequests > 0) {
+    for (const field of ['prompt', 'completion', 'cached', 'total'] as const) {
+      const priorCount = priorCounts[field];
+      if (!hasReportedTokenCounts || (priorRequests > 0 && priorCount === undefined)) {
+        delete target[field];
+      }
+    }
+
+    if (!hasReportedTokenCounts) {
+      delete target.completionDetails;
+    } else if (priorRequests > 0 && priorCompletionDetails === undefined) {
+      delete target.completionDetails;
+    }
+  }
+}
+
+/**
  * Accumulate token usage specifically for assertions.
  * This function operates directly on an assertions object rather than a full TokenUsage object.
  * @param target Assertions object to update
@@ -235,6 +295,34 @@ export function accumulateResponseTokenUsage(
   } else if (response && countAsRequest) {
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
+  }
+}
+
+/**
+ * Response-accounting counterpart to {@link accumulateTokenUsagePreservingUnknown}.
+ */
+export function accumulateResponseTokenUsagePreservingUnknown(
+  target: TokenUsage,
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean },
+): void {
+  const countAsRequest = options?.countAsRequest ?? true;
+
+  if (response?.tokenUsage) {
+    if (countAsRequest) {
+      accumulateTokenUsagePreservingUnknown(
+        target,
+        response.tokenUsage,
+        response.tokenUsage.numRequests === undefined,
+      );
+    } else {
+      accumulateTokenUsagePreservingUnknown(target, {
+        ...response.tokenUsage,
+        numRequests: undefined,
+      });
+    }
+  } else if (response && countAsRequest) {
+    accumulateTokenUsagePreservingUnknown(target, { numRequests: 1 });
   }
 }
 

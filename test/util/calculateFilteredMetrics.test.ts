@@ -199,12 +199,119 @@ describe('calculateFilteredMetrics', () => {
         whereSql: sql`eval_id = ${eval_.id}`,
       });
 
-      expect(metrics[0].tokenUsage).toMatchObject({
-        total: 0,
-        prompt: 0,
-        completion: 0,
+      expect(metrics[0].tokenUsage).toEqual({ numRequests: 1 });
+    });
+
+    it('should preserve unknown usage and cost across filtered and mixed result sets', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'known',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'known',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: {},
+        cost: 0.01,
+        metadata: {},
+      });
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 1,
+        testCase: { vars: {} },
+        promptId: 'unknown',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'unknown',
+          tokenUsage: { numRequests: 1 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: {},
+        metadata: {},
+      });
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 2,
+        testCase: { vars: {} },
+        promptId: 'cached',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'cached',
+          cached: true,
+          tokenUsage: { numRequests: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: {},
+        metadata: {},
+      });
+
+      const known = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx = 0`,
+      });
+      expect(known[0].cost).toBe(0.01);
+      expect(known[0].tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 5,
+        completion: 5,
         cached: 0,
-        numRequests: 0,
+        numRequests: 1,
+      });
+
+      const unknown = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx = 1`,
+      });
+      expect(unknown[0].cost).toBeUndefined();
+      expect(unknown[0].tokenUsage).toEqual({ numRequests: 1 });
+
+      const mixed = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx IN (0, 1)`,
+      });
+      expect(mixed[0].cost).toBeUndefined();
+      expect(mixed[0].tokenUsage).toEqual({ numRequests: 2 });
+
+      const knownAndCached = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx IN (0, 2)`,
+      });
+      expect(knownAndCached[0].cost).toBe(0.01);
+      expect(knownAndCached[0].tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
       });
     });
   });

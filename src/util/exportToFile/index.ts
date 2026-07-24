@@ -23,15 +23,16 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
   } else {
     resultText = outputTextDisplay;
   }
+  const { cost, ...resultWithoutCost } = result;
 
   return {
-    ...result,
+    ...resultWithoutCost,
     id: result.id || `${result.testIdx}-${result.promptIdx}`,
     text: resultText || '',
     prompt: result.prompt.raw,
     provider: result.provider?.label || result.provider?.id || 'unknown provider',
     pass: result.success,
-    cost: result.cost || 0,
+    ...(cost === undefined ? {} : { cost }),
     audio: result.response?.audio
       ? {
           id: result.response.audio.id,

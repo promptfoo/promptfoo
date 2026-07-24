@@ -95,7 +95,7 @@ import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
   accumulateGradingRequest,
-  accumulateResponseTokenUsage,
+  accumulateResponseTokenUsagePreservingUnknown,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
@@ -1559,9 +1559,7 @@ async function runEvalInternal({
     });
 
     // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsage(ret.tokenUsage, response);
-    }
+    accumulateResponseTokenUsagePreservingUnknown(ret.tokenUsage, response);
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
       // Save the output in a register for later use
@@ -3227,7 +3225,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (row.tokenUsage) {
-      accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
+      accumulateResponseTokenUsagePreservingUnknown(this.stats.tokenUsage, {
+        tokenUsage: row.tokenUsage,
+      });
     }
   }
 
@@ -3292,13 +3292,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     metrics.assertFailCount +=
       row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
     metrics.totalLatencyMs += row.latencyMs || 0;
-    accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+    accumulateResponseTokenUsagePreservingUnknown(metrics.tokenUsage, row.response);
 
     if (row.gradingResult?.tokensUsed) {
       updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
     }
 
-    metrics.cost += row.cost || 0;
+    if (row.cost === undefined) {
+      if (row.response && !row.response.error && !row.response.cached) {
+        metrics.cost = undefined;
+      }
+    } else if (metrics.cost !== undefined) {
+      metrics.cost += row.cost;
+    }
   }
 
   private async processEvalStep(
@@ -4459,12 +4465,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       avgLatencyMs: Math.round(avgLatencyMs),
       concurrencyUsed: concurrency,
       timeoutOccurred,
-      totalTokens: this.stats.tokenUsage.total,
-      promptTokens: this.stats.tokenUsage.prompt,
-      completionTokens: this.stats.tokenUsage.completion,
-      cachedTokens: this.stats.tokenUsage.cached,
-      totalCost: prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0),
-      totalRequests: this.stats.tokenUsage.numRequests,
+      ...(this.stats.tokenUsage.total === undefined
+        ? {}
+        : { totalTokens: this.stats.tokenUsage.total }),
+      ...(this.stats.tokenUsage.prompt === undefined
+        ? {}
+        : { promptTokens: this.stats.tokenUsage.prompt }),
+      ...(this.stats.tokenUsage.completion === undefined
+        ? {}
+        : { completionTokens: this.stats.tokenUsage.completion }),
+      ...(this.stats.tokenUsage.cached === undefined
+        ? {}
+        : { cachedTokens: this.stats.tokenUsage.cached }),
+      ...(prompts.some((prompt) => prompt.metrics?.cost === undefined)
+        ? {}
+        : { totalCost: prompts.reduce((acc, prompt) => acc + (prompt.metrics?.cost ?? 0), 0) }),
+      totalRequests: this.stats.tokenUsage.numRequests ?? 0,
       ...assertionStats,
       usesConversationVar,
       usesTransforms: usesTransforms(testSuite, tests),
