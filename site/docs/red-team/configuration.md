@@ -88,6 +88,8 @@ redteam:
 
 For multi-input testing, define `inputs` on the target/provider rather than under `redteam`. Promptfoo automatically stores the combined payload in `__prompt` for internal use, so you should not set `injectVar` or create a manual `prompt` field just to support multi-input configs. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) for end-to-end examples.
 
+For custom targets that need conversation state across GOAT, Crescendo, Hydra, or Mischievous User turns, see [Multi-Turn Conversations](/docs/red-team/multi-turn-conversations/).
+
 ### Framework Filtering
 
 Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
