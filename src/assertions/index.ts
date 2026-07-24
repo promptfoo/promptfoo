@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import cliState from '../cliState';
@@ -317,6 +318,49 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+function canStoreRenderedAssertionValue(value: unknown): boolean {
+  if (value === undefined || typeof value === 'function') {
+    return false;
+  }
+
+  try {
+    return JSON.stringify(value) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function renderNestedAssertionValue(value: unknown, vars: Record<string, VarValue>): unknown {
+  if (typeof value === 'string') {
+    if (value.startsWith('file://')) {
+      return processFileReference(value);
+    }
+
+    return nunjucks.renderString(value, vars);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => renderNestedAssertionValue(item, vars));
+  }
+
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, renderNestedAssertionValue(item, vars)]),
+    );
+  }
+
+  return value;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -544,17 +588,8 @@ export async function runAssertion({
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
-      if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return processFileReference(v);
-        }
-        return nunjucks.renderString(v, resolvedVars);
-      }
-      return v;
-    });
+  } else if (Array.isArray(renderedValue) || isPlainRecord(renderedValue)) {
+    renderedValue = renderNestedAssertionValue(renderedValue, resolvedVars) as AssertionValue;
   }
 
   // Centralized script output resolution
@@ -650,9 +685,8 @@ export async function runAssertion({
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
     if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
+      canStoreRenderedAssertionValue(renderedValue) &&
+      !isDeepStrictEqual(renderedValue, assertion.value)
     ) {
       result.metadata = result.metadata || {};
       result.metadata.renderedAssertionValue = renderedValue;
