@@ -269,7 +269,7 @@ describe('handleContextFaithfulness', () => {
       'test query',
       'raw',
       'from-transform',
-      0,
+      0.5,
       {},
       expect.any(Object),
       undefined,

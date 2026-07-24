@@ -127,7 +127,7 @@ describe('handleContextRecall', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -162,7 +162,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'test value',
-      0,
+      0.5,
       {},
       { context: 'test context' },
       undefined,
@@ -212,7 +212,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.5,
       {},
       {},
       undefined,

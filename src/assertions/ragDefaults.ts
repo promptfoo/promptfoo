@@ -1,0 +1,1 @@
+export const DEFAULT_RAG_ASSERTION_THRESHOLD = 0.5;
