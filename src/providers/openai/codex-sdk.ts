@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import fs from 'fs';
 import path from 'path';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
@@ -25,11 +24,17 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { shouldInjectApiKey, usesCustomModelProvider } from './codexApiKeyGating';
 import {
-  applyApiKeyToCliEnv,
-  shouldInjectApiKey,
-  usesCustomModelProvider,
-} from './codexApiKeyGating';
+  codexBaseConfigShape,
+  findCodexGitRepositoryRoot,
+  getIgnoredCodexProviderEnvKeys,
+  getOmittedCodexProcessEnvKeys,
+  prepareCodexProcessEnv,
+  resolveCodexWorkingDirectory,
+  sortCodexProcessEnv,
+  validateCodexWorkingDirectory,
+} from './codexConfig';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -100,57 +105,6 @@ function isValidTraceparent(traceparent: string | undefined): traceparent is str
  * - With thread_id: Resumes specific thread from ~/.codex/sessions
  */
 
-/**
- * Sandbox modes controlling filesystem access
- */
-export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
-
-/**
- * Approval policies controlling when user approval is required
- */
-export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted';
-
-/**
- * Reasoning effort levels for model reasoning intensity.
- *
- * Model support varies:
- * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
- * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
- * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
- *   the OpenAI API uses 'none' instead of 'minimal'
- * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
- *
- * Values:
- * - 'minimal': Minimal reasoning overhead
- * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
- * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
- * - 'max': Deepest single-agent reasoning for GPT-5.6
- * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
- */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
-
-/**
- * Web search modes controlling how the agent accesses the web.
- * - 'disabled': No web search
- * - 'cached': Use cached results only
- * - 'live': Allow live web searches
- */
-export type WebSearchMode = 'disabled' | 'cached' | 'live';
-
-/**
- * Multi-agent collaboration presets accepted by Codex CLI config.
- */
-export type CollaborationMode = 'coding' | 'plan';
-
 type CodexPromptInputItem =
   | {
       type: 'text';
@@ -185,254 +139,22 @@ interface CodexStreamingState {
   activeTurnIndex: number;
 }
 
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
-
-export interface OpenAICodexSDKConfig {
-  /**
-   * Internal promptfoo config base path. Accepted for loader compatibility but not
-   * forwarded to the Codex SDK constructor.
-   */
-  basePath?: string;
-
-  /**
-   * Internal prompt wrapper/provider metadata merged into prompt configs by promptfoo.
-   * Accepted for compatibility but not forwarded to the Codex SDK constructor.
-   */
-  prefix?: string;
-  suffix?: string;
-  provider?: unknown;
-  linkedTargetId?: string;
-
-  apiKey?: string;
-
-  /**
-   * Custom base URL for API requests (for proxies)
-   */
-  base_url?: string;
-
-  /**
-   * Maximum scheduler retry attempts for retryable Codex SDK rate limit failures.
-   */
-  maxRetries?: number;
-
-  /**
-   * Working directory for Codex to operate in
-   * Defaults to process.cwd()
-   */
-  working_dir?: string;
-
-  /**
-   * Additional directories the agent can access beyond the working directory.
-   * Maps to --add-dir flag in Codex CLI.
-   */
-  additional_directories?: string[];
-
-  /**
-   * Skip Git repository check (Codex requires Git by default)
-   */
-  skip_git_repo_check?: boolean;
-
-  /**
-   * Path to custom codex binary
-   */
-  codex_path_override?: string;
-
-  /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
-   * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
-   * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
-   */
-  model?: string;
-
-  /**
-   * Codex model provider to route through, mapped to the CLI's `model_provider` config.
-   * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
-   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.6-sol'` and AWS credentials in `cli_env`).
-   * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
-   *
-   * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
-   */
-  model_provider?: string;
-
-  /**
-   * Sandbox access level controlling filesystem permissions
-   * - 'read-only': Agent can only read files (safest)
-   * - 'workspace-write': Agent can write to working directory (default)
-   * - 'danger-full-access': Full filesystem access (use with caution)
-   */
-  sandbox_mode?: SandboxMode;
-
-  /**
-   * Model reasoning intensity. Support varies by model:
-   * - 'minimal': Minimal reasoning overhead
-   * - 'low': Light reasoning, faster responses
-   * - 'medium': Balanced (default)
-   * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
-   */
-  model_reasoning_effort?: ReasoningEffort;
-
-  /**
-   * Allow network requests
-   */
-  network_access_enabled?: boolean;
-
-  /**
-   * Allow web search (boolean shorthand)
-   */
-  web_search_enabled?: boolean;
-
-  /**
-   * Web search mode for finer-grained control.
-   * - 'disabled': No web search
-   * - 'cached': Use cached results only
-   * - 'live': Allow live web searches
-   *
-   * Takes precedence over web_search_enabled if both are set.
-   */
-  web_search_mode?: WebSearchMode;
-
-  /**
-   * Multi-agent collaboration preset. This is mapped to
-   * cli_config.collaboration_mode when constructing the SDK client.
-   */
-  collaboration_mode?: CollaborationMode;
-
-  /**
-   * When to require user approval
-   * - 'never': Never require approval
-   * - 'on-request': Require approval when requested
-   * - 'on-failure': Require approval after failures
-   * - 'untrusted': Require approval for untrusted operations
-   */
-  approval_policy?: ApprovalPolicy;
-
-  /**
-   * Thread management
-   */
-  thread_id?: string; // Resume existing thread
-  persist_threads?: boolean; // Keep threads alive between calls
-  thread_pool_size?: number; // Max concurrent threads
-
-  /**
-   * Output schema for structured JSON responses
-   * Supports plain JSON schema or Zod schemas converted with zod-to-json-schema
-   */
-  output_schema?: Record<string, any>;
-
-  /**
-   * Environment variables to pass to Codex CLI
-   * By default, Promptfoo passes a minimal shell environment plus provider credentials.
-   * Set inherit_process_env: true to merge the full Node.js process environment.
-   */
-  cli_env?: Record<string, string | number | boolean>;
-
-  /**
-   * Merge process.env into the Codex CLI environment.
-   * Defaults to false to avoid exposing unrelated process secrets to agent commands.
-   */
-  inherit_process_env?: boolean;
-
-  /**
-   * Enable streaming events (default: false for simplicity)
-   */
-  enable_streaming?: boolean;
-
-  /**
-   * Enable deep tracing of Codex CLI operations.
-   * When enabled, injects OTEL environment variables so the Codex CLI
-   * exports its internal spans to the local OTLP receiver.
-   * Requires tracing.enabled and tracing.otlp.http.enabled in promptfooconfig.
-   *
-   * IMPORTANT: Deep tracing is INCOMPATIBLE with thread persistence.
-   * When enabled, persist_threads, thread_id, and thread_pool_size are ignored
-   * because the CLI process must be recreated for each call to get correct span linking.
-   *
-   * Default: false (only traces at provider level, not CLI internals)
-   */
-  deep_tracing?: boolean;
-
-  /**
-   * Additional CLI config overrides passed as --config key=value to the Codex CLI.
-   * The SDK flattens the object into dotted paths and serializes values as TOML literals.
-   *
-   * Example: { collaboration_mode: 'coding', model_provider: { timeout: 30 } }
-   *
-   * @see https://developers.openai.com/codex/changelog/
-   */
-  cli_config?: Record<string, unknown>;
-}
-
-const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
-
 const OpenAICodexSDKConfigShape = {
-  basePath: z.string().optional(),
-  prefix: z.string().optional(),
-  suffix: z.string().optional(),
-  provider: z.unknown().optional(),
-  linkedTargetId: z.string().optional(),
-  apiKey: z.string().min(1).optional(),
-  base_url: z.string().min(1).optional(),
+  ...codexBaseConfigShape,
   maxRetries: z.number().int().nonnegative().optional(),
-  working_dir: z.string().min(1).optional(),
-  additional_directories: z.array(z.string().min(1)).optional(),
-  skip_git_repo_check: z.boolean().optional(),
-  codex_path_override: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  model_provider: z.string().min(1).optional(),
-  sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   model_reasoning_effort: z
     .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
     .optional(),
-  network_access_enabled: z.boolean().optional(),
   web_search_enabled: z.boolean().optional(),
   web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
   collaboration_mode: z.enum(['coding', 'plan']).optional(),
   approval_policy: z.enum(['never', 'on-request', 'on-failure', 'untrusted']).optional(),
-  thread_id: z.string().min(1).optional(),
-  persist_threads: z.boolean().optional(),
-  thread_pool_size: z.number().int().positive().optional(),
-  output_schema: z.record(z.string(), z.unknown()).optional(),
-  cli_env: z.record(z.string(), CodexCliEnvValueSchema).optional(),
-  inherit_process_env: z.boolean().optional(),
   enable_streaming: z.boolean().optional(),
-  deep_tracing: z.boolean().optional(),
-  cli_config: z.record(z.string(), z.unknown()).optional(),
 } as const;
 
 const OpenAICodexSDKConfigSchema = z.object(OpenAICodexSDKConfigShape).strict();
 const OpenAICodexSDKMergedPromptConfigSchema = z.object(OpenAICodexSDKConfigShape).strip();
+export type OpenAICodexSDKConfig = z.input<typeof OpenAICodexSDKConfigSchema>;
 
 function parseCodexConfig(
   config: OpenAICodexSDKConfig | undefined,
@@ -456,17 +178,6 @@ function parseCodexConfig(
 
     throw error;
   }
-}
-
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
 }
 
 const CODEX_RATE_LIMIT_CODES = [
@@ -769,21 +480,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     traceparent?: string,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, string> {
-    const inheritProcessEnv = config.inherit_process_env === true;
-    const cliEnv = Object.fromEntries(
-      Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
-    );
-    const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
-      ...cliEnv,
-    };
-
-    const ignoredProviderEnvKeys = Object.keys(this.env ?? {})
-      .filter(
-        (key) =>
-          key !== 'OPENAI_API_KEY' && key !== 'CODEX_API_KEY' && !(key in (config.cli_env ?? {})),
-      )
-      .sort();
+    const env = prepareCodexProcessEnv(config, apiKey);
+    const ignoredProviderEnvKeys = getIgnoredCodexProviderEnvKeys(this.env, config);
 
     if (ignoredProviderEnvKeys.length > 0 && !this.ignoredProviderEnvWarningShown) {
       logger.warn(
@@ -794,8 +492,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.ignoredProviderEnvWarningShown = true;
     }
 
-    if (!inheritProcessEnv && !this.omittedProcessEnvWarningShown) {
-      const omittedProcessEnvKeys = this.getOmittedOptionalProcessEnvKeys(config, env);
+    if (!config.inherit_process_env && !this.omittedProcessEnvWarningShown) {
+      const includeSsh =
+        config.network_access_enabled === true ||
+        config.web_search_enabled === true ||
+        config.web_search_mode === 'live';
+      const omittedProcessEnvKeys = getOmittedCodexProcessEnvKeys(env, includeSsh);
 
       if (omittedProcessEnvKeys.length > 0) {
         logger.warn(
@@ -807,41 +509,36 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Sort keys for stable cache key generation
-    const sortedEnv: Record<string, string> = {};
-    for (const key of Object.keys(env).sort()) {
-      if (env[key] !== undefined) {
-        sortedEnv[key] = env[key];
-      }
-    }
-
-    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
-
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
     // Without deep_tracing, we still capture spans at the provider level but don't
     // inject OTEL vars into CLI (which would cause export errors if no collector)
     if (config.deep_tracing) {
+      const userConfigured = {
+        endpoint: !!env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        protocol: !!env.OTEL_EXPORTER_OTLP_PROTOCOL,
+        serviceName: !!env.OTEL_SERVICE_NAME,
+      };
       // Standard OTEL environment variables - use defaults only if not already set
-      if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+      if (!env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+        env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
       }
-      if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+      if (!env.OTEL_EXPORTER_OTLP_PROTOCOL) {
+        env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
       }
-      if (!sortedEnv.OTEL_SERVICE_NAME) {
-        sortedEnv.OTEL_SERVICE_NAME = 'codex-cli';
+      if (!env.OTEL_SERVICE_NAME) {
+        env.OTEL_SERVICE_NAME = 'codex-cli';
       }
-      if (!sortedEnv.OTEL_TRACES_EXPORTER) {
-        sortedEnv.OTEL_TRACES_EXPORTER = 'otlp';
+      if (!env.OTEL_TRACES_EXPORTER) {
+        env.OTEL_TRACES_EXPORTER = 'otlp';
       }
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
-        sortedEnv.TRACEPARENT = traceparent;
+        env.TRACEPARENT = traceparent;
         const [, tpTraceId, tpSpanId] = traceparent.split('-');
         if (tpTraceId && tpSpanId) {
-          sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
-            sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
+          env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+            env.OTEL_RESOURCE_ATTRIBUTES,
             tpTraceId,
             tpSpanId,
           );
@@ -849,37 +546,16 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - CLI will start own trace)',
-        endpoint: sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT,
-        userConfigured: {
-          endpoint: !!env.OTEL_EXPORTER_OTLP_ENDPOINT,
-          protocol: !!env.OTEL_EXPORTER_OTLP_PROTOCOL,
-          serviceName: !!env.OTEL_SERVICE_NAME,
-        },
+        endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        userConfigured,
       });
     } else {
       // When deep_tracing is disabled, remove any inherited TRACEPARENT
       // to prevent accidental trace linking from parent processes
-      delete sortedEnv.TRACEPARENT;
+      delete env.TRACEPARENT;
     }
 
-    return sortedEnv;
-  }
-
-  private getOmittedOptionalProcessEnvKeys(
-    config: OpenAICodexSDKConfig,
-    env: Record<string, string>,
-  ): string[] {
-    const shouldWarnForSshEnv =
-      config.network_access_enabled === true ||
-      config.web_search_enabled === true ||
-      config.web_search_mode === 'live';
-
-    return COMMON_OPTIONAL_PROCESS_ENV_KEYS.filter(
-      (key) =>
-        typeof process.env[key] === 'string' &&
-        !(key in env) &&
-        (shouldWarnForSshEnv || (key !== 'SSH_AUTH_SOCK' && key !== 'GIT_SSH_COMMAND')),
-    );
+    return sortCodexProcessEnv(env);
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
@@ -904,7 +580,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return getCodexSkillRootPrefixes({
       codexHome: env.CODEX_HOME,
       gitRepositoryRoot: resolvedWorkingDir
-        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        ? findCodexGitRepositoryRoot(resolvedWorkingDir)
         : undefined,
       homeDir: env.HOME || env.USERPROFILE || process.env.HOME || process.env.USERPROFILE,
       workingDir: resolvedWorkingDir,
@@ -937,51 +613,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return true;
-  }
-
-  private validateWorkingDirectory(workingDir: string, skipGitCheck: boolean = false): void {
-    let stats: fs.Stats;
-    try {
-      stats = fs.statSync(workingDir);
-    } catch (err: any) {
-      throw new Error(
-        `Working directory ${workingDir} does not exist or isn't accessible: ${err.message}`,
-      );
-    }
-
-    if (!stats.isDirectory()) {
-      throw new Error(`Working directory ${workingDir} is not a directory`);
-    }
-
-    if (!skipGitCheck && !this.isInsideGitRepository(workingDir)) {
-      throw new Error(
-        dedent`Working directory ${workingDir} is not inside a Git repository.
-
-        Codex requires a Git repository by default to prevent unrecoverable errors.
-
-        To bypass this check, set skip_git_repo_check: true in your provider config.`,
-      );
-    }
-  }
-
-  private isInsideGitRepository(workingDir: string): boolean {
-    return this.findGitRepositoryRoot(workingDir) !== undefined;
-  }
-
-  private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
   }
 
   /**
@@ -2146,8 +1777,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ? activeTraceparent
       : context?.traceparent;
     const apiKey = this.getApiKey(config);
-    const workingDirectory =
-      resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
+    const workingDirectory = resolveCodexWorkingDirectory(config.working_dir, cliState.basePath);
     const additionalDirectories = config.additional_directories?.map(
       (directory) => resolveAgenticWorkingDir(directory, cliState.basePath) ?? directory,
     );
@@ -2185,7 +1815,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Execute turn
     try {
-      this.validateWorkingDirectory(
+      validateCodexWorkingDirectory(
         resolvedConfig.working_dir as string,
         resolvedConfig.skip_git_repo_check,
       );
