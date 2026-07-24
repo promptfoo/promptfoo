@@ -26,6 +26,7 @@ import { shouldShareResults } from '../../util/sharing';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
+import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
 import type {
@@ -420,8 +421,14 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   if (format === 'json') {
     const jsonData = evalTableToJson(returnTable);
 
-    setDownloadHeaders(res, `${id}.json`, 'application/json');
-    res.json(jsonData);
+    // Serialize before setting download headers. If V8 reaches a JSON
+    // serialization limit, return a regular 413 error response.
+    sendJsonResponse(res, jsonData, {
+      beforeSend: () => setDownloadHeaders(res, `${id}.json`, 'application/json'),
+      evalId: id,
+      logger,
+      tooLargeMessage: 'Eval JSON export is too large to serialize.',
+    });
     return;
   }
 
