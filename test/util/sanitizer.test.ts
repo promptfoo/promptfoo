@@ -1528,6 +1528,177 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
+    it('should fail closed for username-only credentials in templated URLs', () => {
+      expect(sanitizeUrl('wss://runtime-secret@host/{{ sessionId }}')).toBe('[REDACTED]');
+    });
+
+    it('should recognize userinfo after URL delimiters inside Nunjucks expressions', () => {
+      const url = 'wss://{% if "x/y?z#q" %}runtime-secret@host{% endif %}/{{ sessionId }}';
+
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
+    });
+
+    it('should redact secret-shaped literal path segments while preserving runtime templates', () => {
+      const url = 'wss://host/sk-1234567890abcdefghijklmnopqrstuv/{{ sessionId }}';
+
+      expect(sanitizeUrl(url)).toBe('wss://host/%5BREDACTED%5D/{{ sessionId }}');
+    });
+
+    it.each([
+      {
+        value: 'sk-1234567890abcdefghijklmnopqrstuv-{{ sessionId }}',
+        sanitized: '%5BREDACTED%5D{{ sessionId }}',
+      },
+      {
+        value: '{{ sessionId }}-sk-1234567890abcdefghijklmnopqrstuv',
+        sanitized: '{{ sessionId }}%5BREDACTED%5D',
+      },
+      {
+        value: 'token-abcd1234efgh5678{% if active %}-{{ sessionId }}{% endif %}',
+        sanitized: '%5BREDACTED%5D{% if active %}-{{ sessionId }}{% endif %}',
+      },
+      {
+        value: 'token-abcdefghijklmnop{% if active %}-{{ sessionId }}{% endif %}',
+        sanitized: '%5BREDACTED%5D{% if active %}-{{ sessionId }}{% endif %}',
+      },
+      {
+        value: 'token-deadbeefdeadbeef',
+        sanitized: '%5BREDACTED%5D',
+      },
+      {
+        value: 'sk-1234567890abcdefghijklmnopqrstuv%ZZ',
+        sanitized: '%5BREDACTED%5D',
+      },
+      {
+        value: 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signedvalue123',
+        sanitized: '%5BREDACTED%5D',
+      },
+      {
+        value: '{% if "x/y" in path %}sk-1234567890abcdefghijklmnopqrstuv{% endif %}',
+        sanitized: '{% if "x/y" in path %}%5BREDACTED%5D{% endif %}',
+      },
+      {
+        value: '{# a/b #}sk-1234567890abcdefghijklmnopqrstuv',
+        sanitized: '{# a/b #}%5BREDACTED%5D',
+      },
+    ])('should redact credentials beside template tags in path segment $value', ({
+      value,
+      sanitized,
+    }) => {
+      expect(sanitizeUrl(`wss://host/${value}/{{ action }}`)).toBe(
+        `wss://host/${sanitized}/{{ action }}`,
+      );
+    });
+
+    it('should preserve legitimate UUID resource IDs in templated URLs', () => {
+      const url =
+        'wss://host/projects/550e8400-e29b-41d4-a716-446655440000/sessions/{{ sessionId }}';
+
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it.each([
+      'auth-service-target',
+      'token-budget-model',
+      'key-management-service',
+      'secret-shopping-agent',
+      'credential-rotation-test',
+      'token-classification',
+      'token-tokenization',
+      'auth-authentication',
+      'auth-authorization',
+      'credential-verification',
+      'key-infrastructure',
+      'secret-configuration',
+      'token-conversation',
+      'token-misconfiguration',
+      'auth-misconfiguration',
+      'credential-misconfiguration',
+      'token-reproducibility',
+    ])('should preserve ordinary hyphenated URL path names such as %s', (segment) => {
+      const url = `wss://host/${segment}/{{ sessionId }}`;
+
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should preserve Nunjucks control tags around templated credential values', () => {
+      const url = 'wss://host/ws{% if token %}?token={{ token }}{% endif %}';
+
+      expect(sanitizeUrl(url)).toBe(url);
+    });
+
+    it('should redact literal credentials without removing their closing Nunjucks control tags', () => {
+      const url = 'wss://host/ws{% if token %}?token=runtime-secret{% endif %}';
+
+      expect(sanitizeUrl(url)).toBe('wss://host/ws{% if token %}?token=%5BREDACTED%5D{% endif %}');
+    });
+
+    it('should redact conditional credential values while preserving all Nunjucks control tags', () => {
+      const url =
+        'wss://host/ws?token={% if enabled %}runtime-secret{% endif %}&session={{ sessionId }}';
+
+      expect(sanitizeUrl(url)).toBe(
+        'wss://host/ws?token={% if enabled %}%5BREDACTED%5D{% endif %}&session={{ sessionId }}',
+      );
+    });
+
+    it('should redact conditional fragment credentials while preserving Nunjucks control tags', () => {
+      const url = 'wss://host/ws#access_token={% if enabled %}runtime-secret{% endif %}';
+
+      expect(sanitizeUrl(url)).toBe(
+        'wss://host/ws#access_token={% if enabled %}%5BREDACTED%5D{% endif %}',
+      );
+    });
+
+    it('should ignore URL delimiters inside Nunjucks expressions', () => {
+      const url = 'wss://host/ws{% if "?#" in token %}?token=runtime-secret{% endif %}';
+
+      expect(sanitizeUrl(url)).toBe(
+        'wss://host/ws{% if "?#" in token %}?token=%5BREDACTED%5D{% endif %}',
+      );
+    });
+
+    it('should preserve Nunjucks comments while redacting literal query credentials', () => {
+      const url = 'wss://host/ws{# ? comment #}?token=runtime-secret';
+
+      expect(sanitizeUrl(url)).toBe('wss://host/ws{# ? comment #}?token=%5BREDACTED%5D');
+    });
+
+    it('should redact secret-looking values under a wholly templated query key', () => {
+      const url = 'wss://host/ws?{{ key }}=sk-1234567890abcdefghijklmnopqrstuv';
+
+      expect(sanitizeUrl(url)).toBe('wss://host/ws?{{ key }}=%5BREDACTED%5D');
+    });
+
+    it.each([
+      '{% set token = "sk-1234567890abcdefghijklmnopqrstuv" %}{{ token }}',
+      '{{ "sk-1234567890abcdefghijklmnopqrstuv" }}',
+      '{# sk-1234567890abcdefghijklmnopqrstuv #}{{ sessionId }}',
+      '{{ "prefix/sk-1234567890abcdefghijklmnopqrstuv" }}',
+      '{% set token = "sk%2D1234567890abcdefghijklmnopqrstuv" %}{{ token }}',
+      '{{ "Bearer%20sk%2D1234567890abcdefghijklmnopqrstuv" }}',
+      '{{ "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signedvalue123" }}',
+    ])('should fail closed when a Nunjucks tag contains a literal credential', (template) => {
+      expect(sanitizeUrl(`wss://host/ws/${template}`)).toBe('[REDACTED]');
+    });
+
+    it('should fail closed for malformed template tags beside runtime interpolation', () => {
+      const malformed = `{%${'{%'.repeat(1000)}{{ sessionId }}`;
+
+      expect(sanitizeUrl(`wss://host/ws?value=${malformed}`)).toBe('[REDACTED]');
+    });
+
+    it.each([
+      '{{',
+      '{%',
+      '{#',
+    ])('should fail closed for repeated unterminated %s template tags without backtracking', (openingTag) => {
+      const validTag = openingTag === '{{' ? '{% if active %}' : '{{ sessionId }}';
+      const malformed = `${openingTag.repeat(10_000)}${validTag}`;
+
+      expect(sanitizeUrl(`wss://host/ws?value=${malformed}`)).toBe('[REDACTED]');
+    });
+
     it('should redact mixed template and sensitive params', () => {
       const url = 'https://admin:secret@{{ api_base }}/api?api_key=key123&data=public';
       expect(sanitizeUrl(url)).toBe('[REDACTED]');

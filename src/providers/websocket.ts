@@ -243,6 +243,8 @@ export async function createStreamResponse(
 export class WebSocketProvider implements ApiProvider {
   url: string;
   private readonly providerId: string;
+  private readonly useLabelAsIdentity: boolean;
+  label?: string;
   config: WebSocketProviderConfig;
   timeoutMs: number;
   transformResponse: (data: any) => ProviderResponse;
@@ -257,7 +259,19 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
-    this.providerId = getSafeProviderId(this.url);
+    this.label = options.label;
+    const explicitProviderId =
+      options.id && options.id !== url && !['websocket', 'ws', 'wss'].includes(options.id)
+        ? options.id
+        : undefined;
+    if (explicitProviderId) {
+      invariant(
+        getSafeProviderId(explicitProviderId) === explicitProviderId,
+        'WebSocket provider IDs must not contain credentials. Configure a non-secret provider ID.',
+      );
+    }
+    this.providerId = explicitProviderId ?? getSafeProviderId(this.url);
+    this.useLabelAsIdentity = !explicitProviderId && this.providerId !== this.url;
     this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -274,11 +288,21 @@ export class WebSocketProvider implements ApiProvider {
   }
 
   id(): string {
+    if (this.label) {
+      invariant(
+        getSafeProviderId(this.label) === this.label,
+        'WebSocket provider labels must not contain credentials. Configure a non-secret label.',
+      );
+      if (this.useLabelAsIdentity) {
+        return this.label;
+      }
+    }
+
     return this.providerId;
   }
 
   toString(): string {
-    return `[WebSocket Provider ${this.providerId}]`;
+    return `[WebSocket Provider ${this.id()}]`;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
