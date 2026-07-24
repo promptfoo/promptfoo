@@ -24,6 +24,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Choosing the Right Temperature](/docs/guides/evaluate-llm-temperature) — Find the optimal temperature setting for your use case
 - [Evaluating Text-to-SQL](/docs/guides/text-to-sql-evaluation) — Measure SQL generation accuracy
 - [Sandboxed Code Evaluations](/docs/guides/sandboxed-code-evals) — Safely run and test LLM-generated code
+- [Evaluate Code with E2B](/docs/guides/evaluate-e2b) — Execute generated Python in a hosted sandbox with network access disabled
 - [HLE Benchmark](/docs/guides/hle-benchmark) — Evaluate models on the Humanity's Last Exam benchmark
 
 ## Model Comparisons
