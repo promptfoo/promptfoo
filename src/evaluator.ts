@@ -793,6 +793,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registers,
   test,
   testSuite,
   vars,
@@ -801,19 +802,25 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
+  const redteamSkipVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
     ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+    : [];
+  // Register-sourced vars (from `options.storeOutputAs`) hold a prior test's model output, which is
+  // runtime data, not a template. Prevent recursive template evaluation while retaining the
+  // established file/package loading and trailing-newline normalization applied to regular vars.
+  const registerVarNames = registers ? Object.keys(registers) : undefined;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
     filters,
     provider,
-    skipRenderVars,
+    redteamSkipVars.length > 0 ? redteamSkipVars : undefined,
+    registerVarNames,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1463,6 +1470,7 @@ async function runEvalInternal({
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registers,
       test,
       testSuite,
       vars: state.vars,
