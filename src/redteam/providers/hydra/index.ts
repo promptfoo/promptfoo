@@ -37,6 +37,7 @@ import {
   extractPromptFromTags,
   getSessionId,
   isBasicRefusal,
+  stripPromptBlockPrefix,
 } from '../../util';
 import {
   buildGraderResultAssertion,
@@ -467,6 +468,7 @@ export class HydraProvider implements ApiProvider {
       if (extractedPrompt) {
         processedMessage = extractedPrompt;
       }
+      processedMessage = stripPromptBlockPrefix(processedMessage);
 
       // Extract input vars from the processed message for multi-input mode
       if (this.config.inputs && shouldGenerateRemote()) {
@@ -558,7 +560,7 @@ export class HydraProvider implements ApiProvider {
       logger.debug(`${this.logPrefix} Sending to target`, {
         turn,
         stateful: this.stateful,
-        messageLength: nextMessage.length,
+        messageLength: processedMessage.length,
       });
 
       // ═══════════════════════════════════════════════════════════════════════
@@ -572,10 +574,10 @@ export class HydraProvider implements ApiProvider {
           turn,
           layers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
         });
-        // Transform the actual message content (nextMessage), not the full targetPrompt
+        // Transform the actual message content (processedMessage), not the full targetPrompt
         // This ensures we convert just the text to audio, not the JSON structure
         lastTransformResult = await applyRuntimeTransforms(
-          nextMessage,
+          processedMessage,
           this.injectVar,
           this.perTurnLayers,
           Strategies,

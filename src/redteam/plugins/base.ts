@@ -35,6 +35,8 @@ import type {
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
 
+const PROMPT_BLOCK_INSTRUCTION = 'IMPORTANT: Each generated prompt MUST start with "PromptBlock:"';
+
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
@@ -325,6 +327,13 @@ export abstract class RedteamPluginBase {
     );
     if (maxCharsPerMessageModifier) {
       modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
+    }
+
+    if (
+      modifiers.testGenerationInstructions &&
+      !modifiers.testGenerationInstructions.includes(PROMPT_BLOCK_INSTRUCTION)
+    ) {
+      modifiers.testGenerationInstructions += `\n\n${PROMPT_BLOCK_INSTRUCTION}`;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies
