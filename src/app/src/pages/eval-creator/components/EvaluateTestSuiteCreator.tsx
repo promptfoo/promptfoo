@@ -91,10 +91,6 @@ const EvaluateTestSuiteCreator = () => {
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
 
-  useEffect(() => {
-    useStore.persist.rehydrate();
-  }, []);
-
   // Fetch config status to determine if ConfigureEnvButton should be shown
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
