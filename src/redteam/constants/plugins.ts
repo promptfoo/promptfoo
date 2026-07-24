@@ -414,6 +414,7 @@ export const ADDITIONAL_PLUGINS = [
   'rbac',
   'reasoning-dos',
   'religion',
+  'role-confusion',
   'shell-injection',
   'special-token-injection',
   'sql-injection',
