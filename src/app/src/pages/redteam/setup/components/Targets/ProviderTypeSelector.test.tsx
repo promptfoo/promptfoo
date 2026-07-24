@@ -330,6 +330,36 @@ describe('ProviderTypeSelector', () => {
     );
   });
 
+  it.each([
+    ['DeepSeek', 'DeepSeek-V4 Flash and Pro models', 'deepseek', 'deepseek:deepseek-v4-flash'],
+    [
+      'Alibaba Cloud (Qwen)',
+      'Qwen3.7, Qwen3.6, and other DashScope models',
+      'alibaba',
+      'alibaba:qwen3.7-plus',
+    ],
+    ['Moonshot (Kimi)', 'Kimi K3 and K2 thinking models', 'moonshot', 'moonshot:kimi-k3'],
+    ['MiniMax', 'MiniMax M3 and M2.7 models', 'minimax', 'minimax:MiniMax-M3'],
+  ])('selects the current %s foundation model provider', async (label, description, type, id) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Model target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText(description)).toBeVisible();
+    const card = screen.getByText(label).closest('[role="button"]');
+    expect(card).toBeInTheDocument();
+    await user.click(card!);
+
+    expect(setProvider).toHaveBeenCalledWith({ id, label: 'Model target', config: {} }, type);
+  });
+
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {

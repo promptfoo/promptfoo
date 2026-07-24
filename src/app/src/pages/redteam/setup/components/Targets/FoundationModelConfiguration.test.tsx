@@ -209,6 +209,49 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
+  it.each([
+    [
+      'deepseek',
+      'deepseek:deepseek-v4-flash, deepseek:deepseek-v4-pro',
+      'DeepSeek',
+      'DEEPSEEK_API_KEY',
+    ],
+    [
+      'alibaba',
+      'alibaba:qwen3.7-plus, alibaba:qwen3.7-max',
+      'Alibaba Cloud (Qwen)',
+      'DASHSCOPE_API_KEY',
+    ],
+    [
+      'moonshot',
+      'moonshot:kimi-k3, moonshot:kimi-k2.7-code',
+      'Moonshot (Kimi)',
+      'MOONSHOT_API_KEY',
+    ],
+    ['minimax', 'minimax:MiniMax-M3, minimax:MiniMax-M2.7', 'MiniMax', 'MINIMAX_API_KEY'],
+  ])('shows the current %s model placeholder, documentation, and API-key hint', async (providerType, placeholder, providerName, envVar) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType={providerType}
+      />,
+    );
+
+    expect(screen.getByRole('textbox', { name: /Model ID/i })).toHaveAttribute(
+      'placeholder',
+      placeholder,
+    );
+    expect(screen.getByRole('link', { name: `${providerName} documentation` })).toHaveAttribute(
+      'href',
+      `https://www.promptfoo.dev/docs/providers/${providerType}`,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    expect(screen.getByText(`Optional - defaults to ${envVar} environment variable`)).toBeVisible();
+  });
+
   it('should update the Model ID input value when selectedTarget.id prop changes', () => {
     const { rerender } = render(
       <FoundationModelConfiguration

@@ -47,6 +47,9 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   groq: `${BASE_DOCS_URL}/groq`,
   perplexity: `${BASE_DOCS_URL}/perplexity`,
   deepseek: `${BASE_DOCS_URL}/deepseek`,
+  alibaba: `${BASE_DOCS_URL}/alibaba`,
+  moonshot: `${BASE_DOCS_URL}/moonshot`,
+  minimax: `${BASE_DOCS_URL}/minimax`,
   xai: `${BASE_DOCS_URL}/xai`,
 
   // Cloud & Enterprise
@@ -77,7 +80,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   'text-generation-webui': `${BASE_DOCS_URL}/text-generation-webui`,
 
   // Additional providers found in docs
-  alibaba: `${BASE_DOCS_URL}/alibaba`,
   cerebras: `${BASE_DOCS_URL}/cerebras`,
   cloudera: `${BASE_DOCS_URL}/cloudera`,
   cohere: `${BASE_DOCS_URL}/cohere`,

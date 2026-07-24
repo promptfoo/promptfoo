@@ -2,21 +2,37 @@ import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
-import type { ProviderOptions } from '../types/index';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderOptions } from '../types/index';
+import type { OpenAiCompletionOptions } from './openai/types';
 
 const KNOWN_MODELS = new Set([
+  // Qwen3.7
+  'qwen3.7-max',
+  'qwen3.7-max-us',
+  'qwen3.7-max-preview',
+  'qwen3.7-max-2026-06-08',
+  'qwen3.7-max-2026-05-20',
+  'qwen3.7-max-2026-05-17',
+  'qwen3.7-plus',
+  'qwen3.7-plus-us',
+  'qwen3.7-plus-2026-05-26',
+
   // Qwen3.6
   'qwen3.6-max-preview',
   'qwen3.6-plus',
   'qwen3.6-plus-2026-04-02',
   'qwen3.6-flash',
   'qwen3.6-flash-2026-04-16',
+  'qwen3.6-27b',
+  'qwen3.6-35b-a3b',
 
   // Qwen3.5
   'qwen3.5-plus',
   'qwen3.5-plus-2026-02-15',
+  'qwen3.5-plus-2026-04-20',
   'qwen3.5-flash',
   'qwen3.5-flash-2026-02-23',
+  'qwen3.5-ocr',
   'qwen3.5-397b-a17b',
   'qwen3.5-122b-a10b',
   'qwen3.5-27b',
@@ -35,6 +51,7 @@ const KNOWN_MODELS = new Set([
 
   // Qwen-Plus
   'qwen-plus',
+  'qwen-plus-us',
   'qwen-plus-latest',
   'qwen-plus-2025-12-01',
   'qwen-plus-2025-09-11',
@@ -45,6 +62,7 @@ const KNOWN_MODELS = new Set([
 
   // Qwen-Flash
   'qwen-flash',
+  'qwen-flash-us',
   'qwen-flash-2025-07-28',
 
   // Qwen-Turbo
@@ -75,10 +93,12 @@ const KNOWN_MODELS = new Set([
 
   // Qwen3-VL-Plus
   'qwen3-vl-plus',
+  'qwen3-vl-plus-2025-12-19',
   'qwen3-vl-plus-2025-09-23',
 
   // Qwen3-VL-Flash
   'qwen3-vl-flash',
+  'qwen3-vl-flash-us',
   'qwen3-vl-flash-2025-10-15',
 
   // Qwen-VL-OCR
@@ -170,6 +190,8 @@ const KNOWN_MODELS = new Set([
   'qwen3-coder-30b-a3b-instruct',
 
   // DeepSeek
+  'deepseek-v4-flash',
+  'deepseek-v4-pro',
   'deepseek-v3.2',
   'deepseek-v3.2-exp',
   'deepseek-v3.1',
@@ -182,9 +204,46 @@ const KNOWN_MODELS = new Set([
   'deepseek-r1-distill-qwen-32b',
   'deepseek-r1-distill-llama-8b',
   'deepseek-r1-distill-llama-70b',
+  'vanchin/deepseek-v4-pro',
+  'vanchin/deepseek-v3.2-think',
+  'vanchin/deepseek-v3.1-terminus',
+  'vanchin/deepseek-r1',
+  'vanchin/deepseek-v3',
+  'vanchin/deepseek-ocr',
 
   // Kimi
+  'kimi-k2.7-code',
+  'kimi-k2.6',
+  'kimi-k2.5',
+  'kimi-k2-thinking',
+  'kimi/kimi-k3',
+  'kimi/kimi-k2.7-code-highspeed',
+  'kimi/kimi-k2.7-code',
+  'kimi/kimi-k2.6',
+  'kimi/kimi-k2.5',
   'moonshot-kimi-k2-instruct',
+
+  // GLM
+  'glm-5.2',
+  'glm-5.2-us',
+  'glm-5.2-fast-preview',
+  'glm-5.1',
+  'glm-5',
+  'ZHIPU/GLM-5.2',
+  'ZHIPU/GLM-5.1',
+  'ZHIPU/GLM-5',
+
+  // MiniMax
+  'MiniMax-M2.5',
+  'MiniMax-M2.1',
+  'MiniMax/MiniMax-M3',
+  'MiniMax/MiniMax-M2.7',
+  'MiniMax/MiniMax-M2.5',
+  'MiniMax/MiniMax-M2.1',
+
+  // Other Chinese model providers
+  'xiaomi/mimo-v2.5-pro',
+  'stepfun/step-3.7-flash',
 
   // Image generation
   'qwen-image-plus',
@@ -195,6 +254,18 @@ const KNOWN_MODELS = new Set([
 ]);
 
 const API_BASE_URL = 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+
+// Kimi and MiniMax reject Promptfoo's injected sampling defaults and use a
+// larger server-side output budget for reasoning.
+function pinsSamplingParams(modelName: string): boolean {
+  return /^(?:kimi(?:\/kimi)?-|minimax(?:\/minimax)?-)/i.test(modelName);
+}
+
+function supportsReasoningEffort(modelName: string): boolean {
+  return /^(?:kimi\/kimi-k3|(?:vanchin\/)?deepseek-v4-(?:flash|pro)|(?:ZHIPU\/)?glm-5(?:\.1|\.2(?:-us|-fast-preview)?)?|stepfun\/step-3\.7-flash)$/i.test(
+    modelName,
+  );
+}
 
 export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, options: ProviderOptions = {}) {
@@ -215,6 +286,57 @@ export class AlibabaChatCompletionProvider extends OpenAiChatCompletionProvider 
         apiKeyEnvar: 'DASHSCOPE_API_KEY',
       },
     });
+  }
+
+  protected override isReasoningModel(): boolean {
+    return supportsReasoningEffort(this.modelName) || super.isReasoningModel();
+  }
+
+  protected override supportsTemperature(): boolean {
+    return !super.isReasoningModel();
+  }
+
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+
+    if (!pinsSamplingParams(this.modelName)) {
+      return result;
+    }
+
+    const { body, config } = result;
+    if (config.temperature === undefined) {
+      delete body.temperature;
+    }
+    if (config.top_p === undefined) {
+      delete body.top_p;
+    }
+    if (config.presence_penalty === undefined) {
+      delete body.presence_penalty;
+    }
+    if (config.frequency_penalty === undefined) {
+      delete body.frequency_penalty;
+    }
+
+    // Prefer prompt-level limits across both aliases, then send the canonical
+    // field so Kimi K3 and other thinking models can budget reasoning tokens.
+    const promptConfig = (context?.prompt?.config ?? {}) as OpenAiCompletionOptions;
+    const maxTokens =
+      promptConfig.max_completion_tokens ??
+      promptConfig.max_tokens ??
+      config.max_completion_tokens ??
+      config.max_tokens;
+    delete body.max_tokens;
+    if (maxTokens === undefined) {
+      delete body.max_completion_tokens;
+    } else {
+      body.max_completion_tokens = maxTokens;
+    }
+
+    return result;
   }
 }
 

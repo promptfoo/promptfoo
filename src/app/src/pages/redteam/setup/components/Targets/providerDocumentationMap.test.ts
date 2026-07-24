@@ -10,6 +10,9 @@ describe('hasSpecificDocumentation', () => {
     { providerType: 'http', description: 'an API endpoint provider' },
     { providerType: 'custom', description: 'a provider with a general documentation page' },
     { providerType: 'aws-bedrock', description: 'a provider with an alias in the map' },
+    { providerType: 'alibaba', description: 'the Alibaba Cloud Qwen provider' },
+    { providerType: 'moonshot', description: 'the Moonshot Kimi provider' },
+    { providerType: 'minimax', description: 'the MiniMax provider' },
   ])('should return true when providerType ($description) is a key in the documentation map', ({
     providerType,
   }) => {

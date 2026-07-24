@@ -275,10 +275,16 @@
         "COHERE_CLIENT_NAME": {
           "type": "string"
         },
+        "DASHSCOPE_API_KEY": {
+          "type": "string"
+        },
         "DATABRICKS_TOKEN": {
           "type": "string"
         },
         "DATABRICKS_WORKSPACE_URL": {
+          "type": "string"
+        },
+        "DEEPSEEK_API_KEY": {
           "type": "string"
         },
         "DOCKER_MODEL_RUNNER_BASE_URL": {
@@ -1749,10 +1755,16 @@
                     "COHERE_CLIENT_NAME": {
                       "type": "string"
                     },
+                    "DASHSCOPE_API_KEY": {
+                      "type": "string"
+                    },
                     "DATABRICKS_TOKEN": {
                       "type": "string"
                     },
                     "DATABRICKS_WORKSPACE_URL": {
+                      "type": "string"
+                    },
+                    "DEEPSEEK_API_KEY": {
                       "type": "string"
                     },
                     "DOCKER_MODEL_RUNNER_BASE_URL": {
