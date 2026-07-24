@@ -30,7 +30,13 @@ import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig, Tool } from './types';
+import type {
+  CompletionOptions,
+  GoogleProviderConfig,
+  StreamedFunctionCall,
+  StreamedPartialArg,
+  Tool,
+} from './types';
 
 /**
  * Options for creating a Google provider instance.
@@ -42,6 +48,228 @@ export interface GoogleProviderOptions {
   id?: string;
   /** Environment variable overrides */
   env?: EnvOverrides;
+}
+
+interface PendingFunctionCall {
+  id?: string;
+  name?: string;
+  args: Record<string, unknown>;
+  argsText: string;
+}
+
+const MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX = 10_000;
+
+function setPartialFunctionArg(
+  args: Record<string, unknown>,
+  partialArg: StreamedPartialArg,
+): boolean {
+  const path = partialArg.jsonPath;
+  if (!path || !/^\$(?:\.[\w$ -]+|\[\d+\]|\['[^'\\\]]*'\]|\["[^"\\\]]*"\])+$/.test(path)) {
+    return false;
+  }
+
+  const segments = Array.from(
+    path.matchAll(/\.([\w$ -]+)|\[(\d+)\]|\['([^'\\\]]*)'\]|\["([^"\\\]]*)"\]/g),
+    (match) => (match[2] === undefined ? (match[1] ?? match[3] ?? match[4]) : Number(match[2])),
+  );
+  if (
+    segments.some(
+      (segment) =>
+        ['__proto__', 'prototype', 'constructor'].includes(String(segment)) ||
+        (typeof segment === 'number' &&
+          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX)),
+    )
+  ) {
+    return false;
+  }
+
+  let value: unknown;
+  if ('stringValue' in partialArg) {
+    value = partialArg.stringValue;
+  } else if ('numberValue' in partialArg) {
+    value = partialArg.numberValue;
+  } else if ('boolValue' in partialArg) {
+    value = partialArg.boolValue;
+  } else if ('nullValue' in partialArg) {
+    value = null;
+  } else {
+    return true;
+  }
+
+  let current: Record<string | number, unknown> = args;
+  for (let index = 0; index < segments.length - 1; index++) {
+    const segment = segments[index];
+    const nextSegment = segments[index + 1];
+    const existing = current[segment];
+    if (!existing || typeof existing !== 'object') {
+      current[segment] = typeof nextSegment === 'number' ? [] : {};
+    }
+    current = current[segment] as Record<string | number, unknown>;
+  }
+
+  const lastSegment = segments[segments.length - 1];
+  const existing = current[lastSegment];
+  current[lastSegment] =
+    typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
+  return true;
+}
+
+function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown): void {
+  if (typeof args !== 'string') {
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      pending.args = { ...pending.args, ...args };
+    }
+    return;
+  }
+
+  if (pending.argsText && !args.startsWith(pending.argsText)) {
+    pending.argsText += args;
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(args);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      pending.args = { ...pending.args, ...parsed };
+      pending.argsText = '';
+      return;
+    }
+  } catch {
+    // Some streaming integrations expose cumulative or fragmented JSON strings.
+  }
+  pending.argsText = args;
+}
+
+function finalizeStreamedFunctionCall(
+  pending: PendingFunctionCall,
+): StreamedFunctionCall | undefined {
+  if (pending.argsText) {
+    try {
+      const parsed = JSON.parse(pending.argsText);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+      pending.args = { ...pending.args, ...parsed };
+    } catch {
+      return undefined;
+    }
+  }
+
+  return pending.name ? { id: pending.id, name: pending.name, args: pending.args } : undefined;
+}
+
+function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | undefined {
+  const completed: StreamedFunctionCall[] = [];
+  const pendingById = new Map<string, PendingFunctionCall>();
+  let pendingUnnamed: PendingFunctionCall | undefined;
+
+  for (const part of parts) {
+    const functionCall = part?.functionCall as StreamedFunctionCall | undefined;
+    if (!functionCall) {
+      continue;
+    }
+
+    const id = functionCall.id;
+    let pending = id ? pendingById.get(id) : pendingUnnamed;
+    if (!pending) {
+      pending = { id, name: functionCall.name, args: {}, argsText: '' };
+      if (id) {
+        pendingById.set(id, pending);
+      } else {
+        pendingUnnamed = pending;
+      }
+    } else if (functionCall.name) {
+      if (pending.name && pending.name !== functionCall.name) {
+        return undefined;
+      }
+      pending.name = functionCall.name;
+    }
+
+    if (functionCall.args !== undefined) {
+      mergeStreamedFunctionArgs(pending, functionCall.args);
+    }
+    for (const partialArg of functionCall.partialArgs ?? []) {
+      if (!setPartialFunctionArg(pending.args, partialArg)) {
+        return undefined;
+      }
+    }
+
+    if (functionCall.willContinue === true) {
+      continue;
+    }
+
+    const complete = finalizeStreamedFunctionCall(pending);
+    if (!complete) {
+      return undefined;
+    }
+    completed.push(complete);
+    if (id) {
+      pendingById.delete(id);
+    } else {
+      pendingUnnamed = undefined;
+    }
+  }
+
+  return pendingById.size === 0 && !pendingUnnamed ? completed : undefined;
+}
+
+function restoreStreamedFunctionCallParts(
+  parts: any[],
+  functionCalls: StreamedFunctionCall[],
+): any[] {
+  const callsById = new Map<string, StreamedFunctionCall[]>();
+  const unnamedCalls: StreamedFunctionCall[] = [];
+  for (const functionCall of functionCalls) {
+    if (functionCall.id) {
+      const calls = callsById.get(functionCall.id) ?? [];
+      calls.push(functionCall);
+      callsById.set(functionCall.id, calls);
+    } else {
+      unnamedCalls.push(functionCall);
+    }
+  }
+
+  const activeCallIds = new Set<string>();
+  let unnamedCallInProgress = false;
+
+  return parts.flatMap((part) => {
+    const fragment = part?.functionCall as StreamedFunctionCall | undefined;
+    if (!fragment) {
+      return [part];
+    }
+
+    if (fragment.id) {
+      if (activeCallIds.has(fragment.id)) {
+        if (fragment.willContinue !== true) {
+          activeCallIds.delete(fragment.id);
+        }
+        return [];
+      }
+
+      const functionCall = callsById.get(fragment.id)?.shift();
+      if (!functionCall) {
+        return [];
+      }
+      if (fragment.willContinue === true) {
+        activeCallIds.add(fragment.id);
+      }
+      return [{ ...part, functionCall }];
+    }
+
+    if (unnamedCallInProgress) {
+      if (fragment.willContinue !== true) {
+        unnamedCallInProgress = false;
+      }
+      return [];
+    }
+
+    const functionCall = unnamedCalls.shift();
+    if (!functionCall) {
+      return [];
+    }
+    unnamedCallInProgress = fragment.willContinue === true;
+    return [{ ...part, functionCall }];
+  });
 }
 
 /**
@@ -72,6 +300,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   /** Cache of loaded function callbacks */
   protected loadedFunctionCallbacks: Record<string, Function> = {};
+
+  /** References used to populate the callback cache, for prompt-level overrides. */
+  protected loadedFunctionCallbackRefs: Record<string, string | Function | undefined> = {};
 
   /** Custom provider ID function */
   protected customId?: () => string;
@@ -327,13 +558,24 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     config: CompletionOptions,
   ): Promise<any> {
     try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
+      const callbacks = config.functionToolCallbacks;
+      const callbackRef =
+        callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
+          ? callbacks[functionName]
+          : undefined;
+      let callback: Function | undefined = Object.prototype.hasOwnProperty.call(
+        this.loadedFunctionCallbacks,
+        functionName,
+      )
+        ? this.loadedFunctionCallbacks[functionName]
+        : undefined;
+
+      if (this.loadedFunctionCallbackRefs[functionName] !== callbackRef) {
+        callback = undefined;
+      }
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
           if (callbackStr.startsWith('file://')) {
@@ -361,9 +603,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
           // Cache for future use
           this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
           this.loadedFunctionCallbacks[functionName] = callback;
+          this.loadedFunctionCallbackRefs[functionName] = callbackRef;
         }
       }
 
@@ -380,6 +624,112 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error;
     }
+  }
+
+  /**
+   * Execute explicitly configured callbacks from native parts or trusted JSON
+   * function-call envelopes. Local eval configuration and model-output feedback
+   * loops share the trusted execution model documented in SECURITY.md.
+   */
+  protected async executeFunctionToolCallbacks(
+    output: ProviderResponse['output'],
+    config: CompletionOptions,
+    toolsDisabled: boolean,
+  ): Promise<ProviderResponse['output']> {
+    if (toolsDisabled) {
+      return output;
+    }
+
+    let parsedOutput: any = output;
+    if (typeof output === 'string') {
+      try {
+        parsedOutput = JSON.parse(output);
+      } catch {
+        return output;
+      }
+    }
+
+    const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
+    const passthroughToolConfig = config.passthrough?.toolConfig ?? config.passthrough?.tool_config;
+    const effectiveToolConfig = (passthroughToolConfig ??
+      config.toolConfig ??
+      config.tool_config) as
+      | {
+          functionCallingConfig?: {
+            streamFunctionCallArguments?: boolean;
+            stream_function_call_arguments?: boolean;
+          };
+          function_calling_config?: {
+            streamFunctionCallArguments?: boolean;
+            stream_function_call_arguments?: boolean;
+          };
+        }
+      | undefined;
+    const functionCallingConfig =
+      effectiveToolConfig?.functionCallingConfig ?? effectiveToolConfig?.function_calling_config;
+    const streamsFunctionCallArguments =
+      config.streaming === true &&
+      (functionCallingConfig?.streamFunctionCallArguments === true ||
+        functionCallingConfig?.stream_function_call_arguments === true);
+    const functionCalls = streamsFunctionCallArguments
+      ? assembleStreamedFunctionCalls(parts)
+      : parts.flatMap((part) => (part?.functionCall ? [part.functionCall] : []));
+    if (!functionCalls?.length) {
+      return output;
+    }
+
+    if (!config.functionToolCallbacks) {
+      return streamsFunctionCallArguments
+        ? restoreStreamedFunctionCallParts(parts, functionCalls)
+        : output;
+    }
+
+    const preparedCalls: Array<{ functionName: string; args: string }> = [];
+    for (const functionCall of functionCalls) {
+      const functionName = functionCall.name;
+      if (!Object.prototype.hasOwnProperty.call(config.functionToolCallbacks, functionName)) {
+        return output;
+      }
+      try {
+        const args =
+          typeof functionCall.args === 'string'
+            ? JSON.parse(functionCall.args)
+            : (functionCall.args ?? {});
+        preparedCalls.push({ functionName, args: JSON.stringify(args) });
+      } catch {
+        return output;
+      }
+    }
+
+    if (preparedCalls.length === 0) {
+      return output;
+    }
+
+    const results = [];
+    for (const { functionName, args } of preparedCalls) {
+      try {
+        results.push(await this.executeFunctionCallback(functionName, args, config));
+      } catch {
+        // executeFunctionCallback already logs the error. Preserve the original
+        // model output when a callback cannot be executed.
+        return output;
+      }
+    }
+    if (results.length === 1) {
+      return results[0];
+    }
+    return results
+      .map((result) => {
+        if (typeof result === 'string') {
+          return result;
+        }
+        try {
+          return JSON.stringify(result) ?? String(result);
+        } catch {
+          return String(result);
+        }
+      })
+      .join('\n');
   }
 
   /**

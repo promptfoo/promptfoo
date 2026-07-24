@@ -1,11 +1,11 @@
 ---
 sidebar_label: Google AI / Gemini
-description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for comprehensive multimodal LLM testing and evaluation
+description: Configure Google's Gemini models with support for text, image, audio, video, and PDF inputs through the Google AI Studio API for multimodal LLM testing
 ---
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, images, and video inputs.
+The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, image, audio, video, and PDF inputs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -140,7 +140,8 @@ providers:
   - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-3.5-flash
+  - google:gemini-3.6-flash
+  - google:gemini-3.5-flash-lite
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -247,12 +248,14 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
 
-| Google AI Studio          | Vertex AI                     | Notes                                   |
-| ------------------------- | ----------------------------- | --------------------------------------- |
-| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`     | Same model, different endpoint          |
-| `GOOGLE_API_KEY`          | `GOOGLE_CLOUD_PROJECT` + auth | Vertex uses Google Cloud authentication |
-| Simple API key            | Multiple auth methods         | Vertex supports ADC, service accounts   |
-| Global endpoint           | Regional endpoints            | Vertex requires region selection        |
+| Google AI Studio               | Vertex AI                      | Notes                                    |
+| ------------------------------ | ------------------------------ | ---------------------------------------- |
+| `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`      | Vertex uses the `global` endpoint        |
+| `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite` | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-2.5-flash`      | `vertex:gemini-2.5-flash`      | Same model, different endpoint           |
+| `GOOGLE_API_KEY`               | `GOOGLE_CLOUD_PROJECT` + auth  | Vertex uses Google Cloud authentication  |
+| Simple API key                 | Multiple auth methods          | Vertex supports ADC, service accounts    |
+| Global endpoint                | Regional endpoints             | Vertex requires region selection         |
 
 Example migration:
 
@@ -277,7 +280,9 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.6-flash` - Latest frontier Flash model for agentic, coding, and multimodal tasks; 1M input/65K output context ($1.50/1M input, $7.50/1M output)
+- `google:gemini-3.5-flash-lite` - High-throughput, low-latency Flash-Lite model for agentic and document-processing tasks; 1M input/65K output context ($0.30/1M input, $2.50/1M output)
+- `google:gemini-3.5-flash` - Gemini 3.5 Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
@@ -292,6 +297,10 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
 - `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
+
+:::note
+Gemini 3.5 Flash Cyber is currently available only through Google's limited-access CodeMender pilot and does not have a publicly documented Gemini API model ID. See the [Gemini model announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/).
+:::
 
 ### Embedding Models
 
@@ -618,7 +627,9 @@ providers:
 | MINIMAL | Fewest tokens. Best for low-complexity tasks (Flash only). |
 | LOW     | Fewer tokens. Suitable for simpler tasks.                  |
 | MEDIUM  | Balanced approach for moderate complexity (Flash only).    |
-| HIGH    | More tokens for deep reasoning. Default.                   |
+| HIGH    | More tokens for deep reasoning.                            |
+
+Defaults vary by model: Gemini 3.6 Flash and Gemini 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
 #### Gemini 2.5 Models (thinkingBudget)
 
@@ -654,10 +665,18 @@ providers:
               type: string
 ```
 
-For multimodal inputs (images and video), the provider supports:
+For multimodal inputs, the provider supports:
 
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)
 - Videos: MP4, MPEG, MOV, AVI, FLV, MPG, WEBM, WMV, 3GPP formats (up to ~1 hour)
+- Audio: WAV, MP3, AIFF/AIFC, AAC, OGG, FLAC, and M4A formats
+- PDF: use a native Gemini `inlineData` or `fileData` part
+
+Image, audio, and video inputs loaded with `file://` are converted to Gemini inline data. For large inputs, use a native `fileData` part instead.
+
+:::note
+SVG, GIF, BMP, TIFF, and ICO images are unsupported. Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Promptfoo leaves unsupported media variables as text instead of sending invalid inline data. Convert unsupported images to PNG or JPEG, video to MP4 or WEBM, and audio to WAV or MP3 before evaluation; OGG audio is supported.
+:::
 
 When using images, place them on separate lines in your prompt. The `file://` prefix automatically handles loading and encoding:
 
@@ -672,6 +691,25 @@ providers:
 tests:
   - vars:
       imageFile: file://assets/red-panda.jpg
+```
+
+Native Gemini prompts can reference previously uploaded files directly. This is useful for PDFs or larger audio and video inputs:
+
+```yaml
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "parts": [
+          {"fileData": {"mimeType": "application/pdf", "fileUri": "https://generativelanguage.googleapis.com/v1beta/files/example"}},
+          {"text": "Summarize this document."}
+        ]
+      }
+    ]
+
+providers:
+  - id: google:gemini-3.6-flash
 ```
 
 ### Safety Settings
@@ -726,9 +764,77 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ## Model Examples
 
+### Gemini 3.6 Flash
+
+The latest frontier Flash model, tuned for agentic and coding workloads with a 1M-token context window:
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM (default), or HIGH
+```
+
+### Gemini 3.5 Flash-Lite
+
+A high-throughput model for lower-latency agentic tasks and document processing:
+
+```yaml
+providers:
+  - id: google:gemini-3.5-flash-lite
+    config:
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MINIMAL # MINIMAL (default), LOW, MEDIUM, or HIGH
+```
+
+Both models ignore `temperature`, `topP`, and `topK` and reject frequency or presence penalties and multiple candidates. Promptfoo omits those unsupported generation fields when sending requests. Gemini 3.5 Flash-Lite defaults to `MINIMAL`; use `MEDIUM` or `HIGH` for multi-step tool use. Prompts must not end with a prefilled `model` turn, and function responses should preserve the matching function-call `name` and `id` when one is returned. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
+
+Both models accept text, image, audio, video, and PDF inputs and support structured output, function calling, code execution, Search and Maps grounding, URL context, File Search, context caching, and standard/Flex/Priority inference. Computer Use is available in preview on Gemini 3.6 Flash, but is not supported by Gemini 3.5 Flash-Lite. Neither model generates images or audio, nor supports the Live API.
+
+#### Inference tiers and cached-token pricing
+
+Set `service_tier` to select standard, Flex, or Priority inference. Promptfoo includes cached input and reasoning tokens in its cost estimate; Google bills reasoning as output tokens. When Google reports that a Priority request was processed at the standard tier, `metadata.serviceTier` reflects the actual tier and cost estimates use standard pricing.
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      service_tier: priority # standard, flex, or priority
+      generationConfig:
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+```
+
+| Model                 | Tier     | Input / 1M | Output and reasoning / 1M | Cached input / 1M |
+| --------------------- | -------- | ---------: | ------------------------: | ----------------: |
+| Gemini 3.6 Flash      | Standard |      $1.50 |                     $7.50 |             $0.15 |
+| Gemini 3.6 Flash      | Flex     |      $0.75 |                     $3.75 |            $0.075 |
+| Gemini 3.6 Flash      | Priority |      $2.70 |                    $13.50 |             $0.27 |
+| Gemini 3.5 Flash-Lite | Standard |      $0.30 |                     $2.50 |             $0.03 |
+| Gemini 3.5 Flash-Lite | Flex     |      $0.15 |                     $1.25 |             $0.02 |
+| Gemini 3.5 Flash-Lite | Priority |      $0.54 |                     $4.50 |             $0.05 |
+
+Batch inference uses the same published token rates as Flex for these models. Cache-storage and grounding-query charges are separate; see [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+Promptfoo can reference an existing explicit cache with `passthrough`; cache creation and lifecycle management remain outside the provider:
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      passthrough:
+        cachedContent: cachedContents/example-cache
+```
+
 ### Gemini 3.5 Flash
 
-The latest frontier Flash model, tuned for agentic and coding workloads:
+Gemini 3.5 Flash remains available for agentic and coding workloads:
 
 ```yaml
 providers:
@@ -883,28 +989,40 @@ Google models support tool calling via the `tools` and `tool_config` config fiel
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro
+  - id: google:gemini-3.6-flash
     config:
       tools:
-        function_declarations:
-          - name: 'get_weather'
-            description: 'Get current weather for a location'
-            parameters:
-              type: 'object'
-              properties:
-                location:
-                  type: 'string'
-                  description: 'City name or coordinates'
-                units:
-                  type: 'string'
-                  enum: ['celsius', 'fahrenheit']
-              required: ['location']
-      tool_config:
-        function_calling_config:
-          mode: 'auto' # or 'none' to disable
+        - functionDeclarations:
+            - name: get_weather
+              description: Get current weather for a location
+              parameters:
+                type: OBJECT
+                properties:
+                  location:
+                    type: STRING
+                    description: City name or coordinates
+                  units:
+                    type: STRING
+                    enum: [celsius, fahrenheit]
+                required: [location]
+      toolConfig:
+        functionCallingConfig:
+          mode: AUTO # AUTO, ANY, VALIDATED, or NONE
 ```
 
-For practical examples of function calling with Google AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution patterns that work with Google AI Studio models.
+Promptfoo can execute configured `functionToolCallbacks`, including calls represented as JSON model output, or return the native `functionCall` parts for assertions such as `is-valid-function-call`. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content. Returned thought signatures are available in `metadata.thoughtSignatures` without changing normal text or JSON output. For a subsequent model turn, preserve the returned `thoughtSignature` and provide a matching function response:
+
+```yaml
+prompts:
+  - |
+    [
+      {"role":"user","parts":[{"text":"What is the weather in Boston?"}]},
+      {"role":"model","parts":[{"functionCall":{"id":"call-1","name":"get_weather","args":{"location":"Boston"}},"thoughtSignature":"{{signature}}"}]},
+      {"role":"user","parts":[{"functionResponse":{"id":"call-1","name":"get_weather","response":{"result":"Sunny"}}}]}
+    ]
+```
+
+See the [Google AI Studio tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools) and the [Vertex tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) for runnable function-call and callback configurations.
 
 ### Structured Output
 
@@ -980,6 +1098,7 @@ providers:
 :::info
 Search grounding works with most recent Gemini models including:
 
+- Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
 - Gemini 3.5 Flash
 - Gemini 3.1 Pro and Gemini 3 Flash
 - Gemini 2.5 Flash, Flash-Lite, and Pro models
@@ -1012,6 +1131,26 @@ When using Search grounding, the API response includes additional metadata:
 - **Important**: Per Google's requirements, applications using Search grounding must display Google Search Suggestions included in the API response metadata
 
 For more details, see the [Google AI Studio documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Maps Grounding
+
+Gemini 3.6 Flash and Gemini 3.5 Flash-Lite can ground location-aware responses with Google Maps. Provide optional coordinates using `toolConfig.retrievalConfig`:
+
+```yaml
+providers:
+  - id: google:gemini-3.5-flash-lite
+    config:
+      tools:
+        - googleMaps: {}
+      toolConfig:
+        retrievalConfig:
+          latLng:
+            latitude: 42.3601
+            longitude: -71.0589
+          languageCode: en-US
+```
+
+Maps grounding is text-only and can incur query charges. Applications must display the returned Maps sources and attribution. See [Grounding with Google Maps](https://ai.google.dev/gemini-api/docs/generate-content/maps-grounding).
 
 ### Code Execution
 
@@ -1063,6 +1202,39 @@ URL context is particularly valuable for:
 - Comparing information across multiple URLs
 
 For more details, see the [Google AI Studio documentation on URL Context](https://ai.google.dev/gemini-api/docs/url-context).
+
+### File Search
+
+Both new models support retrieval against an existing Gemini File Search store. Promptfoo forwards the store name and optional metadata filter; create and populate the store using the Gemini API before running an eval.
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      tools:
+        - fileSearch:
+            fileSearchStoreNames:
+              - fileSearchStores/my-store
+            metadataFilter: 'source="handbook"'
+```
+
+See Google's [File Search guide](https://ai.google.dev/gemini-api/docs/generate-content/file-search) for store setup, metadata filters, and citation requirements.
+
+### Computer Use (Preview)
+
+Gemini 3.6 Flash supports the preview Computer Use tool on the Gemini API. Promptfoo forwards the tool declaration and exposes returned action calls; the application under test is responsible for executing actions, returning screenshots and function responses, and preserving thought signatures between turns.
+
+```yaml
+providers:
+  - id: google:gemini-3.6-flash
+    config:
+      tools:
+        - computerUse:
+            environment: ENVIRONMENT_BROWSER
+            enablePromptInjectionDetection: true
+```
+
+Computer Use is not supported by Gemini 3.5 Flash-Lite. See Google's [Computer Use guide](https://ai.google.dev/gemini-api/docs/generate-content/computer-use) for the action loop and safety requirements.
 
 For complete working examples of the search grounding, code execution, and url context features, see the [google-aistudio-tools examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-aistudio-tools).
 

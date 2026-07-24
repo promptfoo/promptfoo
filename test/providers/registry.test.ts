@@ -1333,11 +1333,27 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [

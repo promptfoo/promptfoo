@@ -1,4 +1,4 @@
-module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
+export default /** @type {import('promptfoo').TestSuiteConfig} */ ({
   description: 'Function calling and callback execution demonstration',
   prompts: [
     'Please add the following numbers together: {{a}} and {{b}}',
@@ -6,8 +6,16 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      id: 'vertex:gemini-2.5-flash-002',
+      id: 'vertex:gemini-3.6-flash',
       config: {
+        region: 'global',
+        streaming: true,
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'ANY',
+            streamFunctionCallArguments: true,
+          },
+        },
         tools: [
           {
             functionDeclarations: [

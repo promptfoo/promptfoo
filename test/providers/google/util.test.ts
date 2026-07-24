@@ -19,14 +19,20 @@ import {
   calculateGoogleCostFromUsage,
   clearCachedAuth,
   collectGroundingMetadata,
+  collectThoughtSignatures,
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
+  getGoogleResponseServiceTier,
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -150,6 +156,87 @@ describe('util', () => {
 
     it('should return undefined as-is', () => {
       expect(parseStringObject(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('Google service tiers', () => {
+    it.each([
+      ['standard', false, 'standard'],
+      ['priority', false, 'priority'],
+      ['flex', false, 'flex'],
+      ['SERVICE_TIER_PRIORITY', false, 'priority'],
+      ['standard', true, 'SERVICE_TIER_STANDARD'],
+      ['priority', true, 'SERVICE_TIER_PRIORITY'],
+      ['flex', true, 'SERVICE_TIER_FLEX'],
+      ['SERVICE_TIER_FLEX', true, 'SERVICE_TIER_FLEX'],
+    ])('normalizes %s for Vertex=%s', (tier, vertexai, expected) => {
+      expect(normalizeGoogleServiceTier(tier, vertexai)).toBe(expected);
+    });
+
+    it('preserves an unknown tier so the API can reject it', () => {
+      expect(normalizeGoogleServiceTier('custom', true)).toBe('custom');
+    });
+
+    it('prefers the actual tier reported in response headers', () => {
+      expect(
+        getGoogleResponseServiceTier(
+          { 'X-Gemini-Service-Tier': 'standard' },
+          { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        ),
+      ).toBe('standard');
+    });
+
+    it('falls back to the actual tier reported in usage metadata', () => {
+      expect(getGoogleResponseServiceTier(undefined, { service_tier: 'SERVICE_TIER_FLEX' })).toBe(
+        'flex',
+      );
+    });
+  });
+
+  describe('removeDeprecatedGeminiGenerationParams', () => {
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+    ])('removes unsupported sampling and penalty parameters for %s', (modelName) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams(modelName, {
+          temperature: 0.5,
+          topP: 0.5,
+          top_p: 0.5,
+          topK: 10,
+          top_k: 10,
+          candidateCount: 2,
+          candidate_count: 2,
+          presencePenalty: 0.5,
+          presence_penalty: 0.5,
+          frequencyPenalty: 0.5,
+          frequency_penalty: 0.5,
+          maxOutputTokens: 128,
+        }),
+      ).toEqual({ maxOutputTokens: 128 });
+    });
+
+    it('preserves generation parameters for other Gemini models', () => {
+      const config = { presencePenalty: 0.5, frequencyPenalty: 0.5 };
+
+      expect(removeDeprecatedGeminiGenerationParams('gemini-2.5-flash', config)).toBe(config);
+    });
+  });
+
+  describe('mergeGoogleRequestTools', () => {
+    it('omits tools when no configured or passthrough tools exist', () => {
+      expect(mergeGoogleRequestTools([], undefined)).toBeUndefined();
+    });
+
+    it('merges configured tools with a single passthrough tool', () => {
+      expect(mergeGoogleRequestTools([{ googleSearch: {} }], { codeExecution: {} })).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+    });
+
+    it('preserves explicitly empty passthrough tools', () => {
+      expect(mergeGoogleRequestTools([], [])).toEqual([]);
     });
   });
 
@@ -660,6 +747,52 @@ describe('util', () => {
       ];
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
+        contents: input,
+        coerced: false,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should preserve native Gemini tool history and thought signatures', () => {
+      const input = [
+        { role: 'user', parts: [{ text: 'What is the weather in Boston?' }] },
+        {
+          role: 'model',
+          parts: [
+            {
+              functionCall: {
+                id: 'call-1',
+                name: 'get_weather',
+                args: { location: 'Boston' },
+              },
+              thoughtSignature: 'signed-thought',
+            },
+          ],
+        },
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                id: 'call-1',
+                name: 'get_weather',
+                response: { result: 'Sunny' },
+                parts: [
+                  {
+                    fileData: {
+                      mimeType: 'image/jpeg',
+                      fileUri: 'gs://test-bucket/weather.jpg',
+                      displayName: 'weather.jpg',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ];
+
+      expect(maybeCoerceToGeminiFormat(input)).toEqual({
         contents: input,
         coerced: false,
         systemInstruction: undefined,
@@ -1679,6 +1812,153 @@ describe('util', () => {
       });
 
       describe('data URL support', () => {
+        const asfHeader = Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex');
+        const asfStreamProperties = Buffer.from('9107dcb7b7a9cf118ee600c00c205365', 'hex');
+        const asfVideoStream = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');
+        const asfAudioStream = Buffer.from('409e69f84d5bcf11a8fd00805f5c442b', 'hex');
+        const wmvBase64 = Buffer.concat([
+          asfHeader,
+          asfStreamProperties,
+          Buffer.alloc(8),
+          asfVideoStream,
+        ]).toString('base64');
+        const wmaBase64 = Buffer.concat([
+          asfHeader,
+          asfStreamProperties,
+          Buffer.alloc(8),
+          asfAudioStream,
+        ]).toString('base64');
+        const webmBase64 = Buffer.from('1a45dfa3a34282847765626d00000000', 'hex').toString(
+          'base64',
+        );
+        const matroskaBase64 = Buffer.from(
+          '1a45dfa3a34282886d6174726f736b6100000000',
+          'hex',
+        ).toString('base64');
+
+        it.each([
+          ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/aiff', Buffer.from('FORM....AIFFCOMM........').toString('base64')],
+          ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          ['audio/flac', Buffer.from('fLaC................').toString('base64')],
+          ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
+          ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
+          ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/quicktime', Buffer.from('....ftypqt  ........').toString('base64')],
+          ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
+          ['video/mpeg', Buffer.from('000001ba000000000000000000000000', 'hex').toString('base64')],
+          ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
+          ['video/wmv', wmvBase64],
+          ['video/webm', webmBase64],
+        ])('should convert %s data URLs to Gemini inline data', (mimeType, base64Data) => {
+          const dataUrl = `data:${mimeType};base64,${base64Data}`;
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
+
+          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
+        it.each([
+          ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
+          ['audio/aiff', Buffer.from('FORM....AIFCCOMM........').toString('base64')],
+          ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
+          ['audio/aac', Buffer.from('fff15080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/aac', Buffer.from('fff05080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/aac', Buffer.from('fff85080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/aac', Buffer.from('fff95080000000000000000000000000', 'hex').toString('base64')],
+          ['audio/mpeg', Buffer.from('fffb5000000000000000000000000000', 'hex').toString('base64')],
+          ['audio/mp4', Buffer.from('....ftypM4A ........').toString('base64')],
+          ['audio/ogg', Buffer.from('OggS................').toString('base64')],
+          ['audio/flac', Buffer.from('fLaC................').toString('base64')],
+          ['image/heic', Buffer.from('....ftypheic........').toString('base64')],
+          ['image/heif', Buffer.from('....ftypmif1........').toString('base64')],
+          ['video/mp4', Buffer.from('....ftypisom........').toString('base64')],
+          ['video/quicktime', Buffer.from('....ftypqt  ........').toString('base64')],
+          ['video/quicktime', Buffer.from('....moov............').toString('base64')],
+          ['video/quicktime', Buffer.from('....mdat............').toString('base64')],
+          ['video/quicktime', Buffer.from('....wide............').toString('base64')],
+          ['video/3gpp', Buffer.from('....ftyp3gp5........').toString('base64')],
+          ['video/mpeg', Buffer.from('000001b3000000000000000000000000', 'hex').toString('base64')],
+          ['video/x-flv', Buffer.from('FLV\u0001................').toString('base64')],
+          ['video/wmv', wmvBase64],
+          ['video/webm', webmBase64],
+        ])('should infer %s for raw base64 media loaded from a file', (mimeType, base64Data) => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+        });
+
+        it.each([
+          ['image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')],
+          ['image/gif', Buffer.from('GIF89a..............')],
+          ['image/bmp', Buffer.from('BM..................')],
+          ['image/tiff', Buffer.from('II*.................')],
+          ['image/x-icon', Buffer.from('00000100010000000000000000000000', 'hex')],
+          ['audio/x-ms-wma', Buffer.from(wmaBase64, 'base64')],
+          ['video/ogg', Buffer.from('OggS........\u0080theora...')],
+          ['video/x-matroska', Buffer.from(matroskaBase64, 'base64')],
+          ['audio/unsupported', Buffer.from('unsupported audio...')],
+          ['video/unsupported', Buffer.from('unsupported video...')],
+        ])('leaves unsupported %s data URLs as text', (mimeType, bytes) => {
+          const dataUrl = `data:${mimeType};base64,${bytes.toString('base64')}`;
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: dataUrl }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
+
+          expect(contents[0].parts).toEqual([{ text: dataUrl }]);
+        });
+
+        it.each([
+          ['GIF image', Buffer.from('GIF89a..............').toString('base64')],
+          ['WMA audio', wmaBase64],
+          [
+            'Ogg/Theora video',
+            Buffer.from('4f6767530000000000000000807468656f72610000000000', 'hex').toString(
+              'base64',
+            ),
+          ],
+        ])('leaves unsupported raw %s as text', (_media, base64Data) => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+          expect(contents[0].parts).toEqual([{ text: base64Data }]);
+        });
+
+        it('does not misclassify Matroska containers as WebM', () => {
+          const prompt = JSON.stringify([{ role: 'user', parts: [{ text: matroskaBase64 }] }]);
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, { media: matroskaBase64 });
+
+          expect(contents[0].parts).toEqual([{ text: matroskaBase64 }]);
+        });
+
+        it('sniffs only the beginning of large base64 media', () => {
+          const bytes = Buffer.concat([Buffer.from('RIFF....WAVEfmt ........'), Buffer.alloc(1e6)]);
+          const base64Data = bytes.toString('base64');
+          const fromSpy = vi.spyOn(Buffer, 'from');
+
+          try {
+            const prompt = JSON.stringify([{ role: 'user', parts: [{ text: base64Data }] }]);
+            const { contents } = geminiFormatAndSystemInstructions(prompt, { media: base64Data });
+
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: 'audio/wav', data: base64Data } },
+            ]);
+            expect(fromSpy.mock.calls.some(([value]) => value === base64Data)).toBe(false);
+          } finally {
+            fromSpy.mockRestore();
+          }
+        });
+
         it('should handle JPEG data URLs and extract base64', () => {
           const base64Data = validBase64Image;
           const dataUrl = `data:image/jpeg;base64,${base64Data}`;
@@ -1747,38 +2027,6 @@ describe('util', () => {
             {
               inlineData: {
                 mimeType: 'image/png',
-                data: base64Data,
-              },
-            },
-          ]);
-        });
-
-        it('should handle GIF data URLs', () => {
-          const base64Data =
-            'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
-          const dataUrl = `data:image/gif;base64,${base64Data}`;
-
-          const prompt = JSON.stringify([
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: dataUrl,
-                },
-              ],
-            },
-          ]);
-
-          const contextVars = {
-            image1: dataUrl,
-          };
-
-          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
-
-          expect(contents[0].parts).toEqual([
-            {
-              inlineData: {
-                mimeType: 'image/gif',
                 data: base64Data,
               },
             },
@@ -2663,6 +2911,13 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it.each([
+      ['gemini-3.6-flash', 0.00525],
+      ['gemini-3.5-flash-lite', 0.00155],
+    ])('should calculate cost for %s', (modelId, expectedCost) => {
+      expect(calculateGoogleCost(modelId, {}, 1_000, 500)).toBeCloseTo(expectedCost, 10);
+    });
+
     it('should calculate cost for gemini-omni-flash-preview', () => {
       const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.006, 10);
@@ -2752,6 +3007,128 @@ describe('util', () => {
         (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
+    });
+
+    it.each([
+      ['gemini-3.6-flash', 'priority', 1.5, 7.5, 1.8, 0.27],
+      ['gemini-3.6-flash', 'flex', 1.5, 7.5, 0.5, 0.075],
+      ['gemini-3.5-flash-lite', 'priority', 0.3, 2.5, 1.8, 0.05],
+      ['gemini-3.5-flash-lite', 'flex', 0.3, 2.5, 0.5, 0.02],
+    ])('should apply AI Studio cached multimodal pricing for %s at %s tier', (modelId, serviceTier, input, output, multiplier, cachedInput) => {
+      const cost = calculateGoogleCost(
+        modelId,
+        { passthrough: { service_tier: serviceTier } },
+        1_000,
+        500,
+        false,
+        400,
+        0,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo(
+        (multiplier * (500 * input + 500 * output) + 500 * cachedInput) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      ['priority', 1.8, 0.054],
+      ['flex', 0.5, 0.015],
+    ])('should keep Vertex Flash-Lite cached pricing at the %s tier', (serviceTier, multiplier, cachedInput) => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global', service_tier: serviceTier } as any,
+        1_000,
+        500,
+        true,
+        400,
+        0,
+        undefined,
+        0,
+        500,
+        300,
+      );
+
+      expect(cost).toBeCloseTo(
+        (multiplier * (500 * 0.3 + 500 * 2.5) + 500 * cachedInput) / 1e6,
+        12,
+      );
+    });
+
+    it.each([
+      ['global', 0.00155],
+      ['us', 0.001705],
+      ['eu', 0.001705],
+      ['us-central1', 0.00155],
+      ['europe-west1', 0.00155],
+    ])('applies the Gemini 3.5 Flash-Lite premium only to supported multi-regions: %s', (region, expectedCost) => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(cost).toBeCloseTo(expectedCost, 12);
+    });
+
+    it('should not stack the Gemini Vertex regional premium on a cost override', () => {
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', cost: 1 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(regionalCost).toBeCloseTo(0.0015, 12);
+    });
+
+    it('should apply the Vertex regional premium only to non-overridden input and output rates', () => {
+      const inputOverrideCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', inputCost: 2 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+      const outputOverrideCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', outputCost: 4 / 1e6 } as any,
+        1_000,
+        500,
+        true,
+      );
+
+      expect(inputOverrideCost).toBeCloseTo(0.003375, 12);
+      expect(outputOverrideCost).toBeCloseTo(0.00233, 12);
+    });
+
+    it('should not apply the Vertex regional premium to overridden modality rates', () => {
+      const regionalCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        {
+          region: 'us',
+          audioInputCost: 2 / 1e6,
+          audioOutputCost: 3 / 1e6,
+          imageInputCost: 4 / 1e6,
+          videoOutputCost: 5 / 1e6,
+        } as any,
+        1_000,
+        500,
+        true,
+        200,
+        100,
+        150,
+        300,
+      );
+
+      expect(regionalCost).toBeCloseTo(0.0035025, 12);
     });
 
     it.each([
@@ -2926,6 +3303,33 @@ describe('util', () => {
         (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
+    });
+
+    it('uses the actual response tier instead of the requested priority tier', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        true,
+        { serviceTier: 'SERVICE_TIER_STANDARD' },
+      );
+
+      expect(cost).toBeCloseTo(0.00055, 12);
+    });
+
+    it('prefers the actual response header tier over usage metadata', () => {
+      const cost = calculateGoogleCostFromUsage(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000,
+        100,
+        true,
+        { serviceTier: 'SERVICE_TIER_PRIORITY' },
+        'standard',
+      );
+
+      expect(cost).toBeCloseTo(0.00055, 12);
     });
 
     it('should infer cached Gemini audio and image tokens without cache modality details', () => {
@@ -3301,6 +3705,90 @@ describe('util', () => {
         toolsDisabled: false,
       });
     });
+
+    it('merges a required tool choice with streamed function-call arguments', () => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: 'required',
+        toolConfig: {
+          functionCallingConfig: { streamFunctionCallArguments: true },
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', streamFunctionCallArguments: true },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('merges a named tool choice with snake_case streamed function-call arguments', () => {
+      const result = resolveGoogleToolConfig({
+        tool_choice: { type: 'function', function: { name: 'get_weather' } },
+        tool_config: {
+          function_calling_config: { stream_function_call_arguments: true },
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: {
+            mode: 'ANY',
+            allowedFunctionNames: ['get_weather'],
+            streamFunctionCallArguments: true,
+          },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('preserves Maps retrieval config without a function-calling policy', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('normalizes snake_case Maps retrieval config and preserves it when functions are disabled', () => {
+      const result = resolveGoogleToolConfig({
+        tool_config: {
+          retrieval_config: {
+            lat_lng: { latitude: 42.36, longitude: -71.06 },
+            language_code: 'en-US',
+          },
+          include_server_side_tool_invocations: true,
+        },
+        tool_choice: 'none',
+      });
+
+      expect(result).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: {
+            latLng: { latitude: 42.36, longitude: -71.06 },
+            languageCode: 'en-US',
+          },
+          includeServerSideToolInvocations: true,
+        },
+        toolsDisabled: true,
+      });
+    });
   });
 
   describe('removeGoogleFunctionDeclarations', () => {
@@ -3367,6 +3855,38 @@ describe('util', () => {
   });
 
   describe('mergeParts', () => {
+    it('keeps signed textual responses compatible with text and JSON assertions', () => {
+      const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
+
+      expect(formatCandidateContents({ content: { parts: [signedPart] } } as any)).toBe(
+        'Signed response',
+      );
+    });
+
+    it('collects thought signatures across streamed candidate parts', () => {
+      expect(
+        collectThoughtSignatures([
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'First', thoughtSignature: 'first' }] },
+                safetyRatings: [],
+              },
+            ],
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Second', thoughtSignature: 'second' }] },
+                safetyRatings: [],
+              },
+            ],
+          },
+          { candidates: [] },
+        ]),
+      ).toEqual(['first', 'second']);
+    });
+
     it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
       const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
       const secondChunk = [{ text: 'done' }];
@@ -3407,6 +3927,33 @@ describe('util', () => {
       );
       expect(merged.tool_choice).toBe('none');
       expect(merged.toolConfig).toBeUndefined();
+      expect(merged.tool_config).toBeUndefined();
+    });
+
+    it.each([
+      {
+        toolConfig: {
+          functionCallingConfig: { mode: 'AUTO' as const },
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        },
+      },
+      {
+        tool_config: {
+          function_calling_config: { mode: 'AUTO' as const },
+          retrieval_config: { lat_lng: { latitude: 42.36, longitude: -71.06 } },
+          include_server_side_tool_invocations: true,
+        },
+      },
+    ])('preserves non-function Maps settings when a prompt overrides tool choice', (baseConfig) => {
+      const merged = mergeGoogleCompletionOptions(baseConfig, { tool_choice: 'required' });
+
+      expect(merged.tool_choice).toBe('required');
+      expect(merged.toolConfig).toEqual({
+        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+        includeServerSideToolInvocations: true,
+      });
+      expect(merged.toolConfig?.functionCallingConfig).toBeUndefined();
       expect(merged.tool_config).toBeUndefined();
     });
   });

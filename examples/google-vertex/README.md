@@ -23,7 +23,7 @@ cd google-vertex
 
 ## Environment Variables
 
-- `VERTEX_PROJECT_ID` - Your Google Cloud project ID
+- `GOOGLE_CLOUD_PROJECT` - Your Google Cloud project ID (`VERTEX_PROJECT_ID` is also supported)
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account credentials (optional)
 
 ## Setup
@@ -46,17 +46,18 @@ cd google-vertex
 
 3. Set your project ID:
    ```sh
-   export VERTEX_PROJECT_ID=your-project-id
+   export GOOGLE_CLOUD_PROJECT=your-project-id
    ```
 
 ## Configurations
 
 This example includes:
 
-- `promptfooconfig.gemini.yaml`: Gemini models with function calling, system instructions, and safety settings
+- `promptfooconfig.gemini.yaml`: Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, and Gemini 2.5 models with function calling
 - `promptfooconfig.claude.yaml`: Claude models for technical writing and code analysis
 - `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
-- `promptfooconfig.search.yaml`: Search grounding for real-time information
+- `promptfooconfig.search.yaml`: Search grounding with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
+- `promptfooconfig.image.yaml`: Multimodal image inputs with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
 - `promptfooconfig.response-schema.yaml`: Response schemas with structured output
 
 ## Running Examples
