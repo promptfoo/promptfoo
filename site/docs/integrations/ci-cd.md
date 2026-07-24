@@ -217,30 +217,17 @@ See also: [Standalone GitHub Action example](https://github.com/promptfoo/prompt
 See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 
 ```yaml title=".gitlab-ci.yml"
-image: node:24
+include:
+  - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
+    integrity: 'sha256-gWJYSFbacdtNgwYxEILHdX4EJD+5LioEG9e6XdN46g8='
 
-evaluate:
-  script:
-    - |
-      npx promptfoo@latest eval \
-        -c promptfooconfig.yaml \
-        --share \
-        -o output.json \
-        -o report.html \
-        -o output.junit.xml
+promptfoo-eval:
+  extends: .promptfoo-eval
   variables:
-    OPENAI_API_KEY: ${OPENAI_API_KEY}
-    PROMPTFOO_CACHE_PATH: .cache/promptfoo
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}-promptfoo
-    paths:
-      - .cache/promptfoo
-  artifacts:
-    reports:
-      junit: output.junit.xml
-    paths:
-      - output.json
-      - report.html
+    PROMPTFOO_CONFIG: promptfooconfig.yaml
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 ```
 
 ### Jenkins
