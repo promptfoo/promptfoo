@@ -13,12 +13,9 @@ vi.mock('../model-audit/stores', () => ({
     historyError: null,
     totalCount: 0,
     pageSize: 10,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' }],
     fetchHistoricalScans: vi.fn(),
     deleteHistoricalScan: vi.fn(),
-    setPageSize: vi.fn(),
-    setCurrentPage: vi.fn(),
     setSortModel: vi.fn(),
   }),
 }));
