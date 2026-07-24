@@ -166,6 +166,32 @@ describe('OpenRouter', () => {
       }
     });
 
+    it('returns a graceful error instead of crashing on an empty choices array', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'default-test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [],
+            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('Malformed response data');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 

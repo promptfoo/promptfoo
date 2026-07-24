@@ -180,6 +180,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+      };
+    }
+
     // Process the response with special handling for Gemini
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
