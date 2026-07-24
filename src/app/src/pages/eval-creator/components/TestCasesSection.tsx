@@ -18,6 +18,7 @@ import {
   UploadIcon,
 } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
@@ -271,7 +272,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-xl font-semibold">Test Cases</h3>
+        <Typography variant="title" as="h3">
+          Test Cases
+        </Typography>
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlineTests && (
             <>
