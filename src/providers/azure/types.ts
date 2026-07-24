@@ -121,6 +121,16 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
   omitDefaults?: boolean;
 }
 
+/**
+ * Options specific to the Azure Responses provider.
+ */
+export interface AzureResponsesOptions extends AzureChatResponsesOptions {
+  /**
+   * Specifies the latency tier used to process the request.
+   */
+  service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
+}
+
 export interface AzureModelCost {
   id: string;
   cost: {

@@ -1,9 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
+import * as azureUtil from '../../../src/providers/azure/util';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
 import { mockProcessEnv } from '../../util/utils';
 import type { MockedFunction } from 'vitest';
+
+import type { AzureResponsesOptions } from '../../../src/providers/azure/types';
 
 // Mock external dependencies
 vi.mock('../../../src/cache');
@@ -58,6 +61,12 @@ describe('AzureResponsesProvider', () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
       expect(provider).toBeInstanceOf(AzureResponsesProvider);
       expect(provider.deploymentName).toBe('gpt-4.1-test');
+    });
+
+    it('should type only Azure-supported request service tiers', () => {
+      expectTypeOf<AzureResponsesOptions['service_tier']>().toEqualTypeOf<
+        'auto' | 'default' | 'flex' | 'priority' | null | undefined
+      >();
     });
   });
 
@@ -371,6 +380,48 @@ describe('AzureResponsesProvider', () => {
       });
       expect(body.text.verbosity).toBeUndefined();
     });
+
+    it('should include top-level service_tier in the request body', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { service_tier: 'priority' },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.service_tier).toBe('priority');
+    });
+
+    it('should prefer passthrough service_tier over the top-level option', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: {
+          service_tier: 'priority',
+          passthrough: { service_tier: 'default' },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.service_tier).toBe('default');
+    });
+
+    it('should omit a null top-level service_tier while preserving passthrough overrides', async () => {
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: {
+          service_tier: null,
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+      const providerWithoutOverride = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { service_tier: null },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+      const bodyWithoutOverride =
+        await providerWithoutOverride.getAzureResponsesBody('Hello world');
+
+      expect(body.service_tier).toBe('priority');
+      expect(bodyWithoutOverride).not.toHaveProperty('service_tier');
+    });
   });
 
   describe('callApi', () => {
@@ -567,6 +618,160 @@ describe('AzureResponsesProvider', () => {
       const result = await provider.callApi('What is 2+2?');
 
       expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('falls back to the requested top-level service_tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { service_tier: 'priority' },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(
+        mockFetchWithCache.mock.calls[0]![1]!.body as string,
+      ) as Record<string, unknown>;
+
+      expect(requestBody.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('prices the passthrough service_tier that overrides the top-level option', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: {
+          service_tier: 'priority',
+          passthrough: { service_tier: 'default' },
+        },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(
+        mockFetchWithCache.mock.calls[0]![1]!.body as string,
+      ) as Record<string, unknown>;
+
+      expect(requestBody.service_tier).toBe('default');
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+    });
+
+    it('prices the default tier Azure served instead of requested priority', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          service_tier: 'default',
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { service_tier: 'priority' },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(
+        mockFetchWithCache.mock.calls[0]![1]!.body as string,
+      ) as Record<string, unknown>;
+
+      expect(requestBody.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+    });
+
+    it('prices the priority tier Azure served instead of requested auto', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          service_tier: 'priority',
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { service_tier: 'auto' },
+      });
+
+      const result = await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(
+        mockFetchWithCache.mock.calls[0]![1]!.body as string,
+      ) as Record<string, unknown>;
+
+      expect(requestBody.service_tier).toBe('auto');
+      expect(result.cost).toBeCloseTo((2 * (1_500 * 5 + 500 * 0.5 + 1_000 * 30)) / 1e6, 12);
+    });
+
+    it('omits a null service_tier from the request and cost config', async () => {
+      const costSpy = vi.spyOn(azureUtil, 'calculateAzureCost');
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '4' }] },
+          ],
+          usage: {
+            input_tokens: 2_000,
+            input_tokens_details: { cached_tokens: 500 },
+            output_tokens: 1_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new AzureResponsesProvider('gpt-5.6-sol', {
+        config: { service_tier: null },
+      });
+
+      await provider.callApi('What is 2+2?');
+      const requestBody = JSON.parse(
+        mockFetchWithCache.mock.calls[0]![1]!.body as string,
+      ) as Record<string, unknown>;
+      const costConfig = costSpy.mock.calls[0]![1];
+      costSpy.mockRestore();
+
+      expect(requestBody).not.toHaveProperty('service_tier');
+      expect(costConfig).not.toHaveProperty('service_tier');
+      expect(costConfig.passthrough).not.toHaveProperty('service_tier');
     });
 
     it('prices image-token usage from Azure Responses details', async () => {
