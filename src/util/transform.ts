@@ -6,7 +6,6 @@ import { isJavascriptFile } from './fileExtensions';
 import { safeJoin } from './pathUtils';
 import { getProcessShim } from './processShim';
 
-import type { Vars } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
 
 export const INLINE_FUNCTION_LABEL = '[inline function]';
@@ -101,7 +100,7 @@ function getPythonTransformFunction(
   filePath: string,
   functionName: string = 'get_transform',
 ): Function {
-  return async (output: string, context: { vars: Vars }) => {
+  return async (output: string, context: TransformContext) => {
     return runPython(filePath, functionName, [output, context]);
   };
 }

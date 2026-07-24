@@ -89,6 +89,7 @@ describe('normalizeProviderRef', () => {
       'config',
       'prompts',
       'transform',
+      'transformCanSetTestResult',
       'delay',
       'env',
       'inputs',

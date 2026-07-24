@@ -1277,6 +1277,33 @@ describe('EvalResult', () => {
       });
     });
 
+    it('does not count grading results that are explicitly not assertion requests', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'provided by an output transform',
+          countAsAssertionRequest: false,
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
+        numRequests: 0,
+      });
+    });
+
     it('counts a provider request for a response that reports no token usage', () => {
       const result = new EvalResult({
         id: 'test-id',
