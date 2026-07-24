@@ -4,11 +4,10 @@ All notable changes to this package will be documented in this file.
 
 ## [0.1.9](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.8...code-scan-action-0.1.9) (2026-07-24)
 
-
 ### Bug Fixes
 
-* **code-scan:** harden action supply chain ([#9991](https://github.com/promptfoo/promptfoo/issues/9991)) ([17e90eb](https://github.com/promptfoo/promptfoo/commit/17e90eb9641f935aebb34663560fcee1b90c62bc))
-* **deps:** update type definitions ([#9832](https://github.com/promptfoo/promptfoo/issues/9832)) ([f545c51](https://github.com/promptfoo/promptfoo/commit/f545c5164c6a45ce80bf2a73a013924f1a49f1c4))
+- **code-scan:** harden action supply chain ([#9991](https://github.com/promptfoo/promptfoo/issues/9991)) ([17e90eb](https://github.com/promptfoo/promptfoo/commit/17e90eb9641f935aebb34663560fcee1b90c62bc))
+- **deps:** update type definitions ([#9832](https://github.com/promptfoo/promptfoo/issues/9832)) ([f545c51](https://github.com/promptfoo/promptfoo/commit/f545c5164c6a45ce80bf2a73a013924f1a49f1c4))
 
 ## [0.1.8](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.7...code-scan-action-0.1.8) (2026-06-16)
 
