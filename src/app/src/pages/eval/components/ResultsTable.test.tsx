@@ -484,7 +484,12 @@ describe('ResultsTable Metrics Display', () => {
       const stylesheets = [unreadableStyleSheet, ...Array.from(document.styleSheets)];
       const styles = stylesheets.flatMap((stylesheet) => {
         try {
-          return Array.from(stylesheet.cssRules, (rule) => rule.cssText);
+          return Array.from(stylesheet.cssRules)
+            .filter((rule): rule is CSSStyleRule => rule instanceof CSSStyleRule)
+            .map((rule) => ({
+              selector: rule.selectorText.replace(/\s*>\s*/g, '>'),
+              style: rule.style,
+            }));
         } catch (error) {
           if (error instanceof DOMException && error.name === 'SecurityError') {
             return [];
@@ -493,10 +498,10 @@ describe('ResultsTable Metrics Display', () => {
         }
       });
       const variableCellAffordance = styles.find((rule) =>
-        rule.includes('.result-row:focus-within > td.variable'),
+        rule.selector.includes('.result-row:focus-within>td.variable'),
       );
       const rowRailAffordance = styles.find((rule) =>
-        rule.includes('.result-row:focus-within > td:first-child::after'),
+        rule.selector.includes('.result-row:focus-within>td:first-child::after'),
       );
 
       expect(resultRow).toHaveClass('result-row');
@@ -504,10 +509,14 @@ describe('ResultsTable Metrics Display', () => {
       expect(resultRow).not.toHaveAttribute('role');
       expect(variableCell).toHaveClass('variable');
       expect(variableCell).toHaveTextContent('hello');
-      expect(variableCellAffordance).toContain('background-image');
-      expect(rowRailAffordance).toContain('z-index: 1');
-      expect(rowRailAffordance).toContain('background-color: hsl(var(--ring))');
-      expect(rowRailAffordance).toContain('pointer-events: none');
+      expect(variableCellAffordance?.style.getPropertyValue('background-image')).toContain(
+        'linear-gradient',
+      );
+      expect(rowRailAffordance?.style.getPropertyValue('z-index')).toBe('1');
+      expect(rowRailAffordance?.style.getPropertyValue('background-color')).toBe(
+        'hsl(var(--ring))',
+      );
+      expect(rowRailAffordance?.style.getPropertyValue('pointer-events')).toBe('none');
 
       variableCell.focus();
       expect(variableCell).toHaveFocus();
