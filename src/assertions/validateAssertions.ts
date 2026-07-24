@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import logger from '../logger';
 import {
   type Assertion,
   AssertionOrSetSchema,
@@ -53,8 +54,39 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
     );
   }
 
+  // Comparison assertions decide pass/fail across outputs, so they can't be
+  // metric-only. Reject rather than silently ignore the property.
+  if (
+    (result.data.type === 'select-best' || result.data.type === 'max-score') &&
+    'metricOnly' in assertionObj
+  ) {
+    throw new AssertValidationError(
+      `Invalid assertion at ${context}:\n` +
+        `'metricOnly' is not supported on ${result.data.type}. Comparison assertions decide pass/fail across outputs and cannot be metric-only.\n\n` +
+        `Received: ${JSON.stringify(assertion, null, 2)}`,
+    );
+  }
+
+  // Legacy metric-counter pattern: weight: 0 zeroes the named score, so the
+  // recorded metric is always 0. Steer toward metricOnly, which records the
+  // real score (see docs "Metric-only assertions").
+  if (result.data.weight === 0 && result.data.metric && !assertionObj.metricOnly) {
+    logger.warn(
+      `Assertion at ${context} combines weight: 0 with metric '${result.data.metric}' — the named score is always recorded as 0. ` +
+        `Use metricOnly: true instead to record the real score without affecting pass/fail.`,
+    );
+  }
+
   // For assert-set, also validate nested assertions recursively
   if (result.data.type === 'assert-set') {
+    if ('metricOnly' in assertionObj) {
+      throw new AssertValidationError(
+        `Invalid assertion at ${context}:\n` +
+          `'metricOnly' is not supported on assert-set. Set it on the assertions inside the set instead; ` +
+          `a set whose assertions are all metricOnly is excluded from the test score automatically.\n\n` +
+          `Received: ${JSON.stringify(assertion, null, 2)}`,
+      );
+    }
     const assertSet = result.data as AssertionSet;
     if (!assertSet.assert || !Array.isArray(assertSet.assert)) {
       throw new AssertValidationError(

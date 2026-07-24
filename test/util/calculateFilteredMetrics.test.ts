@@ -14,6 +14,8 @@ import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import EvalFactory from '../factories/evalFactory';
 
+import type { Assertion } from '../../src/types/index';
+
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -417,6 +419,80 @@ describe('calculateFilteredMetrics', () => {
       });
 
       expect(metrics[0].assertPassCount).toBe(0);
+      expect(metrics[0].assertFailCount).toBe(0);
+    });
+
+    it('should exclude metricOnly assertions from assertion counts', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'test',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: { tp: 1, fp: 0 },
+        cost: 0.001,
+        metadata: {},
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'All assertions passed',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              assertion: { type: 'contains', value: 'test' },
+            },
+            {
+              pass: true,
+              score: 1,
+              reason: 'counter',
+              assertion: { type: 'javascript', metric: 'tp', metricOnly: true },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'counter',
+              assertion: { type: 'javascript', metric: 'fp', metricOnly: true },
+            },
+            {
+              // Set-level result of an all-metricOnly assert-set: marked with
+              // an assertion carrying metricOnly so the SQL filter excludes it.
+              pass: false,
+              score: 0,
+              reason: 'Aggregate score 0.00 < 0.5 threshold',
+              // 'assert-set' is not a member of AssertionType; the marker is
+              // read as plain JSON at runtime (mirrors src/assertions/index.ts).
+              assertion: { type: 'assert-set', metricOnly: true } as unknown as Assertion,
+            },
+          ],
+        },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      // Metric-only assertions don't participate in pass/fail, so filtered
+      // metrics must not count their outcomes.
+      expect(metrics[0].assertPassCount).toBe(1);
       expect(metrics[0].assertFailCount).toBe(0);
     });
   });

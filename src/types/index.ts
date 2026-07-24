@@ -592,6 +592,19 @@ export function isGradingResult(result: any): result is GradingResult {
   );
 }
 
+/**
+ * Component results that participate in pass/fail: everything except
+ * metric-only assertions, which only emit named scores. Use this wherever
+ * assertion outcomes are aggregated into pass/fail stats or reasons.
+ */
+export function countedComponentResults(
+  componentResults: (GradingResult | null | undefined)[] | null | undefined,
+): GradingResult[] {
+  return (componentResults ?? []).filter(
+    (result): result is GradingResult => Boolean(result) && !result?.assertion?.metricOnly,
+  );
+}
+
 export const BaseAssertionTypesSchema = z.enum([
   'agent-rubric',
   'answer-relevance',
@@ -722,6 +735,10 @@ export const AssertionSchema = z.object({
 
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
+
+  // If true, the assertion only emits its score as a named metric (for namedScores and
+  // derivedMetrics) and is excluded from the test's pass/fail and weighted score. Defaults to false.
+  metricOnly: z.boolean().optional(),
 
   // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
   provider: z.custom<GradingConfig['provider']>().optional(),

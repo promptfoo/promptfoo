@@ -7,7 +7,7 @@ import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable from './ResultsTable';
+import ResultsTable, { getManualRatingUpdate } from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
@@ -1565,6 +1565,73 @@ describe('ResultsTable Row Navigation', () => {
       );
       expect(cleared).toBe(true);
     });
+  });
+});
+
+describe('getManualRatingUpdate - clearing a rating on all-metricOnly rows', () => {
+  const buildOutput = (threshold?: number) =>
+    ({
+      id: 'test-output-1',
+      pass: false,
+      score: 0.4,
+      text: 'test output',
+      latencyMs: 100,
+      cost: 0.01,
+      failureReason: 0,
+      namedScores: { tp: 1 },
+      testCase: threshold === undefined ? {} : { threshold },
+      gradingResult: {
+        // The manual override being cleared.
+        pass: false,
+        score: 0.4,
+        reason: 'Manual result (overrides all other grading results)',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'counter',
+            assertion: { type: 'javascript', metric: 'tp', metricOnly: true },
+          },
+          {
+            pass: false,
+            score: 0.4,
+            reason: 'Manual result (overrides all other grading results)',
+            assertion: { type: 'human' },
+          },
+        ],
+      },
+    }) as any;
+
+  it('fails a thresholded all-metricOnly row when the rating is cleared (score 0 < threshold)', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(0.5),
+      isPass: null,
+    });
+
+    // Mirrors the server-side aggregate for an all-metricOnly test: score 0,
+    // which fails a positive threshold on a re-run.
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(false);
+  });
+
+  it('passes an all-metricOnly row without a threshold when the rating is cleared', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(),
+      isPass: null,
+    });
+
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(true);
+  });
+
+  it('honors a threshold of 0 when the rating is cleared (0 >= 0 passes)', () => {
+    const update = getManualRatingUpdate({
+      existingOutput: buildOutput(0),
+      isPass: null,
+    });
+
+    expect(update.score).toBe(0);
+    expect(update.pass).toBe(true);
   });
 });
 

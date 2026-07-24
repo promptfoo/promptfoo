@@ -378,6 +378,129 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.15, 10);
   });
 
+  it('evaluator should support metricOnly assertions as classification counters for derived metrics', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for metricOnly counters')],
+      tests: [
+        {
+          // Positive case: the detection assertion is the pass/fail criterion,
+          // the tp/fp counters only feed derived metrics.
+          assert: [
+            {
+              type: 'contains',
+              value: 'Test',
+            },
+            {
+              type: 'javascript',
+              value: '1',
+              metric: 'tp',
+              metricOnly: true,
+            },
+            {
+              // Scores 0 → would fail the test without metricOnly.
+              type: 'javascript',
+              value: '0',
+              metric: 'fp',
+              metricOnly: true,
+            },
+          ],
+        },
+        {
+          // Negative case: mirrored counters.
+          assert: [
+            {
+              type: 'contains',
+              value: 'Test',
+            },
+            {
+              type: 'javascript',
+              value: '0',
+              metric: 'tp',
+              metricOnly: true,
+            },
+            {
+              type: 'javascript',
+              value: '1',
+              metric: 'fp',
+              metricOnly: true,
+            },
+          ],
+        },
+      ],
+      derivedMetrics: [
+        {
+          name: 'precision',
+          value: 'tp / (tp + fp)', // 1 / (1 + 1) = 0.5
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const metrics = evalRecord.prompts[0]?.metrics;
+    expect(metrics).toBeDefined();
+    expect(metrics!.testPassCount).toBe(2);
+    expect(metrics!.testFailCount).toBe(0);
+    expect(metrics!.namedScores.tp).toBe(1);
+    expect(metrics!.namedScores.fp).toBe(1);
+    expect(metrics!.namedScores.precision).toBeCloseTo(0.5, 10);
+    // Metric-only assertions are excluded from assertion pass/fail stats, so a
+    // 100% green eval doesn't report failed assertions from its counters.
+    expect(metrics!.assertPassCount).toBe(2);
+    expect(metrics!.assertFailCount).toBe(0);
+  });
+
+  it('evaluator should exclude an all-metricOnly assert-set from assertion stats', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt for metricOnly set stats')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'contains',
+              value: 'Test',
+            },
+            {
+              type: 'assert-set',
+              // The set's aggregate score is 0 (all members are metricOnly), so
+              // with a threshold its set-level result is failing.
+              threshold: 0.5,
+              assert: [
+                {
+                  type: 'javascript',
+                  value: '1',
+                  metric: 'tp',
+                  metricOnly: true,
+                },
+                {
+                  type: 'javascript',
+                  value: '0',
+                  metric: 'fp',
+                  metricOnly: true,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const metrics = evalRecord.prompts[0]?.metrics;
+    expect(metrics).toBeDefined();
+    expect(metrics!.testPassCount).toBe(1);
+    expect(metrics!.testFailCount).toBe(0);
+    expect(metrics!.namedScores.tp).toBe(1);
+    expect(metrics!.namedScores.fp).toBe(0);
+    // The set-level result of an all-metricOnly set is metric-only in effect,
+    // so a green eval must not report a failed assertion from it.
+    expect(metrics!.assertPassCount).toBe(1);
+    expect(metrics!.assertFailCount).toBe(0);
+  });
+
   it('should apply max-score to overall pass/fail and stats', async () => {
     const maxScoreProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('max-score-provider'),

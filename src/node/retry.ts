@@ -8,7 +8,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
 import { createShareableUrl, isSharingEnabled } from '../share';
-import { ResultFailureReason } from '../types/index';
+import { countedComponentResults, ResultFailureReason } from '../types/index';
 import { ConfigResolutionError, resolveConfigs } from '../util/config/load';
 import {
   filterProviders,
@@ -260,14 +260,11 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         }
 
         // Update assertion counts
-        if (result.gradingResult?.componentResults) {
-          metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
-          ).length;
-          metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
-          ).length;
-        }
+        const countedAssertResults = countedComponentResults(
+          result.gradingResult?.componentResults,
+        );
+        metrics.assertPassCount += countedAssertResults.filter((r) => r.pass).length;
+        metrics.assertFailCount += countedAssertResults.filter((r) => !r.pass).length;
 
         // Update token usage
         if (result.response?.tokenUsage) {

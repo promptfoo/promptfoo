@@ -266,6 +266,52 @@ describe('retryCommand', () => {
     );
   });
 
+  it('excludes metricOnly assertions from recalculated assertion counts', async () => {
+    const prompts = [{}] as any[];
+    const evalRecord = createEval({
+      persisted: true,
+      prompts,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          {
+            id: 'metric-only-result',
+            promptIdx: 0,
+            success: true,
+            failureReason: ResultFailureReason.NONE,
+            score: 1,
+            latencyMs: 10,
+            namedScores: { tp: 1, fp: 0 },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'passed',
+              componentResults: [
+                { pass: true, assertion: { type: 'contains', value: 'x' } },
+                {
+                  pass: true,
+                  assertion: { type: 'javascript', metric: 'tp', metricOnly: true },
+                },
+                {
+                  pass: false,
+                  assertion: { type: 'javascript', metric: 'fp', metricOnly: true },
+                },
+              ],
+            },
+          },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord);
+
+    // Metric-only assertions don't participate in pass/fail, so retrying must
+    // not re-inflate assertion stats with their outcomes.
+    expect(prompts[0].metrics).toMatchObject({
+      assertPassCount: 1,
+      assertFailCount: 0,
+    });
+  });
+
   it('logs and rethrows metric recalculation and persistence failures', async () => {
     const calculationError = new Error('batch unavailable');
     const calculationEval = createEval({

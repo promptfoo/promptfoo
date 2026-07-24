@@ -658,8 +658,11 @@ export async function runAssertion({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
+    // If weight is 0, treat this as a metric-only assertion that can't fail.
+    // Explicit metricOnly assertions skip this: they're already excluded from
+    // pass/fail at aggregation, and force-passing would mask the real outcome
+    // in componentResults for migrated configs still carrying weight: 0.
+    if (assertion.weight === 0 && !assertion.metricOnly) {
       return {
         ...result,
         pass: true, // Force pass for weight=0 assertions
@@ -818,6 +821,7 @@ export async function runAssertions({
       result,
       metric: renderMetricName(assertion.metric, vars || test.vars || {}),
       weight: assertion.weight,
+      metricOnly: assertion.metricOnly,
     });
   });
 
@@ -825,14 +829,24 @@ export async function runAssertions({
     const result = await subAssertResult.testResult();
     const {
       index,
-      assertionSet: { metric, weight },
+      assertionSet: { assert, metric, weight },
     } = subAssertResult.parentAssertionSet!;
+
+    // A set whose assertions are all metricOnly is metric-only in effect:
+    // its aggregate score is always 0 and must not dilute the test score.
+    const metricOnly = assert.length > 0 && assert.every((subAssert) => subAssert.metricOnly);
 
     mainAssertResult.addResult({
       index,
-      result,
+      // Give a metric-only set result a pseudo-assertion for addResult to
+      // stamp `metricOnly` onto, so stored stats filters can exclude it.
+      // 'assert-set' is not an AssertionType member, hence the cast.
+      result: metricOnly
+        ? { ...result, assertion: { type: 'assert-set' } as unknown as Assertion }
+        : result,
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
+      metricOnly,
     });
   });
 
