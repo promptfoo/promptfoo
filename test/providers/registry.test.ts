@@ -359,6 +359,30 @@ describe('Provider Registry', () => {
       expect(config.apiKeyEnvar).toBe('MOONSHOT_API_KEY');
     });
 
+    it('should pass Snowflake provider options without nesting the config', async () => {
+      const factory = providerMap.find((factory) => factory.test('snowflake:mistral-large2'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'snowflake:mistral-large2',
+        {
+          config: {
+            accountIdentifier: 'myorg-myaccount',
+            apiBaseUrl: 'https://custom.snowflakecomputing.com',
+            apiKey: 'snowflake-test-key',
+          },
+        },
+        mockContext,
+      );
+
+      expect(provider.id()).toBe('snowflake:mistral-large2');
+      expect(provider.config).toMatchObject({
+        accountIdentifier: 'myorg-myaccount',
+        apiBaseUrl: 'https://custom.snowflakecomputing.com',
+        apiKey: 'snowflake-test-key',
+      });
+    });
+
     it('should route Moonshot chat prefixes and Kimi defaults correctly', async () => {
       const factory = providerMap.find((f) => f.test('moonshot:chat:kimi-k2.6'));
       expect(factory).toBeDefined();

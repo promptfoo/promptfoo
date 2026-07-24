@@ -2,15 +2,19 @@ import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
 import {
   calculateOpenAICost,
+  calculateSafeOpenAICost,
   failApiCall,
   formatOpenAiError,
+  getChatCompletionRefusal,
   getTokenUsage,
+  getTokenUsageWithRequestCount,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
   OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
   OPENAI_TTS_MODELS,
+  validateChatCompletionMessage,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
@@ -118,6 +122,44 @@ describe('getTokenUsage', () => {
     });
   });
 
+  it('should read completion details from output_tokens_details for Responses-style usage', () => {
+    const data = {
+      usage: {
+        total_tokens: 45,
+        prompt_tokens: 15,
+        completion_tokens: 30,
+        output_tokens_details: {
+          reasoning_tokens: 100,
+        },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 45,
+      prompt: 15,
+      completion: 30,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 100,
+      },
+    });
+  });
+
+  it('should prefer completion_tokens_details over output_tokens_details', () => {
+    const data = {
+      usage: {
+        total_tokens: 45,
+        prompt_tokens: 15,
+        completion_tokens: 30,
+        completion_tokens_details: { reasoning_tokens: 7 },
+        output_tokens_details: { reasoning_tokens: 100 },
+      },
+    };
+
+    expect(getTokenUsage(data, false).completionDetails).toEqual({ reasoning: 7 });
+  });
+
   it('should preserve provider-side cache read and write tokens', () => {
     const data = {
       usage: {
@@ -142,6 +184,41 @@ describe('getTokenUsage', () => {
         cacheCreationInputTokens: 4,
       },
     });
+  });
+
+  it('drops malformed usage fields while preserving valid fields', () => {
+    expect(
+      getTokenUsage(
+        {
+          usage: {
+            total_tokens: Number.MAX_VALUE,
+            prompt_tokens: -1,
+            completion_tokens: 2,
+            completion_tokens_details: {
+              reasoning_tokens: 'private',
+              accepted_prediction_tokens: 1,
+            },
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      prompt: 0,
+      completion: 2,
+      numRequests: 1,
+      completionDetails: { acceptedPrediction: 1 },
+    });
+  });
+
+  it('bounds adversarial nested usage without coercion', () => {
+    let cachedTokens: unknown = 1;
+    for (let i = 0; i < 5_000; i++) {
+      cachedTokens = [cachedTokens];
+    }
+
+    expect(
+      getTokenUsage({ usage: { prompt_tokens_details: { cached_tokens: cachedTokens } } }, false),
+    ).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
   });
 
   it('should read cached tokens from top-level usage.cached_tokens (e.g. Moonshot)', () => {
@@ -199,6 +276,194 @@ describe('getTokenUsage', () => {
 
     expect(result.completionDetails).toEqual({
       cacheCreationInputTokens: expected,
+    });
+  });
+});
+
+describe('getTokenUsageWithRequestCount', () => {
+  it('preserves valid usage and explicit fresh request accounting', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: 100,
+            prompt_tokens: 40,
+            completion_tokens: 60,
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+    });
+  });
+
+  it('does not count a cached error as a new request', () => {
+    expect(getTokenUsageWithRequestCount({}, true)).toEqual({ numRequests: 0 });
+  });
+
+  it('drops malformed usage fields without losing request accounting', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: { private: 'must-not-appear' },
+            prompt_tokens: { private: 'must-not-appear' },
+            completion_tokens: { private: 'must-not-appear' },
+          },
+        },
+        false,
+      ),
+    ).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
+  });
+
+  it('drops negative and unsafe token counts while preserving valid fields', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: Number.MAX_VALUE,
+            prompt_tokens: -1,
+            completion_tokens: 2,
+          },
+        },
+        false,
+      ),
+    ).toEqual({ prompt: 0, completion: 2, numRequests: 1 });
+  });
+
+  it('bounds coercion failures from adversarial nested usage', () => {
+    let cachedTokens: unknown = 1;
+    for (let i = 0; i < 5_000; i++) {
+      cachedTokens = [cachedTokens];
+    }
+
+    const result = getTokenUsageWithRequestCount(
+      { usage: { prompt_tokens_details: { cached_tokens: cachedTokens } } },
+      false,
+    );
+
+    expect(result).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
+  });
+});
+
+describe('calculateSafeOpenAICost', () => {
+  const config = { inputCost: 0.001, outputCost: 0.002 };
+
+  it('preserves cost for valid usage', () => {
+    expect(
+      calculateSafeOpenAICost('gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it('prefers a safe provider-reported cost without local overrides', () => {
+    expect(
+      calculateSafeOpenAICost(
+        'openai/gpt-4o',
+        {},
+        {
+          usage: { prompt_tokens: 3, completion_tokens: 2, cost: 0.0042 },
+        },
+      ),
+    ).toBe(0.0042);
+  });
+
+  it('prefers explicit local cost overrides over provider-reported cost', () => {
+    expect(
+      calculateSafeOpenAICost('gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2, cost: 99 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it('applies complete local overrides to vendor-qualified model IDs', () => {
+    expect(
+      calculateSafeOpenAICost('openai/gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2, cost: 99 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it('does not fall back to provider cost when local overrides cannot be safely calculated', () => {
+    expect(
+      calculateSafeOpenAICost('openai/gpt-4o', config, {
+        usage: { prompt_tokens: -1, completion_tokens: 2, cost: 99 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['negative counts', { prompt_tokens: -2, completion_tokens: -1 }],
+    ['unsafe counts', { prompt_tokens: 1e308, completion_tokens: 1e308 }],
+    ['mixed-type counts', { prompt_tokens: 3, completion_tokens: '2' }],
+  ])('omits cost for %s', (_description, usage) => {
+    expect(calculateSafeOpenAICost('gpt-4o', config, { usage })).toBeUndefined();
+  });
+
+  it.each([-1, Number.POSITIVE_INFINITY, '0.01'])('rejects unsafe reported cost %s', (cost) => {
+    expect(
+      calculateSafeOpenAICost('openai/unknown-model', {}, { usage: { cost } }),
+    ).toBeUndefined();
+  });
+});
+
+describe('validateChatCompletionMessage', () => {
+  it('accepts a complete custom tool call', () => {
+    const toolCall = {
+      id: 'call_custom',
+      type: 'custom',
+      custom: { name: 'shell', input: 'echo hello' },
+    };
+
+    expect(validateChatCompletionMessage({ tool_calls: [toolCall] })?.toolCalls).toEqual([
+      toolCall,
+    ]);
+  });
+
+  it('requires a usable payload', () => {
+    expect(validateChatCompletionMessage({ content: null })).toBeUndefined();
+    expect(validateChatCompletionMessage({ content: '' })).toBeUndefined();
+    expect(validateChatCompletionMessage({ content: [] }, { allowStructuredContent: true })).toBe(
+      undefined,
+    );
+  });
+
+  it('validates required fields for structured content parts', () => {
+    expect(
+      validateChatCompletionMessage(
+        { content: [{ type: 'text' }] },
+        { allowStructuredContent: true },
+      ),
+    ).toBeUndefined();
+    expect(
+      validateChatCompletionMessage(
+        { content: [{ type: 'text', text: 'Hello' }] },
+        { allowStructuredContent: true },
+      )?.structuredContent,
+    ).toEqual([{ type: 'text', text: 'Hello' }]);
+  });
+
+  it('normalizes refusals and content-filter responses', () => {
+    const refusalMessage = validateChatCompletionMessage({ refusal: 'Cannot comply' });
+    const filteredMessage = validateChatCompletionMessage(
+      { content: null },
+      { finishReason: 'content_filter' },
+    );
+
+    expect(getChatCompletionRefusal(refusalMessage!, 'stop')).toEqual({
+      output: 'Cannot comply',
+      isRefusal: true,
+      guardrails: { flagged: true },
+    });
+    expect(getChatCompletionRefusal(filteredMessage!, 'content_filter')).toEqual({
+      output: 'Content filtered by provider',
+      isRefusal: true,
+      guardrails: { flagged: true },
     });
   });
 });

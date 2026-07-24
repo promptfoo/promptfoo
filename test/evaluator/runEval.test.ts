@@ -329,6 +329,27 @@ describe('runEval', () => {
     });
   });
 
+  it('should not add provider errors to conversation history', async () => {
+    const conversations = {} as Record<string, any>;
+    const errorProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockResolvedValue({ error: 'Provider failed' }),
+    };
+
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: errorProvider,
+      prompt: { raw: 'Hello {{_conversation[0].output}}', label: 'test-label' },
+      test: {},
+      conversations,
+      registers: {},
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Provider failed');
+    expect(conversations).toEqual({});
+  });
+
   it('should handle conversation with custom ID', async () => {
     const conversations = {};
 
