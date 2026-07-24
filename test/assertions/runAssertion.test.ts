@@ -1998,6 +1998,60 @@ describe('runAssertion', () => {
     });
   });
 
+  // Test for ends-with assertion
+  const endsWithAssertion: Assertion = {
+    type: 'ends-with',
+    value: 'output',
+  };
+
+  it('should pass when the ends-with assertion passes', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: endsWithAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when the ends-with assertion fails', async () => {
+    const output = 'Different result';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: endsWithAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to end with "output"',
+    });
+  });
+
+  it('should fail when the ends-with value is contained but not at the end', async () => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'ends-with', value: 'Expected' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'Expected output to end with "Expected"',
+    });
+  });
+
   it('should use the provider from the assertion if it exists', async () => {
     // Assertion grader passes
     const output = 'Expected output';
