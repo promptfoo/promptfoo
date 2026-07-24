@@ -112,6 +112,7 @@ describe('index.ts exports', () => {
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
+    'isReservedAssertionAliasLabel',
     'isResultFailureReason',
     'isTransformFunction',
     'loadApiProvider',
@@ -123,6 +124,8 @@ describe('index.ts exports', () => {
   ];
 
   const expectedSchemaExports = [
+    'AssertionAliasSchema',
+    'AssertionAliasesSchema',
     'AssertionOrSetSchema',
     'AssertionSchema',
     'AssertionSetSchema',

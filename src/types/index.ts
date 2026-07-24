@@ -687,6 +687,55 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
+export type EvaluateAssertionType = AssertionType | (string & {});
+
+const ScriptAssertionTypeSchema = z.enum(['javascript', 'python', 'ruby']);
+
+export const AssertionAliasSchema = z.object({
+  label: z.string().min(1),
+  type: ScriptAssertionTypeSchema,
+  script: z.string().refine((value) => value.startsWith('file://'), {
+    error: 'script must start with file://',
+  }),
+});
+
+export type AssertionAlias = z.infer<typeof AssertionAliasSchema>;
+
+export function isReservedAssertionAliasLabel(label: string): boolean {
+  const isBuiltInType =
+    BaseAssertionTypesSchema.safeParse(label).success ||
+    SpecialAssertionTypesSchema.safeParse(label).success ||
+    (label.startsWith('not-') &&
+      BaseAssertionTypesSchema.safeParse(label.slice('not-'.length)).success);
+  const isRedteamType =
+    label.startsWith('promptfoo:redteam:') || label.startsWith('not-promptfoo:redteam:');
+
+  return isBuiltInType || label.startsWith('select-') || isRedteamType;
+}
+
+export const AssertionAliasesSchema = z.array(AssertionAliasSchema).superRefine((aliases, ctx) => {
+  const labels = new Set<string>();
+
+  for (const [index, alias] of aliases.entries()) {
+    if (labels.has(alias.label)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Duplicate assertion alias label: ${alias.label}`,
+        path: [index, 'label'],
+      });
+    }
+    labels.add(alias.label);
+
+    if (isReservedAssertionAliasLabel(alias.label)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Assertion alias label conflicts with built-in assertion type: ${alias.label}`,
+        path: [index, 'label'],
+      });
+    }
+  }
+});
+
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
@@ -753,6 +802,7 @@ export interface AssertionValueFunctionContext {
   vars: Record<string, VarValue>;
   test: AtomicTestCase;
   logProbs: number[] | undefined;
+  value?: AssertionValue;
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
@@ -1245,6 +1295,9 @@ export const TestSuiteConfigSchema = z.object({
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
 
+  // Reusable JavaScript, Python, or Ruby assertion scripts.
+  assertionAliases: AssertionAliasesSchema.optional(),
+
   // Extension that is called at various plugin points
   extensions: z.array(z.string()).nullable().optional(),
 
@@ -1361,6 +1414,25 @@ export interface EvalWithMetadata {
   description?: string;
 }
 
+type EvaluateAssertion = Omit<Assertion, 'type'> & {
+  type: EvaluateAssertionType;
+};
+
+type EvaluateAssertionSet = Omit<AssertionSet, 'assert'> & {
+  assert: EvaluateAssertionOrSet[];
+};
+
+type EvaluateAssertionOrSet = EvaluateAssertion | EvaluateAssertionSet;
+
+type EvaluateTestCase = Omit<TestCase, 'assert'> & {
+  assert?: EvaluateAssertionOrSet[];
+};
+
+type EvaluateScenario = Omit<Scenario, 'config' | 'tests'> & {
+  config: Array<Partial<EvaluateTestCase>>;
+  tests: EvaluateTestCase[];
+};
+
 // node.js package interface
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
@@ -1373,7 +1445,11 @@ export type EvaluateTestSuite = {
    * this option > stored user email > PROMPTFOO_AUTHOR env var > null.
    */
   author?: string;
-} & Omit<TestSuiteConfig, 'prompts' | 'providers'>;
+} & Omit<TestSuiteConfig, 'prompts' | 'providers' | 'tests' | 'scenarios' | 'defaultTest'> & {
+    tests?: string | Array<string | EvaluateTestCase | TestGeneratorConfig> | TestGeneratorConfig;
+    scenarios?: Array<string | EvaluateScenario>;
+    defaultTest?: string | Omit<EvaluateTestCase, 'description'>;
+  };
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
   evaluateOptions: EvaluateOptions;

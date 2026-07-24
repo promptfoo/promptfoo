@@ -1,3 +1,4 @@
+import { copyResolvedAssertionAlias, resolveAssertionAliases } from './assertions/aliases';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -28,6 +29,7 @@ import type {
   Scenario,
   TestCase,
   TestSuite,
+  TestSuiteConfig,
   UnifiedConfig,
 } from './types/index';
 import type { InternalEvaluateOptions } from './types/internal';
@@ -53,7 +55,9 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
     cloned.options = { ...test.options };
   }
   if (test.assert) {
-    cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
+    cloned.assert = test.assert.map((assertion) =>
+      copyResolvedAssertionAlias(assertion, { ...assertion }),
+    );
   }
   return cloned;
 }
@@ -224,13 +228,29 @@ async function createRuntimeTestSuite(
     testSuiteConfig.defaultTest.startsWith('file://')
       ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
       : testSuiteConfig.defaultTest;
+  const rawScenarios = testSuiteConfig.scenarios
+    ? await maybeLoadFromExternalFile(testSuiteConfig.scenarios)
+    : undefined;
+  const scenarios = Array.isArray(rawScenarios)
+    ? (rawScenarios as Scenario[]).flat()
+    : (rawScenarios as Scenario[] | undefined);
+  const loadedScenarios = scenarios
+    ? await Promise.all(
+        scenarios.map(async (scenario) => ({
+          ...scenario,
+          ...(scenario.tests === undefined
+            ? {}
+            : { tests: await readTests(scenario.tests as TestSuiteConfig['tests']) }),
+        })),
+      )
+    : undefined;
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios: testSuiteConfig.scenarios as Scenario[],
+    scenarios: loadedScenarios,
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
+    tests: await readTests(testSuiteConfig.tests as TestSuiteConfig['tests']),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
@@ -287,6 +307,36 @@ async function resolveNestedProviders(
       }
     }
   }
+
+  const { assertionAliases } = testSuiteConfig;
+  if (!assertionAliases?.length) {
+    return;
+  }
+
+  if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
+    [constructedTestSuite.defaultTest] = resolveAssertionAliases(
+      [constructedTestSuite.defaultTest],
+      assertionAliases,
+    );
+  }
+  constructedTestSuite.tests = resolveAssertionAliases(
+    constructedTestSuite.tests,
+    assertionAliases,
+  );
+  constructedTestSuite.scenarios = constructedTestSuite.scenarios?.map((scenario) => {
+    if (typeof scenario !== 'object' || !scenario) {
+      return scenario;
+    }
+    return {
+      ...scenario,
+      ...(Array.isArray(scenario.config)
+        ? { config: resolveAssertionAliases(scenario.config, assertionAliases) }
+        : {}),
+      ...(Array.isArray(scenario.tests)
+        ? { tests: resolveAssertionAliases(scenario.tests, assertionAliases) }
+        : {}),
+    };
+  });
 }
 
 async function maybeShareEval(

@@ -134,6 +134,9 @@ interface AssertionValueFunctionContext {
   // Configuration passed to the assertion
   config?: Record<string, any>;
 
+  // Value passed at the call site of a named script alias
+  value?: string | number | object;
+
   // The provider that generated the response
   provider: ApiProvider | undefined;
 

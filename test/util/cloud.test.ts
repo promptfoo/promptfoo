@@ -1197,6 +1197,35 @@ describe('cloud utils', () => {
       );
     });
 
+    it('should not send local assertion alias script paths to permission checks', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      await expect(
+        checkCloudPermissions({
+          providers: ['test-provider'],
+          assertionAliases: [
+            {
+              label: 'checks-local-value',
+              type: 'javascript',
+              script: 'file:///Users/example/project/assertions/check-value.mjs:checkValue',
+            },
+          ],
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/permissions/check',
+        {
+          method: 'POST',
+          body: JSON.stringify({ config: { providers: ['test-provider'] } }),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
     it('should throw ConfigPermissionError when response is 403', async () => {
       const errorData = {
         errors: [
