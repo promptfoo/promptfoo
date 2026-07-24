@@ -201,11 +201,12 @@ await cache.withCacheNamespace('v1', async () => {
 
 ### Guardrails Functions
 
-| Function             | Purpose          | Stability |
-| -------------------- | ---------------- | --------- |
-| `guardrails.guard()` | Moderation check | ✅ Stable |
-| `guardrails.pii()`   | PII detection    | ✅ Stable |
-| `guardrails.harm()`  | Harm detection   | ✅ Stable |
+| Function                | Purpose                        | Stability |
+| ----------------------- | ------------------------------ | --------- |
+| `guardrails.guard()`    | Moderation check               | ✅ Stable |
+| `guardrails.pii()`      | PII detection                  | ✅ Stable |
+| `guardrails.harm()`     | Harm detection                 | ✅ Stable |
+| `guardrails.adaptive()` | Policy-based prompt adaptation | ✅ Stable |
 
 ### Red Team Functions
 

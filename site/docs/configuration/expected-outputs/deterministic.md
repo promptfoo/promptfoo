@@ -1663,7 +1663,7 @@ tests:
 The assertion automatically normalizes provider-specific values:
 
 - **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
-- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`, `refusal` → `content_filter`
 
 :::note
 Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
@@ -1964,4 +1964,4 @@ assert:
 - [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation
 - [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded/index.md) - Using LLMs to evaluate other LLMs
 - [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options
-- [Guardrails](/docs/configuration/expected-outputs/guardrails.md) - Setting up safety guardrails for LLM outputs
+- [Guardrails](/docs/configuration/expected-outputs/guardrails) - Evaluating target-reported guardrail decisions

@@ -211,34 +211,24 @@ Non-serializable fields (`logger`, `getCache`, `filters`, `originalProvider`) ar
 
 ### Return Format
 
-Your function must return a dictionary with these fields:
+Your function must return a dictionary containing `output` or `error`, plus any optional fields:
 
 ```python
 def call_api(prompt, options, context):
-    # Required field
-    result = {
-        "output": "Your response here"
-    }
-
-    # Optional fields
-    result["tokenUsage"] = {
-        "total": 150,
-        "prompt": 50,
-        "completion": 100
-    }
-
-    result["cost"] = 0.0025  # in dollars
-    result["cached"] = False
-    result["logProbs"] = [-0.5, -0.3, -0.1]
-    result["latencyMs"] = 150  # custom latency in milliseconds
-    result["conversationEnded"] = False
-    result["conversationEndReason"] = "thread_closed"
-
-    # Error handling
     if something_went_wrong:
-        result["error"] = "Description of what went wrong"
+        return {"error": "Description of what went wrong"}
 
-    return result
+    return {
+        "output": "Your response here",
+        "tokenUsage": {"total": 150, "prompt": 50, "completion": 100},
+        "cost": 0.0025,  # in dollars
+        "cached": False,
+        "logProbs": [-0.5, -0.3, -0.1],
+        "latencyMs": 150,  # custom latency in milliseconds
+        "conversationEnded": False,
+        "conversationEndReason": "thread_closed",
+        "guardrails": {"flagged": False},
+    }
 ```
 
 For workflows that make multiple model calls, set `tokenUsage.numRequests` yourself. Fresh Python-provider results that omit it are recorded as one request.
@@ -258,10 +248,16 @@ class CallApiContextParams:
     test: Optional[Dict[str, Any]]         # Full test case including metadata
 
 class TokenUsage:
-    total: int
-    prompt: int
-    completion: int
-    numRequests: int
+    total: Optional[int]
+    prompt: Optional[int]
+    completion: Optional[int]
+    numRequests: Optional[int]
+
+class GuardrailResponse:
+    flagged: Optional[bool]
+    flaggedInput: Optional[bool]
+    flaggedOutput: Optional[bool]
+    reason: Optional[str]
 
 class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]
@@ -273,6 +269,7 @@ class ProviderResponse:
     latencyMs: Optional[int]  # overrides measured latency
     conversationEnded: Optional[bool]
     conversationEndReason: Optional[str]
+    guardrails: Optional[GuardrailResponse]
     metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
@@ -288,7 +285,7 @@ class ProviderClassificationResponse:
 ```
 
 :::tip
-Always include the `output` field in your response, even if it's an empty string when an error occurs.
+Return at least one of `output` or `error`. Represent an expected safety block as a non-empty `output` plus `guardrails`; use `error` for provider or guardrail execution failures.
 :::
 
 For multi-turn red team strategies, return `conversationEnded: True` (with optional
@@ -645,6 +642,7 @@ def call_api(prompt, options, context):
 ```python
 def call_api(prompt, options, context):
     """Provider with safety guardrails."""
+    config = options.get("config", {})
 
     # Check for prohibited content
     prohibited_terms = config.get('prohibited_terms', [])
@@ -654,6 +652,8 @@ def call_api(prompt, options, context):
                 "output": "I cannot process this request.",
                 "guardrails": {
                     "flagged": True,
+                    "flaggedInput": True,
+                    "flaggedOutput": False,
                     "reason": "Prohibited content detected"
                 }
             }
@@ -663,13 +663,23 @@ def call_api(prompt, options, context):
 
     # Post-process checks
     if check_output_safety(result):
-        return {"output": result}
+        return {
+            "output": result,
+            "guardrails": {"flagged": False}
+        }
     else:
         return {
             "output": "[Content filtered]",
-            "guardrails": {"flagged": True}
+            "guardrails": {
+                "flagged": True,
+                "flaggedInput": False,
+                "flaggedOutput": True,
+                "reason": "Generated content failed output safety checks"
+            }
         }
 ```
+
+Set the aggregate `flagged` field explicitly; the directional fields do not control the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails) by themselves. Return guardrail service failures through `error` rather than treating them as unflagged.
 
 ### OpenTelemetry Tracing
 
