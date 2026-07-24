@@ -521,11 +521,15 @@ export abstract class RedteamGraderBase {
 
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
+    const graderLanguage = test.options?.redteamGraderLanguage ?? 'English';
+    const graderLanguageString = `\n\nIMPORTANT: Write the "reason" field in ${graderLanguage}. All explanations and justifications in the reason field must be in ${graderLanguage}.`;
+
     const finalRubric =
       this.renderRubric(vars) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
       graderExamplesString +
+      graderLanguageString +
       timestampString;
     const imagesForGrading = imageOutputs ?? gradingProviderResponse?.images;
 
