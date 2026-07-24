@@ -64,6 +64,17 @@ describe('testCaseFromCsvRow', () => {
     expect(result).toEqual(expectedTestCase);
   });
 
+  it('should preserve a Python file reference from a CSV row', () => {
+    const result = testCaseFromCsvRow({
+      __expected: 'file://nested/grader.PY:check_output',
+    });
+
+    expect(result.assert?.[0]).toMatchObject({
+      type: 'python',
+      value: 'file://nested/grader.PY:check_output',
+    });
+  });
+
   it('should properly trim whitespace and newlines from assertion values', () => {
     const row: CsvRow = {
       __expected1: 'equals:Expected output\n',
@@ -502,6 +513,53 @@ describe('assertionFromString', () => {
     expect(result.type).toBe('contains-json');
   });
 
+  it.each([
+    'file://script.py',
+    'file://script.PY',
+    'file://nested.dir/script.Py',
+    'file:///tmp/script.pY',
+    'file://C:/path/script.PY',
+    String.raw`file://C:\path\script.PY`,
+    'file://path:with:colons/script.py',
+    'file://dir.py:segment/script.PY',
+    'file://fixtures#1/script.PY',
+    'file://C#/script.PY:fn',
+    'file://script.py:fn',
+    'file://script.PY:get_assert',
+    'file://script.PY:Check.run',
+    'file://script.PY:Class.py',
+    'file://script.PY:评分',
+  ])('should preserve a Python file reference case-insensitively: %s', (expected) => {
+    expect(assertionFromString(expected)).toEqual({
+      type: 'python',
+      value: expected,
+    });
+  });
+
+  it.each([
+    'file://script.pyi',
+    'file://script.PYTHON',
+    'file://script.py.bak',
+    'file://dir.py/readme.txt',
+    'file://dir.py:segment/readme.txt',
+    'file://script.py?raw=1',
+    'file://script.py#fragment',
+    'file://note.txt?handler=script.PY:fn',
+    'file://note.txt?handler=script.PY',
+    'file://note.txt#handler.PY',
+    'file://script.js:Class.py',
+    'file://script.rb:Validator.py',
+    'file://script.py:',
+    'file://script.py:fn:extra',
+    'http://script.py',
+    'ftp://script.py',
+  ])('should preserve a non-Python lookalike as an equality assertion: %s', (expected) => {
+    expect(assertionFromString(expected)).toEqual({
+      type: 'equals',
+      value: expected,
+    });
+  });
+
   it('should create a function assertion', () => {
     const expected = 'fn:output === "Expected output"';
 
@@ -794,19 +852,27 @@ describe('assertionFromString', () => {
     });
   });
 
-  it(`should parse file:// prefix assertion`, () => {
-    const assertion = assertionFromString('file://script.py');
-    expect(assertion).toEqual({
-      type: 'python',
-      value: 'script.py',
+  it.each([
+    ['python:file://script.PY:check', 'python'],
+    ['not-python:file://script.PY:check', 'not-python'],
+  ])('should preserve an explicit %s file reference', (expected, type) => {
+    expect(assertionFromString(expected)).toEqual({
+      type,
+      value: 'file://script.PY:check',
     });
   });
 
-  it(`should parse file:// prefix assertion with function name`, () => {
-    const assertion = assertionFromString('file://script.py:function_name');
-    expect(assertion).toEqual({
+  it('should parse a file:// Python assertion', () => {
+    expect(assertionFromString('file://script.py')).toEqual({
       type: 'python',
-      value: 'script.py:function_name',
+      value: 'file://script.py',
+    });
+  });
+
+  it('should parse a file:// Python assertion with a function name', () => {
+    expect(assertionFromString('file://script.py:function_name')).toEqual({
+      type: 'python',
+      value: 'file://script.py:function_name',
     });
   });
 
