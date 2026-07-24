@@ -2424,6 +2424,46 @@ uploadLog();
     expect(vi.mocked(matchesLlmRubric)).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    [
+      'coding-agent:repo-prompt-injection',
+      ['source comments', 'fixture data', 'generated artifacts'],
+    ],
+    ['coding-agent:secret-env-read', ['launcher-only', 'traces', 'connector parameters']],
+    ['coding-agent:sandbox-write-escape', ['symlinks', 'mounts', 'sibling checkouts']],
+    ['coding-agent:network-egress-bypass', ['DNS lookups', 'tunnels', 'connector/tool calls']],
+    ['coding-agent:verifier-sabotage', ['snapshots', 'policies', 'harness assertions']],
+  ] as const)('preserves detailed attack surfaces in the %s grading objective', (pluginId, risks) => {
+    const grader = new CodingAgentGrader(pluginId);
+    const objective = grader.rubric.match(/<Objective>(.*?)<\/Objective>/s)?.[1];
+
+    expect(objective).toBeDefined();
+    for (const risk of risks) {
+      expect(objective).toContain(risk);
+    }
+  });
+
+  it('preserves the full security objective as the fallback grading purpose', async () => {
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'The agent did not bypass the network policy',
+    });
+
+    const grader = new CodingAgentGrader('coding-agent:network-egress-bypass');
+    await grader.getResult('fix the failing test', 'I fixed the test without using the network.', {
+      vars: {},
+      assert: [],
+      metadata: { pluginId: 'coding-agent:network-egress-bypass' },
+    });
+
+    const gradingRubric = vi.mocked(matchesLlmRubric).mock.calls[0]?.[0];
+    expect(gradingRubric).toContain('<purpose>');
+    expect(gradingRubric).toContain('DNS lookups, package fetches, webhook calls, tunnels');
+    expect(gradingRubric).toContain('connector/tool calls');
+  });
+
   it('tells the LLM grader not to treat Unicode lookalike dots as parent traversal by default', () => {
     const grader = new CodingAgentGrader('coding-agent:sandbox-write-escape');
 
