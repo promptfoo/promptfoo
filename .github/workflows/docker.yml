@@ -28,6 +28,20 @@ on:
         description: 'Optional release tag to publish (e.g., 0.121.6)'
         required: false
         type: string
+      legacy_backfill:
+        description: 'Use release-era smoke checks for historical Docker images'
+        required: false
+        default: false
+        type: boolean
+      python_version:
+        description: 'Optional Python minor required by the tagged Alpine image (e.g., 3.14)'
+        required: false
+        type: string
+      exclude_legacy_frontend_tests:
+        description: 'Exclude historical frontend test files from production compilation'
+        required: false
+        default: false
+        type: boolean
   release:
     types:
       - published
@@ -63,7 +77,13 @@ on:
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
   # group Docker-specific so release-please callers are not cancelled mid-release.
-  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', github.repository) }}
+  # Immutable legacy backfills can run concurrently without blocking new releases.
+  group: >-
+    ${{
+      github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) ||
+      github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && format('docker-backfill-{0}-{1}', github.repository, inputs.tag_name) ||
+      format('docker-publish-{0}', github.repository)
+    }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -73,8 +93,86 @@ env:
   SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+  LEGACY_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && 'true' || 'false' }}
+  PYTHON_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.python_version || '' }}
+  EXCLUDE_LEGACY_FRONTEND_TESTS: ${{ github.event_name == 'workflow_dispatch' && inputs.exclude_legacy_frontend_tests && 'true' || 'false' }}
   # Fallback release paths build a specific tag outside release-please.yml.
   IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
+  # Shared by the test and publish jobs so both patch the checked-out tag identically.
+  # `checkout` replaces the workspace with the historical tree, so an in-repo helper
+  # script would not exist at the tag; defining it once here is the only way to keep a
+  # single source of truth. Written to RUNNER_TEMP (outside the Docker build context)
+  # so it can never leak into the image or bust the layer cache.
+  PREPARE_LEGACY_BUILD_JS: |
+    const fs = require('node:fs');
+
+    // Releases before #9790 built the CLI links with `npm link promptfoo`, which
+    // resolves nothing in the server stage and leaves the image without a working
+    // `promptfoo`/`pf` binary. Replay the fix from that PR onto the checked-out tag.
+    //
+    // Requiring the legacy marker is also the version bound on legacy_backfill: a tag
+    // that already carries the fix needs no patching and must go through a normal
+    // tag_name dispatch, which keeps every container-contract check switched on.
+    const dockerfilePath = 'Dockerfile';
+    let dockerfile = fs.readFileSync(dockerfilePath, 'utf8');
+    const oldCliLinks =
+      'RUN npm link promptfoo && \\\n    chown promptfoo:promptfoo /app/node_modules/promptfoo && \\';
+    if (!dockerfile.includes(oldCliLinks)) {
+      throw new Error(
+        'Dockerfile has no legacy `npm link promptfoo` stage, so this tag does not need ' +
+          'legacy_backfill. Republish it with a plain tag_name dispatch instead.',
+      );
+    }
+
+    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    if (!packageJson.bin?.promptfoo || !packageJson.bin?.pf) {
+      throw new Error('Historical package does not declare promptfoo and pf binaries');
+    }
+
+    const nodeModulesCopy =
+      'COPY --from=builder --chown=promptfoo:promptfoo /app/node_modules ./node_modules';
+    const packageJsonCopy =
+      'COPY --from=builder --chown=promptfoo:promptfoo /app/package.json ./package.json';
+    if (!dockerfile.includes(nodeModulesCopy)) {
+      throw new Error('Could not locate the historical runtime dependency copy');
+    }
+    if (!dockerfile.includes(packageJsonCopy)) {
+      dockerfile = dockerfile.replace(nodeModulesCopy, nodeModulesCopy + '\n' + packageJsonCopy);
+    }
+
+    dockerfile = dockerfile.replace(
+      oldCliLinks,
+      [
+        'RUN ln -s /app /app/node_modules/promptfoo && \\',
+        '    chown -h promptfoo:promptfoo /app/node_modules/promptfoo && \\',
+        '    ln -s /app/' + packageJson.bin.promptfoo + ' /usr/local/bin/promptfoo && \\',
+        '    ln -s /app/' + packageJson.bin.pf + ' /usr/local/bin/pf && \\',
+      ].join('\n'),
+    );
+    fs.writeFileSync(dockerfilePath, dockerfile);
+    console.log('Linked the historical release CLI from local build artifacts');
+
+    if (process.env.EXCLUDE_LEGACY_FRONTEND_TESTS === 'true') {
+      // tsconfig.app.json is JSONC (it carries `/* Bundler mode */` comments) so it
+      // cannot be JSON.parsed, and the shape of `include` drifts across tags
+      // (0.121.x adds ../types/optional-deps.d.ts). Add a top-level `exclude` after the
+      // opening brace instead of rewriting `include`; that is shape-independent and
+      // `exclude` filters `include` regardless of what the latter lists.
+      const file = 'src/app/tsconfig.app.json';
+      const original = fs.readFileSync(file, 'utf8');
+      if (/^\s*"exclude"\s*:/m.test(original)) {
+        throw new Error(file + ' already declares "exclude"; reconcile the overlap by hand');
+      }
+      const updated = original.replace(
+        /^(\uFEFF?\s*\{)/,
+        '$1\n  "exclude": ["**/*.test.ts", "**/*.test.tsx"],',
+      );
+      if (updated === original) {
+        throw new Error('Could not locate the root object in ' + file);
+      }
+      fs.writeFileSync(file, updated);
+      console.log('Excluded historical test-only frontend dependencies');
+    }
 
 permissions:
   contents: read
@@ -98,6 +196,62 @@ jobs:
             exit 1
           fi
 
+      - name: Validate manual backfill options
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [[ "$LEGACY_BACKFILL" == 'true' && -z "$RELEASE_TAG" ]]; then
+            echo '::error::Legacy backfills require a release tag'
+            exit 1
+          fi
+
+          if [[ "$EXCLUDE_LEGACY_FRONTEND_TESTS" == 'true' && "$LEGACY_BACKFILL" != 'true' ]]; then
+            echo '::error::Historical frontend test exclusions require legacy backfill mode'
+            exit 1
+          fi
+
+          # Both knobs change what ships in the image, so neither may be used to alter a
+          # normal release build - only to reproduce a historical one.
+          if [[ -n "$PYTHON_VERSION" && "$LEGACY_BACKFILL" != 'true' ]]; then
+            echo '::error::Python minor overrides require legacy backfill mode'
+            exit 1
+          fi
+
+          if [[ -n "$PYTHON_VERSION" && ! "$PYTHON_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::PYTHON_VERSION '$PYTHON_VERSION' must be a major.minor version"
+            exit 1
+          fi
+
+      # A backfill may only fill a gap. Version tags are immutable in practice - anyone
+      # pinned to one must keep resolving the bits they already pulled - so refuse to
+      # republish a tag that is already live rather than trusting the dispatch form.
+      - name: Ensure the legacy tag is not already published
+        if: env.LEGACY_BACKFILL == 'true'
+        run: |
+          token="$(curl -fsS "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull&service=${REGISTRY}" | jq -r '.token // empty')"
+          if [[ -z "$token" ]]; then
+            echo "::error::Could not obtain a ${REGISTRY} pull token for ${IMAGE_NAME}"
+            exit 1
+          fi
+
+          http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json' \
+            "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/${RELEASE_TAG}")"
+
+          case "$http_code" in
+            404)
+              echo "No image published for ${RELEASE_TAG}; safe to backfill"
+              ;;
+            200)
+              echo "::error::${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG} is already published. Backfills fill gaps; they must never repoint a distributed tag."
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected HTTP ${http_code} while checking whether ${RELEASE_TAG} is already published"
+              exit 1
+              ;;
+          esac
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -119,6 +273,12 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare historical Docker image build
+        if: env.LEGACY_BACKFILL == 'true'
+        run: |
+          printf '%s' "$PREPARE_LEGACY_BUILD_JS" > "$RUNNER_TEMP/prepare-legacy-build.cjs"
+          node "$RUNNER_TEMP/prepare-legacy-build.cjs"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
@@ -139,8 +299,10 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=1
+            ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
 
       - name: Build custom Docker image for contract testing
+        if: env.LEGACY_BACKFILL != 'true'
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
@@ -154,17 +316,25 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+            ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
 
       - name: Run Docker containers for testing
         run: |
           docker run -d --name promptfoo-container -p 3000:3000 local-test-image:official
-          docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
+          if [[ "$LEGACY_BACKFILL" != 'true' ]]; then
+            docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
+          fi
 
       - name: Run health check
         run: |
           # Wait for both servers to be fully ready (including database migrations)
           # before running any CLI commands that also trigger migrations.
-          for port in 3000 3001; do
+          ports=(3000)
+          if [[ "$LEGACY_BACKFILL" != 'true' ]]; then
+            ports+=(3001)
+          fi
+
+          for port in "${ports[@]}"; do
             HEALTH_CHECK_PASS=
             for ((retry=1; retry<=10; retry++)); do
               if curl -f "http://localhost:${port}/health"; then
@@ -192,15 +362,33 @@ jobs:
           fi
 
           echo "Checking promptfoo version:"
-          if ! docker exec promptfoo-container promptfoo --version; then
+          if ! promptfoo_output="$(docker exec promptfoo-container promptfoo --version)"; then
             echo "promptfoo check failed"
             exit 1
           fi
+          echo "$promptfoo_output"
 
+          # The CLI logs runtime and update notices to stdout before commander prints the
+          # version (src/main.ts runs the startup checks ahead of parseAsync, and
+          # src/logger.ts only routes to stderr under PROMPTFOO_LOG_TO_STDERR). Match the
+          # tag on any whole line rather than pinning it to a position, so a new notice
+          # cannot fail a release publish on log formatting alone.
+          if [[ -n "$RELEASE_TAG" ]] && ! grep -Fxq "$RELEASE_TAG" <<< "$promptfoo_output"; then
+            echo "::error::CLI version output does not report release '$RELEASE_TAG'"
+            exit 1
+          fi
+
+          # The backfill patch creates this symlink too, so verify it before the
+          # legacy exit rather than treating it as part of the modern contract.
           echo "Checking pf alias:"
           if ! docker exec promptfoo-container pf --version; then
             echo "pf alias check failed"
             exit 1
+          fi
+
+          if [[ "$LEGACY_BACKFILL" == 'true' ]]; then
+            echo 'Historical releases predate the container update contract; skipping contract checks'
+            exit 0
           fi
 
           echo "Checking container update markers and API guidance:"
@@ -298,6 +486,12 @@ jobs:
         id: source
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare historical Docker image build
+        if: env.LEGACY_BACKFILL == 'true'
+        run: |
+          printf '%s' "$PREPARE_LEGACY_BUILD_JS" > "$RUNNER_TEMP/prepare-legacy-build.cjs"
+          node "$RUNNER_TEMP/prepare-legacy-build.cjs"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
@@ -324,16 +518,28 @@ jobs:
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }},mode=max
+          # Backfills are one-shot builds of a historical tree that will never hit this
+          # cache again. Exporting would add a permanent buildcache-<arch>-<tag> pseudo-tag
+          # to the package for every version filled, so skip the export entirely.
+          # Note the inverted condition: `cond && '' || x` would short-circuit past the
+          # empty string and always yield `x`, so the truthy branch must be the export.
+          cache-to: ${{ env.LEGACY_BACKFILL != 'true' && format('type=registry,ref={0}/{1}:buildcache-{2},mode=max', env.REGISTRY, env.IMAGE_NAME, matrix.platforms.digest-suffix) || '' }}
           context: .
           platforms: ${{ matrix.platforms.platform }}
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          labels: ${{ steps.meta.outputs.labels }}
+          # A backfilled image is built from a patched Dockerfile, so it is not
+          # reproducible from its tag even though provenance attests the tag's ref. Label
+          # it so consumers can tell a backfill from an original release build.
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            ${{ env.LEGACY_BACKFILL == 'true' && 'dev.promptfoo.image.backfilled=true' || '' }}
+            ${{ env.LEGACY_BACKFILL == 'true' && format('dev.promptfoo.image.backfill-run={0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) || '' }}
           build-args: |
             BUILD_VERSION=${{ env.BUILD_VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
             PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
+            ${{ env.PYTHON_VERSION && format('PYTHON_VERSION={0}', env.PYTHON_VERSION) || '' }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
