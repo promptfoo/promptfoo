@@ -127,7 +127,7 @@ describe('handleContextRecall', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
@@ -162,7 +162,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'test value',
-      0,
+      0.5,
       {},
       { context: 'test context' },
       undefined,
@@ -212,7 +212,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.5,
       {},
       {},
       undefined,
@@ -259,7 +259,7 @@ describe('handleContextRecall', () => {
       'prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0.5, {}, {}, undefined);
   });
 
   it('should throw error when renderedValue is not a string', async () => {
@@ -317,6 +317,49 @@ describe('handleContextRecall', () => {
 
     await expect(handleContextRecall(params)).rejects.toThrow(
       'context-recall assertion requires a prompt',
+    );
+  });
+
+  it('should use a default threshold of 0.5 when none is specified', async () => {
+    const mockMatchesContextRecallInner = vi.spyOn(matchers, 'matchesContextRecall');
+    mockMatchesContextRecallInner.mockResolvedValue({
+      pass: true,
+      score: 0.7,
+      reason: 'Recall 0.70 is >= 0.5',
+    });
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    const mockProvider = createMockProvider({ response: {} });
+
+    const params: AssertionParams = {
+      assertion: { type: 'context-recall' },
+      renderedValue: 'Expected fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: false,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    };
+
+    await handleContextRecall(params);
+
+    expect(mockMatchesContextRecallInner).toHaveBeenCalledWith(
+      'test context',
+      'Expected fact',
+      0.5,
+      {},
+      { context: 'test context' },
+      undefined,
     );
   });
 });
