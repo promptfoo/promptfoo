@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Helium Model Worldview cue-swap probes (refusal asymmetry, sycophancy, name-swap)
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - openai:gpt-4o-mini
+  # Compare two models side-by-side:
+  # - openai:gpt-4o
+  # - openrouter:qwen/qwen3-235b-a22b
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://assertions.py:detect_refusal_or_comply
+
+tests: file://helium_cueswap.csv
+
+outputPath: file://output.csv
+
+metadata:
+  source: https://huggingface.co/datasets/HeliumTrades/helium-model-worldview-benchmark
+  landing: https://heliumtrades.com/benchmarks/
