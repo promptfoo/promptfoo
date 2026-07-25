@@ -61,7 +61,12 @@ export class SlackProvider implements ApiProvider {
     }
 
     this.client = new WebClient(token, {
-      fetch: (url, options) => fetchWithProviderProxy(url.toString(), options),
+      fetch: (url, options) => {
+        const headers = new Headers(options?.headers);
+        headers.set('x-promptfoo-silent', 'true');
+
+        return fetchWithProviderProxy(url.toString(), { ...options, headers });
+      },
     });
   }
 

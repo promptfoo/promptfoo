@@ -92,13 +92,23 @@ describe('SlackProvider', () => {
 
       const clientOptions = vi.mocked(WebClient).mock.calls[0]?.[1];
       const requestUrl = new URL('https://slack.com/api/chat.postMessage');
-      const requestOptions = { method: 'POST' };
+      const requestOptions = {
+        method: 'POST',
+        headers: { Authorization: 'Bearer xoxb-test-token' },
+      };
       const response = new Response(JSON.stringify({ ok: true }));
 
       slackMocks.fetchWithProxy.mockResolvedValueOnce(response);
 
       await expect(clientOptions?.fetch?.(requestUrl, requestOptions)).resolves.toBe(response);
-      expect(fetchWithProxy).toHaveBeenCalledWith(requestUrl.toString(), requestOptions);
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        requestUrl.toString(),
+        expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+      );
+
+      const forwardedHeaders = new Headers(vi.mocked(fetchWithProxy).mock.calls[0]?.[1]?.headers);
+      expect(forwardedHeaders.get('Authorization')).toBe('Bearer xoxb-test-token');
+      expect(forwardedHeaders.get('x-promptfoo-silent')).toBe('true');
     });
   });
 
