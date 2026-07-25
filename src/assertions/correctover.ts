@@ -4,30 +4,28 @@ import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Correctover CCS (Call Shield) assertion handler.
- * 
+ *
  * Validates MCP/AI agent tool calls against Correctover's runtime
  * call verification rules (24 detection rules).
- * 
+ *
  * Usage in promptfoo config:
  * ```yaml
  * assertions:
  *   - type: correctover
- *     # Optional: path to CCS rules config
  *     value: /path/to/ccs-rules.yaml
- *     # Optional: treat CCS findings as PASS (for red-teaming)
  *     inverse: false
  * ```
- * 
- * Requires: `pip install correctover` or `ccs` CLI in PATH.
- * If CCS is not installed, the assertion gracefully passes with a notice.
+ *
+ * Requires: pip install correctover. If CCS is not installed,
+ * the assertion gracefully passes with a notice.
  */
 export const handleCorrectover = async ({
   assertion,
   inverse,
   providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
-  const input = typeof providerResponse.output === 'string' 
-    ? providerResponse.output 
+  const input = typeof providerResponse.output === 'string'
+    ? providerResponse.output
     : JSON.stringify(providerResponse.output || '');
 
   if (!input || input === '""') {
@@ -40,8 +38,6 @@ export const handleCorrectover = async ({
   }
 
   try {
-    const { execSync } = require('child_process');
-    
     let result;
     try {
       result = execSync('ccs scan --format json --input -', {
@@ -52,7 +48,7 @@ export const handleCorrectover = async ({
         stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch (execError: any) {
-      if (execError.stderr?.includes('command not found') || 
+      if (execError.stderr?.includes('command not found') ||
           execError.stderr?.includes('No such file') ||
           execError.code === 'ENOENT') {
         return {
@@ -62,20 +58,16 @@ export const handleCorrectover = async ({
           assertion,
         };
       }
-      // CCS ran but found issues (exit code 1)
       result = execError.stdout || '';
     }
 
     const output = (result || '').toString().trim();
-    
     let findings: any[];
     try {
       findings = JSON.parse(output);
     } catch {
-      // If output isn't parseable JSON, check for textual findings
       findings = output ? [{ rule: 'ccs-scan', detail: output.substring(0, 200) }] : [];
     }
-
     if (!Array.isArray(findings)) {
       findings = findings ? [findings] : [];
     }
@@ -85,16 +77,16 @@ export const handleCorrectover = async ({
 
     if (hasFindings) {
       const ruleSummary = findings.map((f: any) => f.rule || f.id || 'unknown').join(', ');
-      const detail = findings.map((f: any) => 
-        `${f.rule || f.id || 'unknown'}: ${f.detail || f.message || 'no details'}`
+      const detail = findings.map((f: any) =>
+        (f.rule || f.id || 'unknown') + ': ' + (f.detail || f.message || 'no details')
       ).join('; ');
 
       return {
         pass,
         score: pass ? 1 : 0,
-        reason: pass 
-          ? `CCS confirmed: ${findings.length} issue(s) detected [${ruleSummary}]`
-          : `CCS detected ${findings.length} issue(s): ${detail}`,
+        reason: pass
+          ? 'CCS confirmed: ' + findings.length + ' issue(s) detected [' + ruleSummary + ']'
+          : 'CCS detected ' + findings.length + ' issue(s): ' + detail,
         assertion,
       };
     }
@@ -106,11 +98,11 @@ export const handleCorrectover = async ({
       assertion,
     };
   } catch (err: any) {
-    logger.warn(`Correctover CCS assertion error: ${err.message}`);
+    logger.warn('Correctover CCS assertion error: ' + err.message);
     return {
       pass: true,
       score: 1,
-      reason: `CCS assertion error (graceful skip): ${err.message}`,
+      reason: 'CCS assertion error (graceful skip): ' + err.message,
       assertion,
     };
   }
