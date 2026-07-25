@@ -1,5 +1,6 @@
-import { WebClient } from '@slack/web-api';
+import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/web-api';
 import logger from '../logger';
+import { fetchWithProxy } from '../util/fetch/index';
 
 import type {
   ApiProvider,
@@ -59,7 +60,9 @@ export class SlackProvider implements ApiProvider {
       throw new Error('Slack provider requires a channel ID');
     }
 
-    this.client = new WebClient(token);
+    this.client = new WebClient(token, {
+      fetch: (url, options) => fetchWithProxy(url.toString(), options),
+    });
   }
 
   id(): string {
@@ -139,11 +142,15 @@ export class SlackProvider implements ApiProvider {
         output: responseText,
         metadata: responseMetadata,
       };
-    } catch (error: any) {
+    } catch (error) {
       logger.error(`Slack provider error: ${error}`);
 
+      if (error instanceof WebAPIRateLimitedError) {
+        return { error: 'Slack API rate limit exceeded. Please try again later.' };
+      }
+
       // Handle specific Slack API errors
-      if (error?.data?.error) {
+      if (error instanceof WebAPIPlatformError) {
         const slackError = error.data.error;
         switch (slackError) {
           case 'channel_not_found':
