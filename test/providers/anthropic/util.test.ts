@@ -8,8 +8,6 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
   isClaudeOpus5Model,
-  isClaudeOpus47Model,
-  isClaudeOpus48Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
   isDisabledThinkingRejectedAtEffort,
@@ -1936,25 +1934,31 @@ describe('Anthropic utilities', () => {
         'jp.anthropic.claude-opus-4-8',
         'global.anthropic.claude-opus-4-8',
       ]) {
-        expect(isClaudeOpus48Model(id)).toBe(true);
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+        expect(getClaudeModelWarningName(id)).toBe('Claude Opus 4.7 and 4.8');
       }
     });
 
     it('does not treat other models as Opus 4.8', () => {
+      // The 4.7/4.8 family must not claim these. 4.7 shares 4.8's warning name, so it is
+      // checked via the pattern boundary below rather than by warning name.
       for (const id of [
-        'claude-opus-4-7',
         'claude-opus-4-6',
         'claude-sonnet-4-6',
         // Boundary: a hypothetical higher-numbered "4.80" must not match "4.8".
         'claude-opus-4-80',
       ]) {
-        expect(isClaudeOpus48Model(id)).toBe(false);
+        expect(getClaudeModelWarningName(id)).not.toBe('Claude Opus 4.7 and 4.8');
       }
+      // `claude-opus-4-80` is not a recognized family at all, and keeps sampling params.
+      expect(getClaudeModelWarningName('claude-opus-4-80')).toBeUndefined();
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-80')).toBe(false);
     });
 
     it('still detects dated Opus 4.8 snapshots', () => {
       // A trailing date/region suffix is a real, supported form and must match.
-      expect(isClaudeOpus48Model('claude-opus-4-8-20260528')).toBe(true);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8-20260528')).toBe(true);
+      expect(getClaudeModelWarningName('claude-opus-4-8-20260528')).toBe('Claude Opus 4.7 and 4.8');
     });
 
     it('treats both Opus 4.7 and 4.8 as temperature-deprecated', () => {
@@ -1962,8 +1966,6 @@ describe('Anthropic utilities', () => {
       expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-7-20260416')).toBe(true);
       expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-8')).toBe(true);
       expect(isSamplingParamsDeprecatedClaudeModel('us.anthropic.claude-opus-4-8')).toBe(true);
-      // The 4.7-only predicate stays scoped to 4.7.
-      expect(isClaudeOpus47Model('claude-opus-4-8')).toBe(false);
     });
 
     it('detects Fable 5 and Mythos 5 across provider naming schemes', () => {

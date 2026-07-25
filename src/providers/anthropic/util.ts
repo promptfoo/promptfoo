@@ -289,16 +289,6 @@ function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boo
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
 
-/** Matches Claude Opus 4.7 model IDs (see the pattern constants above for boundary rules). */
-export function isClaudeOpus47Model(modelId: string): boolean {
-  return CLAUDE_OPUS_47_PATTERN.test(modelId);
-}
-
-/** Matches Claude Opus 4.8 model IDs. */
-export function isClaudeOpus48Model(modelId: string): boolean {
-  return CLAUDE_OPUS_48_PATTERN.test(modelId);
-}
-
 /** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, not `claude-opus-50`). */
 export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
