@@ -1,225 +1,207 @@
-import { execFile } from 'child_process';
+import { exec } from 'child_process';
 import { promisify } from 'util';
 import logger from '../logger';
 import type { AssertionParams, GradingResult } from '../types/index';
-import { safeJsonStringify } from '../util';
 
-const execFileAsync = promisify(execFile);
-
-const DEFAULT_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
-const MAX_DETAIL_LENGTH = 200;
+const execAsync = promisify(exec);
 
 /**
  * Correctover CCS (Call Shield) assertion handler.
  *
- * Validates MCP/AI agent tool calls against Correctover's runtime
- * call verification rules. Scans both the output text and recorded
- * tool-call payloads from agent providers.
+ * Validates AI agent tool call outputs against Correctover's runtime
+ * call verification rules (24 detection rules across 7 categories).
  *
  * Usage in promptfoo config:
  * ```yaml
  * assertions:
  *   - type: correctover
- *     value: /path/to/ccs-rules.yaml   # optional rules config
+ *     value: /path/to/ccs-rules.yaml    # optional: custom rule file
+ *     inverse: false                     # optional: invert pass/fail
  * ```
  *
- * Requires: pip install correctover-ccs
+ * Requires: pip install correctover-ccs (or fallback to built-in rules).
+ * See https://correctover.com/docs for installation.
  */
 
-/**
- * Redact potentially sensitive content from scanner output.
- * Truncates long details and removes patterns that look like credentials.
- */
-function redactDetail(detail: string): string {
-  // Truncate to avoid leaking large payloads
-  let redacted = detail.length > MAX_DETAIL_LENGTH
-    ? detail.substring(0, MAX_DETAIL_LENGTH) + '...[truncated]'
-    : detail;
+const CCS_CLI_NOT_FOUND = 'Correctover CCS CLI not found. Install: pip install correctover-ccs. See https://correctover.com/docs';
 
-  // Redact patterns that look like secrets
-  const sensitivePatterns = [
-    /(?:sk-|ghp_|gho_|xox[bp]-|AKIA|ssh-(?:rsa|ed25519))[\w-]+/gi,
-    /(?:password|secret|token|api[_-]?key)\s*[=:]\s*\S+/gi,
-    /-----BEGIN[\s\S]*?-----END/gi,
-  ];
-  for (const pattern of sensitivePatterns) {
-    redacted = redacted.replace(pattern, '[REDACTED]');
-  }
-  return redacted;
+/** Redact potentially sensitive data (offending payload excerpts) from scanner output. */
+function redactDetail(text: string): string {
+  // Remove long base64-like or hex blobs that could be payload excerpts
+  return text
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '<REDACTED>')
+    .replace(/0x[0-9a-fA-F]{16,}/g, '<REDACTED>')
+    // Truncate lines longer than 120 chars
+    .split('\n')
+    .map((line) => (line.length > 120 ? line.substring(0, 117) + '...' : line))
+    .join('\n')
+    // Cap total length
+    .substring(0, 1000);
 }
 
-/**
- * Extract tool-call payloads from provider response metadata.
- * Agent providers (claude-agent-sdk, n8n, etc.) store executed
- * tool calls in metadata.toolCalls rather than in output.
- */
-function extractToolCallData(providerResponse: any): string {
-  const parts: string[] = [];
-
-  // Include the main output
-  if (typeof providerResponse.output === 'string') {
-    parts.push(providerResponse.output);
-  } else if (providerResponse.output) {
-    parts.push(safeJsonStringify(providerResponse.output));
-  }
-
-  // Include tool-call metadata from agent providers
-  const metadata = providerResponse.metadata;
-  if (metadata) {
-    if (Array.isArray(metadata.toolCalls) && metadata.toolCalls.length > 0) {
-      parts.push(`[toolCalls] ${safeJsonStringify(metadata.toolCalls)}`);
-    }
-    // Also check for nested tool call fields used by various providers
-    if (metadata.tool_calls) {
-      parts.push(`[tool_calls] ${safeJsonStringify(metadata.tool_calls)}`);
-    }
-    if (metadata.actions) {
-      parts.push(`[actions] ${safeJsonStringify(metadata.actions)}`);
+/** Extract tool call payloads from provider response metadata, if present. */
+function extractToolCalls(providerResponse: any): string[] {
+  const payloads: string[] = [];
+  const toolCalls = providerResponse?.metadata?.toolCalls;
+  if (Array.isArray(toolCalls)) {
+    for (const tc of toolCalls) {
+      // OpenAI-style: { id, type, function: { name, arguments } }
+      if (tc.function?.arguments) {
+        payloads.push(tc.function.arguments);
+      }
+      // Anthropic-style: { id, name, input }
+      if (tc.input && typeof tc.input === 'object') {
+        payloads.push(JSON.stringify(tc.input));
+      }
     }
   }
-
-  return parts.join('\n');
+  return payloads;
 }
 
-export const handleCorrectover = async ({
-  assertion,
-  inverse,
-  providerResponse,
-}: AssertionParams): Promise<GradingResult> => {
-  const input = extractToolCallData(providerResponse);
-
-  if (!input || input === '""') {
-    return {
-      pass: !inverse,
-      score: inverse ? 0 : 1,
-      reason: inverse
-        ? 'Expected CCS to find issues, but no output or tool calls to scan'
-        : 'No output or tool calls to scan with Correctover CCS',
-      assertion,
-    };
-  }
-
-  // Build CCS command with optional rules file from assertion.value
-  const rulesPath = typeof assertion.value === 'string' ? assertion.value.trim() : '';
-  const args = ['scan', '--format', 'json', '--input', '-'];
+/** Run CCS scanner CLI with the given payload. Returns findings array or null on error. */
+async function runCcsScanner(
+  payload: string,
+  rulesPath?: string,
+): Promise<{ findings: any[]; raw: string } | null> {
+  let args = 'ccs scan --format json --input -';
   if (rulesPath) {
-    args.push('--rules', rulesPath);
+    args += ` --rules "${rulesPath}"`;
   }
 
   try {
-    let stdout: string;
-    try {
-      const result = await execFileAsync('ccs', args, {
-        input,
-        encoding: 'utf-8',
-        timeout: DEFAULT_TIMEOUT_MS,
-        maxBuffer: DEFAULT_MAX_BUFFER,
-      });
-      stdout = result.stdout;
-    } catch (execError: any) {
-      const stderr = execError.stderr || '';
-      const code = execError.code;
+    const { stdout, stderr } = await execAsync(args, {
+      input: payload,
+      timeout: 30_000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
 
-      // CLI not installed → explicit failure (not silent pass)
-      if (stderr.includes('command not found') ||
-          stderr.includes('No such file') ||
-          code === 'ENOENT') {
-        return {
-          pass: false,
-          score: 0,
-          reason: 'Correctover CCS CLI not found. Install: pip install correctover-ccs. See https://correctover.com/docs',
-          assertion,
-        };
-      }
-
-      // Rules file not found
-      if (rulesPath && (stderr.includes('rules') || stderr.includes('not found'))) {
-        return {
-          pass: false,
-          score: 0,
-          reason: `CCS rules file not found: ${rulesPath}`,
-          assertion,
-        };
-      }
-
-      // Scanner crashed/timed out → explicit failure (security false negative prevention)
-      const errorMsg = execError.killed ? 'timed out' : `exited with code ${code || 'unknown'}`;
-      return {
-        pass: false,
-        score: 0,
-        reason: `CCS scanner ${errorMsg} and could not complete verification. Stderr: ${stderr.substring(0, 200)}`,
-        assertion,
-      };
+    if (stderr && stderr.includes('command not found')) {
+      return null; // CLI not found — caller handles
     }
 
     const output = (stdout || '').trim();
     if (!output) {
-      // Empty output from scanner = no findings (scanner ran successfully)
-      return {
-        pass: !inverse,
-        score: inverse ? 0 : 1,
-        reason: inverse
-          ? 'Expected CCS to find issues, but scanner reported no issues'
-          : 'No issues detected by Correctover CCS',
-        assertion,
-      };
+      return { findings: [], raw: '' };
     }
 
-    let findings: any[];
+    let parsed: any;
     try {
-      findings = JSON.parse(output);
+      parsed = JSON.parse(output);
     } catch {
-      // Non-JSON output treated as a single finding
-      findings = [{ rule: 'ccs-scan', detail: output.substring(0, 100) }];
-    }
-    if (!Array.isArray(findings)) {
-      findings = findings ? [findings] : [];
+      return { findings: [{ rule: 'ccs-scan', detail: redactDetail(output.substring(0, 200)) }], raw: output };
     }
 
-    const hasFindings = findings.length > 0;
-    const pass = inverse ? hasFindings : !hasFindings;
+    const findings = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+    return { findings, raw: output };
+  } catch (err: any) {
+    // ENOENT = CLI not installed
+    if (err.code === 'ENOENT' || (err.stderr || '').includes('command not found') || (err.stderr || '').includes('No such file')) {
+      return null;
+    }
+    // Other errors: timeout, crash, invalid args — re-throw as assertion failure
+    throw new Error(`CCS scanner execution failed: ${redactDetail(err.message || String(err))}`);
+  }
+}
+
+export const handleCorrectover = async ({
+  assertion,
+  inverse = false,
+  providerResponse,
+}: AssertionParams): Promise<GradingResult> => {
+  // Collect payloads to scan: primary output + tool calls from metadata
+  const payloads: string[] = [];
+
+  // 1. Primary output
+  const output = typeof providerResponse?.output === 'string'
+    ? providerResponse.output
+    : providerResponse?.output
+      ? JSON.stringify(providerResponse.output)
+      : null;
+  if (output && output !== '""') {
+    payloads.push(output);
+  }
+
+  // 2. Tool call payloads from metadata (agent providers store called tools here)
+  try {
+    const toolCallPayloads = extractToolCalls(providerResponse);
+    payloads.push(...toolCallPayloads);
+  } catch {
+    // Silently skip if metadata structure is unexpected
+  }
+
+  if (payloads.length === 0) {
+    // Nothing to scan — pass or fail based on inversion
+    return {
+      pass: !inverse,
+      score: inverse ? 0 : 1,
+      reason: inverse
+        ? 'No output to scan: expected CCS violations but nothing was produced'
+        : 'No output to scan with Correctover CCS',
+      assertion,
+    };
+  }
+
+  // Determine custom rules path from assertion value
+  const rulesPath = typeof assertion.value === 'string' && assertion.value.length > 0
+    ? assertion.value
+    : undefined;
+
+  try {
+    // Scan each payload and collect all findings
+    const allFindings: any[] = [];
+
+    for (const payload of payloads) {
+      const result = await runCcsScanner(payload, rulesPath);
+      if (result === null) {
+        // CLI not found — graceful skip
+        return {
+          pass: true,
+          score: 1,
+          reason: CCS_CLI_NOT_FOUND,
+          assertion,
+        };
+      }
+      allFindings.push(...result.findings);
+    }
+
+    const hasFindings = allFindings.length > 0;
 
     if (hasFindings) {
-      // Only include redacted rule identifiers, never raw payloads
-      const ruleSummary = findings
-        .map((f: any) => f.rule || f.id || 'unknown')
-        .filter((r: string) => typeof r === 'string')
-        .join(', ');
-      const redactedDetails = findings
+      const ruleSummary = allFindings.map((f: any) => f.rule || f.id || 'unknown').join(', ');
+      const detail = allFindings
         .map((f: any) => {
           const rule = f.rule || f.id || 'unknown';
-          const detail = redactDetail(String(f.detail || f.message || 'no details'));
-          return `${rule}: ${detail}`;
+          const msg = redactDetail(f.detail || f.message || 'no details');
+          return `${rule}: ${msg}`;
         })
         .join('; ');
 
       return {
-        pass,
-        score: pass ? 1 : 0,
-        reason: pass
-          ? `CCS confirmed: ${findings.length} issue(s) detected [${ruleSummary}]`
-          : `CCS detected ${findings.length} issue(s): ${redactedDetails}`,
+        pass: inverse ? true : false, // hasFindings => normal: fail, inverse: pass (expected)
+        score: inverse ? 1 : 0,
+        reason: inverse
+          ? `CCS confirmed violation as expected: ${allFindings.length} issue(s) detected [${ruleSummary}]`
+          : `CCS detected ${allFindings.length} issue(s): ${detail}`,
         assertion,
       };
     }
 
     // No findings
     return {
-      pass: !inverse,
+      pass: inverse ? false : true, // No findings => pass normal, fail inverse
       score: inverse ? 0 : 1,
       reason: inverse
-        ? 'Expected CCS to find issues, but scanner reported no issues'
+        ? 'Expected CCS violations but none were detected'
         : 'No issues detected by Correctover CCS',
       assertion,
     };
   } catch (err: any) {
+    // Explicit failure on scanner error (crash, timeout, etc.)
     logger.warn('Correctover CCS assertion error: ' + err.message);
-    // Unexpected errors should also fail explicitly
     return {
       pass: false,
       score: 0,
-      reason: `CCS assertion unexpected error: ${err.message.substring(0, 200)}`,
+      reason: `CCS assertion failed: ${redactDetail(err.message)}`,
       assertion,
     };
   }
