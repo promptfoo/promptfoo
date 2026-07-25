@@ -679,8 +679,14 @@ function createRunEvalState({
   const vars = structuredClone(test.vars || {});
   const fileMetadata = collectFileMetadata(vars);
   // Provider identifiers and prompt ids can both collide, but every result-table
-  // column has a unique index. Include it so separate columns never share history.
-  const conversationKey = `${provider.label || provider.id()}:${prompt.id}:${promptIndex}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
+  // column has a unique index. Encode the components as a tuple because identifiers
+  // can contain separators that would make concatenated keys ambiguous.
+  const conversationKey = JSON.stringify([
+    getProviderIdentifier(provider),
+    prompt.id,
+    promptIndex,
+    test.metadata?.conversationId,
+  ]);
 
   const setup = createRunEvalSetup({
     provider,
