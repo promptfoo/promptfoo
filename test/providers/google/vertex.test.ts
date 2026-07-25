@@ -2659,6 +2659,71 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
   it.each([
     {
+      label: 'omits sampling params and converts manual thinking to adaptive',
+      config: {
+        max_tokens: 32,
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+        thinking: { type: 'enabled' as const, budget_tokens: 1024 },
+      },
+      expectedThinking: { type: 'adaptive' },
+    },
+    {
+      label: 'keeps thinking disabled (the Vertex Claude path does not forward effort)',
+      config: { max_tokens: 32, thinking: { type: 'disabled' as const } },
+      expectedThinking: { type: 'disabled' },
+    },
+    {
+      // The disabled+xhigh 400 is only reachable where `output_config.effort` is actually
+      // sent, which today is the Anthropic Messages provider alone. Vertex drops `effort`
+      // on the floor, so the API sees the default effort (`high`) and `disabled` is valid —
+      // dropping it here would needlessly turn thinking back on.
+      label: 'keeps thinking disabled even when effort is configured (effort is not sent)',
+      config: { max_tokens: 32, thinking: { type: 'disabled' as const }, effort: 'xhigh' },
+      expectedThinking: { type: 'disabled' },
+    },
+  ])('Claude Opus 5 on Vertex $label', async ({ config, expectedThinking }) => {
+    provider = new VertexChatProvider('claude-opus-5', { config });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    // Opus 5 inherits the Opus 4.7+ sampling-param deprecation on every provider path.
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
+    expect(sentBody.thinking).toEqual(expectedThinking);
+  });
+
+  it.each([
+    {
       name: 'at the 200K boundary',
       region: 'global',
       inputTokens: 200_000,
