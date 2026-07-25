@@ -348,7 +348,21 @@ describe('runEval', () => {
     ]);
   });
 
-  it('keeps colon-delimited prompt and conversation identifiers from colliding', async () => {
+  it.each([
+    {
+      description: 'legacy provider, prompt, and conversation keys',
+      conversationId: '1:shared',
+      promptIdx: 0,
+    },
+    {
+      description: 'column-aware conversation keys',
+      conversationId: '0:shared',
+      promptIdx: 1,
+    },
+  ])('keeps colon-delimited identifiers from colliding for $description', async ({
+    conversationId,
+    promptIdx,
+  }) => {
     const conversations = {};
     const promptTemplate =
       '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ turn }}';
@@ -364,10 +378,10 @@ describe('runEval', () => {
 
     await runEval({
       ...defaultOptions,
-      promptIdx: 1,
+      promptIdx,
       provider: mockProvider,
       prompt: { raw: promptTemplate, label: 'second prompt', id: 'prompt' },
-      test: { metadata: { conversationId: '0:shared' }, vars: { turn: 'second' } },
+      test: { metadata: { conversationId }, vars: { turn: 'second' } },
       conversations,
       registers: {},
     });
