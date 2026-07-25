@@ -569,8 +569,9 @@ handles for you:
 Opus 5 uses a 1M-token context window (both the default and the maximum) billed at a flat
 **$5 per million input / $25 per million output** — the same list rates as Opus 4.8, with no
 long-context surcharge above 200K tokens. Anthropic's fast mode ($10 / $50, Claude API only)
-is a separate research-preview rate that promptfoo does not encode; set an explicit `cost` in
-your provider config if you need to track it.
+is a separate research-preview rate that promptfoo does not encode. To track it, set
+`inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
+rates, because it is applied as both the input and the output per-token price.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -596,7 +597,7 @@ controls at the model level:
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
 
-Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set an explicit `cost` in your provider config if you want to track the introductory rate.
+Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set `inputCost: 2 / 1e6` and `outputCost: 10 / 1e6` to track the introductory rate (a single `cost` is applied as both the input and output rate, so it cannot express the two).
 
 ### Claude Opus 4.8 notes
 

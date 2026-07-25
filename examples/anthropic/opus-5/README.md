@@ -24,7 +24,7 @@ Both run at two effort levels so you can see the cost/quality tradeoff on your o
 - **Disabling thinking is effort-gated.** `thinking: { type: disabled }` is only accepted at `effort` `high` or below — pairing it with `xhigh` or `max` returns a 400. Promptfoo drops the rejected `disabled` (keeping your `effort`) and warns once; lower `effort` to `high` if you need thinking off.
 - **`effort` is the main cost lever.** Opus 5 supports `low`, `medium`, `high`, `xhigh`, and `max`. Start at `xhigh` for coding and agentic work, then sweep downward — `low` and `medium` are unusually strong on this model.
 - **Sampling controls are managed for you.** Opus 5 rejects `temperature`, `top_p`, and `top_k` at the model level; promptfoo omits them automatically (don't set them in config).
-- **Pricing.** $5/$25 per million input/output tokens — the same as Opus 4.8. The full 1M-token context bills at the standard rate (no long-context surcharge). Fast mode ($10/$50, Claude API only) is not encoded in promptfoo's cost calculation; set an explicit `cost` if you need to track it.
+- **Pricing.** $5/$25 per million input/output tokens — the same as Opus 4.8. The full 1M-token context bills at the standard rate (no long-context surcharge). Fast mode ($10/$50, Claude API only) is not encoded in promptfoo's cost calculation; set `inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` to track it (a single `cost` is applied as both rates).
 
 ## Running the Example
 

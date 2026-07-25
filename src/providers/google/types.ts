@@ -185,6 +185,7 @@ export interface CompletionOptions {
   top_k?: number; // Alternative format for Claude models
   thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
   showThinking?: boolean; // Whether to include thinking output for Claude models
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // Reasoning depth for Claude models
 
   // Imagen image generation options
   n?: number; // Number of images to generate
@@ -490,6 +491,7 @@ export interface ClaudeRequest {
   top_k?: number;
   system?: Array<{ type: string; text: string }>;
   thinking?: ClaudeThinkingConfig;
+  output_config?: { effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max' };
   messages: ClaudeMessage[];
 }
 

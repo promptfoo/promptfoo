@@ -8,6 +8,7 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
@@ -1599,12 +1600,18 @@ export const BEDROCK_MODEL = {
         undefined,
         'bedrock-2023-05-31',
       );
+      // Models that think by default (Opus 5) spend part of max_tokens on thinking even
+      // when the request carries no `thinking` field, so the bare 1024 default truncates
+      // ordinary answers. Give those the same headroom the Anthropic Messages path uses.
+      const thinksByDefault = modelName
+        ? isThinkingOnByDefaultClaudeModel(modelName) && config?.thinking?.type !== 'disabled'
+        : false;
       addConfigParam(
         params,
         'max_tokens',
         config?.max_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        1024,
+        thinksByDefault ? 2048 : 1024,
       );
       // Newer Claude models deprecate manual sampling controls at the model
       // level — Bedrock relays the resulting 400 as a ValidationException. Drop

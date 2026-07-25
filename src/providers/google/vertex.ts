@@ -20,6 +20,7 @@ import {
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
@@ -340,18 +341,25 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const effort = this.config.effort;
     const thinkingConfig: ClaudeThinkingConfig | undefined = normalizeClaudeThinkingConfig(
       this.modelName,
       requestedThinkingConfig,
+      effort,
     );
     const isThinkingEnabled =
       alwaysOnAdaptiveThinking ||
       thinkingConfig?.type === 'enabled' ||
       thinkingConfig?.type === 'adaptive';
+    // Opus 5 runs adaptive thinking even with no `thinking` field, and thinking shares the
+    // max_tokens budget with the answer — so the 512 default would truncate ordinary replies.
+    const thinkingConsumesTokens =
+      isThinkingEnabled ||
+      (thinkingConfig == null && isThinkingOnByDefaultClaudeModel(this.modelName));
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
-      maxTokens = isThinkingEnabled ? 2048 : 512;
+      maxTokens = thinkingConsumesTokens ? 2048 : 512;
     }
     // Claude requires max_tokens >= budget_tokens when thinking is enabled
     if (
@@ -384,6 +392,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
       top_k: resolvedTopK,
       ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
+      // Claude on Vertex accepts output_config.effort the same way the Anthropic API does;
+      // without this an `effort` in config was silently dropped and every request ran at the
+      // service default, quietly invalidating effort sweeps.
+      ...(effort ? { output_config: { effort } } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 

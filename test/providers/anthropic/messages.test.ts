@@ -3217,6 +3217,54 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.max_tokens).toBe(2048);
     });
 
+    it('keeps a forced tool_choice on Opus 5 even though it thinks by default', async () => {
+      // Regression: thinks-by-default must NOT count as "thinking enabled" for the forced
+      // tool_choice suppression. Verified against the live API that adaptive thinking and a
+      // forced tool_choice are compatible on Opus 5, so dropping tool_choice here would
+      // silently change what the user asked for.
+      const provider = createProvider('claude-opus-5', {
+        config: {
+          tool_choice: { type: 'any' },
+          tools: [
+            { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
+          ],
+        },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as {
+        tool_choice?: { type?: string };
+        max_tokens?: number;
+      };
+      expect(params.tool_choice).toEqual({ type: 'any' });
+      // ...while still getting the thinking headroom on max_tokens.
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it('still drops a forced tool_choice when thinking is explicitly enabled', async () => {
+      const provider = createProvider('claude-opus-4-6', {
+        config: {
+          thinking: { type: 'adaptive' },
+          tool_choice: { type: 'any' },
+          tools: [
+            { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
+          ],
+        },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
+      expect(params.tool_choice).toBeUndefined();
+    });
+
     it('uses the non-thinking default max_tokens on Opus 4.8 when thinking is unset', async () => {
       // Regression guard: 4.8 does NOT think by default, so the smaller default still applies.
       const provider = createProvider('claude-opus-4-8', { config: {} });

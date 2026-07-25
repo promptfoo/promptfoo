@@ -676,6 +676,48 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
+      // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
+      // `thinking` field, so the bare 1024 default would truncate ordinary answers.
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it('keeps the 1024 default for Opus 5 when thinking is explicitly disabled', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(1024);
+    });
+
+    it('keeps the 1024 default for models that do not think by default', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-4-8',
+      );
+      expect(params.max_tokens).toBe(1024);
+    });
+
+    it('lets an explicit max_tokens win over the thinking headroom default', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', max_tokens: 77 },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(77);
+    });
+
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',

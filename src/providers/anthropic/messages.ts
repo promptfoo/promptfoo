@@ -589,7 +589,18 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     },
   ): {
     thinking: Anthropic.Messages.ThinkingConfigParam | undefined;
+    /**
+     * Thinking was explicitly turned on (or is always on). Gates the legacy
+     * extended-thinking incompatibilities — forced `tool_choice`, `top_p` clamping,
+     * `top_k`/`temperature` omission.
+     */
     thinkingEnabled: boolean;
+    /**
+     * Thinking will consume output tokens, including the Opus 5 case where an omitted
+     * `thinking` field still runs adaptive. Only used to size the default `max_tokens`:
+     * a request that thinks by default needs headroom or it truncates mid-answer.
+     */
+    thinkingConsumesTokens: boolean;
   } {
     const { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
 
@@ -619,11 +630,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort) as
       | Anthropic.Messages.ThinkingConfigParam
       | undefined;
-    const thinkingEnabled =
-      alwaysOnAdaptiveThinking ||
-      (resolved == null && isThinkingOnByDefaultClaudeModel(this.modelName)) ||
-      isThinkingEnabled(resolved);
-    return { thinking: resolved, thinkingEnabled };
+    const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolved);
+    // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
+    // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
+    // thinks-by-default as "thinking enabled" would silently drop a user's tool_choice.
+    const thinkingConsumesTokens =
+      thinkingEnabled || (resolved == null && isThinkingOnByDefaultClaudeModel(this.modelName));
+    return { thinking: resolved, thinkingEnabled, thinkingConsumesTokens };
   }
 
   /**
@@ -712,7 +725,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
-    const { thinking: resolvedThinking, thinkingEnabled } = this.resolveModelThinking(
+    const {
+      thinking: resolvedThinking,
+      thinkingEnabled,
+      thinkingConsumesTokens,
+    } = this.resolveModelThinking(
       // Provider config wins over a thinking block embedded in the prompt.
       config.thinking ?? thinking,
       config.effort,
@@ -828,7 +845,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       model: this.modelName,
       ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
       max_tokens:
-        config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
+        config.max_tokens ??
+        getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingConsumesTokens ? 2048 : 1024),
       messages: extractedMessages,
       stream: shouldStream,
       ...(omitTemperature
