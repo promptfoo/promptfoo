@@ -90,7 +90,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
-  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+  # Qualify release tags as refs/tags/<tag>. actions/checkout resolves a bare ref as a
+  # branch before a tag, so an unqualified version like "0.120.0" would publish the
+  # contents of a same-named branch under that immutable release tag if one ever existed.
+  SOURCE_REF: ${{ inputs.tag_name && format('refs/tags/{0}', inputs.tag_name) || github.event.release.tag_name && format('refs/tags/{0}', github.event.release.tag_name) || github.ref }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
   LEGACY_BACKFILL: ${{ github.event_name == 'workflow_dispatch' && inputs.legacy_backfill && 'true' || 'false' }}
