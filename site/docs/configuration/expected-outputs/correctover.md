@@ -40,25 +40,27 @@ assertions:
 
 The assertion handler:
 
-1. Extracts tool call data from the provider response, including both the output text and any recorded tool-call metadata (e.g., `metadata.toolCalls` from agent providers like Claude Agent SDK and n8n).
-2. Sends the combined payload to the CCS CLI for scanning.
-3. Parses the JSON output and determines pass/fail based on whether violations were found.
+1. Extracts data from the provider response, including the output text and any recorded tool-call metadata.
+2. If a `transform` function is configured on the assertion, the post-transform output is also scanned separately.
+3. Sends each payload to the CCS CLI for scanning.
+4. Parses the JSON output and determines pass/fail based on whether violations were found.
 
 ### Scan Coverage
 
 | Data Source | Description |
 |-------------|-------------|
 | `providerResponse.output` | The final text output from the agent |
-| `providerResponse.metadata.toolCalls` | Recorded tool calls from agent providers |
-| `providerResponse.metadata.tool_calls` | Alternative tool call field |
-| `providerResponse.metadata.actions` | Action records from some providers |
+| Transformed output | Post-transform output if the assertion defines a `transform` function |
+| `metadata.toolCalls` | Recorded tool calls from agent providers (Claude Agent SDK, n8n, ElevenLabs, etc.) |
+| `metadata.toolArgs` | Direct tool arguments from MCP provider |
+| `metadata.originalPayload` | Original payload from MCP provider |
 
 ## Behavior
 
 ### Pass/Fail Logic
 
 | Mode | CCS finds issues | CCS finds no issues | CCS error |
-|------|-----------------|--------------------|-----------| 
+|------|-----------------|--------------------|-----------|
 | `correctover` | FAIL | PASS | FAIL |
 | `not-correctover` | PASS | FAIL | FAIL |
 
@@ -70,7 +72,7 @@ The assertion handler:
 
 ### Security
 
-All finding details in assertion reasons are automatically redacted to prevent credential leakage in logs and reports. Patterns matching API keys, tokens, and private keys are replaced with `[REDACTED]`.
+All finding details in assertion reasons are automatically redacted to prevent credential leakage in logs and reports. Patterns matching API keys, tokens, and private keys are replaced with `<REDACTED>`.
 
 ## Performance
 
