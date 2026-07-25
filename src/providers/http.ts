@@ -7,7 +7,7 @@ import path from 'path';
 import httpZ from 'http-z';
 import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -35,6 +35,14 @@ import {
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  estimateProviderStreamingTokensPerSecond,
+  fetchProviderWithRetries,
+  type ProviderFirstTokenDetector,
+  type ProviderStreamFormat,
+  type ProviderStreamingMetrics,
+  processProviderStreamingResponse,
+} from './fetch';
 import {
   HttpMultipartConfigSchema,
   type RenderedHttpMultipartBody,
@@ -928,6 +936,28 @@ export const HttpProviderConfigSchema = z.object({
   stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
+  /**
+   * Select a built-in text content-token detector for TTFT measurement. When
+   * set, TTFT stamps the first time a text content token (not framing
+   * metadata) arrives on the stream. Audio stream latency is not measured by
+   * these detectors.
+   *
+   * - `openai-chat`: OpenAI `/v1/chat/completions` SSE
+   * - `openai-responses`: OpenAI `/v1/responses` SSE
+   * - `anthropic-messages`: Anthropic `/v1/messages` SSE
+   *
+   * If not set, TTFT falls back to "time to first non-whitespace body byte"
+   * (the format-agnostic wire-level proxy). `streamFirstTokenPattern`
+   * takes precedence when both are specified.
+   */
+  streamFormat: z.enum(['openai-chat', 'openai-responses', 'anthropic-messages']).optional(),
+  /**
+   * Advanced override: a regex source string used to identify the first
+   * content token when `streamFormat` doesn't cover your endpoint. Evaluated
+   * against the most recent 64 KiB of stream text to bound matching work.
+   * Takes precedence over `streamFormat`.
+   */
+  streamFirstTokenPattern: z.string().optional(),
   url: z.string().optional(),
   validateStatus: z
     .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
@@ -1873,6 +1903,40 @@ async function createHttpsAgent(
     .compose(stripDecompressionHeaders());
 }
 
+// Streaming responses are never cached, so the wrapper result's delete hook
+// is a no-op. Hoisted so we don't allocate a fresh closure per request.
+const NOOP_DELETE_FROM_CACHE = async () => {};
+const STREAM_FIRST_TOKEN_PATTERN_WINDOW_CHARS = 64 * 1024;
+
+function requestsStreamingTransport(body: unknown): boolean {
+  return (
+    typeof body === 'object' && body !== null && (body as Record<string, unknown>).stream === true
+  );
+}
+
+function buildFirstTokenDetectionOptions(
+  customPattern: string | undefined,
+  format: ProviderStreamFormat | undefined,
+):
+  | {
+      firstTokenDetector?: ProviderFirstTokenDetector;
+      firstTokenDetectorWindowChars?: number;
+      streamFormat?: ProviderStreamFormat;
+    }
+  | undefined {
+  if (customPattern) {
+    const regex = new RegExp(customPattern);
+    return {
+      firstTokenDetector: (accumulatedText) => regex.test(accumulatedText),
+      firstTokenDetectorWindowChars: STREAM_FIRST_TOKEN_PATTERN_WINDOW_CHARS,
+    };
+  }
+  if (format) {
+    return { streamFormat: format };
+  }
+  return undefined;
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1884,6 +1948,11 @@ export class HttpProvider implements ApiProvider {
     (prompt: string, vars: Record<string, any>, context?: CallApiContextParams) => any
   >;
   private validateStatus: Promise<(status: number) => boolean>;
+  private firstTokenDetectionOptions?: {
+    firstTokenDetector?: ProviderFirstTokenDetector;
+    firstTokenDetectorWindowChars?: number;
+    streamFormat?: ProviderStreamFormat;
+  };
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
@@ -1919,6 +1988,13 @@ export class HttpProvider implements ApiProvider {
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
+    // Build TTFT detection options once. A custom regex pattern always wins
+    // over a named preset so users can override ad hoc.
+    this.firstTokenDetectionOptions = buildFirstTokenDetectionOptions(
+      this.config.streamFirstTokenPattern,
+      this.config.streamFormat,
+    );
+
     // Initialize session endpoint parser if session config is provided
     if (this.config.session) {
       this.sessionEndpointParser = createSessionParser(this.config.session.responseParser);
@@ -1947,6 +2023,55 @@ export class HttpProvider implements ApiProvider {
     if (this.config.body) {
       this.config.body = maybeLoadConfigFromExternalFile(this.config.body);
     }
+  }
+
+  // Streaming bypasses the cache so TTFT reflects a live call.
+  private async fetchResponse(
+    url: string,
+    fetchOptions: RequestInit,
+    context: CallApiContextParams | undefined,
+    isStreaming: boolean,
+    multipartBody: boolean = false,
+  ): Promise<{
+    response: FetchWithCacheResult<string>;
+    streamingMetrics?: ProviderStreamingMetrics;
+  }> {
+    if (isStreaming) {
+      const requestStartTime = Date.now();
+      const rawResponse = await fetchProviderWithRetries(
+        url,
+        fetchOptions,
+        getRequestTimeoutMs(),
+        this.config.maxRetries,
+      );
+      const { text, streamingMetrics } = await processProviderStreamingResponse(
+        rawResponse,
+        requestStartTime,
+        this.firstTokenDetectionOptions,
+      );
+
+      const response: FetchWithCacheResult<string> = {
+        data: text,
+        cached: false,
+        status: rawResponse.status,
+        statusText: rawResponse.statusText,
+        headers: Object.fromEntries(rawResponse.headers.entries()),
+        latencyMs: Date.now() - requestStartTime,
+        deleteFromCache: NOOP_DELETE_FROM_CACHE,
+      };
+
+      return { response, streamingMetrics };
+    }
+
+    const response = await fetchWithCache<string>(
+      url,
+      fetchOptions,
+      getRequestTimeoutMs(),
+      'text',
+      multipartBody ? true : (context?.bustCache ?? context?.debug),
+      this.config.maxRetries,
+    );
+    return { response };
   }
 
   id(): string {
@@ -2848,31 +2973,18 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        multipartBody ? true : (context?.bustCache ?? context?.debug),
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+    // Read from rendered body so templated `stream` values are honored.
+    const isStreaming = requestsStreamingTransport(renderedConfig.body);
+
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context,
+      isStreaming,
+      Boolean(multipartBody),
+    );
+
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2914,6 +3026,11 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
+    // Add streaming metrics if available
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
+
     const rawText = data as string;
     let parsedData;
     try {
@@ -2945,6 +3062,10 @@ export class HttpProvider implements ApiProvider {
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
+
+    if (streamingMetrics) {
+      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
+    }
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -3089,31 +3210,26 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
+    // Detect streaming in raw-request mode by parsing the JSON body.
+    // Non-JSON bodies (form-data, x-www-form-urlencoded) cannot express stream:true.
+    let parsedRawBody: unknown;
+    if (bodyContent) {
+      try {
+        parsedRawBody = JSON.parse(bodyContent);
+      } catch {
+        parsedRawBody = undefined;
+      }
     }
+    const isStreaming = requestsStreamingTransport(parsedRawBody);
+
+    const { response, streamingMetrics } = await this.fetchResponse(
+      url,
+      fetchOptions,
+      context,
+      isStreaming,
+    );
+
+    const { data, cached, status, statusText, headers: responseHeaders, latencyMs } = response;
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
@@ -3187,9 +3303,17 @@ export class HttpProvider implements ApiProvider {
       };
     }
 
+    if (streamingMetrics) {
+      ret.streamingMetrics = streamingMetrics;
+    }
+
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
+
+    if (streamingMetrics) {
+      this.populateStreamingCompletionMetrics(streamingMetrics, parsedOutput);
+    }
 
     return this.processResponseWithTokenEstimation(
       ret,
@@ -3211,6 +3335,55 @@ export class HttpProvider implements ApiProvider {
       return parsedOutput.output;
     }
     return rawText;
+  }
+
+  /**
+   * Populate streaming completion metrics only when `transformResponse`
+   * returned a definite completion string. Falling back to raw SSE framing
+   * would overcount by 20-60x for non-string transform outputs.
+   */
+  private populateStreamingCompletionMetrics(
+    streamingMetrics: ProviderStreamingMetrics,
+    parsedOutput: unknown,
+  ): void {
+    // Without an explicit transform, SSE/NDJSON framing is indistinguishable
+    // from a plain-text completion. Leave content-derived metrics unset
+    // rather than reporting protocol bytes as model output.
+    if (!this.config.transformResponse && !this.config.responseParser) {
+      return;
+    }
+
+    const completionText = this.getDefiniteCompletionText(parsedOutput);
+    if (completionText === undefined) {
+      return;
+    }
+    streamingMetrics.completionChars = completionText.length;
+    if (streamingMetrics.multiChunkDelivery) {
+      streamingMetrics.tokensPerSecond = estimateProviderStreamingTokensPerSecond(
+        completionText.length,
+        streamingMetrics.totalStreamTime,
+      );
+    }
+  }
+
+  /**
+   * Like getCompletionText but returns undefined when we cannot confidently
+   * identify the parsed content (no string output and no `.output` string
+   * field). Used for metrics that would be misleading if fed raw SSE text,
+   * such as `completionChars` and the `tokensPerSecond` estimate derived
+   * from it.
+   */
+  private getDefiniteCompletionText(parsedOutput: unknown): string | undefined {
+    if (typeof parsedOutput === 'string') {
+      return parsedOutput;
+    }
+    if (parsedOutput !== null && typeof parsedOutput === 'object') {
+      const maybeOutput = (parsedOutput as { output?: unknown }).output;
+      if (typeof maybeOutput === 'string') {
+        return maybeOutput;
+      }
+    }
+    return undefined;
   }
 
   /**

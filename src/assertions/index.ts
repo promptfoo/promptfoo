@@ -67,7 +67,7 @@ import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
-import { handleLatency } from './latency';
+import { handleLatency, handleTtft } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
@@ -311,6 +311,7 @@ const ASSERTION_HANDLERS: Record<
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
+  ttft: handleTtft,
   webhook: handleWebhook,
   'word-count': handleWordCount,
 };

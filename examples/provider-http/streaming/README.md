@@ -1,21 +1,22 @@
 # provider-http/streaming (HTTP Provider Streaming Example)
 
-This example shows how to use OpenAI's streaming API via HTTP provider.
+This example demonstrates text streaming response handling with **Time to First Token (TTFT)** measurement using Promptfoo's HTTP provider.
 
-You can run this example with:
+Initialize this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-http/streaming
 cd provider-http/streaming
 ```
 
-⚠️ **Streaming is not recommended for evaluations**
+## Why Stream?
 
-Promptfoo supports streaming HTTP targets, but evals wait for full responses before scoring. That means:
+While Promptfoo waits for complete responses before scoring, streaming unlocks additional performance insights:
 
-- No progressive display during evals
-- Extra parsing complexity for streaming formats (SSE/chunked)
-- Similar end-to-end latency vs. non-streaming
+- **TTFT Measurement**: Track how quickly models start responding
+- **User-Perceived Performance**: Measure streaming responsiveness
+- **Model Comparison**: Compare streaming performance across providers
+- **Production Insights**: Validate streaming implementations before deployment
 
 ## Environment Variables
 
@@ -31,14 +32,14 @@ export OPENAI_API_KEY="your-openai-api-key"
 OPENAI_API_KEY=your-openai-api-key
 ```
 
-## Quick Start
+## Running the Example
 
 1. Set your API key (or ensure `.env` is populated)
 
-2. Run the evaluation (recommended):
+2. Run the evaluation:
 
    ```bash
-   npx promptfoo@latest eval -c examples/provider-http/streaming/promptfooconfig.yaml
+   npx promptfoo@latest eval -c promptfooconfig.yaml
    ```
 
 3. View results (optional):
@@ -46,5 +47,44 @@ OPENAI_API_KEY=your-openai-api-key
    ```bash
    npx promptfoo@latest view
    ```
+
+## Key Features
+
+### TTFT Measurement
+
+This example uses `stream: true` in the request body to enable TTFT measurement, and `streamFormat: openai-chat` to pin TTFT to the first model-emitted text content token rather than the first SSE framing frame. TTFT does not measure audio streaming latency:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      body:
+        model: gpt-5.4-mini
+        reasoning_effort: none
+        stream: true # Enable streaming (required for TTFT)
+      streamFormat: openai-chat # Canonical "first content token" TTFT
+```
+
+Supported `streamFormat` values: `openai-chat`, `openai-responses`, `anthropic-messages`. If your endpoint is not one of these, use `streamFirstTokenPattern` with a custom regex, or omit both and TTFT falls back to "first non-whitespace response byte" (a format-agnostic wire-level proxy).
+
+### Performance Assertions
+
+The configuration includes three types of performance tests:
+
+- **Content Quality**: Ensures meaningful output (> 10 characters)
+- **TTFT Performance**: Measures time to first content token (< 3000ms)
+- **Total Latency**: Measures end-to-end response time (< 10000ms)
+
+### Expected Results
+
+Inspect the measured TTFT and total latency from your own environment. Both depend on the selected model, prompt, endpoint region, and network path.
+
+## Reasoning Models
+
+Reasoning-enabled models can delay output tokens until internal reasoning completes. This example uses `gpt-5.4-mini` with `reasoning_effort: none` so TTFT reflects streamed text delivery rather than internal deliberation time.
+
+## Caching Behavior
+
+When `stream: true` is set, response caching is disabled so every TTFT measurement reflects a live call.
 
 For more HTTP provider configuration options, see the docs: `https://promptfoo.dev/docs/providers/http`.
