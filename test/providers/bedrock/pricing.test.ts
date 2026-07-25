@@ -92,6 +92,33 @@ describe('calculateBedrockCost', () => {
     );
   });
 
+  it('prices Claude Opus 5 at $5/$25 on the global endpoint (base rate)', () => {
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 100_000, 1_000)).toBeCloseTo(
+      (100_000 / 1e6) * 5 + (1_000 / 1e6) * 25,
+      6,
+    );
+  });
+
+  it('bills Claude Opus 5 at the standard rate above 200k tokens (no long-context tier)', () => {
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 300_000, 20_000)).toBeCloseTo(
+      (300_000 / 1e6) * 5 + (20_000 / 1e6) * 25,
+      6,
+    );
+  });
+
+  it('does not price Claude Opus 5 at the Opus 4.x rate (prefix-collision guard)', () => {
+    // BEDROCK_PRICING is matched with `includes()` in insertion order, so a new
+    // `anthropic.claude-opus-5` key must not fall through to `anthropic.claude-opus-4`
+    // ($15/$75) and must not steal Opus 4.5's lookup either.
+    expect(calculateBedrockCost('global.anthropic.claude-opus-5', 1_000_000, 0)).toBeCloseTo(5, 6);
+    expect(
+      calculateBedrockCost('global.anthropic.claude-opus-4-5-20251101-v1:0', 1_000_000, 0),
+    ).toBeCloseTo(5, 6);
+    expect(
+      calculateBedrockCost('global.anthropic.claude-opus-4-1-20250805-v1:0', 1_000_000, 0),
+    ).toBeCloseTo(15, 6);
+  });
+
   it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
     // The global endpoint bills at the base rate; regional profiles add a premium (below).
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
@@ -151,6 +178,28 @@ describe('calculateBedrockCost', () => {
     expect(
       calculateBedrockInvokeModelCost('zai.glm-5', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1'),
     ).toBeCloseTo(costAtRates(1, 3.2), 6);
+  });
+
+  it('reports InvokeModel cost for Claude Opus 5 but not legacy Opus 4.x', () => {
+    // Opus 5 is a Claude 5 model with a verified Runtime rate, so the default `bedrock:`
+    // (InvokeModel) path reports cost instead of `cost: 0`. Opus 4.8 stays fail-closed.
+    const base = (100 / 1e6) * 5 + (200 / 1e6) * 25;
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-opus-5',
+        100,
+        200,
+        0,
+        0,
+        'us-east-2',
+      ),
+    ).toBeCloseTo(base, 10);
+    expect(
+      calculateBedrockInvokeModelCost('us.anthropic.claude-opus-5', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeCloseTo(base * 1.1, 10);
+    expect(
+      calculateBedrockInvokeModelCost('anthropic.claude-opus-4-8', 100, 200, 0, 0, 'us-east-2'),
+    ).toBeUndefined();
   });
 
   it('reports InvokeModel cost for Claude Sonnet 5 (a Claude 5 model) but not legacy Sonnet 4.x', () => {

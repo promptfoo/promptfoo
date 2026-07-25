@@ -3321,6 +3321,19 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it('maps Claude Opus 5 across the base and regional inference profiles', () => {
+    // Verified via `aws bedrock list-inference-profiles`: Opus 5 exposes base +
+    // us./eu./global. only — unlike Opus 4.7/4.8 there is no `jp.` profile.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-5']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-5']).toBeUndefined();
+    expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+  });
+
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
     // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);

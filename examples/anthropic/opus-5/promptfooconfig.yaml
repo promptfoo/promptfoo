@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Opus 5 agentic coding with effort levels
+
+prompts:
+  - |
+    {{task}}
+
+providers:
+  # Opus 5 at xhigh — the recommended starting point for coding and agentic work.
+  - id: anthropic:messages:claude-opus-5
+    label: opus-5-xhigh
+    config:
+      # Opus 5 deprecates manual sampling controls (temperature/top_p/top_k) at the
+      # model level — promptfoo omits them automatically, so don't set them here.
+      #
+      # Thinking is ON by default on Opus 5: unlike Opus 4.7/4.8, omitting `thinking`
+      # runs adaptive thinking rather than no thinking. Because max_tokens caps
+      # thinking + response text together, give it real headroom.
+      effort: xhigh
+      max_tokens: 8000
+
+  # Same model at low effort. Opus 5 is unusually strong at the bottom of the effort
+  # ladder, so sweep downward on your own evals — effort is the main cost/latency lever.
+  - id: anthropic:messages:claude-opus-5
+    label: opus-5-low
+    config:
+      effort: low
+      max_tokens: 8000
+
+tests:
+  # Multi-system bug diagnosis (intermittent failure)
+  - vars:
+      task: |
+        You're debugging a production issue where users can't log in. Here's what you know:
+
+        1. The frontend shows "Authentication failed" after username/password submission
+        2. Backend logs show successful JWT generation
+        3. Redis cache is returning stale session data
+        4. Database shows correct user credentials
+        5. The issue only affects 10% of login attempts
+        6. It started after deploying a load balancer configuration change
+
+        Diagnose the root cause and propose a fix. Explain your reasoning about what's
+        causing the intermittent nature of the bug.
+    assert:
+      - type: contains-any
+        value: ['load balancer', 'session', 'sticky', 'affinity', 'routing']
+        reason: Should identify load balancer session routing as the issue
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Identify the root cause (likely session affinity/sticky sessions issue with the load balancer)
+          2. Explain why it's intermittent (requests hit different backends with inconsistent session state)
+          3. Propose concrete fixes (sticky sessions, a shared session store, or stateless tokens)
+          4. Reason about the tradeoffs of the proposed solutions
+
+  # Multi-file refactor planning — the kind of long-horizon task Opus 5 targets
+  - vars:
+      task: |
+        A Python service has a `UserService` class that directly instantiates a
+        `PostgresClient`, a `RedisCache`, and a `StripeClient` in its constructor. Tests
+        currently monkeypatch each of those globals, and the test suite is flaky.
+
+        Plan the refactor to make this testable, then write the resulting `UserService`
+        constructor and one example test. Call out the tradeoffs of your approach.
+    assert:
+      - type: contains-any
+        value: ['inject', 'dependency', 'protocol', 'interface', 'constructor']
+        reason: Should propose dependency injection or an equivalent seam
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Identify the tight coupling to concrete clients as the root problem
+          2. Propose a concrete seam (constructor injection, protocols/ABCs, or a factory)
+          3. Show the refactored constructor and a test that uses fakes or stubs rather than monkeypatching
+          4. Honestly discuss at least one tradeoff (e.g. added indirection, wiring cost)
+          5. Not leave placeholder or stubbed-out implementations

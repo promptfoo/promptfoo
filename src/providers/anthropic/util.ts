@@ -22,6 +22,18 @@ export const ANTHROPIC_MODELS = [
       output: 50 / 1e6, // $50 / MTok
     },
   })),
+  // Claude Opus 5 — the Opus-tier Claude 5 model. 1M context window (both the default
+  // and the maximum) with the full low→max effort ladder, at the same list pricing as
+  // Opus 4.8 ($5/$25), so it is a drop-in cost swap. The full 1M context bills at this
+  // flat rate. Fast mode ($10/$50, Claude API only) is a separate research-preview rate
+  // that is intentionally not encoded here; set an explicit `cost` to track it.
+  ...['claude-opus-5'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
   // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
   // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
   // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. The full 1M
@@ -180,6 +192,7 @@ export const ANTHROPIC_MODELS = [
 // neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and `claude-sonnet-4-5` is not Sonnet 5)
 // while still matching dated snapshots like `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
+const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
@@ -196,9 +209,26 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
+  /**
+   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
+   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   */
+  thinkingOnByDefault?: boolean;
+  /**
+   * `thinking: { type: 'disabled' }` is only accepted at effort `high` or below — pairing it
+   * with `xhigh`/`max` returns 400. Unlike `alwaysOnAdaptiveThinking`, disabling thinking is
+   * still possible, just effort-gated.
+   */
+  disabledThinkingEffortCapped?: boolean;
   /** 10% premium on Bedrock regional / Vertex regional+multi-region endpoints vs global. */
   regionalPremium?: boolean;
 }
+
+/**
+ * Effort levels at which `thinking: { type: 'disabled' }` is rejected on models flagged
+ * `disabledThinkingEffortCapped` (the API returns 400 for the combination).
+ */
+const EFFORT_LEVELS_REJECTING_DISABLED_THINKING = new Set(['xhigh', 'max']);
 
 /**
  * Single source of truth for Claude model capabilities. Adding a model is a new row here
@@ -213,6 +243,16 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
+    regionalPremium: true,
+  },
+  // Opus 5 thinks by default (omitting `thinking` runs adaptive, unlike Opus 4.7/4.8) and
+  // still accepts `disabled`, but only at effort `high` or below.
+  {
+    match: CLAUDE_OPUS_5_PATTERN,
+    warningName: 'Claude Opus 5',
+    samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
+    disabledThinkingEffortCapped: true,
     regionalPremium: true,
   },
   {
@@ -239,7 +279,12 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
 
 function hasClaudeCapability(
   modelId: string,
-  capability: 'samplingParamsDeprecated' | 'alwaysOnAdaptiveThinking' | 'regionalPremium',
+  capability:
+    | 'samplingParamsDeprecated'
+    | 'alwaysOnAdaptiveThinking'
+    | 'thinkingOnByDefault'
+    | 'disabledThinkingEffortCapped'
+    | 'regionalPremium',
 ): boolean {
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
@@ -252,6 +297,11 @@ export function isClaudeOpus47Model(modelId: string): boolean {
 /** Matches Claude Opus 4.8 model IDs. */
 export function isClaudeOpus48Model(modelId: string): boolean {
   return CLAUDE_OPUS_48_PATTERN.test(modelId);
+}
+
+/** Matches Claude Opus 5 model IDs (not `claude-opus-4-5`, not `claude-opus-50`). */
+export function isClaudeOpus5Model(modelId: string): boolean {
+  return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
 
 /** Matches the Claude 5 Fable and Mythos model IDs. */
@@ -285,12 +335,38 @@ export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean 
   return hasClaudeCapability(modelId, 'alwaysOnAdaptiveThinking');
 }
 
+/**
+ * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5). Callers use this
+ * so that thinking-token headroom (e.g. the default `max_tokens`) reflects what the API will
+ * actually do rather than assuming an absent `thinking` field means thinking is off.
+ */
+export function isThinkingOnByDefaultClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'thinkingOnByDefault');
+}
+
+/**
+ * True when `thinking: { type: 'disabled' }` would be rejected for this model at this effort
+ * level. Claude Opus 5 thinks by default and only accepts `disabled` at effort `high` or below,
+ * so `disabled` + `xhigh`/`max` is a 400. An unset effort uses the API default (`high`), which
+ * is within the cap.
+ */
+export function isDisabledThinkingRejectedAtEffort(
+  modelId: string,
+  effort: string | undefined | null,
+): boolean {
+  return (
+    hasClaudeCapability(modelId, 'disabledThinkingEffortCapped') &&
+    effort != null &&
+    EFFORT_LEVELS_REJECTING_DISABLED_THINKING.has(effort)
+  );
+}
+
 export function normalizeAnthropicModelName(modelName: string): string {
   return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
 }
 
 /**
- * Claude Opus 4.7+, Claude Sonnet 5, and Claude 5 Fable/Mythos deprecate manual sampling
+ * Claude Opus 4.7/4.8, Claude Opus 5, Claude Sonnet 5, and Claude 5 Fable/Mythos deprecate manual sampling
  * controls at the model level — `temperature`, `top_p`, and `top_k` return 400
  * `invalid_request_error` (including promptfoo's built-in `temperature` default of 0). Shared
  * by the Anthropic, Bedrock, Vertex, and Azure providers; support for a new model lands as a
@@ -304,20 +380,27 @@ export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean 
  * Normalize a Claude thinking config for models that deprecate manual
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
  * (preserving `display`), and `disabled` is omitted on always-on adaptive
- * thinking models (Fable 5 / Mythos 5), which reject it. The Anthropic,
- * Bedrock InvokeModel/Converse, and Vertex paths all share this transform;
- * user-facing warnings stay at the call sites that surface them.
+ * thinking models (Fable 5 / Mythos 5), which reject it. `disabled` is also
+ * omitted on effort-capped models (Opus 5) when `effort` is high enough that
+ * the combination would 400. The Anthropic, Bedrock InvokeModel/Converse, and
+ * Vertex paths all share this transform; user-facing warnings stay at the call
+ * sites that surface them.
  */
 export function normalizeClaudeThinkingConfig<
   T extends { type: string; display?: 'summarized' | 'omitted' | null },
 >(
   modelId: string,
   thinking: T | undefined,
+  effort?: string | null,
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
   if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
-  if (thinking?.type === 'disabled' && isAlwaysOnAdaptiveThinkingClaudeModel(modelId)) {
+  if (
+    thinking?.type === 'disabled' &&
+    (isAlwaysOnAdaptiveThinkingClaudeModel(modelId) ||
+      isDisabledThinkingRejectedAtEffort(modelId, effort))
+  ) {
     return undefined;
   }
   return thinking;

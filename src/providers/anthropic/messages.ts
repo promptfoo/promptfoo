@@ -30,7 +30,9 @@ import {
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
+  isDisabledThinkingRejectedAtEffort,
   isSamplingParamsDeprecatedClaudeModel,
+  isThinkingOnByDefaultClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
@@ -626,18 +628,36 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       );
       this.manualThinkingConversionWarned = true;
     }
+    // Opus 5 thinks by default and only accepts `disabled` at effort `high` or below —
+    // `disabled` + `xhigh`/`max` is a 400, so drop the `disabled` and let the model think.
+    const disabledThinkingRejectedByEffort = isDisabledThinkingRejectedAtEffort(
+      this.modelName,
+      config.effort,
+    );
     if (
-      alwaysOnAdaptiveThinking &&
+      (alwaysOnAdaptiveThinking || disabledThinkingRejectedByEffort) &&
       resolvedThinking?.type === 'disabled' &&
       !this.disabledThinkingRemovalWarned
     ) {
       logger.warn(
-        'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+        alwaysOnAdaptiveThinking
+          ? 'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.'
+          : `${modelWarningName} only accepts thinking.type "disabled" at effort "high" or below (got "${config.effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
       );
       this.disabledThinkingRemovalWarned = true;
     }
-    resolvedThinking = normalizeClaudeThinkingConfig(this.modelName, resolvedThinking);
-    const thinkingEnabled = alwaysOnAdaptiveThinking || isThinkingEnabled(resolvedThinking);
+    resolvedThinking = normalizeClaudeThinkingConfig(
+      this.modelName,
+      resolvedThinking,
+      config.effort,
+    );
+    // On Opus 5 an omitted `thinking` field still runs adaptive thinking, so treat that as
+    // enabled — otherwise the default `max_tokens` below is sized as if no thinking tokens
+    // will be spent, and responses truncate mid-answer.
+    const thinkingEnabled =
+      alwaysOnAdaptiveThinking ||
+      (resolvedThinking == null && isThinkingOnByDefaultClaudeModel(this.modelName)) ||
+      isThinkingEnabled(resolvedThinking);
 
     // Validate and warn about thinking-incompatible params. Skip when the model
     // deprecates sampling params entirely — the deduped model-level warning

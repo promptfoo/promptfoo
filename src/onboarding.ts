@@ -505,6 +505,7 @@ export async function createDummyFiles(
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
           'anthropic:messages:claude-fable-5',
+          'anthropic:messages:claude-opus-5',
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5',
           'anthropic:messages:claude-sonnet-4-6',

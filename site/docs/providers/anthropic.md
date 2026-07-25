@@ -57,6 +57,7 @@ The `anthropic` provider supports the following models via the messages API:
 | -------------------------------------------------------------------------- | ---------------------- |
 | `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
 | `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
+| `anthropic:messages:claude-opus-5`                                         | Claude Opus 5          |
 | `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
 | `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
 | `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
@@ -83,6 +84,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
 | Claude Fable 5    | claude-fable-5                                        | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                       | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
+| Claude Opus 5     | claude-opus-5                                         | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
 | Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
 | Claude Sonnet 5   | claude-sonnet-5                                       | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
@@ -539,6 +541,44 @@ Both models use a 1M-token context window, support up to 128K output tokens, and
 priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
 access is limited through Project Glasswing and may require provider approval. Both
 model IDs are pinned; Anthropic does not publish `-latest` aliases for them.
+
+### Claude Opus 5 notes
+
+Opus 5 is the Opus-tier Claude 5 model, aimed at complex agentic coding and long-horizon
+work. It keeps Opus 4.8's request surface and pricing, with two behavior changes promptfoo
+handles for you:
+
+- **Thinking is on by default.** Unlike Opus 4.7/4.8 — where omitting `thinking` meant no
+  extended thinking — an omitted `thinking` block on Opus 5 runs adaptive thinking. Because
+  `max_tokens` caps thinking _plus_ response text, promptfoo sizes its default `max_tokens`
+  with thinking headroom (2048 instead of 1024) so responses aren't truncated mid-answer.
+  Set `max_tokens` explicitly for anything longer.
+- **Disabling thinking is effort-gated.** `thinking: { type: 'disabled' }` is only accepted
+  at `effort` `high` or below; pairing it with `xhigh` or `max` returns a 400. Promptfoo
+  drops the rejected `thinking: { type: 'disabled' }` (keeping your `effort`) and logs a
+  one-time warning. Lower `effort` to `high` if you actually need thinking off.
+- **Sampling controls are managed for you.** Like Opus 4.7/4.8, Opus 5 rejects
+  `temperature`, `top_p`, and `top_k` with a 400; promptfoo omits all three from every
+  request, including its built-in `temperature: 0` default. A legacy
+  `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
+  `thinking: { type: 'adaptive' }`.
+- **The full `low` → `max` effort ladder is available.** Start at `xhigh` for coding and
+  agentic work, then sweep downward — `low` and `medium` are unusually strong on this model
+  and are the main cost and latency lever. See the [Effort Level](#effort-level) section.
+
+Opus 5 uses a 1M-token context window (both the default and the maximum) billed at a flat
+**$5 per million input / $25 per million output** — the same list rates as Opus 4.8, with no
+long-context surcharge above 200K tokens. Anthropic's fast mode ($10 / $50, Claude API only)
+is a separate research-preview rate that promptfoo does not encode; set an explicit `cost` in
+your provider config if you need to track it.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-opus-5
+    config:
+      effort: xhigh
+      max_tokens: 8192
+```
 
 ### Claude Sonnet 5 notes
 
