@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { validRange } from 'semver';
+import { minVersion, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -181,6 +181,28 @@ describe('package manifests', () => {
     expect(packageJson.dependencies?.jsdom).toBeUndefined();
     expect(parse5Range).toBeDefined();
     expect(validRange(parse5Range as string)).not.toBeNull();
+  });
+
+  it('requires patched WebSocket fragment limits in published and example manifests', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const lockfile = readPackageJson<{
+      packages?: Record<string, PackageManifest>;
+    }>('package-lock.json');
+    const websocketManifests = [
+      'package.json',
+      'examples/config-websockets/basic/test-server/package.json',
+      'examples/config-websockets/streaming/server/package.json',
+    ];
+
+    for (const manifestPath of websocketManifests) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      const websocketRange = manifest.dependencies?.ws;
+
+      expect(websocketRange, `${manifestPath} must depend on ws`).toBeDefined();
+      expect(minVersion(websocketRange as string)?.compare('8.21.1')).toBeGreaterThanOrEqual(0);
+    }
+
+    expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
   });
 
   it('does not import jsdom from root src/', () => {
