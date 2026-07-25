@@ -43,7 +43,11 @@ function redactDetail(text: string): string {
 /** Extract tool call payloads from provider response metadata, if present. */
 function extractToolCalls(providerResponse: any): string[] {
   const payloads: string[] = [];
-  const toolCalls = providerResponse?.metadata?.toolCalls;
+  const metadata = providerResponse?.metadata;
+  if (!metadata) return payloads;
+
+  // Standard toolCalls array (OpenAI, Anthropic, etc.)
+  const toolCalls = metadata.toolCalls;
   if (Array.isArray(toolCalls)) {
     for (const tc of toolCalls) {
       // OpenAI-style: { id, type, function: { name, arguments } }
@@ -52,10 +56,26 @@ function extractToolCalls(providerResponse: any): string[] {
       }
       // Anthropic-style: { id, name, input }
       if (tc.input && typeof tc.input === 'object') {
-        payloads.push(JSON.stringify(tc.input));
+        payloads.push(safeJsonStringify(tc.input));
       }
     }
   }
+
+  // MCP provider direct metadata fields (MCPProvider.transformToolResult)
+  // Stores toolName/toolArgs directly on metadata, not in toolCalls array
+  if (metadata.toolArgs !== undefined) {
+    const args = typeof metadata.toolArgs === 'string'
+      ? metadata.toolArgs
+      : safeJsonStringify(metadata.toolArgs);
+    payloads.push(args);
+  }
+  if (metadata.originalPayload !== undefined) {
+    const orig = typeof metadata.originalPayload === 'string'
+      ? metadata.originalPayload
+      : safeJsonStringify(metadata.originalPayload);
+    payloads.push(orig);
+  }
+
   return payloads;
 }
 
@@ -93,7 +113,7 @@ async function runCcsScanner(
     }
 
     const findings = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-    return { findings, raw: output };
+    return { findings, raw: redactDetail(output) };
   } catch (err: any) {
     // ENOENT = CLI not installed
     if (err.code === 'ENOENT' || (err.stderr || '').includes('command not found') || (err.stderr || '').includes('No such file')) {
@@ -104,22 +124,30 @@ async function runCcsScanner(
   }
 }
 
-export const handleCorrectover = async ({
-  assertion,
-  inverse = false,
-  providerResponse,
-}: AssertionParams): Promise<GradingResult> => {
-  // Collect payloads to scan: primary output + tool calls from metadata
+export const handleCorrectover = async (params: AssertionParams): Promise<GradingResult> => {
+  const { assertion, inverse = false, providerResponse, output: transformedOutput } = params;
+  // Collect payloads to scan: primary output + tool calls from metadata + post-transform output
   const payloads: string[] = [];
 
-  // 1. Primary output
-  const output = typeof providerResponse?.output === 'string'
+  // 1. Primary output (raw provider response)
+  const rawOutput = typeof providerResponse?.output === 'string'
     ? providerResponse.output
     : providerResponse?.output
       ? safeJsonStringify(providerResponse.output)
       : null;
-  if (output && output !== '""') {
-    payloads.push(output);
+  if (rawOutput && rawOutput !== '""') {
+    payloads.push(rawOutput);
+  }
+
+  // 1b. Post-transform output (from assertion transform function) — scan separately
+  // to catch payloads that may be hidden or encoded after transformation
+  if (transformedOutput !== undefined && transformedOutput !== rawOutput) {
+    const transformed = typeof transformedOutput === 'string'
+      ? transformedOutput
+      : safeJsonStringify(transformedOutput);
+    if (transformed && transformed !== '""') {
+      payloads.push(transformed);
+    }
   }
 
   // 2. Tool call payloads from metadata (agent providers store called tools here)
