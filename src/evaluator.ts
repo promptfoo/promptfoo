@@ -2066,9 +2066,12 @@ function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): Co
 }
 
 function buildPromptIndexMap(prompts: CompletedPrompt[]) {
-  const promptIndexMap = new Map<string, number>();
+  const promptIndexMap = new Map<string, number[]>();
   for (let i = 0; i < prompts.length; i++) {
-    promptIndexMap.set(`${prompts[i].provider}:${prompts[i].id}`, i);
+    const key = `${prompts[i].provider}:${prompts[i].id}`;
+    const promptIndices = promptIndexMap.get(key) ?? [];
+    promptIndices.push(i);
+    promptIndexMap.set(key, promptIndices);
   }
   return promptIndexMap;
 }
@@ -2256,7 +2259,7 @@ async function buildRunEvalOptions({
   conversations: EvalConversations;
   evalId: string;
   options: InternalEvaluateOptions;
-  promptIndexMap: Map<string, number>;
+  promptIndexMap: Map<string, number[]>;
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
@@ -2383,7 +2386,7 @@ function appendRunEvalOptionsForTestCase({
   nextTestIdx: number;
   options: InternalEvaluateOptions;
   promptIdCache: Map<Prompt, string>;
-  promptIndexMap: Map<string, number>;
+  promptIndexMap: Map<string, number[]>;
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
@@ -2456,7 +2459,7 @@ function appendRunEvalOptionsForVars({
   evalId: string;
   options: InternalEvaluateOptions;
   promptIdCache: Map<Prompt, string>;
-  promptIndexMap: Map<string, number>;
+  promptIndexMap: Map<string, number[]>;
   promptPrefix: string;
   promptSuffix: string;
   providerAbortSignal?: AbortSignal;
@@ -2469,7 +2472,12 @@ function appendRunEvalOptionsForVars({
   testSuite: TestSuite;
   vars: Vars | undefined;
 }) {
+  const providerOccurrenceCounts = new Map<string, number>();
   for (const provider of testSuite.providers) {
+    const providerKey = provider.label || provider.id();
+    const providerOccurrenceIndex = providerOccurrenceCounts.get(providerKey) ?? 0;
+    providerOccurrenceCounts.set(providerKey, providerOccurrenceIndex + 1);
+
     if (!isProviderAllowed(provider, testCase.providers)) {
       continue;
     }
@@ -2483,6 +2491,8 @@ function appendRunEvalOptionsForVars({
       promptPrefix,
       promptSuffix,
       provider,
+      providerKey,
+      providerOccurrenceIndex,
       providerAbortSignal,
       rateLimitRegistry,
       registers,
@@ -2506,6 +2516,8 @@ function appendRunEvalOptionsForProvider({
   promptPrefix,
   promptSuffix,
   provider,
+  providerKey,
+  providerOccurrenceIndex,
   providerAbortSignal,
   rateLimitRegistry,
   registers,
@@ -2521,10 +2533,12 @@ function appendRunEvalOptionsForProvider({
   evalId: string;
   options: InternalEvaluateOptions;
   promptIdCache: Map<Prompt, string>;
-  promptIndexMap: Map<string, number>;
+  promptIndexMap: Map<string, number[]>;
   promptPrefix: string;
   promptSuffix: string;
   provider: ApiProvider;
+  providerKey: string;
+  providerOccurrenceIndex: number;
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
@@ -2535,13 +2549,13 @@ function appendRunEvalOptionsForProvider({
   testSuite: TestSuite;
   vars: Vars | undefined;
 }) {
-  const providerKey = provider.label || provider.id();
   for (const prompt of testSuite.prompts) {
     if (!shouldRunPromptForTest(prompt, providerKey, testCase, testSuite)) {
       continue;
     }
 
-    const promptIdx = promptIndexMap.get(`${providerKey}:${promptIdCache.get(prompt)!}`);
+    const promptIndices = promptIndexMap.get(`${providerKey}:${promptIdCache.get(prompt)!}`);
+    const promptIdx = promptIndices?.[providerOccurrenceIndex];
     if (promptIdx === undefined) {
       logger.warn(
         `Could not find prompt index for ${providerKey}:${promptIdCache.get(prompt)}, skipping`,

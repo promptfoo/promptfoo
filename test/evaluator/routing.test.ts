@@ -181,6 +181,45 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     expect(mockUnlabeledProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps duplicate provider ids in separate prompt columns', async () => {
+    const firstProvider: ApiProvider = {
+      id: () => 'duplicate-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'First provider output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+    const secondProvider: ApiProvider = {
+      id: () => 'duplicate-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Second provider output',
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [firstProvider, secondProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { input: 'value' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    const table = await evalRecord.getTable();
+
+    expect(firstProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(secondProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(table.head.prompts).toEqual([
+      expect.objectContaining({ provider: 'duplicate-provider' }),
+      expect.objectContaining({ provider: 'duplicate-provider' }),
+    ]);
+    expect(table.body[0].outputs).toMatchObject([
+      { text: 'First provider output', provider: 'duplicate-provider' },
+      { text: 'Second provider output', provider: 'duplicate-provider' },
+    ]);
+  });
+
   it('evaluate with test-level providers filter', async () => {
     const mockProvider1: ApiProvider = {
       id: () => 'provider-1',
