@@ -572,6 +572,68 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }
 
   /**
+   * Reconcile a requested thinking config with what the target model actually accepts, and
+   * report whether the request will end up thinking.
+   *
+   * Three model-level rules apply, each verified against the live API:
+   * - Manual budget thinking (`type: 'enabled'`) is rejected on adaptive-only models and is
+   *   converted to `type: 'adaptive'`.
+   * - `type: 'disabled'` is rejected outright on always-on models (Fable 5 / Mythos 5), and on
+   *   Opus 5 when `effort` is `xhigh`/`max`. In both cases it is dropped rather than sent.
+   * - On Opus 5 an *omitted* thinking config still runs adaptive thinking, so it counts as
+   *   enabled — callers size the default `max_tokens` off this, and treating it as disabled
+   *   truncates responses mid-answer.
+   *
+   * Warnings are emitted at most once per provider instance.
+   */
+  private resolveModelThinking(
+    requested: Anthropic.Messages.ThinkingConfigParam | undefined,
+    effort: string | undefined,
+    flags: {
+      samplingParamsDeprecated: boolean;
+      alwaysOnAdaptiveThinking: boolean;
+      modelWarningName: string;
+    },
+  ): {
+    thinking: Anthropic.Messages.ThinkingConfigParam | undefined;
+    thinkingEnabled: boolean;
+  } {
+    const { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
+
+    if (samplingParamsDeprecated && requested?.type === 'enabled') {
+      if (!this.manualThinkingConversionWarned) {
+        logger.warn(
+          alwaysOnAdaptiveThinking
+            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+            : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
+        );
+        this.manualThinkingConversionWarned = true;
+      }
+    } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
+      if (alwaysOnAdaptiveThinking) {
+        logger.warn(
+          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+        );
+        this.disabledThinkingRemovalWarned = true;
+      } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
+        logger.warn(
+          `${modelWarningName} only accepts thinking.type "disabled" at effort "high" or below (got "${effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
+        );
+        this.disabledThinkingRemovalWarned = true;
+      }
+    }
+
+    const resolved = normalizeClaudeThinkingConfig(this.modelName, requested, effort) as
+      | Anthropic.Messages.ThinkingConfigParam
+      | undefined;
+    const thinkingEnabled =
+      alwaysOnAdaptiveThinking ||
+      (resolved == null && isThinkingOnByDefaultClaudeModel(this.modelName)) ||
+      isThinkingEnabled(resolved);
+    return { thinking: resolved, thinkingEnabled };
+  }
+
+  /**
    * Internal implementation of callApi without tracing wrapper.
    */
   private async callApiInternal(
@@ -615,49 +677,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
-    let resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
-    if (
-      samplingParamsDeprecated &&
-      resolvedThinking?.type === 'enabled' &&
-      !this.manualThinkingConversionWarned
-    ) {
-      logger.warn(
-        alwaysOnAdaptiveThinking
-          ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
-          : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
-      );
-      this.manualThinkingConversionWarned = true;
-    }
-    // Opus 5 thinks by default and only accepts `disabled` at effort `high` or below —
-    // `disabled` + `xhigh`/`max` is a 400, so drop the `disabled` and let the model think.
-    const disabledThinkingRejectedByEffort = isDisabledThinkingRejectedAtEffort(
-      this.modelName,
+    const { thinking: resolvedThinking, thinkingEnabled } = this.resolveModelThinking(
+      resolveThinkingConfig(config.thinking, thinking),
       config.effort,
+      { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
-    if (
-      (alwaysOnAdaptiveThinking || disabledThinkingRejectedByEffort) &&
-      resolvedThinking?.type === 'disabled' &&
-      !this.disabledThinkingRemovalWarned
-    ) {
-      logger.warn(
-        alwaysOnAdaptiveThinking
-          ? 'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.'
-          : `${modelWarningName} only accepts thinking.type "disabled" at effort "high" or below (got "${config.effort}"), so thinking.type "disabled" has been omitted. Lower effort to "high" if you need thinking off.`,
-      );
-      this.disabledThinkingRemovalWarned = true;
-    }
-    resolvedThinking = normalizeClaudeThinkingConfig(
-      this.modelName,
-      resolvedThinking,
-      config.effort,
-    );
-    // On Opus 5 an omitted `thinking` field still runs adaptive thinking, so treat that as
-    // enabled — otherwise the default `max_tokens` below is sized as if no thinking tokens
-    // will be spent, and responses truncate mid-answer.
-    const thinkingEnabled =
-      alwaysOnAdaptiveThinking ||
-      (resolvedThinking == null && isThinkingOnByDefaultClaudeModel(this.modelName)) ||
-      isThinkingEnabled(resolvedThinking);
 
     // Validate and warn about thinking-incompatible params. Skip when the model
     // deprecates sampling params entirely — the deduped model-level warning
