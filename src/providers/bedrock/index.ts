@@ -97,14 +97,8 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     type: 'any' | 'auto' | 'tool';
     name?: string;
   };
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-        display?: 'summarized' | 'omitted';
-      }
-    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-    | { type: 'disabled' };
+  /** Same shape the Anthropic Messages provider accepts; see normalizeClaudeThinkingConfig. */
+  thinking?: Anthropic.Messages.ThinkingConfigParam;
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {

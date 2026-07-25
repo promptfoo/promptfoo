@@ -80,13 +80,6 @@ function parseEnvFloat(value: string | undefined): number | undefined {
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-function resolveThinkingConfig(
-  configThinking: Anthropic.Messages.ThinkingConfigParam | undefined,
-  promptThinking: Anthropic.Messages.ThinkingConfigParam | undefined,
-): Anthropic.Messages.ThinkingConfigParam | undefined {
-  return configThinking ?? promptThinking;
-}
-
 function isThinkingEnabled(thinking: Anthropic.Messages.ThinkingConfigParam | undefined): boolean {
   return thinking?.type === 'enabled' || thinking?.type === 'adaptive';
 }
@@ -720,7 +713,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     const { thinking: resolvedThinking, thinkingEnabled } = this.resolveModelThinking(
-      resolveThinkingConfig(config.thinking, thinking),
+      // Provider config wins over a thinking block embedded in the prompt.
+      config.thinking ?? thinking,
       config.effort,
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );

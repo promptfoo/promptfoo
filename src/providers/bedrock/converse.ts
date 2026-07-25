@@ -43,6 +43,7 @@ import {
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
+import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -80,15 +81,9 @@ export interface BedrockConverseOptions extends BedrockOptions {
   stopSequences?: string[];
   stop?: string[]; // Alias for compatibility
 
-  // Extended thinking (Claude models)
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-        display?: 'summarized' | 'omitted';
-      }
-    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-    | { type: 'disabled' };
+  // Extended thinking (Claude models) — the SDK's own union, shared with the Anthropic
+  // and Bedrock InvokeModel providers so a new thinking mode lands in one place.
+  thinking?: Anthropic.Messages.ThinkingConfigParam;
 
   // Reasoning configuration (Amazon Nova 2 models)
   // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
@@ -1225,11 +1220,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1328,7 +1319,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Resolves the effective tool choice for a request without touching the MCP
    * client. Used by `callApi`/`callApiStreaming` to short-circuit MCP init for
-   * tool-disabled requests so a hung MCP transport never stalls them.
+   * tool-disabled requests so a hung MCP transport never stalls them, and to supply
+   * the `toolsDisabled` flag those methods pass on to `parseResponse`.
    */
   private isRequestToolsDisabled(context?: CallApiContextParams): boolean {
     return isDisabledToolChoice(
@@ -1710,11 +1702,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolsDisabled = this.isRequestToolsDisabled(context);
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();

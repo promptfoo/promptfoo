@@ -78,24 +78,37 @@ export interface OutputFormat {
   };
 }
 
-export interface AnthropicMessageOptions {
-  apiBaseUrl?: string;
+/**
+ * Options shared by every Anthropic provider. `AnthropicGenericProvider` types its
+ * `config` as this, and the per-provider option interfaces extend it, so a field added
+ * here reaches all of them instead of having to be copied.
+ */
+export interface AnthropicBaseOptions {
   apiKey?: string;
+  apiBaseUrl?: string;
   /**
    * When `false`, skip promptfoo's upfront API key check and authenticate
    * through a local Claude Code session (OAuth credential from the macOS
    * keychain or `$HOME/.claude/.credentials.json`). Lets Claude.ai Max /
    * Pro subscribers run evals — including `llm-rubric` grading — without a
-   * separate Anthropic Console API key. Defaults to `true`.
+   * separate Anthropic Console API key.
+   *
+   * Matches the `apiKeyRequired` option already exposed by the
+   * `anthropic:claude-agent-sdk` provider.
+   *
+   * @default true
    */
   apiKeyRequired?: boolean;
-  cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
+  headers?: Record<string, string>;
   cost?: number;
   inputCost?: number;
   outputCost?: number;
+}
+
+export interface AnthropicMessageOptions extends AnthropicBaseOptions {
+  cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // Controls output quality/speed tradeoff
   extra_body?: Record<string, any>;
-  headers?: Record<string, string>;
   max_tokens?: number;
   metadata?: Anthropic.Messages.Metadata; // Request metadata for tracking/abuse detection
   model?: string;
