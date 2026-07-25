@@ -2764,6 +2764,52 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(sentBody.max_tokens).toBe(2048);
   });
 
+  it.each([
+    {
+      label: 'drops the empty thinking block Opus 5 returns by default',
+      thinkingText: '',
+      expected: 'the answer',
+    },
+    {
+      label: 'renders summarized reasoning without an explicit showThinking',
+      thinkingText: 'considered the options',
+      expected: 'Thinking: considered the options\nSignature: sig\n\nthe answer',
+    },
+  ])('Claude Opus 5 on Vertex $label', async ({ thinkingText, expected }) => {
+    // Opus 5 thinks even with no `thinking` block, so showThinking must follow the effective
+    // thinking state — otherwise reasoning would be stripped here but shown on the Anthropic
+    // path for the same config.
+    provider = new VertexChatProvider('claude-opus-5', { config: {} });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [
+          { type: 'thinking', thinking: thinkingText, signature: 'sig' },
+          { type: 'text', text: 'the answer' },
+        ],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    expect(result.output).toBe(expected);
+  });
+
   it('keeps the 512 default for a Claude model that does not think by default', async () => {
     provider = new VertexChatProvider('claude-opus-4-8', { config: {} });
 
