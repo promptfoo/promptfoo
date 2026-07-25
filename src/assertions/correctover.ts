@@ -1,4 +1,5 @@
 import { exec } from 'child_process';
+import { safeJsonStringify } from '../util';
 import { promisify } from 'util';
 import logger from '../logger';
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -115,7 +116,7 @@ export const handleCorrectover = async ({
   const output = typeof providerResponse?.output === 'string'
     ? providerResponse.output
     : providerResponse?.output
-      ? JSON.stringify(providerResponse.output)
+      ? safeJsonStringify(providerResponse.output)
       : null;
   if (output && output !== '""') {
     payloads.push(output);
@@ -153,10 +154,10 @@ export const handleCorrectover = async ({
     for (const payload of payloads) {
       const result = await runCcsScanner(payload, rulesPath);
       if (result === null) {
-        // CLI not found — graceful skip
+        // CLI not found — explicit failure (prevents security false negatives)
         return {
-          pass: true,
-          score: 1,
+          pass: false,
+          score: 0,
           reason: CCS_CLI_NOT_FOUND,
           assertion,
         };
