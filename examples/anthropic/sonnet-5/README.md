@@ -41,7 +41,7 @@ npx promptfoo@latest view
 Sonnet 5 is also reachable through:
 
 - AWS Bedrock — `bedrock:us.anthropic.claude-sonnet-5` (or `bedrock:converse:us.anthropic.claude-sonnet-5`)
-- Google Vertex — `vertex:claude-sonnet-5` with `config.region: global` (availability may roll out after the Anthropic API launch)
+- Google Vertex — `vertex:claude-sonnet-5` with `config.region: global` (verified working; regional endpoints depend on the quota provisioned for your GCP project)
 - Azure AI Foundry — point `anthropic:messages:claude-sonnet-5` at `https://<resource>.services.ai.azure.com/anthropic` via `apiBaseUrl`
 
 Across all four providers, promptfoo automatically omits the unsupported sampling parameters (`temperature`, `top_p`, `top_k`) for Sonnet 5. The Anthropic Messages provider — used directly and for Azure AI Foundry via `apiBaseUrl` — logs a one-time warning if you set them explicitly; the Bedrock and Vertex paths omit them silently.
