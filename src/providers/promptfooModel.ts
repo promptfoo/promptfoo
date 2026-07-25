@@ -1,6 +1,6 @@
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { fetchWithProxy } from '../util/fetch/index';
+import { fetchWithProviderProxy } from './fetch';
 
 import type {
   ApiProvider,
@@ -113,7 +113,7 @@ export class PromptfooModelProvider implements ApiProvider {
 
       const body = JSON.stringify(payload);
       logger.debug('[PromptfooModel] Sending request', { url, payload });
-      const response = await fetchWithProxy(url, {
+      const response = await fetchWithProviderProxy(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

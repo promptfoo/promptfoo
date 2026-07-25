@@ -1,6 +1,6 @@
 import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/web-api';
 import logger from '../logger';
-import { fetchWithProxy } from '../util/fetch/index';
+import { fetchWithProviderProxy } from './fetch';
 
 import type {
   ApiProvider,
@@ -61,7 +61,7 @@ export class SlackProvider implements ApiProvider {
     }
 
     this.client = new WebClient(token, {
-      fetch: (url, options) => fetchWithProxy(url.toString(), options),
+      fetch: (url, options) => fetchWithProviderProxy(url.toString(), options),
     });
   }
 
