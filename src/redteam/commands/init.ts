@@ -340,8 +340,8 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-opus-4-1-20250805',
       },
       {
-        name: 'anthropic:claude-3-7-sonnet-20250219',
-        value: 'anthropic:messages:claude-3-7-sonnet-20250219',
+        name: 'anthropic:claude-haiku-4-5',
+        value: 'anthropic:messages:claude-haiku-4-5',
       },
       {
         name: 'Google Vertex Gemini 2.5 Pro',
