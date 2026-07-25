@@ -6,10 +6,8 @@ import type { TokenUsage } from '../../types/index';
 import type {
   AnthropicToolConfig,
   WebFetchToolConfig,
-  WebFetchToolConfig20260209,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
-  WebSearchToolConfig20260209,
 } from './types';
 
 // Model definitions with cost information
@@ -701,6 +699,68 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
 }
 
 /**
+ * Config fields copied onto the SDK tool object, in the order they are written. Order is
+ * significant only in that it fixes the key order of the emitted object; the `satisfies`
+ * clauses keep these lists honest against the config interfaces.
+ */
+const WEB_FETCH_FIELDS = [
+  'allowed_callers',
+  'max_uses',
+  'allowed_domains',
+  'blocked_domains',
+  'citations',
+  'max_content_tokens',
+  'cache_control',
+  'defer_loading',
+  'strict',
+] as const satisfies readonly (keyof WebFetchToolConfig)[];
+
+const WEB_SEARCH_FIELDS = [
+  'allowed_callers',
+  'allowed_domains',
+  'blocked_domains',
+  'cache_control',
+  'defer_loading',
+  'max_uses',
+  'strict',
+  'user_location',
+] as const satisfies readonly (keyof WebSearchToolConfig)[];
+
+interface ServerToolSpec {
+  /** Tool name the API expects; always overrides whatever `name` the user config carried. */
+  name: 'web_fetch' | 'web_search';
+  fields: readonly string[];
+  /** Beta feature this tool version requires, if any. */
+  betaFeature?: string;
+}
+
+/**
+ * Anthropic server tools promptfoo rebuilds from config, keyed by tool `type`.
+ *
+ * A Map rather than an object literal so a config with a prototype-shaped `type`
+ * (`constructor`, `toString`, `__proto__`, …) misses cleanly and falls through to
+ * pass-through, instead of resolving to an Object.prototype member and throwing.
+ */
+const SERVER_TOOL_SPECS = new Map<string, ServerToolSpec>([
+  [
+    'web_fetch_20250910',
+    { name: 'web_fetch', fields: WEB_FETCH_FIELDS, betaFeature: 'web-fetch-2025-09-10' },
+  ],
+  ['web_fetch_20260209', { name: 'web_fetch', fields: WEB_FETCH_FIELDS }],
+  // The 20260309 version is the only one that supports use_cache.
+  [
+    'web_fetch_20260309',
+    {
+      name: 'web_fetch',
+      fields: [...WEB_FETCH_FIELDS, 'use_cache' satisfies keyof WebFetchToolConfigV2],
+    },
+  ],
+  // Web search needs no beta header in the current SDK.
+  ['web_search_20250305', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
+  ['web_search_20260209', { name: 'web_search', fields: WEB_SEARCH_FIELDS }],
+]);
+
+/**
  * Processes tools configuration to handle web fetch and web search tools
  */
 export function processAnthropicTools(
@@ -719,29 +779,25 @@ export function processAnthropicTools(
   };
 
   for (const tool of tools) {
-    if ('type' in tool) {
-      // Handle our custom tool configs
-      if (tool.type === 'web_fetch_20250910') {
-        processedTools.push(transformWebFetchTool(tool as WebFetchToolConfig));
-        addRequiredBetaFeature('web-fetch-2025-09-10');
-      } else if (tool.type === 'web_fetch_20260209') {
-        processedTools.push(transformWebFetchTool20260209(tool as WebFetchToolConfig20260209));
-      } else if (tool.type === 'web_fetch_20260309') {
-        processedTools.push(transformWebFetchToolV2(tool as WebFetchToolConfigV2));
-      } else if (tool.type === 'web_search_20250305') {
-        processedTools.push(transformWebSearchTool(tool as WebSearchToolConfig));
-        // Web search doesn't need beta header in latest SDK
-      } else if (tool.type === 'web_search_20260209') {
-        processedTools.push(transformWebSearchTool20260209(tool as WebSearchToolConfig20260209));
-        // Web search doesn't need beta header in latest SDK
-      } else if (tool.type === 'memory_20250818') {
-        processedTools.push(tool as Anthropic.Messages.MemoryTool20250818);
-      } else {
-        // Pass through other tool types (standard Anthropic tools)
-        processedTools.push(tool as Anthropic.Messages.ToolUnion);
+    // Server tools are rebuilt from a spec so the SDK object carries only the fields we
+    // support, in a stable order. Everything else (memory, standard Anthropic tools) is
+    // passed through untouched.
+    const toolType = 'type' in tool && typeof tool.type === 'string' ? tool.type : undefined;
+    const spec = toolType === undefined ? undefined : SERVER_TOOL_SPECS.get(toolType);
+    if (spec) {
+      const source = tool as unknown as Record<string, unknown>;
+      const built: Record<string, unknown> = { type: toolType, name: spec.name };
+      for (const field of spec.fields) {
+        const value = source[field];
+        if (value !== undefined) {
+          built[field] = value;
+        }
+      }
+      processedTools.push(built as unknown as Anthropic.Messages.ToolUnion);
+      if (spec.betaFeature) {
+        addRequiredBetaFeature(spec.betaFeature);
       }
     } else {
-      // Standard Anthropic tool
       processedTools.push(tool as Anthropic.Messages.ToolUnion);
     }
 
@@ -752,134 +808,4 @@ export function processAnthropicTools(
   }
 
   return { processedTools, requiredBetaFeatures };
-}
-
-/**
- * Apply shared web fetch tool fields from config onto the SDK tool object.
- */
-function applyWebFetchFields(
-  tool:
-    | Anthropic.Messages.WebFetchTool20250910
-    | Anthropic.Messages.WebFetchTool20260209
-    | Anthropic.Messages.WebFetchTool20260309,
-  config: WebFetchToolConfig | WebFetchToolConfig20260209 | WebFetchToolConfigV2,
-): void {
-  if (config.allowed_callers !== undefined) {
-    tool.allowed_callers = config.allowed_callers;
-  }
-  if (config.max_uses !== undefined) {
-    tool.max_uses = config.max_uses;
-  }
-  if (config.allowed_domains !== undefined) {
-    tool.allowed_domains = config.allowed_domains;
-  }
-  if (config.blocked_domains !== undefined) {
-    tool.blocked_domains = config.blocked_domains;
-  }
-  if (config.citations !== undefined) {
-    tool.citations = config.citations;
-  }
-  if (config.max_content_tokens !== undefined) {
-    tool.max_content_tokens = config.max_content_tokens;
-  }
-  if (config.cache_control !== undefined) {
-    tool.cache_control = config.cache_control;
-  }
-  if (config.defer_loading !== undefined) {
-    tool.defer_loading = config.defer_loading;
-  }
-  if (config.strict !== undefined) {
-    tool.strict = config.strict;
-  }
-}
-
-function transformWebFetchTool(
-  config: WebFetchToolConfig,
-): Anthropic.Messages.WebFetchTool20250910 {
-  const tool: Anthropic.Messages.WebFetchTool20250910 = {
-    type: 'web_fetch_20250910',
-    name: 'web_fetch',
-  };
-  applyWebFetchFields(tool, config);
-  return tool;
-}
-
-function transformWebFetchTool20260209(
-  config: WebFetchToolConfig20260209,
-): Anthropic.Messages.WebFetchTool20260209 {
-  const tool: Anthropic.Messages.WebFetchTool20260209 = {
-    type: 'web_fetch_20260209',
-    name: 'web_fetch',
-  };
-  applyWebFetchFields(tool, config);
-  return tool;
-}
-
-function transformWebFetchToolV2(
-  config: WebFetchToolConfigV2,
-): Anthropic.Messages.WebFetchTool20260309 {
-  const tool: Anthropic.Messages.WebFetchTool20260309 = {
-    type: 'web_fetch_20260309',
-    name: 'web_fetch',
-  };
-  applyWebFetchFields(tool, config);
-  if (config.use_cache !== undefined) {
-    tool.use_cache = config.use_cache;
-  }
-  return tool;
-}
-
-function applyWebSearchFields(
-  tool: Anthropic.Messages.WebSearchTool20250305 | Anthropic.Messages.WebSearchTool20260209,
-  config: WebSearchToolConfig | WebSearchToolConfig20260209,
-): void {
-  if (config.allowed_callers !== undefined) {
-    tool.allowed_callers = config.allowed_callers;
-  }
-  if (config.allowed_domains !== undefined) {
-    tool.allowed_domains = config.allowed_domains;
-  }
-  if (config.blocked_domains !== undefined) {
-    tool.blocked_domains = config.blocked_domains;
-  }
-  if (config.cache_control !== undefined) {
-    tool.cache_control = config.cache_control;
-  }
-  if (config.defer_loading !== undefined) {
-    tool.defer_loading = config.defer_loading;
-  }
-  if (config.max_uses !== undefined) {
-    tool.max_uses = config.max_uses;
-  }
-  if (config.strict !== undefined) {
-    tool.strict = config.strict;
-  }
-  if (config.user_location !== undefined) {
-    tool.user_location = config.user_location;
-  }
-}
-
-/**
- * Transform web search tool config to Anthropic beta tool format
- */
-function transformWebSearchTool(
-  config: WebSearchToolConfig,
-): Anthropic.Messages.WebSearchTool20250305 {
-  const tool: Anthropic.Messages.WebSearchTool20250305 = {
-    type: 'web_search_20250305',
-    name: 'web_search',
-  };
-  applyWebSearchFields(tool, config);
-  return tool;
-}
-
-function transformWebSearchTool20260209(
-  config: WebSearchToolConfig20260209,
-): Anthropic.Messages.WebSearchTool20260209 {
-  const tool: Anthropic.Messages.WebSearchTool20260209 = {
-    type: 'web_search_20260209',
-    name: 'web_search',
-  };
-  applyWebSearchFields(tool, config);
-  return tool;
 }

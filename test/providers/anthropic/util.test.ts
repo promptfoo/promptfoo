@@ -1117,6 +1117,20 @@ describe('Anthropic utilities', () => {
       expect(requiredBetaFeatures).toEqual([]);
     });
 
+    it('passes through tool types that collide with Object.prototype members', () => {
+      // The server-tool spec lookup must be prototype-safe. With a plain object literal,
+      // a `type` of 'constructor'/'toString'/'__proto__' resolves to an inherited member,
+      // passes a truthiness check, and then throws when its `fields` are iterated —
+      // turning a user's odd YAML into a crash during request building. `tools` is
+      // user-supplied, so these must fall through to pass-through untouched.
+      for (const type of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+        const tool = { type, name: 'whatever', max_uses: 1 } as any;
+        const { processedTools, requiredBetaFeatures } = processAnthropicTools([tool]);
+        expect(processedTools).toEqual([tool]);
+        expect(requiredBetaFeatures).toEqual([]);
+      }
+    });
+
     it('should process web_fetch_20250910 tool and add beta feature', () => {
       const webFetchTool: WebFetchToolConfig = {
         type: 'web_fetch_20250910',
