@@ -320,9 +320,9 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:undefined');
-    expect(conversations['test-provider:undefined']).toHaveLength(1);
-    expect(conversations['test-provider:undefined'][0]).toEqual({
+    expect(conversations).toHaveProperty('test-provider:undefined:0');
+    expect(conversations['test-provider:undefined:0']).toHaveLength(1);
+    expect(conversations['test-provider:undefined:0'][0]).toEqual({
       prompt: 'Hello ',
       input: 'Hello ',
       output: 'Test output',
@@ -342,7 +342,7 @@ describe('runEval', () => {
     });
     const result = results[0];
     expect(result.success).toBe(true);
-    expect(conversations).toHaveProperty('test-provider:custom-id:conv1');
+    expect(conversations).toHaveProperty('test-provider:custom-id:0:conv1');
   });
 
   it('should include sessionId from response in result metadata', async () => {
