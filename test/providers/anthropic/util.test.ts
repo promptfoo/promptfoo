@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
@@ -2072,13 +2073,13 @@ describe('Anthropic utilities', () => {
 
     it('rejects disabled thinking on Opus 5 only above effort "high"', () => {
       // The API returns 400 for thinking:{disabled} + effort xhigh/max on Opus 5.
-      for (const effort of ['xhigh', 'max']) {
+      for (const effort of ['xhigh', 'max'] as const) {
         expect(isDisabledThinkingRejectedAtEffort('claude-opus-5', effort)).toBe(true);
         expect(isDisabledThinkingRejectedAtEffort('us.anthropic.claude-opus-5', effort)).toBe(true);
       }
       // At or below `high` — and when effort is unset (the API default is `high`) —
       // disabling thinking is valid.
-      for (const effort of ['low', 'medium', 'high', undefined, null]) {
+      for (const effort of ['low', 'medium', 'high', undefined, null] as const) {
         expect(isDisabledThinkingRejectedAtEffort('claude-opus-5', effort)).toBe(false);
       }
       // Other Claude families have no such cap.
@@ -2133,15 +2134,35 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('reports whether thinking will consume output tokens', () => {
+      // Explicitly-on thinking consumes tokens on every family.
+      for (const t of [{ type: 'enabled' }, { type: 'adaptive' }]) {
+        expect(claudeThinkingConsumesTokens('claude-opus-4-8', t)).toBe(true);
+        expect(claudeThinkingConsumesTokens('claude-opus-5', t)).toBe(true);
+      }
+      // Always-on models consume tokens no matter what the config says.
+      expect(claudeThinkingConsumesTokens('claude-fable-5', undefined)).toBe(true);
+      // An omitted config consumes tokens only on thinks-by-default models — this is the
+      // case that sizes the default max_tokens and truncates answers when it is wrong.
+      expect(claudeThinkingConsumesTokens('claude-opus-5', undefined)).toBe(true);
+      expect(claudeThinkingConsumesTokens('claude-opus-5', null)).toBe(true);
+      expect(claudeThinkingConsumesTokens('claude-opus-4-8', undefined)).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(false);
+      // Explicitly disabled never consumes tokens (except on always-on models, where the
+      // API rejects `disabled` and normalization strips it before this is called).
+      expect(claudeThinkingConsumesTokens('claude-opus-5', { type: 'disabled' })).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-opus-4-8', { type: 'disabled' })).toBe(false);
+    });
+
     it('normalizes thinking configs per model family and effort', () => {
       // Manual budget thinking converts to adaptive on every sampling-deprecated family,
       // preserving `display`.
       expect(
-        normalizeClaudeThinkingConfig('claude-opus-5', {
-          type: 'enabled',
-          budget_tokens: 8000,
-          display: 'summarized',
-        } as any),
+        normalizeClaudeThinkingConfig(
+          'claude-opus-5',
+          { type: 'enabled', budget_tokens: 8000, display: 'summarized' } as any,
+          undefined,
+        ),
       ).toEqual({ type: 'adaptive', display: 'summarized' });
 
       // Fable/Mythos reject `disabled` outright, at any effort.
@@ -2150,13 +2171,13 @@ describe('Anthropic utilities', () => {
       ).toBeUndefined();
 
       // Opus 5 keeps `disabled` at effort `high` or below (and when effort is unset)...
-      for (const effort of [undefined, 'low', 'medium', 'high']) {
+      for (const effort of [undefined, 'low', 'medium', 'high'] as const) {
         expect(
           normalizeClaudeThinkingConfig('claude-opus-5', { type: 'disabled' }, effort),
         ).toEqual({ type: 'disabled' });
       }
       // ...but drops it at xhigh/max, where the pairing would 400.
-      for (const effort of ['xhigh', 'max']) {
+      for (const effort of ['xhigh', 'max'] as const) {
         expect(
           normalizeClaudeThinkingConfig('claude-opus-5', { type: 'disabled' }, effort),
         ).toBeUndefined();

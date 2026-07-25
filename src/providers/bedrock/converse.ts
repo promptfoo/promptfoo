@@ -1095,7 +1095,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const additionalThinking = fields.thinking as
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
-      const normalizedThinking = normalizeClaudeThinkingConfig(this.modelName, additionalThinking);
+      const normalizedThinking = normalizeClaudeThinkingConfig(
+        this.modelName,
+        additionalThinking,
+        undefined,
+      );
       if (normalizedThinking === undefined) {
         delete fields.thinking;
       } else {
@@ -1108,6 +1112,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         this.config.thinking,
+        // Converse takes effort only via additionalModelRequestFields, which this path
+        // does not inspect, so the effort-capped rules cannot be evaluated here.
+        undefined,
       );
       if (normalizedThinking !== undefined) {
         fields.thinking = normalizedThinking;

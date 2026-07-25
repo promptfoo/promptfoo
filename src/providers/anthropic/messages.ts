@@ -26,13 +26,13 @@ import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  claudeThinkingConsumesTokens,
   getClaudeModelWarningName,
   getRefusalDetails,
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
   isSamplingParamsDeprecatedClaudeModel,
-  isThinkingOnByDefaultClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
@@ -43,7 +43,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type { CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { AnthropicMessageOptions } from './types';
+import type { AnthropicMessageOptions, ClaudeEffort } from './types';
 
 const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
 
@@ -581,7 +581,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    */
   private resolveModelThinking(
     requested: Anthropic.Messages.ThinkingConfigParam | undefined,
-    effort: string | undefined,
+    effort: ClaudeEffort | undefined,
     flags: {
       samplingParamsDeprecated: boolean;
       alwaysOnAdaptiveThinking: boolean;
@@ -634,8 +634,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Deliberately NOT folded into thinkingEnabled: adaptive thinking is compatible with a
     // forced tool_choice (verified against the live API on Opus 5 and Opus 4.8), so treating
     // thinks-by-default as "thinking enabled" would silently drop a user's tool_choice.
-    const thinkingConsumesTokens =
-      thinkingEnabled || (resolved == null && isThinkingOnByDefaultClaudeModel(this.modelName));
+    const thinkingConsumesTokens = claudeThinkingConsumesTokens(this.modelName, resolved);
     return { thinking: resolved, thinkingEnabled, thinkingConsumesTokens };
   }
 

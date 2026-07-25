@@ -5,6 +5,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { TokenUsage } from '../../types/index';
 import type {
   AnthropicToolConfig,
+  ClaudeEffort,
   WebFetchToolConfig,
   WebFetchToolConfigV2,
   WebSearchToolConfig,
@@ -223,12 +224,6 @@ interface ClaudeModelFamily {
 }
 
 /**
- * Effort levels at which `thinking: { type: 'disabled' }` is rejected on models flagged
- * `disabledThinkingEffortCapped` (the API returns 400 for the combination).
- */
-const EFFORT_LEVELS_REJECTING_DISABLED_THINKING = new Set(['xhigh', 'max']);
-
-/**
  * Single source of truth for Claude model capabilities. Adding a model is a new row here
  * (plus, if a provider branches on it by name, a thin `isClaude<Model>Model` accessor)
  * instead of editing several parallel OR-chains. Regional-premium coverage follows
@@ -333,6 +328,30 @@ export function isThinkingOnByDefaultClaudeModel(modelId: string): boolean {
 }
 
 /**
+ * Whether a request will spend output tokens on thinking, given the thinking config as
+ * normalized by {@link normalizeClaudeThinkingConfig}. Thinking shares the `max_tokens`
+ * budget with the answer, so providers size their default `max_tokens` off this — get it
+ * wrong and responses truncate mid-answer.
+ *
+ * Note this is deliberately NOT the same question as "is thinking enabled". A model that
+ * thinks by default consumes tokens without the request ever saying so, but must not be
+ * treated as explicitly-enabled thinking: that would trigger the legacy extended-thinking
+ * incompatibilities (forced `tool_choice` suppression, `top_p` clamping) which do not apply
+ * to adaptive thinking. Callers that need that second question keep their own predicate.
+ */
+export function claudeThinkingConsumesTokens(
+  modelId: string,
+  resolvedThinking: { type?: string } | undefined | null,
+): boolean {
+  return (
+    isAlwaysOnAdaptiveThinkingClaudeModel(modelId) ||
+    resolvedThinking?.type === 'enabled' ||
+    resolvedThinking?.type === 'adaptive' ||
+    (resolvedThinking == null && isThinkingOnByDefaultClaudeModel(modelId))
+  );
+}
+
+/**
  * True when `thinking: { type: 'disabled' }` would be rejected for this model at this effort
  * level. Claude Opus 5 thinks by default and only accepts `disabled` at effort `high` or below,
  * so `disabled` + `xhigh`/`max` is a 400. An unset effort uses the API default (`high`), which
@@ -340,12 +359,11 @@ export function isThinkingOnByDefaultClaudeModel(modelId: string): boolean {
  */
 export function isDisabledThinkingRejectedAtEffort(
   modelId: string,
-  effort: string | undefined | null,
+  effort: ClaudeEffort | undefined | null,
 ): boolean {
   return (
     hasClaudeCapability(modelId, 'disabledThinkingEffortCapped') &&
-    effort != null &&
-    EFFORT_LEVELS_REJECTING_DISABLED_THINKING.has(effort)
+    (effort === 'xhigh' || effort === 'max')
   );
 }
 
@@ -379,7 +397,7 @@ export function normalizeClaudeThinkingConfig<
 >(
   modelId: string,
   thinking: T | undefined,
-  effort?: string | null,
+  effort: ClaudeEffort | null | undefined,
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
   if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };

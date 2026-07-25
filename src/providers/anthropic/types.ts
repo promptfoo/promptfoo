@@ -78,6 +78,9 @@ export interface OutputFormat {
   };
 }
 
+/** The reasoning-depth ladder Claude accepts on `output_config.effort`. */
+export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 /**
  * Options shared by every Anthropic provider. `AnthropicGenericProvider` types its
  * `config` as this, and the per-provider option interfaces extend it, so a field added
@@ -107,7 +110,7 @@ export interface AnthropicBaseOptions {
 
 export interface AnthropicMessageOptions extends AnthropicBaseOptions {
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // Controls output quality/speed tradeoff
+  effort?: ClaudeEffort; // Controls output quality/speed tradeoff
   extra_body?: Record<string, any>;
   max_tokens?: number;
   metadata?: Anthropic.Messages.Metadata; // Request metadata for tracking/abuse detection

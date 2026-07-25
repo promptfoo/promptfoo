@@ -1603,6 +1603,12 @@ export const BEDROCK_MODEL = {
       // Models that think by default (Opus 5) spend part of max_tokens on thinking even
       // when the request carries no `thinking` field, so the bare 1024 default truncates
       // ordinary answers. Give those the same headroom the Anthropic Messages path uses.
+      //
+      // Intentionally narrower than the shared claudeThinkingConsumesTokens(): that helper
+      // also returns true for an explicitly-enabled `thinking` block, which would raise this
+      // path's default from 1024 to 2048 for every Claude model, not just the thinks-by-
+      // default ones. That may well be the right default here too, but it is a behavior
+      // change for existing configs and belongs in its own change.
       const thinksByDefault = modelName
         ? isThinkingOnByDefaultClaudeModel(modelName) && config?.thinking?.type !== 'disabled'
         : false;
@@ -1646,7 +1652,8 @@ export const BEDROCK_MODEL = {
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
       const thinking = modelName
-        ? normalizeClaudeThinkingConfig(modelName, config?.thinking)
+        ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
+          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
         : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {

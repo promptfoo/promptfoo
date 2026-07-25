@@ -17,10 +17,9 @@ import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
+  claudeThinkingConsumesTokens,
   getTokenUsage,
-  isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
-  isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
@@ -338,7 +337,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
     const effort = this.config.effort;
@@ -347,15 +345,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       requestedThinkingConfig,
       effort,
     );
-    const isThinkingEnabled =
-      alwaysOnAdaptiveThinking ||
-      thinkingConfig?.type === 'enabled' ||
-      thinkingConfig?.type === 'adaptive';
-    // Opus 5 runs adaptive thinking even with no `thinking` field, and thinking shares the
-    // max_tokens budget with the answer — so the 512 default would truncate ordinary replies.
-    const thinkingConsumesTokens =
-      isThinkingEnabled ||
-      (thinkingConfig == null && isThinkingOnByDefaultClaudeModel(this.modelName));
+    // Thinking shares the max_tokens budget with the answer, and Opus 5 thinks even with no
+    // `thinking` field — so the 512 default would truncate ordinary replies.
+    const thinkingConsumesTokens = claudeThinkingConsumesTokens(this.modelName, thinkingConfig);
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
