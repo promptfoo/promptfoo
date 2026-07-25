@@ -17,27 +17,37 @@ const execAsync = promisify(exec);
  * assertions:
  *   - type: correctover
  *     value: /path/to/ccs-rules.yaml    # optional: custom rule file
- *     inverse: false                     # optional: invert pass/fail
+ *     inverse: false                     // optional: invert pass/fail
  * ```
  *
  * Requires: pip install correctover-ccs (or fallback to built-in rules).
  * See https://correctover.com/docs for installation.
  */
 
-const CCS_CLI_NOT_FOUND = 'Correctover CCS CLI not found. Install: pip install correctover-ccs. See https://correctover.com/docs';
+const CCS_CLI_NOT_FOUND =
+  'Correctover CCS CLI not found. Install: pip install correctover-ccs. See https://correctover.com/docs';
 
 /** Redact potentially sensitive data (offending payload excerpts) from scanner output. */
 function redactDetail(text: string): string {
-  // Remove long base64-like or hex blobs that could be payload excerpts
   return text
     .replace(/[A-Za-z0-9+/=]{40,}/g, '<REDACTED>')
     .replace(/0x[0-9a-fA-F]{16,}/g, '<REDACTED>')
-    // Truncate lines longer than 120 chars
     .split('\n')
     .map((line) => (line.length > 120 ? line.substring(0, 117) + '...' : line))
     .join('\n')
-    // Cap total length
     .substring(0, 1000);
+}
+
+/** Serialize a value to a JSON string for scanning. */
+function serializeForScan(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'string') return value || null;
+  try {
+    const s = safeJsonStringify(value);
+    return s && s !== '""' ? s : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Extract tool call payloads from provider response metadata, if present. */
@@ -46,34 +56,34 @@ function extractToolCalls(providerResponse: any): string[] {
   const metadata = providerResponse?.metadata;
   if (!metadata) return payloads;
 
-  // Standard toolCalls array (OpenAI, Anthropic, etc.)
+  // Standard toolCalls array (OpenAI, Anthropic, Claude Agent SDK, n8n, ElevenLabs, etc.)
   const toolCalls = metadata.toolCalls;
   if (Array.isArray(toolCalls)) {
     for (const tc of toolCalls) {
-      // OpenAI-style: { id, type, function: { name, arguments } }
       if (tc.function?.arguments) {
         payloads.push(tc.function.arguments);
       }
-      // Anthropic-style: { id, name, input }
       if (tc.input && typeof tc.input === 'object') {
-        payloads.push(safeJsonStringify(tc.input));
+        const s = serializeForScan(tc.input);
+        if (s) payloads.push(s);
+      }
+      // Generic: serialize entire tool call if it has a name but no structured fields
+      if (tc.name && !tc.function?.arguments && !tc.input) {
+        const s = serializeForScan(tc);
+        if (s) payloads.push(s);
       }
     }
   }
 
   // MCP provider direct metadata fields (MCPProvider.transformToolResult)
-  // Stores toolName/toolArgs directly on metadata, not in toolCalls array
+  // Stores toolArgs/originalPayload directly on metadata, not in toolCalls array
   if (metadata.toolArgs !== undefined) {
-    const args = typeof metadata.toolArgs === 'string'
-      ? metadata.toolArgs
-      : safeJsonStringify(metadata.toolArgs);
-    payloads.push(args);
+    const s = serializeForScan(metadata.toolArgs);
+    if (s) payloads.push(s);
   }
   if (metadata.originalPayload !== undefined) {
-    const orig = typeof metadata.originalPayload === 'string'
-      ? metadata.originalPayload
-      : safeJsonStringify(metadata.originalPayload);
-    payloads.push(orig);
+    const s = serializeForScan(metadata.originalPayload);
+    if (s) payloads.push(s);
   }
 
   return payloads;
@@ -109,48 +119,43 @@ async function runCcsScanner(
     try {
       parsed = JSON.parse(output);
     } catch {
-      return { findings: [{ rule: 'ccs-scan', detail: redactDetail(output.substring(0, 200)) }], raw: output };
+      return { findings: [{ rule: 'ccs-scan', detail: redactDetail(output.substring(0, 200)) }], raw: redactDetail(output) };
     }
 
     const findings = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-    return { findings, raw: redactDetail(output) };
+    // Sanitize raw output in case stderr diagnostics leaked into stdout
+    const raw = stderr ? redactDetail(`${output}\n[stderr] ${stderr.substring(0, 200)}`) : redactDetail(output);
+    return { findings, raw };
   } catch (err: any) {
-    // ENOENT = CLI not installed
     if (err.code === 'ENOENT' || (err.stderr || '').includes('command not found') || (err.stderr || '').includes('No such file')) {
       return null;
     }
-    // Other errors: timeout, crash, invalid args — re-throw as assertion failure
-    throw new Error(`CCS scanner execution failed: ${redactDetail(err.message || String(err))}`);
+    // Sanitize error message before re-throwing — may contain payload excerpts
+    const sanitized = redactDetail(err.message || String(err));
+    throw new Error(`CCS scanner execution failed: ${sanitized}`);
   }
 }
 
 export const handleCorrectover = async (params: AssertionParams): Promise<GradingResult> => {
   const { assertion, inverse = false, providerResponse, output: transformedOutput } = params;
-  // Collect payloads to scan: primary output + tool calls from metadata + post-transform output
   const payloads: string[] = [];
 
-  // 1. Primary output (raw provider response)
-  const rawOutput = typeof providerResponse?.output === 'string'
-    ? providerResponse.output
-    : providerResponse?.output
-      ? safeJsonStringify(providerResponse.output)
-      : null;
-  if (rawOutput && rawOutput !== '""') {
+  // 1. Raw provider output
+  const rawOutput = serializeForScan(providerResponse?.output);
+  if (rawOutput) {
     payloads.push(rawOutput);
   }
 
-  // 1b. Post-transform output (from assertion transform function) — scan separately
-  // to catch payloads that may be hidden or encoded after transformation
-  if (transformedOutput !== undefined && transformedOutput !== rawOutput) {
-    const transformed = typeof transformedOutput === 'string'
-      ? transformedOutput
-      : safeJsonStringify(transformedOutput);
-    if (transformed && transformed !== '""') {
+  // 2. Post-transform output (from assertion transform function)
+  //    Serialize first, then compare — avoids string-vs-object always-unequal bug
+  if (transformedOutput !== undefined) {
+    const transformed = serializeForScan(transformedOutput);
+    if (transformed && transformed !== rawOutput) {
       payloads.push(transformed);
     }
   }
 
-  // 2. Tool call payloads from metadata (agent providers store called tools here)
+  // 3. Tool call payloads from metadata (agent providers store called tools here)
   try {
     const toolCallPayloads = extractToolCalls(providerResponse);
     payloads.push(...toolCallPayloads);
@@ -159,7 +164,6 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
   }
 
   if (payloads.length === 0) {
-    // Nothing to scan — pass or fail based on inversion
     return {
       pass: !inverse,
       score: inverse ? 0 : 1,
@@ -176,13 +180,11 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
     : undefined;
 
   try {
-    // Scan each payload and collect all findings
     const allFindings: any[] = [];
 
     for (const payload of payloads) {
       const result = await runCcsScanner(payload, rulesPath);
       if (result === null) {
-        // CLI not found — explicit failure (prevents security false negatives)
         return {
           pass: false,
           score: 0,
@@ -206,7 +208,7 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
         .join('; ');
 
       return {
-        pass: inverse ? true : false, // hasFindings => normal: fail, inverse: pass (expected)
+        pass: inverse,
         score: inverse ? 1 : 0,
         reason: inverse
           ? `CCS confirmed violation as expected: ${allFindings.length} issue(s) detected [${ruleSummary}]`
@@ -215,9 +217,8 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
       };
     }
 
-    // No findings
     return {
-      pass: inverse ? false : true, // No findings => pass normal, fail inverse
+      pass: !inverse,
       score: inverse ? 0 : 1,
       reason: inverse
         ? 'Expected CCS violations but none were detected'
@@ -225,12 +226,11 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
       assertion,
     };
   } catch (err: any) {
-    // Explicit failure on scanner error (crash, timeout, etc.)
-    logger.warn('Correctover CCS assertion error: ' + err.message);
+    logger.warn('Correctover CCS assertion error: ' + redactDetail(err.message || String(err)));
     return {
       pass: false,
       score: 0,
-      reason: `CCS assertion failed: ${redactDetail(err.message)}`,
+      reason: `CCS assertion could not complete: ${redactDetail(err.message)}`,
       assertion,
     };
   }
