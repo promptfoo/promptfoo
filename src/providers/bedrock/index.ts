@@ -1627,13 +1627,6 @@ export const BEDROCK_MODEL = {
       }
       addConfigParam(
         params,
-        'anthropic_version',
-        config?.anthropic_version,
-        undefined,
-        'bedrock-2023-05-31',
-      );
-      addConfigParam(
-        params,
         'tools',
         await maybeLoadToolsFromExternalFile(config?.tools, vars),
         undefined,

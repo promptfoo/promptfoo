@@ -277,15 +277,15 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   { match: CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN, regionalPremium: true },
 ];
 
-function hasClaudeCapability(
-  modelId: string,
-  capability:
-    | 'samplingParamsDeprecated'
-    | 'alwaysOnAdaptiveThinking'
-    | 'thinkingOnByDefault'
-    | 'disabledThinkingEffortCapped'
-    | 'regionalPremium',
-): boolean {
+/**
+ * The boolean capability flags on ClaudeModelFamily, derived from the interface so that adding
+ * a capability is a single edit there rather than a matching edit here.
+ */
+type ClaudeCapability = {
+  [K in keyof ClaudeModelFamily]-?: NonNullable<ClaudeModelFamily[K]> extends boolean ? K : never;
+}[keyof ClaudeModelFamily];
+
+function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boolean {
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
 
@@ -610,54 +610,34 @@ export function calculateAnthropicCost(
   const withRegionalPremium = (cost: number | undefined): number | undefined =>
     cost == null ? cost : cost * regionalPremiumMultiplier;
 
-  if (
+  // An explicit flat `cost` (with no separate input/output rates) intentionally overrides
+  // tier-specific and cache pricing, so it short-circuits straight to the base calculation.
+  const usesFlatCost =
     effectiveConfig.cost != null &&
     effectiveConfig.inputCost == null &&
-    effectiveConfig.outputCost == null
-  ) {
-    return withRegionalPremium(
-      calculateCostBase(
-        pricingModelName,
-        effectiveConfig,
-        promptTokens,
-        completionTokens,
-        ANTHROPIC_MODELS,
-      ),
-    );
-  }
-
-  if (
-    !Number.isFinite(promptTokens) ||
-    !Number.isFinite(completionTokens) ||
-    typeof promptTokens === 'undefined' ||
-    typeof completionTokens === 'undefined'
-  ) {
-    return withRegionalPremium(
-      calculateCostBase(
-        pricingModelName,
-        effectiveConfig,
-        promptTokens,
-        completionTokens,
-        ANTHROPIC_MODELS,
-      ),
-    );
-  }
-
+    effectiveConfig.outputCost == null;
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
 
   // This shared helper does not infer size-based tiers. Provider-specific callers can supply
   // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.
-  if (cacheRead || cacheCreation) {
-    if (modelInfo) {
-      const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
-      const outputCost =
-        effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
-      return withRegionalPremium(
-        calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
-          completionTokens * outputCost,
-      );
-    }
+  // The `typeof` guards narrow `number | undefined` to `number`; `Number.isFinite` alone already
+  // rejects `undefined` at runtime but does not narrow the type.
+  if (
+    !usesFlatCost &&
+    modelInfo &&
+    (cacheRead || cacheCreation) &&
+    typeof promptTokens !== 'undefined' &&
+    typeof completionTokens !== 'undefined' &&
+    Number.isFinite(promptTokens) &&
+    Number.isFinite(completionTokens)
+  ) {
+    const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
+    const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
+    return withRegionalPremium(
+      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+        completionTokens * outputCost,
+    );
   }
 
   return withRegionalPremium(

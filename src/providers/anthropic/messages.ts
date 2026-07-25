@@ -634,6 +634,48 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }
 
   /**
+   * Build the ProviderResponse for a completed Anthropic message.
+   *
+   * Shared by the cache-hit and fresh-call paths, which are otherwise identical. `cached`
+   * drives the only three differences: token usage is attributed to the cache, the refusal
+   * warning is suppressed (it was already logged when the response was first fetched), and
+   * the `cached` marker is set. Keeping one builder is what stops the two paths drifting —
+   * they have diverged before, which is why the cached-refusal regression test exists.
+   */
+  private buildMessageResponse(
+    message: Anthropic.Messages.Message,
+    config: AnthropicMessageOptions,
+    processedOutputFormat: { type?: string } | undefined,
+    cached: boolean,
+  ): ProviderResponse {
+    const finishReason = normalizeFinishReason(message.stop_reason);
+    let output = outputFromMessage(message, config.showThinking ?? true);
+
+    // Handle structured JSON output parsing
+    if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+      try {
+        output = JSON.parse(output);
+      } catch (error) {
+        logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+      }
+    }
+
+    const refusalDetails = getRefusalDetails(message);
+    if (refusalDetails && !cached) {
+      logger.warn(refusalDetails);
+    }
+
+    return {
+      output,
+      tokenUsage: getTokenUsage(message, cached),
+      ...(finishReason && { finishReason }),
+      ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
+      cost: getAnthropicCostFromMessage(this.modelName, config, message),
+      ...(cached && { cached: true }),
+    };
+  }
+
+  /**
    * Internal implementation of callApi without tracing wrapper.
    */
   private async callApiInternal(
@@ -899,31 +941,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       if (cachedResponse) {
         logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
-          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
-          const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
-          let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
-
-          // Handle structured JSON output parsing
-          if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-            try {
-              output = JSON.parse(output);
-            } catch (error) {
-              logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-            }
-          }
-
-          const cachedRefusalDetails = getRefusalDetails(parsedCachedResponse);
-
-          return {
-            output,
-            tokenUsage: getTokenUsage(parsedCachedResponse, true),
-            ...(finishReason && { finishReason }),
-            ...(cachedRefusalDetails && {
-              guardrails: { flagged: true, reason: cachedRefusalDetails },
-            }),
-            cost: getAnthropicCostFromMessage(this.modelName, config, parsedCachedResponse),
-            cached: true,
-          };
+          // Stays inside this try: the catch below is the legacy plain-string cache fallback,
+          // and it must keep covering parse/format failures from the whole build.
+          return this.buildMessageResponse(
+            JSON.parse(cachedResponse) as Anthropic.Messages.Message,
+            config,
+            processedOutputFormat,
+            true,
+          );
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
           return {
@@ -982,30 +1007,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
       }
 
-      const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
-      let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
-
-      // Handle structured JSON output parsing
-      if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-        try {
-          output = JSON.parse(output);
-        } catch (error) {
-          logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-        }
-      }
-
-      const refusalDetails = getRefusalDetails(resolvedMessage);
-      if (refusalDetails) {
-        logger.warn(refusalDetails);
-      }
-
-      return {
-        output,
-        tokenUsage: getTokenUsage(resolvedMessage, false),
-        ...(finishReason && { finishReason }),
-        ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-        cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
-      };
+      return this.buildMessageResponse(resolvedMessage, config, processedOutputFormat, false);
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
