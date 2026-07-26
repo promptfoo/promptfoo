@@ -383,3 +383,14 @@
     transform: scale(0.98);
   }
 }
+
+/* Decorative-only loops (shimmer/pulse/glow); safe to stop entirely. */
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card *,
+  .card *::before,
+  .card *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

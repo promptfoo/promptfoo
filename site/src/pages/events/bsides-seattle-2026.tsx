@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
@@ -8,7 +8,6 @@ import { SITE_CONSTANTS } from '../../constants';
 import styles from './bsides-seattle-2026.module.css';
 
 // Event configuration
-const EVENT_DATE = '2026-02-27T09:00:00-08:00';
 const EVENT_DATE_DISPLAY = 'February 27-28, 2026';
 const EVENT_LOCATION = 'Building 92, Redmond, WA';
 
@@ -52,78 +51,6 @@ const ChatIcon = () => (
   </svg>
 );
 
-function CountdownTimer(): React.ReactElement {
-  const [timeLeft, setTimeLeft] = useState({
-    days: 0,
-    hours: 0,
-    minutes: 0,
-    seconds: 0,
-    isExpired: false,
-  });
-
-  useEffect(() => {
-    const targetDate = new Date(EVENT_DATE).getTime();
-
-    const updateCountdown = () => {
-      const now = new Date().getTime();
-      const difference = targetDate - now;
-
-      if (difference > 0) {
-        setTimeLeft({
-          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-          hours: Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
-          minutes: Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60)),
-          seconds: Math.floor((difference % (1000 * 60)) / 1000),
-          isExpired: false,
-        });
-      } else {
-        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: true });
-      }
-    };
-
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  if (timeLeft.isExpired) {
-    return (
-      <div className={styles.countdownExpired}>
-        <span>Event is happening now!</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.countdown}>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>{timeLeft.days}</span>
-        <span className={styles.countdownLabel}>Days</span>
-      </div>
-      <div className={styles.countdownSeparator}>:</div>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>{timeLeft.hours.toString().padStart(2, '0')}</span>
-        <span className={styles.countdownLabel}>Hours</span>
-      </div>
-      <div className={styles.countdownSeparator}>:</div>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>
-          {timeLeft.minutes.toString().padStart(2, '0')}
-        </span>
-        <span className={styles.countdownLabel}>Minutes</span>
-      </div>
-      <div className={styles.countdownSeparator}>:</div>
-      <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>
-          {timeLeft.seconds.toString().padStart(2, '0')}
-        </span>
-        <span className={styles.countdownLabel}>Seconds</span>
-      </div>
-    </div>
-  );
-}
-
 export default function BSidesSeattle2026(): React.ReactElement {
   const [rainEnabled, setRainEnabled] = useState(true);
 
@@ -141,13 +68,13 @@ export default function BSidesSeattle2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at BSides Seattle 2026"
-      description="Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos, hallway-track threat intel, and practical ways to harden LLM apps."
+      description="Recap of BSides Seattle 2026: hands-on AI red teaming demos, hallway-track threat intel, and practical ways to harden LLM apps."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at BSides Seattle 2026" />
         <meta
           property="og:description"
-          content="Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos and practical ways to harden LLM apps. Feb 27-28, Building 92, Redmond."
+          content="Recap of BSides Seattle 2026: hands-on AI red teaming demos and practical ways to harden LLM apps. Feb 27-28, Building 92, Redmond."
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/bsides-seattle-2026" />
@@ -198,12 +125,10 @@ export default function BSidesSeattle2026(): React.ReactElement {
         <section className={styles.heroContent}>
           <div className={styles.container}>
             <p className={styles.heroSubtitle}>
-              Meet Promptfoo Engineers and get live demos of AI red teaming: prompt injection,
-              jailbreaks, and data exfiltration against real-world LLM apps. Bring your use case and
-              leave with a testing plan you can run in CI.
+              Promptfoo engineers ran live demos of AI red teaming: prompt injection, jailbreaks,
+              and data exfiltration against real-world LLM apps. People brought their use cases and
+              left with a testing plan they could run in CI.
             </p>
-
-            <CountdownTimer />
 
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
@@ -238,7 +163,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
 
             <div className={styles.heroCtas}>
               <Link to="/contact" className={styles.primaryCta}>
-                Schedule a Meeting
+                Book a Demo
               </Link>
             </div>
             <button
@@ -261,25 +186,20 @@ export default function BSidesSeattle2026(): React.ReactElement {
         <section className={styles.spiritSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What to Expect</h2>
+              <h2 className={styles.sectionTitle}>What We Covered</h2>
               <p className={styles.sectionSubtitle}>Open-Source, Developer-First AI Red Teaming</p>
             </div>
             <div className={styles.spiritGrid}>
-              <a
-                href="https://www.promptfoo.dev/docs/category/red-teaming/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.spiritCard}
-              >
+              <Link to="/docs/red-team/" className={styles.spiritCard}>
                 <div className={styles.cardIconSvg}>
                   <RefreshIcon />
                 </div>
                 <h3>Automated Red Teaming Workflows</h3>
                 <p>
-                  Learn how teams turn one-off testing into repeatable coverage across prompts,
-                  models, and releases.
+                  How teams turn one-off testing into repeatable coverage across prompts, models,
+                  and releases.
                 </p>
-              </a>
+              </Link>
               <a
                 href="https://www.bsidesseattle.com/2026-sponsors.html"
                 target="_blank"
@@ -289,8 +209,8 @@ export default function BSidesSeattle2026(): React.ReactElement {
                 <div className={styles.cardIconSvg}>
                   <TargetIcon />
                 </div>
-                <h3>Attend our Talks</h3>
-                <p>Join our Engineers for a session on Red Teaming for AI at 2:30PM each day.</p>
+                <h3>Our Talks</h3>
+                <p>Our engineers ran a session on Red Teaming for AI at 2:30PM each day.</p>
               </a>
               <a
                 href="https://discord.com/invite/promptfoo"
@@ -311,13 +231,13 @@ export default function BSidesSeattle2026(): React.ReactElement {
           </div>
         </section>
 
-        {/* Attending BSides Seattle Section */}
+        {/* Missed us in Seattle Section */}
         <section className={styles.sharedSection}>
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Attending BSides Seattle?</h2>
+              <h2 className={styles.sectionTitle}>Missed us in Seattle?</h2>
               <p className={styles.sectionSubtitle}>
-                Grab a slot for a quick walkthrough tailored to your stack.
+                We still run the same walkthrough, tailored to your stack.
               </p>
             </div>
             <div className={styles.sharedGrid}>
@@ -325,9 +245,9 @@ export default function BSidesSeattle2026(): React.ReactElement {
                 <div className={styles.cardIconSvg}>
                   <CalendarIcon />
                 </div>
-                <h3>Schedule a Meeting</h3>
+                <h3>Book a Demo</h3>
                 <p>
-                  Book time for a short, technical walkthrough of AI red teaming for your specific
+                  Grab time for a short, technical walkthrough of AI red teaming for your specific
                   use case.
                 </p>
                 <Link to="/contact" className={styles.cardLink}>
@@ -338,7 +258,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                 <div className={styles.cardIconSvg}>
                   <ChatIcon />
                 </div>
-                <h3>Can't Make It?</h3>
+                <h3>Prefer to Lurk?</h3>
                 <p>
                   Join our Discord community to connect with our team and the AI security community.
                 </p>
@@ -379,10 +299,10 @@ export default function BSidesSeattle2026(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>See You in Seattle</h2>
+              <h2 className={styles.ctaTitle}>Thanks, Seattle</h2>
               <p className={styles.ctaText}>
-                Whether you're a local or flying in for the conference, we'd love to connect. Join
-                our community and stay updated on our event plans.
+                Good turnout, sharp questions, and plenty of rain. Join our community to keep the
+                conversation going and hear where we show up next.
               </p>
               <div className={styles.ctaButtons}>
                 <a

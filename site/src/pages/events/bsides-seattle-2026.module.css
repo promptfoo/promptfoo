@@ -131,67 +131,10 @@
 }
 
 /* Countdown Timer */
-.countdown {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-}
-
-.countdownItem {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: linear-gradient(135deg, rgba(45, 90, 61, 0.2) 0%, rgba(111, 78, 55, 0.15) 100%);
-  border: 1px solid rgba(45, 90, 61, 0.35);
-  border-radius: 12px;
-  padding: 1rem 1.25rem;
-  min-width: 80px;
-}
-
-.countdownNumber {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #8fbc8f;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.countdownLabel {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 0.25rem;
-}
-
-.countdownSeparator {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #228b22;
-  animation: blink 1s step-end infinite;
-}
-
 @keyframes blink {
   50% {
     opacity: 0;
   }
-}
-
-.countdownExpired {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 2rem;
-  padding: 1rem 2rem;
-  background: linear-gradient(135deg, rgba(45, 90, 61, 0.25) 0%, rgba(111, 78, 55, 0.2) 100%);
-  border: 1px solid rgba(45, 90, 61, 0.4);
-  border-radius: 12px;
-  color: #8fbc8f;
-  font-size: 1.25rem;
-  font-weight: 600;
 }
 
 .eventDetails {

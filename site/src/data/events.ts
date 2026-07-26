@@ -425,25 +425,25 @@ export const events: Event[] = [
       country: 'USA',
     },
     booth: 'Booth #4712',
-    description: 'Meet us at booth #4712 for live AI red teaming demos and security consultations.',
+    description: 'We ran live AI red teaming demos and security consultations at booth #4712.',
     fullDescription:
-      'Join us at Black Hat USA 2025 for live AI red teaming demos, security consultations, and the latest in LLM vulnerability research. Visit our booth to see how Fortune 500 companies protect their AI applications.',
+      'Promptfoo was at Black Hat USA 2025 with live AI red teaming demos, security consultations, and the latest in LLM vulnerability research. We showed how Fortune 500 companies protect their AI applications.',
     cardImage: '/img/events/blackhat-2025.jpg',
     heroImage: '/img/events/blackhat-2025.jpg',
     highlights: [
       {
         icon: '🎯',
         title: 'Live Demos',
-        description: 'Watch AI red teaming attacks in real-time',
+        description: 'AI red teaming attacks, run on the floor',
       },
       {
         icon: '🔒',
-        title: 'Free Scan',
-        description: 'Get a complimentary AI vulnerability assessment',
+        title: 'Risk Reviews',
+        description: 'Walked through AI vulnerability findings',
       },
       {
         icon: '🎁',
-        title: 'Exclusive Swag',
+        title: 'Swag',
         description: 'Limited edition Promptfoo gear',
       },
     ],
@@ -451,8 +451,8 @@ export const events: Event[] = [
       {
         title: 'LLM Red Teaming Demo',
         description:
-          'Watch our team attempt to jailbreak and exploit a live AI application using prompt injection, data exfiltration, and other OWASP Top 10 attacks.',
-        schedule: 'Running every 30 minutes at the booth',
+          'Our team jailbroke and exploited a live AI application using prompt injection, data exfiltration, and other OWASP Top 10 attacks.',
+        schedule: 'Ran every 30 minutes at the booth',
       },
     ],
     externalLinks: [
@@ -472,10 +472,10 @@ export const events: Event[] = [
     slug: 'defcon-2025',
     name: 'Promptfoo Party at DEF CON 33',
     shortName: 'DEF CON 33',
-    status: getEventStatus('2025-08-09T23:59:00-07:00'),
+    status: getEventStatus('2025-08-09T20:00:00-07:00'),
     type: 'party',
-    startDate: '2025-08-09T20:00:00-07:00', // PDT
-    endDate: '2025-08-09T23:59:00-07:00', // PDT
+    startDate: '2025-08-09T18:00:00-07:00', // PDT
+    endDate: '2025-08-09T20:00:00-07:00', // PDT
     location: {
       venue: 'Millennium FANDOM Bar',
       city: 'Las Vegas',
@@ -483,26 +483,26 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Join hackers, security researchers, and the open source community for the AI security party of DEF CON.',
+      'Hackers, security researchers, and the open source community joined us for the AI security party of DEF CON.',
     fullDescription:
-      "Join hackers, security researchers, and the open source community for the AI security event of DEF CON at the galaxy's most iconic cantina. Free drinks, great vibes, and security war stories.",
+      "Hackers, security researchers, and the open source community joined us for the AI security event of DEF CON at the galaxy's most iconic cantina. Drinks were on us, and the war stories were free.",
     cardImage: '/img/events/defcon-2025.jpg',
     heroImage: '/img/events/defcon-2025.jpg',
     highlights: [
       {
         icon: '🍺',
         title: 'Open Bar',
-        description: 'Free drinks on us',
+        description: 'Drinks were on us',
       },
       {
         icon: '⚔️',
         title: 'Mos Eisley Vibes',
-        description: 'Party in a wretched hive of scum and villainy',
+        description: 'A party in a wretched hive of scum and villainy',
       },
       {
         icon: '🤖',
         title: 'Community',
-        description: 'Network with security researchers',
+        description: 'Networked with security researchers',
       },
     ],
     registrationUrl: 'https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web',
@@ -742,7 +742,7 @@ export function getEventBySlug(slug: string): Event | undefined {
 }
 
 export function getEventsByYear(year: number): Event[] {
-  return events.filter((event) => new Date(event.startDate).getFullYear() === year);
+  return events.filter((event) => getEventYear(event.startDate) === year);
 }
 
 export function getEventsByType(type: EventType): Event[] {
@@ -763,6 +763,13 @@ function parseCalendarDate(isoDate: string): Date {
   return new Date(year, month - 1, day);
 }
 
+// Same reasoning as `parseCalendarDate`: `new Date(iso).getFullYear()` resolves in the build
+// host's timezone, so a late-December evening event in a western offset gets filed under the
+// following year on a UTC box — and the year filter on /events then hides it.
+export function getEventYear(isoDate: string): number {
+  return Number(isoDate.slice(0, 4));
+}
+
 export function formatEventDate(startDate: string, endDate: string): string {
   const start = parseCalendarDate(startDate);
   const end = parseCalendarDate(endDate);
@@ -773,7 +780,10 @@ export function formatEventDate(startDate: string, endDate: string): string {
   const endDay = end.getDate();
   const year = start.getFullYear();
 
-  if (startDate === endDate) {
+  // Compare calendar dates, not the raw ISO strings: a single-day event still carries
+  // different start and end *times* ('T09:00' vs 'T18:00'), so the string compare never
+  // matched and the range branch rendered it as "Dec 3-3, 2025".
+  if (start.getTime() === end.getTime()) {
     return `${startMonth} ${startDay}, ${year}`;
   }
 

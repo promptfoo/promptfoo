@@ -130,27 +130,34 @@ function CopyCodeBox({ command }: { command: string }) {
   );
 }
 
+const HASH_TO_STEP: Record<string, number> = {
+  '#redteam': 1,
+  '#guardrails': 2,
+  '#modelsecurity': 3,
+  '#mcp': 4,
+  '#evals': 5,
+  '#codescanning': 6,
+};
+
 function HomepageWalkthrough() {
   const isDarkTheme = useColorMode().colorMode === 'dark';
-  const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.hash === '#evals') {
-        return 5;
-      } else if (window.location.hash === '#redteam') {
-        return 1;
-      } else if (window.location.hash === '#guardrails') {
-        return 2;
-      } else if (window.location.hash === '#modelsecurity') {
-        return 3;
-      } else if (window.location.hash === '#mcp') {
-        return 4;
-      } else if (window.location.hash === '#codescanning') {
-        return 6;
-      }
-    }
-    return 1; // Default to Red Teaming
-  });
+  // Default to Red Teaming. The hash is applied after mount instead of in the initializer:
+  // reading `window.location.hash` during render would make the first client render disagree
+  // with the server-rendered HTML (which never has a hash) and blow up hydration.
+  const [selectedStep, setSelectedStep] = React.useState(1);
   const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const applyHash = () => {
+      const step = HASH_TO_STEP[window.location.hash];
+      if (step) {
+        setSelectedStep(step);
+      }
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
 
   React.useEffect(() => {
     const checkMobile = () => {

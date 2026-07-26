@@ -24,13 +24,13 @@ export default function HumanX2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at HumanX 2026"
-      description="For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down."
+      description="Recap of Promptfoo at HumanX 2026: how AI leaders evaluate and secure LLM apps and agents without slowing teams down."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at HumanX 2026 | AI Security" />
         <meta
           property="og:description"
-          content="For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down. Apr 6-9, Moscone Center South, SF."
+          content="Recap of Promptfoo at HumanX 2026: how AI leaders evaluate and secure LLM apps and agents without slowing teams down. Apr 6-9, Moscone Center South, SF."
         />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/humanx-2026.jpg" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/humanx-2026" />
@@ -39,7 +39,7 @@ export default function HumanX2026(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo at HumanX 2026 | AI Security" />
         <meta
           name="twitter:description"
-          content="Meet Promptfoo at HumanX 2026. AI security demos, enterprise solutions, and networking with AI leaders."
+          content="Recap of Promptfoo at HumanX 2026. AI security demos, enterprise solutions, and conversations with AI leaders."
         />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/humanx-2026.jpg" />
         <meta
@@ -69,7 +69,7 @@ export default function HumanX2026(): React.ReactElement {
                 <span className={styles.highlight}>You Can Trust</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                AI is moving fast. Security and evaluation need to keep up. Meet Promptfoo for live
+                AI is moving fast. Security and evaluation have to keep up. At HumanX we ran live
                 demos on testing and securing LLM features across copilots, RAG, and agents, before
                 launch and continuously in production.
               </p>
@@ -93,7 +93,7 @@ export default function HumanX2026(): React.ReactElement {
                   Learn More
                 </a>
                 <Link to="/contact" className={styles.secondaryButton}>
-                  Schedule a Meeting
+                  Book a Demo
                 </Link>
               </div>
               <div className={styles.eventDetails}>
@@ -144,7 +144,7 @@ export default function HumanX2026(): React.ReactElement {
         <section className={styles.demoSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What to Expect</h2>
+              <h2 className={styles.sectionTitle}>What We Showed</h2>
               <p className={styles.sectionSubtitle}>Practical workflows for AI teams.</p>
             </div>
             <div className={styles.demoGrid}>
@@ -185,7 +185,7 @@ export default function HumanX2026(): React.ReactElement {
                 <div className={styles.statLabel}>Developers</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>80+</div>
+                <div className={styles.statNumber}>{SITE_CONSTANTS.FORTUNE_500_COUNT}</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>
@@ -200,7 +200,7 @@ export default function HumanX2026(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Attending HumanX?</h2>
+              <h2 className={styles.ctaTitle}>Missed us at HumanX?</h2>
               <p className={styles.ctaText}>
                 Book a short demo and we'll map a testing plan to your AI roadmap.
               </p>

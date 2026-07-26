@@ -93,49 +93,6 @@
 }
 
 /* Countdown Timer */
-.countdown {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
-}
-
-.countdownItem {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  border-radius: 12px;
-  padding: 1rem 1.25rem;
-  min-width: 80px;
-}
-
-.countdownNumber {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #67e8f9;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.countdownLabel {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 0.25rem;
-}
-
-.countdownSeparator {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #06b6d4;
-  animation: blink 1s step-end infinite;
-}
-
 @keyframes blink {
   50% {
     opacity: 0;

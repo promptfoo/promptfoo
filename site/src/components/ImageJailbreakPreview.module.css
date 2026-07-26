@@ -9,6 +9,11 @@
   transform: scale(1.02);
 }
 
+.container:focus-visible {
+  outline: 3px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+}
+
 .imageWrapper {
   position: relative;
 }

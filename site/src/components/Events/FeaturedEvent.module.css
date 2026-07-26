@@ -455,3 +455,14 @@
     font-size: 0.625rem;
   }
 }
+
+/* Decorative-only loops (shimmer/pulse/glow); safe to stop entirely. */
+@media (prefers-reduced-motion: reduce) {
+  .featured,
+  .featured *,
+  .featured *::before,
+  .featured *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

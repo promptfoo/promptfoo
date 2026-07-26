@@ -14,8 +14,23 @@ const ImageJailbreakPreview: React.FC<ImageJailbreakPreviewProps> = ({ title, im
     setFlipped(!flipped);
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setFlipped((current) => !current);
+    }
+  };
+
   return (
-    <div className={`${styles.container} ${flipped ? styles.flipped : ''}`} onClick={handleClick}>
+    <div
+      className={`${styles.container} ${flipped ? styles.flipped : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={flipped}
+      aria-label={`${flipped ? 'Hide' : 'Reveal'} jailbreak images for: ${title}`}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+    >
       {!flipped && (
         <>
           <h3 className={styles.title}>{title}</h3>

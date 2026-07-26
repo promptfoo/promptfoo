@@ -41,20 +41,20 @@ export default function BlackHat2025(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at Black Hat USA 2025"
-      description="Meet Promptfoo at Black Hat USA 2025. Schedule a demo to see how we're revolutionizing AI security testing and red teaming for enterprise LLM applications."
+      description="Promptfoo was at Black Hat USA 2025, booth #4712, with live demos of AI security testing and red teaming for enterprise LLM applications."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at Black Hat USA 2025 | AI Security" />
         <meta
           property="og:description"
-          content="Visit booth #4712 at Black Hat USA 2025. See live demos of AI vulnerability testing, automated red teaming, and LLM security scanning. Schedule your meeting Aug 5-7 in Las Vegas."
+          content="Promptfoo was at booth #4712 at Black Hat USA 2025, Aug 5-7 in Las Vegas, with live demos of AI vulnerability testing, automated red teaming, and LLM security scanning."
         />
         <meta
           property="og:image"
           content="https://www.promptfoo.dev/img/events/blackhat-2025.jpg"
         />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
+        <meta property="og:image:width" content="1536" />
+        <meta property="og:image:height" content="1024" />
         <meta property="og:url" content="https://www.promptfoo.dev/events/blackhat-2025" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Promptfoo" />
@@ -63,7 +63,7 @@ export default function BlackHat2025(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo at Black Hat USA 2025 | AI Security" />
         <meta
           name="twitter:description"
-          content="Visit booth #4712. Live demos of AI vulnerability testing & automated red teaming. Aug 5-7, Las Vegas."
+          content="Booth #4712 at Black Hat USA 2025. Live demos of AI vulnerability testing & automated red teaming. Aug 5-7, Las Vegas."
         />
         <meta
           name="twitter:image"
@@ -91,7 +91,7 @@ export default function BlackHat2025(): React.ReactElement {
                 </span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM
+                We were at Black Hat USA showing how Promptfoo helps security teams find and fix LLM
                 vulnerabilities before attackers do.
               </p>
               <div className={styles.heroButtons}>
@@ -100,7 +100,7 @@ export default function BlackHat2025(): React.ReactElement {
                   className={styles.primaryButton}
                   onClick={(e) => handleSmoothScroll(e, '#schedule-demo')}
                 >
-                  Schedule a Demo at Black Hat
+                  Book a Demo
                 </a>
                 <a
                   href="#learn-more"
@@ -237,10 +237,9 @@ export default function BlackHat2025(): React.ReactElement {
                     <div className={styles.demoContent}>
                       <h3>Real-Time Attack Demonstrations</h3>
                       <p>
-                        Watch our security researchers perform demonstrations of prompt injection,
-                        jailbreaking, and data exfiltration attacks. See how Promptfoo helps you
-                        detect these threats early, reproduce them in testing, and track fixes over
-                        time.
+                        Our security researchers demonstrated prompt injection, jailbreaking, and
+                        data exfiltration attacks, and how Promptfoo detects these threats early,
+                        reproduces them in testing, and tracks fixes over time.
                       </p>
                       <div className={styles.demoTag}>LIVE DEMO</div>
                     </div>
@@ -275,9 +274,9 @@ export default function BlackHat2025(): React.ReactElement {
                     <div className={styles.demoContent}>
                       <h3>Seamless CI/CD Security Integration</h3>
                       <p>
-                        See live demos of our GitHub Actions, GitLab CI, and Jenkins integrations.
-                        Learn how Fortune 500 companies automatically catch LLM vulnerabilities in
-                        development before they reach production environments.
+                        We demoed our GitHub Actions, GitLab CI, and Jenkins integrations. Fortune
+                        500 companies use them to catch LLM vulnerabilities in development, before
+                        they reach production environments.
                       </p>
                       <div className={styles.demoTag}>HANDS-ON</div>
                     </div>
@@ -310,7 +309,7 @@ export default function BlackHat2025(): React.ReactElement {
         {/* Calendar Section */}
         <section className={styles.calendarSection} id="schedule-demo">
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Meet us at Black Hat</h2>
+            <h2 className={styles.sectionTitle}>Missed us at Black Hat?</h2>
             <p className={styles.calendarSubtitle}>
               Book a 30-minute demo slot to see Promptfoo in action. Our security experts will show
               you how to find and fix vulnerabilities in your LLM applications.
@@ -336,7 +335,7 @@ export default function BlackHat2025(): React.ReactElement {
                 <div className={styles.statLabel}>Developers</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>80+</div>
+                <div className={styles.statNumber}>{SITE_CONSTANTS.FORTUNE_500_COUNT}</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>
