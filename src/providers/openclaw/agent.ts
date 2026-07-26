@@ -164,6 +164,10 @@ export class OpenClawAgentProvider implements ApiProvider {
     }
   }
 
+  get config(): Pick<OpenClawConfig, 'session_key'> {
+    return { session_key: this.openclawConfig.session_key };
+  }
+
   id(): string {
     return `openclaw:agent:${this.agentId}`;
   }
