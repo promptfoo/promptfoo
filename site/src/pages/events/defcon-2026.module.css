@@ -1,7 +1,8 @@
-/* DEF CON 34 (2026) — green-phosphor CRT terminal theme.
-   Palette: pure black ground, #00ff41 phosphor, magenta only as glitch fringe.
-   Sibling page blackhat-2026 is red/black and briefing-room sleek; this is
-   deliberately the underground counterpart. */
+/* DEF CON 34 (2026) — black ground, phosphor green accent.
+   Type is the site's sans stack; mono is reserved for the things that are
+   actually terminal output (the transcript, the two shell headings, the
+   bracket tags, and the `man agency` block). Sibling page blackhat-2026 is
+   red/black and briefing-room sleek; this is the underground counterpart. */
 
 /* ============================================================
    Page shell + tokens
@@ -17,20 +18,20 @@
   --dc-muted: #8aa892;
   --dc-red: #ff5f5f;
   --dc-amber: #ffb000;
-  --dc-fringe: #ff2e88;
   --dc-line: rgba(0, 255, 65, 0.22);
   --dc-line-soft: rgba(0, 255, 65, 0.1);
-  /* Top clearance for the fixed CRT layers. Docusaurus only resolves the
+  --dc-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Top clearance for the fixed ambient layer. Docusaurus only resolves the
      announcement bar to a real height at >=997px; the narrow-viewport value is
      set in the responsive block. */
   --dc-bar-offset: var(--docusaurus-announcement-bar-height, 30px);
 
   position: relative;
-  z-index: 0; /* bounds the fixed CRT layers below the navbar */
+  z-index: 0; /* bounds the fixed ambient layer below the navbar */
   min-height: 100vh;
   background: var(--dc-black);
   color: var(--dc-text);
-  font-family: 'Courier New', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--ifm-font-family-base);
   overflow-x: hidden;
 }
 
@@ -42,28 +43,15 @@
   padding: 0 1.5rem;
 }
 
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* ============================================================
-   Decorative CRT layers (fixed, behind content, never over the
-   navbar or the announcement bar)
+   Ambient layer (fixed, behind content, never over the navbar or
+   the announcement bar)
    ============================================================ */
 
-/* `.defconPage` is a z-index:0 stacking context, so these fixed layers paint
-   above the announcement bar, which Docusaurus deliberately ships unpositioned.
-   Start them below it; the uncovered strip that leaves at the top of the
-   viewport sits behind the sticky navbar. */
-.scanlines,
+/* `.defconPage` is a z-index:0 stacking context, so this fixed layer would
+   paint above the announcement bar, which Docusaurus deliberately ships
+   unpositioned. Start it below the bar; the uncovered strip that leaves at the
+   top of the viewport sits behind the sticky navbar. */
 .phosphorGlow {
   position: fixed;
   top: var(--dc-bar-offset);
@@ -72,23 +60,9 @@
   left: 0;
   z-index: 0;
   pointer-events: none;
-}
-
-.scanlines {
-  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(0, 0, 0, 0.32) 2px 4px);
-  animation: scanDrift 9s linear infinite;
-}
-
-.phosphorGlow {
   background:
     radial-gradient(ellipse at 50% 0%, rgba(0, 255, 65, 0.12) 0%, transparent 55%),
     radial-gradient(ellipse at 50% 100%, rgba(0, 255, 65, 0.06) 0%, transparent 60%);
-}
-
-@keyframes scanDrift {
-  to {
-    transform: translateY(4px);
-  }
 }
 
 /* ============================================================
@@ -99,9 +73,10 @@
 .terminalSection,
 .lineupSection,
 .definitionSection,
+.statsSection,
 .runSection,
 .finalCta {
-  padding: 4.5rem 0;
+  padding: 5rem 0;
 }
 
 /* Sits between two flat sections, so it carries its own rule to separate them. */
@@ -129,47 +104,34 @@
    ============================================================ */
 
 .sectionHeading {
+  margin: 0 0 1rem;
+  font-size: clamp(1.5rem, 3.5vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--dc-green);
+}
+
+/* The two headings that are literally commands. */
+.shellHeading {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0 0 0.75rem;
-  font-size: clamp(1.5rem, 3.5vw, 2.25rem);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--dc-green);
-  text-shadow: 0 0 18px rgba(0, 255, 65, 0.35);
+  font-family: var(--dc-mono);
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+  letter-spacing: 0;
 }
 
 .prompt {
   color: var(--dc-green-dim);
 }
 
-.cursor {
-  display: inline-block;
-  width: 0.55em;
-  height: 1em;
-  background: var(--dc-green);
-  translate: 0 0.1em;
-  animation: cursorBlink 1.1s step-end infinite;
-}
-
-@keyframes cursorBlink {
-  0%,
-  49% {
-    opacity: 1;
-  }
-  50%,
-  100% {
-    opacity: 0;
-  }
-}
-
 .sectionLead {
   max-width: 62ch;
-  margin: 0 0 2.5rem;
-  font-size: 1rem;
-  line-height: 1.7;
+  margin: 0 0 2.75rem;
+  font-size: 1.05rem;
+  line-height: 1.75;
   color: var(--dc-muted);
 }
 
@@ -178,17 +140,9 @@
   background: rgba(0, 255, 65, 0.08);
   border: 1px solid var(--dc-line-soft);
   border-radius: 3px;
-  font-family: inherit;
-  font-size: 0.95em;
+  font-family: var(--dc-mono);
+  font-size: 0.9em;
   color: var(--dc-green);
-}
-
-.cardKicker {
-  margin-bottom: 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: var(--dc-green-dim);
 }
 
 .cardTag,
@@ -198,6 +152,7 @@
   background: rgba(0, 255, 65, 0.08);
   border: 1px solid var(--dc-line-soft);
   color: var(--dc-green-dim);
+  font-family: var(--dc-mono);
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -216,10 +171,10 @@
 .secondaryButton {
   display: inline-block;
   padding: 0.9rem 1.75rem;
-  font-family: inherit;
-  font-size: 0.95rem;
+  font-family: var(--dc-mono);
+  font-size: 0.9rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-decoration: none;
   border-radius: 2px;
@@ -227,24 +182,21 @@
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
-    box-shadow 0.2s ease,
-    transform 0.2s ease;
+    color 0.2s ease;
 }
 
 .primaryButton {
   background: var(--dc-green);
   border: 1px solid var(--dc-green);
   color: #000;
-  box-shadow: 0 0 22px rgba(0, 255, 65, 0.28);
 }
 
 .primaryButton:hover,
 .primaryButton:focus-visible {
   background: #4dff7a;
+  border-color: #4dff7a;
   color: #000;
   text-decoration: none;
-  box-shadow: 0 0 32px rgba(0, 255, 65, 0.5);
-  transform: translateY(-2px);
 }
 
 .secondaryButton {
@@ -259,7 +211,6 @@
   border-color: var(--dc-green);
   color: var(--dc-green);
   text-decoration: none;
-  transform: translateY(-2px);
 }
 
 /* ============================================================
@@ -268,128 +219,53 @@
 
 .hero {
   position: relative;
-  padding: 6rem 0 4.5rem;
+  padding: 6rem 0 5rem;
 }
 
 .heroContent {
   max-width: 900px;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 2rem;
+.eyebrow {
+  display: inline-block;
+  margin-bottom: 1.5rem;
   padding: 0.5rem 1rem;
   background: rgba(0, 255, 65, 0.05);
   border: 1px solid var(--dc-line);
   color: var(--dc-green);
-  font-size: 0.75rem;
+  font-family: var(--dc-mono);
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.2em;
 }
 
-.badgeDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--dc-green);
-  box-shadow: 0 0 10px var(--dc-green);
-  animation: dotPulse 2s ease-in-out infinite;
-}
-
-@keyframes dotPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
+/* Identity, not logistics: this is why we are at someone else's booth. */
+.identity {
+  margin: 0 0 0.85rem;
+  font-size: clamp(0.95rem, 1.5vw, 1.05rem);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--dc-text);
 }
 
 .heroTitle {
-  margin: 0 0 1.5rem;
+  margin: 0 0 1.75rem;
   font-size: clamp(2.25rem, 8vw, 5rem);
   font-weight: 700;
   line-height: 1.05;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.02em;
   text-transform: uppercase;
-}
-
-/* Glitch: the crisp headline stays in normal flow. The aria-hidden
-   `.glitchLayers` sibling paints thin offset bands over it, so the text
-   underneath is never obscured for more than a few frames. */
-.glitch {
-  position: relative;
-  display: inline-block;
   color: #e8fff0;
-  text-shadow: 0 0 24px rgba(0, 255, 65, 0.35);
-}
-
-.glitchLayers {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.glitchLayers::before,
-.glitchLayers::after {
-  content: attr(data-text);
-  position: absolute;
-  inset: 0;
-  mix-blend-mode: screen;
-  clip-path: inset(100% 0 0 0);
-  animation: glitchBand 4.4s steps(1, end) infinite;
-}
-
-.glitchLayers::before {
-  --dc-glitch-x: -4px;
-  color: var(--dc-green);
-}
-
-/* Same keyframes, desynced by a negative delay and mirrored offset. */
-.glitchLayers::after {
-  --dc-glitch-x: 4px;
-  color: var(--dc-fringe);
-  animation-delay: -2.05s;
-}
-
-@keyframes glitchBand {
-  0%,
-  6%,
-  14%,
-  62%,
-  67%,
-  100% {
-    clip-path: inset(100% 0 0 0);
-    transform: translate(0);
-  }
-  7% {
-    clip-path: inset(14% 0 72% 0);
-    transform: translate(var(--dc-glitch-x), -1px);
-  }
-  10% {
-    clip-path: inset(58% 0 30% 0);
-    transform: translate(calc(var(--dc-glitch-x) * -0.75), 1px);
-  }
-  64% {
-    clip-path: inset(36% 0 52% 0);
-    transform: translate(var(--dc-glitch-x), 0);
-  }
 }
 
 .accent {
   color: var(--dc-green);
-  text-shadow:
-    0 0 12px rgba(0, 255, 65, 0.55),
-    0 0 42px rgba(0, 255, 65, 0.28);
 }
 
 .heroSubtitle {
-  max-width: 62ch;
+  max-width: 60ch;
   margin: 0 0 2.5rem;
-  font-size: clamp(1rem, 1.6vw, 1.15rem);
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
   line-height: 1.75;
   color: var(--dc-text);
 }
@@ -404,7 +280,7 @@
 .eventDetails {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem 2rem;
+  gap: 1rem 2.5rem;
   padding-top: 2rem;
   border-top: 1px solid var(--dc-line-soft);
 }
@@ -413,7 +289,7 @@
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--dc-text);
 }
 
@@ -434,10 +310,12 @@
   scroll-margin-top: 80px;
 }
 
+/* Three explicit columns rather than auto-fit: auto-fit held three columns well
+   past the point the copy stayed readable, then dropped straight to one. */
 .cardGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
 }
 
 .card {
@@ -446,27 +324,27 @@
   padding: 1.75rem;
   transition:
     border-color 0.25s ease,
-    box-shadow 0.25s ease,
-    transform 0.25s ease;
+    background-color 0.25s ease;
 }
 
+/* Static cards, so the hover response is a border, not a lift. */
 .card:hover {
   border-color: var(--dc-line);
-  box-shadow: 0 0 26px rgba(0, 255, 65, 0.12);
-  transform: translateY(-3px);
+  background: #080d08;
 }
 
 .cardTitle {
   margin: 0 0 0.85rem;
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 700;
+  line-height: 1.3;
   color: var(--dc-green);
 }
 
 .cardBody {
   flex: 1;
-  margin: 0 0 1.25rem;
-  font-size: 0.95rem;
+  margin: 0 0 1.5rem;
+  font-size: 1rem;
   line-height: 1.7;
   color: var(--dc-text);
 }
@@ -475,8 +353,15 @@
   align-self: flex-start;
 }
 
+.partyNote {
+  margin: 2rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--dc-muted);
+}
+
 /* ============================================================
-   Terminal demo
+   Terminal transcript
    ============================================================ */
 
 .terminalFigure {
@@ -486,106 +371,22 @@
 .terminalWindow {
   background: #020402;
   border: 1px solid var(--dc-line);
-  box-shadow: 0 0 48px rgba(0, 255, 65, 0.09);
-}
-
-.terminalBar {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.65rem 0.9rem;
-  background: #0a0f0a;
-  border-bottom: 1px solid var(--dc-line-soft);
-}
-
-.dots {
-  display: inline-flex;
-  gap: 0.4rem;
-}
-
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #1f2a1f;
-  border: 1px solid rgba(0, 255, 65, 0.25);
-}
-
-.terminalTitle {
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  color: var(--dc-muted);
 }
 
 .terminalBody {
   margin: 0;
-  padding: 1.25rem 1rem;
-  overflow-x: auto;
-  font-family: inherit;
-  font-size: clamp(0.68rem, 1.9vw, 0.85rem);
-  line-height: 1.75;
+  padding: 1.5rem 1.25rem;
+  font-family: var(--dc-mono);
+  font-size: clamp(0.78rem, 1.6vw, 0.9rem);
+  line-height: 1.8;
 }
 
+/* Wraps rather than scrolls: the transcript is content, and a sideways scroll
+   inside the page's centrepiece is a dead end on a phone. */
 .termLine {
   display: block;
-  white-space: pre;
-  opacity: 0;
-  transform: translateY(6px);
-  animation: termIn 0.3s ease-out forwards;
-}
-
-@keyframes termIn {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Staggered line-by-line reveal */
-.termLine:nth-child(1) {
-  animation-delay: 0.05s;
-}
-.termLine:nth-child(2) {
-  animation-delay: 0.14s;
-}
-.termLine:nth-child(3) {
-  animation-delay: 0.23s;
-}
-.termLine:nth-child(4) {
-  animation-delay: 0.32s;
-}
-.termLine:nth-child(5) {
-  animation-delay: 0.41s;
-}
-.termLine:nth-child(6) {
-  animation-delay: 0.5s;
-}
-.termLine:nth-child(7) {
-  animation-delay: 0.59s;
-}
-.termLine:nth-child(8) {
-  animation-delay: 0.68s;
-}
-.termLine:nth-child(9) {
-  animation-delay: 0.77s;
-}
-.termLine:nth-child(10) {
-  animation-delay: 0.86s;
-}
-.termLine:nth-child(11) {
-  animation-delay: 0.95s;
-}
-.termLine:nth-child(12) {
-  animation-delay: 1.04s;
-}
-.termLine:nth-child(13) {
-  animation-delay: 1.13s;
-}
-.termLine:nth-child(14) {
-  animation-delay: 1.22s;
-}
-.termLine:nth-child(n + 15) {
-  animation-delay: 1.31s;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .lineCmd {
@@ -597,15 +398,6 @@
   color: var(--dc-muted);
 }
 
-.linePass {
-  color: var(--dc-green);
-}
-
-.lineFail,
-.lineVerdict {
-  color: var(--dc-red);
-}
-
 .lineBlank {
   color: transparent;
 }
@@ -615,12 +407,40 @@
 }
 
 .lineVerdict {
+  color: var(--dc-red);
   font-weight: 700;
+}
+
+/* Result rows are laid out, not padded, so no `padEnd` column is needed. */
+.resultRow {
+  display: grid;
+  grid-template-columns: 4ch minmax(0, 24ch) minmax(0, 1fr);
+  column-gap: 1.5rem;
+  color: var(--dc-text);
+}
+
+.statusPass {
+  color: var(--dc-green);
+  font-weight: 700;
+}
+
+.statusFail {
+  color: var(--dc-red);
+  font-weight: 700;
+}
+
+.resultPlugin {
+  color: var(--dc-text);
+}
+
+.resultNote {
+  color: var(--dc-muted);
 }
 
 .terminalCaption {
   margin-top: 1rem;
-  font-size: 0.85rem;
+  max-width: 68ch;
+  font-size: 0.9rem;
   line-height: 1.65;
   color: var(--dc-muted);
 }
@@ -630,7 +450,7 @@
    ============================================================ */
 
 .dictCard {
-  padding: 2rem;
+  padding: 2.25rem;
   border-left: 3px solid var(--dc-green);
 }
 
@@ -687,135 +507,78 @@
 }
 
 .senseSource {
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.5rem;
   text-transform: uppercase;
 }
 
 .senseText {
   display: block;
-  font-size: 1rem;
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.98rem;
   line-height: 1.75;
   color: var(--dc-text);
 }
 
 .dictFooter {
+  font-family: var(--ifm-font-family-base);
   margin: 2rem 0 0;
   padding-top: 1.25rem;
   border-top: 1px dashed var(--dc-line-soft);
-  font-size: 0.95rem;
-  color: var(--dc-green);
-}
-
-/* ============================================================
-   No party this year
-   ============================================================ */
-
-.noteSection {
-  padding: 3.5rem 0;
-}
-
-.note {
-  padding: 1.75rem;
-  background: rgba(255, 176, 0, 0.04);
-  border: 1px dashed rgba(255, 176, 0, 0.4);
-}
-
-.noteLabel {
-  margin-bottom: 0.65rem;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-  color: var(--dc-amber);
-}
-
-.noteText {
-  max-width: 72ch;
-  margin: 0;
   font-size: 0.98rem;
-  line-height: 1.8;
-  color: var(--dc-text);
-}
-
-.noteLink {
-  color: var(--dc-amber);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.noteLink:hover {
-  color: #ffd166;
-}
-
-/* ============================================================
-   ASCII art
-   ============================================================ */
-
-.asciiSection {
-  padding: 2.5rem 0 4rem;
-}
-
-.asciiWrap {
-  overflow-x: auto;
-}
-
-.asciiArt {
-  display: inline-block;
-  margin: 0;
-  font-family: inherit;
-  font-size: clamp(0.55rem, 2vw, 1rem);
-  /* Block glyphs stack flush; anything above ~1.1 opens seams inside the letterforms. */
-  line-height: 1.05;
+  line-height: 1.7;
   color: var(--dc-green);
-  text-shadow: 0 0 10px rgba(0, 255, 65, 0.4);
-  animation: phosphorFlicker 5s ease-in-out infinite;
-}
-
-@keyframes phosphorFlicker {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  47% {
-    opacity: 0.82;
-  }
-  52% {
-    opacity: 0.95;
-  }
 }
 
 /* ============================================================
-   Stats
+   Open source proof
    ============================================================ */
-
-.statsSection {
-  padding: 3.5rem 0;
-}
 
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1.5rem;
 }
 
 .stat {
+  display: block;
   padding: 1rem 0 1rem 1.25rem;
   border-left: 1px solid var(--dc-line-soft);
+}
+
+.statLink {
+  text-decoration: none;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.statLink:hover,
+.statLink:focus-visible {
+  border-left-color: var(--dc-green);
+  text-decoration: none;
+}
+
+.statLink:hover .statLabel,
+.statLink:focus-visible .statLabel {
+  color: var(--dc-green);
 }
 
 .statNumber {
   font-size: clamp(1.75rem, 4vw, 2.5rem);
   font-weight: 700;
   line-height: 1.1;
+  letter-spacing: -0.02em;
   color: var(--dc-green);
-  text-shadow: 0 0 16px rgba(0, 255, 65, 0.3);
 }
 
 .statLabel {
-  margin-top: 0.4rem;
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
+  margin-top: 0.45rem;
+  font-family: var(--dc-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--dc-muted);
+  transition: color 0.2s ease;
 }
 
 /* ============================================================
@@ -823,17 +586,27 @@
    ============================================================ */
 
 .runCard {
-  padding: 2rem;
+  padding: 2.25rem;
 }
 
 .runHeader {
   margin-bottom: 1.75rem;
 }
 
+.runKicker {
+  margin-bottom: 0.6rem;
+  font-family: var(--dc-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--dc-green-dim);
+}
+
 .runTitle {
   margin: 0;
   font-size: clamp(1.4rem, 3.5vw, 2rem);
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--dc-green);
 }
 
@@ -851,14 +624,15 @@
 }
 
 .runLegDate {
+  font-family: var(--dc-mono);
   font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.14em;
   color: var(--dc-amber);
 }
 
 .runLegName {
-  margin-top: 0.4rem;
+  margin-top: 0.45rem;
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--dc-green);
@@ -866,7 +640,7 @@
 
 .runLegVenue {
   margin-top: 0.25rem;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--dc-muted);
 }
 
@@ -883,7 +657,7 @@
 
 .runNote {
   margin: 1.75rem 0 1.25rem;
-  font-size: 0.98rem;
+  font-size: 1rem;
   line-height: 1.75;
   color: var(--dc-text);
 }
@@ -893,16 +667,14 @@
   align-items: center;
   gap: 0.4rem;
   color: var(--dc-green);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
   text-decoration: none;
-  transition: gap 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .runLink:hover {
-  gap: 0.7rem;
-  color: var(--dc-green);
+  color: #4dff7a;
   text-decoration: underline;
   text-underline-offset: 4px;
 }
@@ -924,14 +696,14 @@
   margin: 0 0 1rem;
   font-size: clamp(1.6rem, 4vw, 2.5rem);
   font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--dc-green);
-  text-shadow: 0 0 22px rgba(0, 255, 65, 0.3);
 }
 
 .ctaText {
-  max-width: 58ch;
-  margin: 0 auto 2rem;
-  font-size: 1rem;
+  max-width: 56ch;
+  margin: 0 auto 2.25rem;
+  font-size: 1.05rem;
   line-height: 1.75;
   color: var(--dc-text);
 }
@@ -941,6 +713,17 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+.ctaFootnote {
+  margin: 1.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--dc-muted);
+}
+
+.ctaFootnote a {
+  color: var(--dc-green);
+  text-underline-offset: 3px;
 }
 
 .footerNav {
@@ -983,16 +766,13 @@
     padding: 4.5rem 0 3.5rem;
   }
 
-  .runTimeline {
-    grid-template-columns: 1fr;
+  /* Two columns, not one: the cards are short enough to stay side by side. */
+  .cardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .runConnector {
-    --dc-dash-angle: 180deg;
-    width: 1px;
-    height: 2rem;
-    justify-self: start;
-    margin-left: 1.25rem;
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1003,10 +783,12 @@
 
   .findSection,
   .terminalSection,
+  .lineupSection,
   .definitionSection,
+  .statsSection,
   .runSection,
   .finalCta {
-    padding: 3.25rem 0;
+    padding: 3.5rem 0;
   }
 
   .heroButtons,
@@ -1027,9 +809,20 @@
 
   .card,
   .dictCard,
-  .runCard,
-  .note {
+  .runCard {
     padding: 1.5rem 1.25rem;
+  }
+
+  .runTimeline {
+    grid-template-columns: 1fr;
+  }
+
+  .runConnector {
+    --dc-dash-angle: 180deg;
+    width: 1px;
+    height: 2rem;
+    justify-self: start;
+    margin-left: 1.25rem;
   }
 
   .stat {
@@ -1037,53 +830,41 @@
   }
 
   .terminalBody {
-    padding: 1rem 0.75rem;
+    padding: 1.25rem 1rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .cardGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The note drops under the plugin name so the transcript never scrolls
+   sideways on a phone. */
+@media (max-width: 600px) {
+  .resultRow {
+    grid-template-columns: 4ch minmax(0, 1fr);
+    column-gap: 1rem;
+  }
+
+  .resultNote {
+    grid-column: 2;
   }
 }
 
 /* ============================================================
-   Reduced motion — neutralize every animation and transition above
+   Reduced motion — neutralize every transition above
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .scanlines,
-  .badgeDot,
-  .cursor,
-  .asciiArt {
-    animation: none;
-  }
-
-  /* Glitch layers are purely decorative: hide them outright. */
-  .glitchLayers::before,
-  .glitchLayers::after {
-    animation: none;
-    clip-path: inset(100% 0 0 0);
-  }
-
-  /* The transcript is content, so it must stay visible without its reveal. */
-  .termLine {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-
   .primaryButton,
   .secondaryButton,
   .card,
+  .statLink,
+  .statLabel,
   .backLink,
   .runLink {
     transition: none;
-  }
-
-  .primaryButton:hover,
-  .primaryButton:focus-visible,
-  .secondaryButton:hover,
-  .secondaryButton:focus-visible,
-  .card:hover {
-    transform: none;
-  }
-
-  .runLink:hover {
-    gap: 0.4rem;
   }
 }

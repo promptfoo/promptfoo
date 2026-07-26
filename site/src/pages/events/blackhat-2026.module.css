@@ -142,38 +142,9 @@
   display: flex;
   align-items: center;
   min-height: 82vh;
-  padding: 5rem 0 4.5rem;
+  padding: 6rem 0 5.5rem;
   overflow: hidden;
   border-bottom: 1px solid rgba(229, 58, 58, 0.14);
-}
-
-/* Slow sweep line, like a radar pass across the briefing room */
-.heroScan {
-  position: absolute;
-  inset-inline: 0;
-  top: 0;
-  height: 1px;
-  z-index: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 85, 85, 0.45), transparent);
-  animation: heroScan 9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes heroScan {
-  0% {
-    transform: translateY(0);
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  88% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(82vh);
-    opacity: 0;
-  }
 }
 
 .heroContent {
@@ -184,7 +155,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  margin: 0 0 1.75rem;
+  margin: 0 0 1.5rem;
   padding: 0.45rem 1rem;
   border: 1px solid rgba(229, 58, 58, 0.4);
   border-radius: 2px;
@@ -214,6 +185,15 @@
   50% {
     opacity: 0.25;
   }
+}
+
+/* Identity line, not logistics: who we are, directly above the headline. */
+.identity {
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--bh-text);
+  margin: 0 0 0.9rem;
 }
 
 .heroTitle {
@@ -276,8 +256,10 @@
 
 /* Where to find us */
 
+/* Vertical rhythm is deliberately uneven: the two signature bands (demos,
+   pipeline) get more air than the logistics and proof bands around them. */
 .findSection {
-  padding: 5.5rem 0;
+  padding: 4.5rem 0;
   scroll-margin-top: 80px;
 }
 
@@ -297,8 +279,7 @@
   border-radius: 4px;
   transition:
     border-color 0.25s ease,
-    background 0.25s ease,
-    transform 0.25s ease;
+    background 0.25s ease;
 }
 
 .findCard::before {
@@ -313,10 +294,11 @@
   transition: opacity 0.25s ease;
 }
 
+/* Non-interactive: responds with border and surface, never a lift. A card that
+   rises on hover reads as clickable, and these are not links. */
 .findCard:hover {
   background: var(--bh-surface-hover);
   border-color: rgba(229, 58, 58, 0.35);
-  transform: translateY(-3px);
 }
 
 .findCard:hover::before {
@@ -390,18 +372,21 @@
 /* What we're demoing */
 
 .demoSection {
-  padding: 5.5rem 0;
+  padding: 6.5rem 0;
   border-top: 1px solid var(--bh-border);
 }
 
 .demoGrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 1.25rem;
 }
 
 .demoCard {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   padding: 2rem;
   background: var(--bh-surface);
   border: 1px solid var(--bh-border);
@@ -409,8 +394,7 @@
   overflow: hidden;
   transition:
     border-color 0.25s ease,
-    background 0.25s ease,
-    transform 0.25s ease;
+    background 0.25s ease;
 }
 
 /* Corner tick, top-right: blueprint detail. Kept above ~0.45 effective alpha —
@@ -431,28 +415,52 @@
 .demoCard:hover {
   background: var(--bh-surface-hover);
   border-color: rgba(229, 58, 58, 0.35);
-  transform: translateY(-3px);
 }
 
 .demoCard:hover::after {
   opacity: 1;
 }
 
-.demoIconWrapper {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 3rem;
-  height: 3rem;
-  margin-bottom: 1.25rem;
-  border: 1px solid rgba(229, 58, 58, 0.3);
-  border-radius: 4px;
-  background: rgba(229, 58, 58, 0.1);
+/* Real product output instead of a stock icon tile: a transcript fragment, a
+   grader verdict, a CI diff. The artifact is the credibility. */
+.artifactLabel {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bh-muted);
+  margin: 0 0 0.6rem;
 }
 
-.demoIcon {
-  font-size: 1.5rem !important;
+.artifact {
+  width: 100%;
+  margin: 0 0 1.5rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--bh-border);
+  border-left: 2px solid rgba(229, 58, 58, 0.5);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: var(--bh-body);
+  /* These are previews of longer output, not full transcripts. Fade the right edge
+     so a clipped line reads as deliberate truncation rather than a layout bug, and
+     hide the overflow so no line wraps mid-token. */
+  overflow: hidden;
+  white-space: pre;
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 80%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 0%, #000 80%, transparent 100%);
+}
+
+.artifactDim {
+  color: var(--bh-muted);
+}
+
+.artifactFail {
   color: var(--bh-red-bright);
+  font-weight: 700;
 }
 
 .demoTitle {
@@ -464,29 +472,17 @@
 }
 
 .demoBody {
+  flex: 1;
   font-size: 0.9875rem;
   line-height: 1.7;
   color: var(--bh-body);
   margin: 0 0 1.5rem;
 }
 
-.demoTag {
-  display: inline-block;
-  padding: 0.35rem 0.7rem;
-  border: 1px solid rgba(229, 58, 58, 0.35);
-  border-radius: 2px;
-  background: rgba(229, 58, 58, 0.12);
-  font-family: var(--ifm-font-family-monospace);
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  color: var(--bh-red-soft);
-}
-
-/* Attack loop pipeline (signature visual) */
+/* Red-team pipeline (signature visual) */
 
 .pipelineSection {
-  padding: 5.5rem 0;
+  padding: 7rem 0;
   border-top: 1px solid var(--bh-border);
   background: linear-gradient(180deg, rgba(229, 58, 58, 0.04) 0%, transparent 45%);
 }
@@ -502,17 +498,18 @@
 
 .pipelineStep {
   position: relative;
-  text-align: center;
+  text-align: left;
 }
 
-/* Connector line to the next step. Math: chip radius 1.375rem + 0.375rem of
-   breathing room, minus the 1.25rem grid gap on the right-hand side. */
+/* Connector line to the next step. Math: the chip is 2.75rem wide and flush
+   left, so the line starts at 2.75rem + 0.375rem of breathing room and runs to
+   the next column's left edge (-1.25rem grid gap) less the same 0.375rem. */
 .pipelineStep::before {
   content: '';
   position: absolute;
   top: 1.375rem;
-  left: calc(50% + 1.75rem);
-  right: calc(-50% + 0.5rem);
+  left: 3.125rem;
+  right: -0.875rem;
   height: 1px;
   background: linear-gradient(90deg, rgba(229, 58, 58, 0.7), rgba(229, 58, 58, 0.15));
 }
@@ -560,17 +557,94 @@
   margin: 0;
 }
 
-/* Stats */
+/* The rest of the lineup */
 
-/* Reuses the .findGrid / .findCard primitives from the "where to find us" band. */
+/* One frame (Daybreak, the wider initiative) holding two peers, split by what
+   each takes as input. Deliberately not three ranked cards: nothing here is a
+   parent of anything else. */
 .lineupSection {
-  padding: 5.5rem 0;
+  padding: 4.5rem 0;
   border-top: 1px solid var(--bh-border);
 }
 
+.lineupFrame {
+  padding: 1.75rem;
+  border: 1px solid rgba(229, 58, 58, 0.22);
+  border-radius: 4px;
+  background: linear-gradient(160deg, rgba(229, 58, 58, 0.07) 0%, rgba(255, 255, 255, 0.015) 55%);
+}
+
+.lineupFrameLabel {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bh-red-soft);
+  margin: 0 0 0.75rem;
+}
+
+.lineupFrameBody {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--bh-body);
+  max-width: 62ch;
+  margin: 0 0 1.75rem;
+}
+
+.lineupPair {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.lineupCard {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border: 1px solid var(--bh-border);
+  border-radius: 4px;
+  background: rgba(10, 10, 11, 0.55);
+  transition:
+    border-color 0.25s ease,
+    background 0.25s ease;
+}
+
+.lineupCard:hover {
+  border-color: rgba(229, 58, 58, 0.3);
+  background: rgba(10, 10, 11, 0.75);
+}
+
+.lineupFlow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bh-muted);
+  margin: 0 0 0.9rem;
+}
+
+.lineupFlowArrow {
+  color: var(--bh-red-bright);
+}
+
+/* Stats */
+
 .statsSection {
-  padding: 5.5rem 0;
+  padding: 3.5rem 0;
   border-top: 1px solid var(--bh-border);
+}
+
+.statsLead {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--bh-body);
+  max-width: 620px;
+  margin: 0 0 1.75rem;
 }
 
 .statsGrid {
@@ -615,7 +689,7 @@
 /* The Vegas run */
 
 .runSection {
-  padding: 0 0 5.5rem;
+  padding: 4rem 0 5rem;
 }
 
 .runCard {
@@ -735,7 +809,7 @@
 /* Final CTA */
 
 .finalCta {
-  padding: 5rem 0;
+  padding: 6rem 0;
   text-align: center;
   border-top: 1px solid var(--bh-border);
 }
@@ -795,26 +869,36 @@
 @media (max-width: 996px) {
   .hero {
     min-height: auto;
-    padding: 3.5rem 0 3rem;
+    padding: 4rem 0 3.25rem;
   }
 
   .findSection,
+  .lineupSection {
+    padding: 3.5rem 0;
+  }
+
   .demoSection,
-  .pipelineSection,
+  .pipelineSection {
+    padding: 4.5rem 0;
+  }
+
   .statsSection {
-    padding: 4rem 0;
+    padding: 3rem 0;
   }
 
   .runSection {
-    padding-bottom: 4rem;
+    padding: 3rem 0 4rem;
   }
 
-  .findGrid {
-    grid-template-columns: 1fr;
+  .finalCta {
+    padding: 4.5rem 0;
   }
 
+  /* Hold two columns down to the phone breakpoint: one column at 996px wastes
+     the whole tablet width. */
+  .findGrid,
   .demoGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .statsGrid {
@@ -865,6 +949,12 @@
     transform: rotate(90deg);
     padding: 0.25rem 0;
   }
+
+  /* The booth is the answer to "where"; it keeps the full width and the other
+     two logistics cards pair up underneath it. */
+  .findCardBooth {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Responsive: phone */
@@ -898,16 +988,16 @@
     gap: 0.75rem;
   }
 
-  .statsGrid {
-    grid-template-columns: 1fr;
-  }
-
+  /* Four stats stay a 2x2 block on phones; four full-width rows read as a list
+     of unrelated numbers. */
   .stat {
     padding: 1.35rem 1.25rem;
   }
 
   .demoCard,
-  .findCard {
+  .findCard,
+  .lineupFrame,
+  .lineupCard {
     padding: 1.5rem;
   }
 
@@ -925,13 +1015,20 @@
   }
 }
 
+/* Responsive: single column. Deliberately below the phone breakpoint so the
+   two-column grids survive tablets and large phones in landscape. */
+
+@media (max-width: 700px) {
+  .findGrid,
+  .demoGrid,
+  .lineupPair {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Reduced motion: neutralize every animation and transform above */
 
 @media (prefers-reduced-motion: reduce) {
-  .heroScan {
-    display: none;
-  }
-
   .eyebrowDot {
     animation: none;
     opacity: 1;
@@ -944,6 +1041,7 @@
   .findLinkArrow,
   .demoCard,
   .demoCard::after,
+  .lineupCard,
   .stat,
   .runLeg,
   .runLegLink,
@@ -953,8 +1051,6 @@
 
   .primaryButton:hover,
   .primaryButton:focus-visible,
-  .findCard:hover,
-  .demoCard:hover,
   .runLegLink:hover {
     transform: none;
   }

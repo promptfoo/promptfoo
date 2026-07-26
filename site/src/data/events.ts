@@ -73,11 +73,41 @@ export interface Event {
   customPageUrl?: string; // Custom dedicated page URL for special events
 }
 
-// Helper to determine event status based on date
+/**
+ * Injected by webpack's DefinePlugin (see `site/docusaurus.config.ts`). Declared as
+ * possibly-undefined because it does not exist outside a webpack build (vitest, the
+ * OG-image generation script); `typeof` guards make the reference safe there.
+ */
+declare const __SITE_BUILD_TIMESTAMP__: string | undefined;
+
+/**
+ * The instant every event status is measured against.
+ *
+ * This is deliberately a BUILD-TIME snapshot, not a live clock. The site is statically
+ * generated, so a bare `new Date()` at module scope resolves to two different instants:
+ * build time in the prerendered HTML, and page-load time during hydration. An event that
+ * ends between deploys would then be `upcoming` in the crawled HTML and `past` on the
+ * client, which reorders the event list and swaps the featured event out from under the
+ * reader after hydration.
+ *
+ * DefinePlugin replaces `__SITE_BUILD_TIMESTAMP__` with the same string literal in both
+ * the server and the client bundle, so the two can never disagree. The trade-off is
+ * explicit: **statuses roll over on rebuild, not on the wire.** Rebuild/redeploy the site
+ * to move a finished event into the past list.
+ *
+ * Outside webpack the identifier is undefined and this falls back to the current time,
+ * which is the right behavior for tests and node scripts.
+ */
+const STATUS_REFERENCE_TIME: number = (() => {
+  const injected = typeof __SITE_BUILD_TIMESTAMP__ === 'string' ? __SITE_BUILD_TIMESTAMP__ : null;
+  const parsed = injected === null ? Number.NaN : Date.parse(injected);
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+})();
+
+// Helper to determine event status based on date. Nothing should re-derive this on the
+// client: `Event.status` is computed once here, at module scope, from the snapshot above.
 function getEventStatus(endDate: string): EventStatus {
-  const today = new Date();
-  const eventEnd = new Date(endDate);
-  return eventEnd < today ? 'past' : 'upcoming';
+  return Date.parse(endDate) < STATUS_REFERENCE_TIME ? 'past' : 'upcoming';
 }
 
 // Event Data
@@ -300,28 +330,11 @@ export const events: Event[] = [
     },
     booth: 'Booth #2967',
     description:
-      'Find the Promptfoo team at booth #2967 in the Black Hat Business Hall with OpenAI, Aug 5-6: prompt injection, jailbreaks, and data exfiltration, live.',
+      'Promptfoo demos at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6: application-specific agent attacks, full transcripts, and CI regression tests.',
     fullDescription:
-      'Promptfoo is at Black Hat USA as part of OpenAI, at booth #2967 in the Business Hall on August 5-6. Watch us break real LLM apps with automated red teaming, then turn every finding into an eval that runs in CI.',
+      'Promptfoo is part of OpenAI. Find the team at OpenAI booth #2967 in the Business Hall, open Aug 4-6. We run automated red teaming against real LLM apps, keep the transcript for every attempt, and show how a confirmed finding becomes a regression test that runs in CI.',
     cardImage: '/img/events/blackhat-2026.jpg',
     heroImage: '/img/events/blackhat-2026.jpg',
-    highlights: [
-      {
-        icon: '🎯',
-        title: 'Attack Demos',
-        description: 'Prompt injection, jailbreaks, data exfiltration',
-      },
-      {
-        icon: '🤖',
-        title: 'Red Team Automation',
-        description: 'Generate application-specific attack variants',
-      },
-      {
-        icon: '🔄',
-        title: 'CI/CD Integration',
-        description: 'Turn findings into regression tests',
-      },
-    ],
     customPageUrl: '/events/blackhat-2026',
   },
   {
@@ -341,28 +354,11 @@ export const events: Event[] = [
     },
     booth: 'Booth #1412',
     description:
-      "DEF CON 34's theme is Agency, and ours is the excessive kind: live AI agent red teaming at booth #1412 in West Hall, with OpenAI.",
+      'At OpenAI booth #1412 in West Hall, see Promptfoo test agent permissions, tool abuse, memory poisoning, and indirect prompt injection.',
     fullDescription:
-      'DEF CON 34 is about agency, charting your own course with the tech you use. Find us at booth #1412 in West Hall with OpenAI, red teaming agents in the open: excessive agency, tool abuse, memory poisoning, and indirect prompt injection.',
+      "DEF CON 34's theme is Agency: charting your own course with the tech you use. Promptfoo is part of OpenAI, so find the team at OpenAI booth #1412 in West Hall, red teaming agents in the open — agent permissions, excessive agency, tool abuse, memory poisoning, and indirect prompt injection.",
     cardImage: '/img/events/defcon-2026.jpg',
     heroImage: '/img/events/defcon-2026.jpg',
-    highlights: [
-      {
-        icon: '🤖',
-        title: 'Agent Red Teaming',
-        description: 'Tool abuse and memory poisoning',
-      },
-      {
-        icon: '🔓',
-        title: 'Excessive Agency',
-        description: 'The OWASP risk, on theme',
-      },
-      {
-        icon: '📟',
-        title: 'Hallway Track',
-        description: 'Trade war stories, no slides',
-      },
-    ],
     customPageUrl: '/events/defcon-2026',
   },
 

@@ -2,11 +2,23 @@ import { promises as fsPromises } from 'fs';
 import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
+import webpack from 'webpack';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
+
+/**
+ * One instant for the whole build, frozen when this config module is evaluated.
+ *
+ * Anything time-dependent on a statically generated site has to be pinned to a build-time
+ * value, otherwise the prerendered HTML and the hydrated client disagree. This constant is
+ * the single source of "now" for the site: it is handed to the client bundle via
+ * DefinePlugin below (consumed by `src/data/events.ts`) and used to pick the announcement
+ * bar. Everything derived from it rolls over on rebuild, not on the wire.
+ */
+const BUILD_TIMESTAMP = new Date().toISOString();
 
 function webpackProgressCompatibilityPlugin(): Plugin {
   return {
@@ -19,6 +31,60 @@ function webpackProgressCompatibilityPlugin(): Plugin {
     },
   };
 }
+
+/**
+ * Bakes `BUILD_TIMESTAMP` into both the server and the client bundle as the same string
+ * literal, so modules that need a stable "now" (event statuses) cannot produce a different
+ * answer during hydration than they did during prerendering.
+ */
+function buildTimestampPlugin(): Plugin {
+  return {
+    name: 'build-timestamp-plugin',
+    configureWebpack() {
+      return {
+        plugins: [
+          new webpack.DefinePlugin({
+            __SITE_BUILD_TIMESTAMP__: JSON.stringify(BUILD_TIMESTAMP),
+          }),
+        ],
+      };
+    },
+  };
+}
+
+/**
+ * The Vegas banner is a build-time snapshot, like every other date-dependent thing here:
+ * it is chosen when this config is evaluated, so the site must be rebuilt (any deploy will
+ * do) for the evergreen bar to take over once the conferences are over.
+ *
+ * Expiry is the end of DEF CON 34's last day, Aug 9 2026 (PDT).
+ */
+const VEGAS_BANNER_EXPIRY = Date.parse('2026-08-10T00:00:00-07:00');
+const isVegasBannerLive = Date.parse(BUILD_TIMESTAMP) < VEGAS_BANNER_EXPIRY;
+
+// Near-black rather than Promptfoo red: the bar sits above both the red Black Hat page and
+// the green DEF CON page, and has to belong to neither. `src/css/custom.css` forces
+// announcement-bar links to #ffffff at 0.85 opacity, which clears AA against this
+// background by a wide margin.
+const ANNOUNCEMENT_BAR_BACKGROUND = '#111113';
+const ANNOUNCEMENT_BAR_TEXT = '#ffffff';
+
+const vegasAnnouncementBar = {
+  id: 'vegas-2026',
+  content:
+    '<strong>Meet Promptfoo at the OpenAI booths in Vegas:</strong> <a href="/events/blackhat-2026/">Black Hat booth 2967</a> &middot; <a href="/events/defcon-2026/">DEF CON 34 booth 1412</a>',
+  backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
+  textColor: ANNOUNCEMENT_BAR_TEXT,
+  isCloseable: true,
+};
+
+const evergreenAnnouncementBar = {
+  id: 'events-evergreen',
+  content: 'Promptfoo is part of OpenAI. <a href="/events/">See where the team will be next</a>.',
+  backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
+  textColor: ANNOUNCEMENT_BAR_TEXT,
+  isCloseable: true,
+};
 
 const config: Config = {
   title: 'Promptfoo',
@@ -92,14 +158,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    announcementBar: {
-      id: 'vegas-2026',
-      content:
-        '<strong>Vegas, Aug 1-9:</strong> find us at <a href="/events/blackhat-2026/">Black Hat</a> and <a href="/events/defcon-2026/">DEF CON 34</a>, with OpenAI.',
-      backgroundColor: '#dc2626',
-      textColor: '#ffffff',
-      isCloseable: false,
-    },
+    announcementBar: isVegasBannerLive ? vegasAnnouncementBar : evergreenAnnouncementBar,
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
@@ -444,6 +503,7 @@ const config: Config = {
 
   plugins: [
     webpackProgressCompatibilityPlugin,
+    buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     // GA/analytics loaded conditionally via consent.js (GDPR)
