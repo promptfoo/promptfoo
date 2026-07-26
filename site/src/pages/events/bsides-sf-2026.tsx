@@ -115,7 +115,7 @@ export default function BSidesSF2026(): React.ReactElement {
         <section id="highlights" className={styles.highlightsSection}>
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We Covered</h2>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
               <p className={styles.sectionSubtitle}>Two days of community-driven AI security</p>
             </div>
 
@@ -163,7 +163,7 @@ export default function BSidesSF2026(): React.ReactElement {
                 </Link>
               </div>
               <div className={styles.ctaCard}>
-                <h3 className={styles.ctaCardTitle}>Prefer to lurk?</h3>
+                <h3 className={styles.ctaCardTitle}>Can't make it?</h3>
                 <p className={styles.ctaCardText}>
                   Join our Discord community to connect with our team and our community.
                 </p>

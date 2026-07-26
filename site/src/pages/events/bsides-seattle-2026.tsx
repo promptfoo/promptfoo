@@ -186,7 +186,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
         <section className={styles.spiritSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We Covered</h2>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
               <p className={styles.sectionSubtitle}>Open-Source, Developer-First AI Red Teaming</p>
             </div>
             <div className={styles.spiritGrid}>

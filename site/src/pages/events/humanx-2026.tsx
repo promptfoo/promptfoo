@@ -17,7 +17,9 @@ export default function HumanX2026(): React.ReactElement {
       const offset = 80;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.scrollY - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+      // CSS scroll-behavior does not govern an explicit JS behavior, so choose it here.
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
   };
 
@@ -144,7 +146,7 @@ export default function HumanX2026(): React.ReactElement {
         <section className={styles.demoSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We Showed</h2>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
               <p className={styles.sectionSubtitle}>Practical workflows for AI teams.</p>
             </div>
             <div className={styles.demoGrid}>

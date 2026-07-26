@@ -130,6 +130,9 @@ function CopyCodeBox({ command }: { command: string }) {
   );
 }
 
+/** Red Teaming: what the page shows with no hash, on the server and after a hash is cleared. */
+const DEFAULT_STEP = 1;
+
 const HASH_TO_STEP: Record<string, number> = {
   '#redteam': 1,
   '#guardrails': 2,
@@ -144,15 +147,15 @@ function HomepageWalkthrough() {
   // Default to Red Teaming. The hash is applied after mount instead of in the initializer:
   // reading `window.location.hash` during render would make the first client render disagree
   // with the server-rendered HTML (which never has a hash) and blow up hydration.
-  const [selectedStep, setSelectedStep] = React.useState(1);
+  const [selectedStep, setSelectedStep] = React.useState(DEFAULT_STEP);
   const [isMobile, setIsMobile] = React.useState(false);
 
   React.useEffect(() => {
+    // Falls back to the default rather than returning early: navigating back from
+    // `/#evals` to `/` fires hashchange with an empty hash, and leaving the previously
+    // selected tab active would stop the UI reflecting the URL. Same for an unknown hash.
     const applyHash = () => {
-      const step = HASH_TO_STEP[window.location.hash];
-      if (step) {
-        setSelectedStep(step);
-      }
+      setSelectedStep(HASH_TO_STEP[window.location.hash] ?? DEFAULT_STEP);
     };
     applyHash();
     window.addEventListener('hashchange', applyHash);

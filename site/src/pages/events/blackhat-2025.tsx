@@ -309,10 +309,12 @@ export default function BlackHat2025(): React.ReactElement {
         {/* Calendar Section */}
         <section className={styles.calendarSection} id="schedule-demo">
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Missed us at Black Hat?</h2>
+            {/* Heading text is unchanged on purpose: site/AGENTS.md notes headings are often
+                externally linked, so the past-tense framing goes in the copy below it. */}
+            <h2 className={styles.sectionTitle}>Meet us at Black Hat</h2>
             <p className={styles.calendarSubtitle}>
-              Book a 30-minute demo slot to see Promptfoo in action. Our security experts will show
-              you how to find and fix vulnerabilities in your LLM applications.
+              Black Hat USA 2025 is over, but the demo still stands. Book a 30-minute slot to see
+              Promptfoo in action and how to find and fix vulnerabilities in your LLM applications.
             </p>
             <div className={styles.calendarWrapper}>
               <Cal

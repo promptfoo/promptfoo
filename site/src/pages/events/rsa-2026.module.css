@@ -92,13 +92,6 @@
   line-height: 1.7;
 }
 
-/* Countdown Timer */
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
-}
-
 .eventDetails {
   display: flex;
   flex-wrap: wrap;

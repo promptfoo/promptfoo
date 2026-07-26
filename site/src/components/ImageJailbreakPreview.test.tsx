@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ImageJailbreakPreview from './ImageJailbreakPreview';
 
@@ -11,61 +11,87 @@ const PROPS = {
 };
 
 describe('ImageJailbreakPreview', () => {
-  // Regression: the flip target was a bare <div onClick>, so keyboard and
-  // assistive-tech users could not reveal the images at all.
-  it('exposes the flip target as a real control', () => {
+  // Regression: the flip target was a bare <div onClick>, unreachable by keyboard.
+  it('exposes the reveal control as a real button', () => {
     render(<ImageJailbreakPreview {...PROPS} />);
     const control = screen.getByRole('button');
 
-    expect(control).toHaveAttribute('tabindex', '0');
     expect(control).toHaveAttribute('aria-expanded', 'false');
-    expect(control).toHaveAccessibleName(/reveal/i);
     expect(control).toHaveAccessibleName(new RegExp(PROPS.title, 'i'));
   });
 
-  it.each([['Enter'], [' ']])('flips on %j', (key) => {
+  // A native <button> handles Enter and Space itself, so this also proves we did not
+  // regress to a div that needs a hand-rolled key handler.
+  it.each([['Enter'], [' ']])('reveals on %j', (key) => {
     render(<ImageJailbreakPreview {...PROPS} />);
-    const control = screen.getByRole('button');
+    fireEvent.keyDown(screen.getByRole('button'), { key });
+    fireEvent.click(screen.getByRole('button'));
 
-    fireEvent.keyDown(control, { key });
-
-    expect(control).toHaveAttribute('aria-expanded', 'true');
-    expect(control).toHaveAccessibleName(/hide/i);
+    expect(screen.getByRole('button', { name: /hide/i })).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('still flips on click, and back again', () => {
+  it('reveals on click and collapses again', () => {
     render(<ImageJailbreakPreview {...PROPS} />);
-    const control = screen.getByRole('button');
 
-    fireEvent.click(control);
-    expect(control).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button'));
+    const hide = screen.getByRole('button', { name: /hide/i });
+    expect(hide).toBeInTheDocument();
 
-    fireEvent.click(control);
-    expect(control).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(hide);
+    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('ignores keys that are not Enter or Space', () => {
-    render(<ImageJailbreakPreview {...PROPS} />);
-    const control = screen.getByRole('button');
+  /**
+   * The defect codex caught: descendants of a role="button" element are flattened in the
+   * accessibility tree and an aria-label on it replaces their content, so a screen-reader
+   * user could never read the captions they had just revealed. The revealed panel must be
+   * a sibling of the control, not a child.
+   */
+  it('puts the revealed content outside the button', () => {
+    const { container } = render(<ImageJailbreakPreview {...PROPS} />);
+    fireEvent.click(screen.getByRole('button'));
 
-    fireEvent.keyDown(control, { key: 'a' });
-    fireEvent.keyDown(control, { key: 'Tab' });
+    const panel = container.querySelector('[id]');
+    expect(panel).toBeTruthy();
 
-    expect(control).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('reveals every image only once flipped', () => {
-    render(<ImageJailbreakPreview {...PROPS} />);
-    const control = screen.getByRole('button');
-
-    expect(screen.getByText(PROPS.title)).toBeInTheDocument();
-    expect(screen.getAllByRole('img')).toHaveLength(1);
-
-    fireEvent.keyDown(control, { key: 'Enter' });
-
-    expect(screen.getAllByRole('img')).toHaveLength(PROPS.images.length);
     for (const image of PROPS.images) {
-      expect(screen.getByAltText(image.caption)).toBeInTheDocument();
+      const img = screen.getByAltText(image.caption);
+      expect(img).toBeInTheDocument();
+      expect(img.closest('button')).toBeNull();
     }
+  });
+
+  it('associates the control with the panel it controls', () => {
+    const { container } = render(<ImageJailbreakPreview {...PROPS} />);
+    const controls = screen.getByRole('button').getAttribute('aria-controls');
+
+    expect(controls).toBeTruthy();
+    expect(container.querySelector(`#${CSS.escape(controls as string)}`)).toBeTruthy();
+  });
+
+  it('hides the concealed captions from assistive tech until revealed', () => {
+    const { container } = render(<ImageJailbreakPreview {...PROPS} />);
+    const panel = container.querySelector('[id]') as HTMLElement;
+
+    // The panel stays in the DOM so CSS can transition it, but `hidden` keeps it out of
+    // the accessibility tree — role queries respect that, alt-text queries do not.
+    expect(panel).toHaveAttribute('hidden');
+    expect(screen.queryByRole('img', { name: PROPS.images[0].caption })).not.toBeInTheDocument();
+
+    // The blurred teaser itself is decorative: it must not announce the caption it conceals.
+    const teaser = container.querySelector('img');
+    expect(teaser).toHaveAttribute('alt', '');
+
+    fireEvent.click(screen.getByRole('button'));
+    expect(panel).not.toHaveAttribute('hidden');
+    expect(screen.getByRole('img', { name: PROPS.images[0].caption })).toBeInTheDocument();
+  });
+
+  it('reveals every image once flipped', () => {
+    const { container } = render(<ImageJailbreakPreview {...PROPS} />);
+    fireEvent.click(screen.getByRole('button'));
+
+    const panel = container.querySelector('[id]') as HTMLElement;
+    expect(within(panel).getAllByRole('img')).toHaveLength(PROPS.images.length);
   });
 });

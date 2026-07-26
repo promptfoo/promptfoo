@@ -17,7 +17,9 @@ export default function GartnerSecurity2026(): React.ReactElement {
       const offset = 80;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.scrollY - offset;
-      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
+      // CSS scroll-behavior does not govern an explicit JS behavior, so choose it here.
+      const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
   };
 
@@ -151,7 +153,7 @@ export default function GartnerSecurity2026(): React.ReactElement {
         <section className={styles.offerSection} id="learn-more">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We Covered</h2>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
               <p className={styles.sectionSubtitle}>
                 Tools and frameworks for security leaders building AI governance programs.
               </p>
