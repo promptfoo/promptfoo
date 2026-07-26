@@ -1,4 +1,6 @@
+import { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { UrlTransform } from 'react-markdown';
 
 /**
  * Stable remark plugins array for ReactMarkdown.
@@ -9,11 +11,17 @@ import remarkGfm from 'remark-gfm';
  */
 export const REMARK_PLUGINS = [remarkGfm];
 
+const INLINE_IMAGE_DATA_URI =
+  /^data:(?:image\/[a-z0-9.+-]+|application\/octet-stream)(?:;[^,\s]*)*;base64,/i;
+
 /**
- * Identity URL transform that allows all URLs including data: URIs.
- * Used for ReactMarkdown's urlTransform prop to allow inline images
- * (e.g., base64 encoded images from Gemini image generation).
- *
- * Defined at module level to maintain stable reference across renders.
+ * Allows base64 image sources required for image previews while retaining
+ * react-markdown's safe protocol handling for links and other URLs.
  */
-export const IDENTITY_URL_TRANSFORM = (url: string): string => url;
+export const INLINE_IMAGE_URL_TRANSFORM: UrlTransform = (url, key, node) => {
+  if (key === 'src' && node.tagName === 'img' && INLINE_IMAGE_DATA_URI.test(url.trim())) {
+    return url;
+  }
+
+  return defaultUrlTransform(url);
+};

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import { INLINE_IMAGE_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+
+const imageNode = { tagName: 'img' } as Parameters<typeof INLINE_IMAGE_URL_TRANSFORM>[2];
+const linkNode = { tagName: 'a' } as Parameters<typeof INLINE_IMAGE_URL_TRANSFORM>[2];
 
 describe('markdown-config', () => {
   describe('REMARK_PLUGINS', () => {
@@ -22,38 +25,46 @@ describe('markdown-config', () => {
     });
   });
 
-  describe('IDENTITY_URL_TRANSFORM', () => {
-    it('should return the URL unchanged', () => {
+  describe('INLINE_IMAGE_URL_TRANSFORM', () => {
+    it('should retain safe image URLs', () => {
       const url = 'https://example.com/image.png';
-      expect(IDENTITY_URL_TRANSFORM(url)).toBe(url);
+      expect(INLINE_IMAGE_URL_TRANSFORM(url, 'src', imageNode)).toBe(url);
     });
 
-    it('should handle data URIs for inline images', () => {
+    it('should allow base64 data URIs for inline images', () => {
       const dataUri =
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-      expect(IDENTITY_URL_TRANSFORM(dataUri)).toBe(dataUri);
+      expect(INLINE_IMAGE_URL_TRANSFORM(dataUri, 'src', imageNode)).toBe(dataUri);
     });
 
-    it('should handle SVG data URIs', () => {
+    it('should allow base64 SVG image sources', () => {
       const svgDataUri =
         'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=';
-      expect(IDENTITY_URL_TRANSFORM(svgDataUri)).toBe(svgDataUri);
+      expect(INLINE_IMAGE_URL_TRANSFORM(svgDataUri, 'src', imageNode)).toBe(svgDataUri);
     });
 
-    it('should handle relative URLs', () => {
+    it('should retain relative image URLs', () => {
       const relativeUrl = '/images/test.png';
-      expect(IDENTITY_URL_TRANSFORM(relativeUrl)).toBe(relativeUrl);
+      expect(INLINE_IMAGE_URL_TRANSFORM(relativeUrl, 'src', imageNode)).toBe(relativeUrl);
     });
 
-    it('should handle empty strings', () => {
-      expect(IDENTITY_URL_TRANSFORM('')).toBe('');
+    it('should reject dangerous protocols', () => {
+      expect(INLINE_IMAGE_URL_TRANSFORM('javascript:alert(1)', 'href', linkNode)).toBe('');
+      expect(INLINE_IMAGE_URL_TRANSFORM('javascript:alert(1)', 'src', imageNode)).toBe('');
+    });
+
+    it('should not permit data URIs in markdown links', () => {
+      const dataUri = 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==';
+      expect(INLINE_IMAGE_URL_TRANSFORM(dataUri, 'href', linkNode)).toBe('');
+    });
+
+    it('should not permit non-image data URIs as image sources', () => {
+      const dataUri = 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==';
+      expect(INLINE_IMAGE_URL_TRANSFORM(dataUri, 'src', imageNode)).toBe('');
     });
 
     it('should be a stable function reference', () => {
-      // Verify the function doesn't get recreated
-      const fn1 = IDENTITY_URL_TRANSFORM;
-      const fn2 = IDENTITY_URL_TRANSFORM;
-      expect(fn1).toBe(fn2);
+      expect(INLINE_IMAGE_URL_TRANSFORM).toBe(INLINE_IMAGE_URL_TRANSFORM);
     });
   });
 });
