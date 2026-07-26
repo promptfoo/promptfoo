@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearCache } from '../../src/cache';
+import { clearCache, disableCache, enableCache, isCacheEnabled } from '../../src/cache';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
@@ -272,6 +272,45 @@ describe('OpenRouter', () => {
           expect(result.error).toContain(JSON.stringify(body));
           expect(result.output).toBeUndefined();
         } finally {
+          restoreEnv();
+        }
+      });
+
+      it('evicts the cached malformed response so the next call retries', async () => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'default-test-key' });
+        const cacheWasEnabled = isCacheEnabled();
+        enableCache();
+
+        try {
+          const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+          // An upstream provider behind OpenRouter fails and returns a cacheable 200
+          // with no usable choice.
+          mockedFetchWithRetries.mockResolvedValueOnce(okJson({ choices: [], usage }));
+          const failed = await provider.callApi('Test prompt');
+          expect(failed.error).toContain('Malformed response data');
+
+          // Upstream has recovered. Without eviction the malformed body would still be
+          // cached under the same key and this call would never reach the network.
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            okJson({
+              choices: [{ message: { content: 'recovered' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 9, prompt_tokens: 5, completion_tokens: 4 },
+            }),
+          );
+          const recovered = await provider.callApi('Test prompt');
+
+          expect(recovered.error).toBeUndefined();
+          expect(recovered.output).toBe('recovered');
+          expect(mockedFetchWithRetries).toHaveBeenCalledTimes(2);
+        } finally {
+          if (!cacheWasEnabled) {
+            disableCache();
+          }
+          // The file-level afterEach uses clearAllMocks, which does not drain queued
+          // mockResolvedValueOnce values. Reset here so a failure in this test cannot
+          // leak an unconsumed response into whichever test runs next.
+          mockedFetchWithRetries.mockReset();
           restoreEnv();
         }
       });
