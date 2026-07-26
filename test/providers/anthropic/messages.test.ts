@@ -3245,10 +3245,45 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.max_tokens).toBe(2048);
     });
 
-    it('still drops a forced tool_choice when thinking is explicitly enabled', async () => {
+    it.each([
+      { model: 'claude-opus-5', thinking: { type: 'adaptive' as const } },
+      { model: 'claude-opus-4-8', thinking: { type: 'adaptive' as const } },
+      { model: 'claude-opus-4-6', thinking: { type: 'adaptive' as const } },
+      { model: 'claude-sonnet-4-6', thinking: { type: 'adaptive' as const } },
+      // Fable is always-on adaptive; normalization strips any explicit config.
+      { model: 'claude-fable-5', thinking: undefined },
+    ])('keeps a forced tool_choice with adaptive thinking on $model', async ({
+      model,
+      thinking,
+    }) => {
+      // Verified live that adaptive thinking + a forced tool_choice returns 200 on all of
+      // these; only legacy budget-based thinking is rejected by the API.
+      const provider = createProvider(model, {
+        config: {
+          ...(thinking ? { thinking } : {}),
+          tool_choice: { type: 'any' },
+          tools: [
+            { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
+          ],
+        },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
+      expect(params.tool_choice).toEqual({ type: 'any' });
+    });
+
+    it('drops a forced tool_choice only for legacy budget-based thinking', async () => {
+      // The API rejects this pairing: "Thinking may not be enabled when tool_choice forces
+      // tool use." Opus 4.6 still accepts budget-based thinking, so it is the case to cover.
       const provider = createProvider('claude-opus-4-6', {
         config: {
-          thinking: { type: 'adaptive' },
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          max_tokens: 8192,
           tool_choice: { type: 'any' },
           tools: [
             { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
@@ -3258,11 +3293,15 @@ describe('AnthropicMessagesProvider', () => {
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+      const warnSpy = vi.spyOn(logger, 'warn');
 
       await provider.callApi('Hello');
 
       const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
       expect(params.tool_choice).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('forced tool use) is incompatible with extended thinking'),
+      );
     });
 
     it('uses the non-thinking default max_tokens on Opus 4.8 when thinking is unset', async () => {

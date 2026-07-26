@@ -65,6 +65,7 @@ import type { DocumentType } from '@smithy/types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig, MCPTool } from '../mcp/types';
 
 /**
@@ -1095,10 +1096,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const additionalThinking = fields.thinking as
         | { type: string; display?: 'summarized' | 'omitted' }
         | undefined;
+      // Converse has no typed effort option, but `output_config.effort` is a supported
+      // escape hatch through these raw fields — so read it back out and feed it to the
+      // normalizer, otherwise the effort-capped rule (disabled + xhigh/max is a 400)
+      // cannot fire on this path.
+      const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
       const normalizedThinking = normalizeClaudeThinkingConfig(
         this.modelName,
         additionalThinking,
-        undefined,
+        effort,
       );
       if (normalizedThinking === undefined) {
         delete fields.thinking;

@@ -757,14 +757,22 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
-    // Resolve tool_choice, suppressing forced tool use when thinking is enabled
+    // Resolve tool_choice, suppressing forced tool use only for legacy budget-based thinking.
+    //
+    // The incompatibility is specific to `thinking: { type: 'enabled' }` — the API rejects
+    // that pairing with "Thinking may not be enabled when tool_choice forces tool use."
+    // Adaptive thinking is compatible: verified live that `adaptive` + a forced `any` or
+    // named tool_choice returns 200 on Opus 5, Opus 4.8, Opus 4.6, Sonnet 4.6, Sonnet 5, and
+    // Fable 5. Keying this off "is thinking on at all" silently dropped the user's
+    // tool_choice on every adaptive config, quietly changing tool-routing evals.
+    const forcedToolChoiceRejected = resolvedThinking?.type === 'enabled';
     let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
     if (config.tool_choice) {
       const transformed = transformToolChoice(
         config.tool_choice,
         'anthropic',
       ) as Anthropic.Messages.ToolChoice;
-      if (thinkingEnabled && (transformed.type === 'any' || transformed.type === 'tool')) {
+      if (forcedToolChoiceRejected && (transformed.type === 'any' || transformed.type === 'tool')) {
         logger.warn(
           `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
         );

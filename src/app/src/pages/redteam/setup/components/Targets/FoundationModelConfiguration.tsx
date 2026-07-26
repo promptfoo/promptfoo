@@ -200,8 +200,8 @@ const FoundationModelConfiguration = ({
       },
       bedrock: {
         name: 'AWS Bedrock',
-        defaultModel: 'bedrock:us.anthropic.claude-sonnet-4-6',
-        placeholder: 'us.anthropic.claude-sonnet-4-6',
+        defaultModel: 'bedrock:global.anthropic.claude-sonnet-5',
+        placeholder: 'global.anthropic.claude-sonnet-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock',
         envVar: 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
       },

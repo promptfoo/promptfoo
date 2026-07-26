@@ -212,15 +212,15 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
         title: 'AWS Bedrock',
         icon: <Cloud className="size-5 text-primary" />,
         targetIdLabel: 'Model ID',
-        targetIdPlaceholder: 'bedrock:us.anthropic.claude-sonnet-4-6',
+        targetIdPlaceholder: 'bedrock:global.anthropic.claude-sonnet-5',
         helpText: <>AWS Bedrock model identifier. Requires AWS credentials configured.</>,
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock/',
         examples: {
           title: 'Bedrock Model Examples',
           items: [
             {
-              code: 'bedrock:us.anthropic.claude-sonnet-4-6',
-              description: 'Claude Sonnet 4.6',
+              code: 'bedrock:global.anthropic.claude-sonnet-5',
+              description: 'Claude Sonnet 5',
             },
             { code: 'bedrock:amazon.nova-lite-v1:0', description: 'Amazon Nova Lite' },
             { code: 'bedrock:meta.llama3-70b-instruct-v1:0', description: 'Llama 3' },

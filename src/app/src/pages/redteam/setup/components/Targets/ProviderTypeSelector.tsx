@@ -660,7 +660,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'bedrock:us.anthropic.claude-sonnet-4-6',
+          id: 'bedrock:global.anthropic.claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
