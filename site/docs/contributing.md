@@ -122,7 +122,7 @@ When opening a pull request:
 - Ensure test coverage for new code or bug fixes.
 - Provide clear instructions on how to reproduce the problem or test the new feature.
 - Be responsive to feedback and be prepared to make changes if requested.
-- Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run lint -- --fix` and `npm run format` respectively.
+- Ensure your tests are passing and your code is properly linted and formatted. You can do this by running `npm run format` and `npm run lint`.
 
 :::tip
 
@@ -183,7 +183,7 @@ npm run format
 npm run lint
 ```
 
-It's a good idea to run the lint command as `npm run lint -- --fix` to automatically fix some linting errors.
+It's a good idea to run `npm run format` first to automatically fix formatting issues before running `npm run lint`.
 
 ## Building the Project
 
