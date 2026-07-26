@@ -339,20 +339,32 @@ export default function BlackHat2026(): React.ReactElement {
                 <p className={styles.findLabel}>01 / The booth</p>
                 <h3 className={styles.boothNumber}>{BOOTH}</h3>
                 <p className={styles.findBody}>
-                  Promptfoo demos at OpenAI booth 2967, in the Business Hall. Bring an architecture
-                  diagram or a sanitized test case. We'll map the attack surface and show where we'd
-                  probe first.
+                  Promptfoo demos at OpenAI booth 2967, in the Business Hall — Bayside A–D at
+                  Mandalay Bay. Bring an architecture diagram or a sanitized test case. We'll map
+                  the attack surface and show where we'd probe first.
                 </p>
               </div>
               <div className={styles.findCard}>
                 <p className={styles.findLabel}>02 / When</p>
                 <h3 className={styles.findTitle}>Business Hall, Aug 4-6</h3>
+                {/* Hall hours, from blackhat.com/us-26/business-hall.html. These are when the
+                    hall is open, which is not the same as when the booth is staffed — say the
+                    former, since it is the part we can actually stand behind. */}
+                <ul className={styles.hours}>
+                  <li>
+                    <span className={styles.hoursDay}>Tue Aug 4</span>4:00–7:00pm, Welcome Reception
+                  </li>
+                  <li>
+                    <span className={styles.hoursDay}>Wed Aug 5</span>9:00am–6:00pm, Booth Crawl
+                    4:00–5:00pm
+                  </li>
+                  <li>
+                    <span className={styles.hoursDay}>Thu Aug 6</span>9:00am–4:00pm
+                  </li>
+                </ul>
                 <p className={styles.findBody}>
-                  The Business Hall runs Tuesday August 4 through Thursday August 6, opening with
-                  the Welcome Reception on Tuesday from 4-7pm. Trainings run August 1-4; Briefings
-                  are August 5-6.
+                  Trainings run August 1-4; Briefings are August 5-6. All times Pacific.
                 </p>
-                {/* TODO(events): confirm which days the team staffs the booth. */}
               </div>
               <div className={styles.findCard}>
                 <p className={styles.findLabel}>03 / Or skip the line</p>

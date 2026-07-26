@@ -186,7 +186,10 @@ export default function Defcon2026(): React.ReactElement {
           <div className={styles.container}>
             <h2 className={styles.sectionHeading}>Find us in West Hall</h2>
             <p className={styles.sectionLead}>
-              The vendor area, west end of the hall.
+              DEF CON splits Exhibitors from Vendors and gives them separate space, so look for the
+              Exhibitor area rather than the Vendor hall.
+              {/* TODO(events): add Exhibitor-hall hours once DEF CON publishes them; only the
+                  general con hours (doors by 08:00) are posted this far out. */}
               {/* TODO(events): add staffed demo hours once the team schedule is confirmed. */}
             </p>
             <div className={styles.cardGrid}>
