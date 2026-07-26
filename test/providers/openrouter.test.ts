@@ -166,32 +166,6 @@ describe('OpenRouter', () => {
       }
     });
 
-    it('returns a graceful error instead of crashing on an empty choices array', async () => {
-      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'default-test-key' });
-
-      try {
-        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
-
-        const response = new Response(
-          JSON.stringify({
-            choices: [],
-            usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
-
-        const result = await provider.callApi('Test prompt');
-        expect(result.error).toContain('Malformed response data');
-      } finally {
-        restoreEnv();
-      }
-    });
-
     it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
@@ -261,6 +235,46 @@ describe('OpenRouter', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    describe('Malformed response handling', () => {
+      const usage = { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 };
+
+      const okJson = (body: unknown) =>
+        new Response(JSON.stringify(body), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+
+      // OpenRouter fronts many upstream providers, so a 200 can arrive without a usable
+      // choice when one of them fails. Each of these shapes used to throw a TypeError
+      // out of callApi instead of returning a result.
+      const malformedBodies: [string, Record<string, unknown>][] = [
+        ['an empty choices array', { choices: [], usage }],
+        ['no choices field at all', { usage }],
+        ['a choice with no message', { choices: [{ finish_reason: 'stop' }], usage }],
+      ];
+
+      it.each(
+        malformedBodies,
+      )('returns a graceful error instead of crashing on %s', async (_label, body) => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'default-test-key' });
+
+        try {
+          const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+          mockedFetchWithRetries.mockResolvedValueOnce(okJson(body));
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toContain('Malformed response data');
+          // Echo the body back so the failure is diagnosable from the eval output.
+          expect(result.error).toContain(JSON.stringify(body));
+          expect(result.output).toBeUndefined();
+        } finally {
+          restoreEnv();
+        }
+      });
     });
 
     describe('Thinking tokens handling', () => {
