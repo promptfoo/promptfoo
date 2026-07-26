@@ -37,6 +37,7 @@ type ArtifactEvalOutput = {
 const ROOT = path.resolve(import.meta.dirname, '..');
 const drizzleDir = path.join(ROOT, 'drizzle');
 const requiredPackagedPaths = [
+  'THIRD_PARTY_NOTICES',
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
   'dist/src/entrypoint.js',
@@ -346,6 +347,74 @@ function writeConsumerScripts(consumerDir: string): void {
     ].join('\n'),
   );
   fs.writeFileSync(
+    path.join(consumerDir, 'fallback-error.js'),
+    [
+      "if (typeof require === 'undefined') {",
+      "  throw new ReferenceError('require is not defined in ESM fixture');",
+      '}',
+      '',
+      "throw new Error('CJS fallback fixture failure');",
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'fallback-errors.cjs'),
+    [
+      "const assert = require('node:assert/strict');",
+      "const path = require('node:path');",
+      '',
+      'async function assertFallbackError(loadApiProvider, format) {',
+      "  const providerPath = path.join(__dirname, 'fallback-error.js');",
+      '  const error = await loadApiProvider(providerPath).then(',
+      '    () => assert.fail(`${format} package unexpectedly loaded the failing provider`),',
+      '    (caught) => caught,',
+      '  );',
+      '',
+      '  assert(error instanceof Error, `${format} package did not throw an Error`);',
+      "  assert.equal(error.name, 'Error');",
+      '',
+      '  const { esmError, cjsError } = error.cause ?? {};',
+      '  assert(esmError instanceof Error, `${format} package lost the ESM error`);',
+      '  assert(cjsError instanceof Error, `${format} package lost the CJS error`);',
+      '  assert.notStrictEqual(esmError, cjsError);',
+      "  assert.deepEqual(Object.keys(error.cause), ['esmError', 'cjsError']);",
+      "  assert.equal(esmError.message, 'require is not defined in ESM fixture');",
+      "  assert.equal(cjsError.message, 'CJS fallback fixture failure');",
+      '  const expectedMessage = [',
+      '    `Failed to load module ${providerPath}:`,',
+      '    `  ESM import error: ${esmError.message}`,',
+      '    `  CJS fallback error: ${cjsError.message}`,',
+      "    'To fix this, either:',",
+      "    '  1. Rename the file to .cjs (recommended for CommonJS)',",
+      "    '  2. Convert to ESM syntax (import/export)',",
+      "    '  3. Ensure the file has valid JavaScript syntax',",
+      "  ].join('\\n');",
+      '  assert.equal(error.message, expectedMessage);',
+      "  assert.equal(error.stack.split('\\n')[0], `Error: Failed to load module ${providerPath}:`);",
+      '',
+      "  const descriptor = Object.getOwnPropertyDescriptor(error, 'cause');",
+      '  assert.equal(descriptor?.writable, true);',
+      '  assert.equal(descriptor?.enumerable, true);',
+      '  assert.equal(descriptor?.configurable, true);',
+      "  assert.deepEqual(Object.keys(error), ['cause']);",
+      '  assert.equal(JSON.stringify(error), \'{"cause":{"esmError":{},"cjsError":{}}}\');',
+      '}',
+      '',
+      'async function main() {',
+      "  const cjsPackage = require('promptfoo');",
+      "  await assertFallbackError(cjsPackage.loadApiProvider, 'CommonJS');",
+      "  const esmPackage = await import('promptfoo');",
+      "  await assertFallbackError(esmPackage.loadApiProvider, 'ESM');",
+      '}',
+      '',
+      'main().catch((error) => {',
+      '  console.error(error);',
+      '  process.exitCode = 1;',
+      '});',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
     path.join(consumerDir, 'import-contracts.ts'),
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
@@ -619,6 +688,12 @@ async function main(): Promise<void> {
     );
 
     const installedPackageDir = path.join(consumerDir, 'node_modules', 'promptfoo');
+    const thirdPartyNotices = fs.readFileSync(
+      path.join(installedPackageDir, 'THIRD_PARTY_NOTICES'),
+      'utf8',
+    );
+    assert.match(thirdPartyNotices, /^Chalk\nCopyright \(c\) Sindre Sorhus/m);
+    assert.match(thirdPartyNotices, /Permission is hereby granted/);
     const installedPackageJson = JSON.parse(
       fs.readFileSync(path.join(installedPackageDir, 'package.json'), 'utf8'),
     ) as {
@@ -632,6 +707,7 @@ async function main(): Promise<void> {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
+    run(process.execPath, ['fallback-errors.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
