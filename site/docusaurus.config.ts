@@ -93,9 +93,9 @@ const config: Config = {
 
   themeConfig: {
     announcementBar: {
-      id: 'joined-openai',
+      id: 'vegas-2026',
       content:
-        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai/">Read the update →</a>',
+        '<strong>Vegas, Aug 1-9:</strong> find us at <a href="/events/blackhat-2026/">Black Hat</a> and <a href="/events/defcon-2026/">DEF CON 34</a>, with OpenAI.',
       backgroundColor: '#dc2626',
       textColor: '#ffffff',
       isCloseable: false,
