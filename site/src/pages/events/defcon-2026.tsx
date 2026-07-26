@@ -164,11 +164,11 @@ export default function Defcon2026(): React.ReactElement {
                 <span className={styles.accent}>LESS AGENCY</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                DEF CON 34's theme is Agency: self-determination, charting your own course. We are
+                DEF CON 34's theme is Agency: self-determination, charting your own course. We're
                 extremely in favor of that for humans, and extremely against it for the AI agent
                 that can read your inbox and call{' '}
                 <code className={styles.inlineCode}>refund()</code>. Promptfoo is part of OpenAI
-                now, and we are in West Hall with the OpenAI crew.
+                now, and we're in West Hall with the OpenAI crew.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -273,7 +273,7 @@ export default function Defcon2026(): React.ReactElement {
               <span className={styles.cursor} aria-hidden="true" />
             </h2>
             <p className={styles.sectionLead}>
-              Four days, one hall, a lot of coffee. Here is how to actually find us.
+              Four days, one hall, a lot of coffee. Here's how to actually find us.
             </p>
             <div className={styles.cardGrid}>
               <article className={styles.card}>
@@ -348,6 +348,54 @@ export default function Defcon2026(): React.ReactElement {
           </div>
         </section>
 
+        {/* The rest of the OpenAI security lineup */}
+        <section className={styles.lineupSection}>
+          <div className={styles.container}>
+            <h2 className={styles.sectionHeading}>
+              <span className={styles.prompt} aria-hidden="true">
+                $
+              </span>
+              tree /openai/security
+            </h2>
+            <p className={styles.sectionLead}>
+              We're one process in a bigger tree. Here's the rest of it, so you know who to corner
+              about what.
+            </p>
+            <div className={styles.cardGrid}>
+              <article className={styles.card}>
+                <div className={styles.cardKicker}>01 / THE UMBRELLA</div>
+                <h3 className={styles.cardTitle}>Daybreak</h3>
+                <p className={styles.cardBody}>
+                  OpenAI's security initiative: frontier models pointed at defense rather than
+                  offense, a partner network, and funded work on patching the open source everyone
+                  quietly depends on.
+                </p>
+                <div className={styles.cardTag}>[INITIATIVE]</div>
+              </article>
+              <article className={styles.card}>
+                <div className={styles.cardKicker}>02 / YOUR CODE</div>
+                <h3 className={styles.cardTitle}>Codex Security</h3>
+                <p className={styles.cardBody}>
+                  The appsec agent. It builds a threat model of your repo, hunts vulnerabilities
+                  along it, reproduces each one in a sandbox before it ever reaches your queue, then
+                  writes the patch.
+                </p>
+                <div className={styles.cardTag}>[SCAN_VALIDATE_PATCH]</div>
+              </article>
+              <article className={styles.card}>
+                <div className={styles.cardKicker}>03 / YOUR AGENT</div>
+                <h3 className={styles.cardTitle}>Promptfoo</h3>
+                <p className={styles.cardBody}>
+                  Us. Codex Security reads the code you wrote. We go after the agent you shipped:
+                  prompt injection, jailbreaks, tool abuse, excessive agency. Different halves of
+                  the same problem.
+                </p>
+                <div className={styles.cardTag}>[RED_TEAM]</div>
+              </article>
+            </div>
+          </div>
+        </section>
+
         {/* Agency, defined */}
         <section className={styles.definitionSection}>
           <div className={styles.container}>
@@ -394,7 +442,7 @@ export default function Defcon2026(): React.ReactElement {
               <div className={styles.noteLabel}>NOTICE</div>
               <p className={styles.noteText}>
                 No party this year. In 2025 we rented a cantina at DEF CON 33 and gave away drinks
-                while supplies lasted. For 2026 it is booth and hallway track only: no RSVP link, no
+                while supplies lasted. For 2026 it's booth and hallway track only: no RSVP link, no
                 wristband, no line. Come find us in West Hall anyway, or argue with us in{' '}
                 <Link to="https://discord.gg/promptfoo" className={styles.noteLink}>
                   Discord
@@ -506,7 +554,7 @@ export default function Defcon2026(): React.ReactElement {
               <span className={styles.cursor} aria-hidden="true" /> Shipping an agent?
             </h2>
             <p className={styles.ctaText}>
-              Book a slot and we will walk through your architecture, your tools, and the specific
+              Book a slot and we'll walk through your architecture, your tools, and the specific
               ways they can be talked into doing something regrettable.
             </p>
             <div className={styles.ctaButtons}>

@@ -97,10 +97,16 @@
 
 .findSection,
 .terminalSection,
+.lineupSection,
 .definitionSection,
 .runSection,
 .finalCta {
   padding: 4.5rem 0;
+}
+
+/* Sits between two flat sections, so it carries its own rule to separate them. */
+.lineupSection {
+  border-top: 1px solid var(--dc-line-soft);
 }
 
 /* Alternating recessed panels */

@@ -62,7 +62,7 @@ const PIPELINE: PipelineStep[] = [
   {
     num: '01',
     title: 'Discover',
-    body: 'Map the target: endpoints, tools, system prompts, and everything it is allowed to touch.',
+    body: "Map the target: endpoints, tools, system prompts, and everything it's allowed to touch.",
   },
   {
     num: '02',
@@ -83,6 +83,35 @@ const PIPELINE: PipelineStep[] = [
     num: '05',
     title: 'Regress',
     body: 'Every confirmed break becomes a test case that runs in CI on the next commit, and the one after that.',
+  },
+];
+
+interface LineupEntry {
+  label: string;
+  title: string;
+  body: string;
+}
+
+/**
+ * The wider OpenAI security portfolio. Deliberately scoped to what OpenAI has
+ * announced publicly — Daybreak as the initiative, Codex Security as the appsec
+ * agent — without claiming Promptfoo ships as part of either.
+ */
+const LINEUP: LineupEntry[] = [
+  {
+    label: '01 / The initiative',
+    title: 'Daybreak',
+    body: "OpenAI's security initiative: frontier models pointed at defense rather than offense, a partner network, and funded work on patching the open source everyone quietly depends on.",
+  },
+  {
+    label: '02 / Your code',
+    title: 'Codex Security',
+    body: 'The appsec agent. It builds a threat model of your repository, hunts vulnerabilities along it, reproduces each one in a sandbox before it reaches your queue, then writes the patch.',
+  },
+  {
+    label: '03 / Your agent',
+    title: 'Promptfoo',
+    body: 'Us. Codex Security reads the code you wrote; we go after the agent you shipped. Prompt injection, jailbreaks, tool abuse, excessive agency. Different halves of the same problem.',
   },
 ];
 
@@ -246,9 +275,9 @@ export default function BlackHat2026(): React.ReactElement {
                 <span className={styles.titleAccent}>Before Attackers Do</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                We are at Black Hat with OpenAI, running live attacks against real LLM applications:
+                We're at Black Hat with OpenAI, running live attacks against real LLM applications:
                 prompt injection, jailbreaks, data exfiltration, and agents talked into doing things
-                they should not. Bring your architecture diagram. We will bring the payloads.
+                they shouldn't. Bring your architecture diagram. We'll bring the payloads.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -291,7 +320,7 @@ export default function BlackHat2026(): React.ReactElement {
               <p className={styles.sectionEyebrow}>// Logistics</p>
               <h2 className={styles.sectionTitle}>Where to find us</h2>
               <p className={styles.sectionSubtitle}>
-                Mandalay Bay is large and the show floor is loud. Here is the short version.
+                Mandalay Bay is large and the show floor is loud. Here's the short version.
               </p>
             </div>
             <div className={styles.findGrid}>
@@ -299,16 +328,16 @@ export default function BlackHat2026(): React.ReactElement {
                 <p className={styles.findLabel}>01 / The booth</p>
                 <h3 className={styles.boothNumber}>{BOOTH}</h3>
                 <p className={styles.findBody}>
-                  In the Business Hall, as part of the OpenAI presence. Come with a system you are
-                  nervous about and we will point our red team at it while you watch.
+                  In the Business Hall, as part of the OpenAI presence. Come with a system you're
+                  nervous about and we'll point our red team at it while you watch.
                 </p>
               </div>
               <div className={styles.findCard}>
                 <p className={styles.findLabel}>02 / When</p>
                 <h3 className={styles.findTitle}>Business Hall, Aug 5-6</h3>
                 <p className={styles.findBody}>
-                  Trainings run August 1-4. Briefings and the Business Hall open August 5-6. If you
-                  are only in town for the Briefings, those two days are when we are on the floor.
+                  Trainings run August 1-4. Briefings and the Business Hall open August 5-6. If
+                  you're only in town for the Briefings, those two days are when we're on the floor.
                 </p>
               </div>
               <div className={styles.findCard}>
@@ -379,6 +408,29 @@ export default function BlackHat2026(): React.ReactElement {
           </div>
         </section>
 
+        {/* The wider OpenAI security portfolio */}
+        <section className={styles.lineupSection}>
+          <div className={styles.container}>
+            <div className={styles.sectionHeader}>
+              <p className={styles.sectionEyebrow}>// Also on the booth</p>
+              <h2 className={styles.sectionTitle}>The rest of the lineup</h2>
+              <p className={styles.sectionSubtitle}>
+                Promptfoo is one part of OpenAI's security work. If your question is really about
+                the other parts, we'll point you at the right person on the floor.
+              </p>
+            </div>
+            <div className={styles.findGrid}>
+              {LINEUP.map((entry) => (
+                <div key={entry.title} className={styles.findCard}>
+                  <p className={styles.findLabel}>{entry.label}</p>
+                  <h3 className={styles.findTitle}>{entry.title}</h3>
+                  <p className={styles.findBody}>{entry.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Stats */}
         <section className={styles.statsSection}>
           <div className={styles.container}>
@@ -386,8 +438,7 @@ export default function BlackHat2026(): React.ReactElement {
               <p className={styles.sectionEyebrow}>// Numbers</p>
               <h2 className={styles.sectionTitle}>Why security teams use Promptfoo</h2>
               <p className={styles.sectionSubtitle}>
-                Open source, self-hostable, and already running in CI at companies you have heard
-                of.
+                Open source, self-hostable, and already running in CI at companies you've heard of.
               </p>
             </div>
             <div className={styles.statsGrid}>
@@ -446,7 +497,7 @@ export default function BlackHat2026(): React.ReactElement {
           <div className={styles.container}>
             <h2 className={styles.finalTitle}>Attending Black Hat?</h2>
             <p className={styles.finalCopy}>
-              Book a slot and we will have something specific to show you. Walk-ups are welcome, but
+              Book a slot and we'll have something specific to show you. Walk-ups are welcome, but
               the good demos draw a line.
             </p>
             <div className={styles.ctaButtons}>

@@ -562,6 +562,12 @@
 
 /* Stats */
 
+/* Reuses the .findGrid / .findCard primitives from the "where to find us" band. */
+.lineupSection {
+  padding: 5.5rem 0;
+  border-top: 1px solid var(--bh-border);
+}
+
 .statsSection {
   padding: 5.5rem 0;
   border-top: 1px solid var(--bh-border);
