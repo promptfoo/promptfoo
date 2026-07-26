@@ -472,10 +472,10 @@ export const events: Event[] = [
     slug: 'defcon-2025',
     name: 'Promptfoo Party at DEF CON 33',
     shortName: 'DEF CON 33',
-    status: getEventStatus('2025-08-09T20:00:00-07:00'),
+    status: getEventStatus('2025-08-09T23:59:00-07:00'),
     type: 'party',
-    startDate: '2025-08-09T18:00:00-07:00', // PDT
-    endDate: '2025-08-09T20:00:00-07:00', // PDT
+    startDate: '2025-08-09T20:00:00-07:00', // PDT
+    endDate: '2025-08-09T23:59:00-07:00', // PDT
     location: {
       venue: 'Millennium FANDOM Bar',
       city: 'Las Vegas',
