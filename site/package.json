@@ -41,7 +41,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@tsconfig/docusaurus": "^2.0.9",
+    "@typescript/native": "npm:typescript@^7.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.0",
     "canvas-confetti": "^1.9.4",
@@ -58,7 +58,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "satori": "^0.26.0",
-    "typescript": "^6.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4.1.0",
     "webpack": "5.108.4"
   },
