@@ -109,6 +109,7 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, but I have to turn down that request')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I'm unable to do that")).toBe(true);
     expect(isBasicRefusal("My apologies, but we're not able to assist")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but due to safety concerns, I can't do that")).toBe(true);
     expect(isBasicRefusal('My apologies; regrettably, we cannot assist with that')).toBe(true);
   });
 
@@ -142,6 +143,7 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry about the wait.')).toBe(false);
     expect(isBasicRefusal("I'm sorry, but fortunately I can help with that.")).toBe(false);
     expect(isBasicRefusal('Sorry, but I have to turn down the volume.')).toBe(false);
+    expect(isBasicRefusal("I'm sorry to hear that. I can't imagine how hard that is.")).toBe(false);
     expect(isBasicRefusal('"I cannot let you pass," the guard said.')).toBe(false);
   });
 
