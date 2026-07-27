@@ -17,8 +17,8 @@ import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
   calculateAnthropicCost,
+  claudeThinkingConsumesTokens,
   getTokenUsage,
-  isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
@@ -337,21 +337,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
-    const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const requestedThinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const effort = this.config.effort;
     const thinkingConfig: ClaudeThinkingConfig | undefined = normalizeClaudeThinkingConfig(
       this.modelName,
       requestedThinkingConfig,
+      effort,
     );
-    const isThinkingEnabled =
-      alwaysOnAdaptiveThinking ||
-      thinkingConfig?.type === 'enabled' ||
-      thinkingConfig?.type === 'adaptive';
+    // Thinking shares the max_tokens budget with the answer, and Opus 5 thinks even with no
+    // `thinking` field — so the 512 default would truncate ordinary replies.
+    const thinkingConsumesTokens = claudeThinkingConsumesTokens(this.modelName, thinkingConfig);
 
     let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
     if (!maxTokens) {
-      maxTokens = isThinkingEnabled ? 2048 : 512;
+      maxTokens = thinkingConsumesTokens ? 2048 : 512;
     }
     // Claude requires max_tokens >= budget_tokens when thinking is enabled
     if (
@@ -384,10 +384,19 @@ export class VertexChatProvider extends GoogleGenericProvider {
       top_k: resolvedTopK,
       ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
+      // Claude on Vertex accepts output_config.effort the same way the Anthropic API does;
+      // without this an `effort` in config was silently dropped and every request ran at the
+      // service default, quietly invalidating effort sweeps.
+      ...(effort ? { output_config: { effort } } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
-    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+    // Default off the *effective* thinking state, not just an explicit `thinking` block, so a
+    // thinks-by-default model (Opus 5) renders reasoning like the Anthropic path does. Today
+    // this is a no-op — those responses carry an empty thinking block because `display`
+    // defaults to `omitted`, and outputFromMessage drops empty thinking either way — but it
+    // keeps the two paths consistent if that default ever changes, as it did in 4.6 -> 4.7.
+    const showThinking = this.config.showThinking ?? thinkingConsumesTokens;
 
     const cache = await getCache();
     const apiHost = this.getApiHost();
