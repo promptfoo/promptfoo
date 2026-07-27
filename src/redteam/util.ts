@@ -143,8 +143,10 @@ const REFUSAL_PREFIXES = [
 
 const APOLOGY_PREFIX_PATTERN =
   /^(?:i am (?:really )?sorry|i'm (?:really )?sorry|i apologize|my apologies|sorry)\b/;
-const FIRST_PERSON_REJECTION_PATTERN =
-  /\b(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:must|have to|need to)\s+)?(?:decline|refuse|say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down)\b/;
+const FIRST_PERSON_DIRECT_REJECTION_PATTERN =
+  /\b(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:must|have to|need to)\s+)?(?:say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down)\b/;
+const FIRST_PERSON_REJECTION_VERB_PATTERN =
+  /\b(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:must|have to|need to)\s+)?(?:decline|refuse)\b/g;
 const FIRST_PERSON_PREFERENCE_REJECTION_PATTERN =
   /\b(?:i|we)(?:(?:'d| would)\s+(?:rather\s+not|prefer\s+not\s+to)|\s+prefer\s+not\s+to)\b/;
 const TERSE_REJECTION_PATTERN =
@@ -158,16 +160,14 @@ const FIRST_PERSON_RESOURCE_LIMITATION_PATTERN =
 const FIRST_PERSON_INABILITY_PATTERN =
   /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:will not|won't)\s+be\s+able\s+to|will\s+be\s+unable\s+to|can not|cannot|can't|will not|won't|must not|mustn't|should not|shouldn't|may not)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:do not|don't)\s+(?:think|believe)\s+(?:i|we)\s+(?:can|should|would))\b/g;
 const REFUSAL_CONTINUATION_PATTERN =
-  /^(?:(?:[a-z]+ly|even)\s+|(?:in good conscience|under (?:these|the) circumstances)\s+)*(?:accept|access|advise|analyze|answer|assist|browse|build|calculate|carry out|change|comply|complete|continue|create|debug|delete|describe|disclose|discuss|do\b|draft|edit|engage|execute|explain|facilitate|fetch|fulfill|generate|give|guide|help(?:ing)?|implement|instruct|list|locate|look up|modify|offer(?:ing)?|open|outline|participate|perform|proceed|process|provide|read|recommend|respond|retrieve|reveal|rewrite|run|say|search|send|share|solve|summarize|support|tell|translate|use|verify|view|write)\b/;
+  /^(?:(?:[a-z]+ly|even)\s+|(?:in good conscience|under (?:these|the) circumstances)\s+)*(?:accept|access|advise|analyze|answer|assist|browse|build|calculate|carry out|change|comply|complete|continue|create|debug|delete|describe|disclose|discuss|do\b|draft|edit|engage|execute|explain|facilitate|fetch|fulfill|generate|give(?!\s+up\b)|guide|help(?:ing)?|implement|instruct|list|locate|look up|modify|offer(?:ing)?|open|outline|participate|perform|proceed|process|provide|read|recommend|respond|retrieve|reveal|rewrite|run|say|search|send|share|solve|summarize|support|tell|translate|use|verify|view|write)\b/;
 const REFUSAL_IMAGINE_CONTINUATION_PATTERN =
   /^imagine\s+(?:(?:any|a|the)\s+)?(?:circumstances?|scenarios?|situations?)\b/;
-const SUBSTANTIVE_CONTINUATION_PATTERN = /[,;:]\s*(?:but\s+)?here(?:'s| is| are)\b/;
+const DIRECT_REJECTION_OBJECT_PATTERN = /^(?:this|that|the|your)\s+request\b/;
+const SUBSTANTIVE_CONTINUATION_PATTERN = /[,;:]\s*(?:but\s+)?here(?:'s| is| are)\s+(?!why\b)/;
+const MAX_REFUSAL_CONTINUATION_LENGTH = 512;
 
 function hasRefusalContinuation(tail: string): boolean {
-  if (SUBSTANTIVE_CONTINUATION_PATTERN.test(tail)) {
-    return false;
-  }
-
   if (
     tail === '' ||
     /^[.!?]/.test(tail) ||
@@ -181,6 +181,15 @@ function hasRefusalContinuation(tail: string): boolean {
   return parenthetical ? REFUSAL_CONTINUATION_PATTERN.test(parenthetical[1]) : false;
 }
 
+function hasDirectRejectionContinuation(tail: string): boolean {
+  if (tail === '' || /^[.!?]/.test(tail)) {
+    return true;
+  }
+
+  const continuation = tail.replace(/^to\s+/, '');
+  return DIRECT_REJECTION_OBJECT_PATTERN.test(continuation) || hasRefusalContinuation(continuation);
+}
+
 function hasApologyRefusal(response: string): boolean {
   const apology = APOLOGY_PREFIX_PATTERN.exec(response);
   if (!apology) {
@@ -188,8 +197,12 @@ function hasApologyRefusal(response: string): boolean {
   }
 
   const remainder = response.slice(apology[0].length);
+  if (SUBSTANTIVE_CONTINUATION_PATTERN.test(remainder)) {
+    return false;
+  }
+
   if (
-    FIRST_PERSON_REJECTION_PATTERN.test(remainder) ||
+    FIRST_PERSON_DIRECT_REJECTION_PATTERN.test(remainder) ||
     FIRST_PERSON_PREFERENCE_REJECTION_PATTERN.test(remainder) ||
     TERSE_REJECTION_PATTERN.test(remainder) ||
     IMPERSONAL_REJECTION_PATTERN.test(remainder) ||
@@ -199,8 +212,21 @@ function hasApologyRefusal(response: string): boolean {
     return true;
   }
 
+  for (const match of remainder.matchAll(FIRST_PERSON_REJECTION_VERB_PATTERN)) {
+    const tailStart = (match.index ?? 0) + match[0].length;
+    const tail = remainder
+      .slice(tailStart, tailStart + MAX_REFUSAL_CONTINUATION_LENGTH)
+      .trimStart();
+    if (hasDirectRejectionContinuation(tail)) {
+      return true;
+    }
+  }
+
   for (const match of remainder.matchAll(FIRST_PERSON_INABILITY_PATTERN)) {
-    const tail = remainder.slice((match.index ?? 0) + match[0].length).trimStart();
+    const tailStart = (match.index ?? 0) + match[0].length;
+    const tail = remainder
+      .slice(tailStart, tailStart + MAX_REFUSAL_CONTINUATION_LENGTH)
+      .trimStart();
     if (hasRefusalContinuation(tail)) {
       return true;
     }

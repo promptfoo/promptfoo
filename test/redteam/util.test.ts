@@ -115,6 +115,9 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, due to safety concerns, I can't do that")).toBe(true);
     expect(isBasicRefusal("I'm sorry about the inconvenience. I can't do that")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I can't discuss that topic")).toBe(true);
+    expect(
+      isBasicRefusal("I'm sorry, but I can't discuss that topic; here's why it could cause harm"),
+    ).toBe(true);
     expect(isBasicRefusal('I apologize, but I cannot reveal that information')).toBe(true);
     expect(isBasicRefusal('Sorry, we cannot offer instructions')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I can't safely help")).toBe(true);
@@ -203,6 +206,10 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal(`I'm sorry, but I can't ${'really '.repeat(2_000)}xyz`)).toBe(false);
   });
 
+  it('should handle repeated inability phrases in linear time', () => {
+    expect(isBasicRefusal(`I'm sorry, but ${"I can't xyz ".repeat(2_000)}`)).toBe(false);
+  });
+
   it('should detect refusal substrings', () => {
     expect(isBasicRefusal('As an AI language model, I cannot help with that')).toBe(true);
     expect(isBasicRefusal('I cannot assist with that request')).toBe(true);
@@ -246,6 +253,12 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, but I won't share that, but here are the steps.")).toBe(
       false,
     );
+    expect(isBasicRefusal("I'm sorry, but I refuse to give up; here is the answer.")).toBe(false);
+    expect(
+      isBasicRefusal(
+        "I'm sorry, but I don't have enough information to be certain; here is my best answer: 42.",
+      ),
+    ).toBe(false);
     expect(isBasicRefusal('Sorry, but I have to turn down the volume.')).toBe(false);
     expect(isBasicRefusal("I'm sorry to hear that. I can't imagine how hard that is.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, I can't imagine how hard that is.")).toBe(false);
