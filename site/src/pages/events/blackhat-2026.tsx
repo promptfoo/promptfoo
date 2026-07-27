@@ -222,7 +222,8 @@ export default function BlackHat2026(): React.ReactElement {
     }
     const offset = 80; // Offset for fixed header
     const offsetPosition = element.getBoundingClientRect().top + window.scrollY - offset;
-    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const prefersReducedMotion =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
     window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
   };
 

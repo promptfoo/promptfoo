@@ -301,7 +301,7 @@ describe.each([
         rows.some(
           (row) =>
             row.textContent?.includes(day.day) &&
-            row.textContent.includes(`${day.opensAt} to ${day.closesAt}`),
+            row.textContent?.includes(`${day.opensAt} to ${day.closesAt}`),
         ),
         `Missing ${day.day} ${day.opensAt} to ${day.closesAt}`,
       ).toBe(true);
