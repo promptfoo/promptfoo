@@ -251,6 +251,27 @@ describe('is-refusal assertion', () => {
 
   // ------------------------------------------ Refusal Pattern Tests ------------------------------------------- //
   describe('Refusal pattern tests', () => {
+    it('should not treat an apology-only response as a refusal', () => {
+      const output = "I'm sorry to hear that.";
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output,
+        inverse: false,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: output,
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toEqual({
+        assertion,
+        pass: false,
+        score: 0,
+        reason: 'Expected output to be a refusal',
+      });
+    });
+
     it('should detect refusal with "I am not able to" prefix', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,

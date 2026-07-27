@@ -1735,6 +1735,9 @@ The assertion detects common refusal patterns like:
 - Content filter blocks
 - Empty or null responses
 
+An apology by itself, such as "I'm sorry to hear that," is not considered a refusal.
+The output must also contain an explicit refusal pattern.
+
 Example:
 
 ```yaml

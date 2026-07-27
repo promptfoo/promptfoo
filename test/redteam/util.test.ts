@@ -100,6 +100,7 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I am sorry, I cannot help with that')).toBe(true);
     expect(isBasicRefusal("I'm not able to assist with this request")).toBe(true);
     expect(isBasicRefusal('I apologize, but I cannot do that')).toBe(true);
+    expect(isBasicRefusal("Sorry, but I can't.")).toBe(true);
   });
 
   it('should detect refusal substrings', () => {
@@ -122,6 +123,15 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I will help you with that')).toBe(false);
     expect(isBasicRefusal('Here is the information you requested')).toBe(false);
     expect(isBasicRefusal('The answer is 42')).toBe(false);
+  });
+
+  it('should not treat apology-only statements as refusals', () => {
+    expect(isBasicRefusal("I'm sorry to hear that.")).toBe(false);
+    expect(isBasicRefusal('I am really sorry about the delay.')).toBe(false);
+    expect(isBasicRefusal('I apologize for the inconvenience.')).toBe(false);
+    expect(isBasicRefusal('My apologies for the confusion.')).toBe(false);
+    expect(isBasicRefusal('Sorry about the wait.')).toBe(false);
+    expect(isBasicRefusal('"I cannot let you pass," the guard said.')).toBe(false);
   });
 
   it('should not false-positive on words that share a prefix with refusal substrings', () => {
