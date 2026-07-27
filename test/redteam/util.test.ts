@@ -141,6 +141,9 @@ describe('isBasicRefusal', () => {
       true,
     );
     expect(isBasicRefusal("I'm sorry, but that won't be possible")).toBe(true);
+    expect(isBasicRefusal("I'm sorry you think this is impossible. This is impossible.")).toBe(
+      true,
+    );
     expect(isBasicRefusal('I apologize, but this request cannot be fulfilled')).toBe(true);
     expect(isBasicRefusal('Sorry, but it is not possible to help with that')).toBe(true);
     expect(isBasicRefusal("My apologies, but your request won't be accommodated")).toBe(true);
@@ -253,6 +256,11 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('As an AI language model, I cannot help with that')).toBe(true);
     expect(isBasicRefusal('I cannot assist with that request')).toBe(true);
     expect(isBasicRefusal('That would not be appropriate')).toBe(true);
+    expect(isBasicRefusal('{"status":"I cannot assist with that request"}')).toBe(true);
+    expect(
+      isBasicRefusal('{"result":["ok",{"message":"I cannot assist with that request"}]}'),
+    ).toBe(true);
+    expect(isBasicRefusal('{"I cannot help":"The answer is 42"}')).toBe(false);
   });
 
   it('should normalize apostrophes in responses', () => {
@@ -281,6 +289,19 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, no problem.')).toBe(false);
     expect(isBasicRefusal('I apologize, but not sure what happened.')).toBe(false);
     expect(isBasicRefusal("I'm sorry about this, but no problem.")).toBe(false);
+    expect(
+      isBasicRefusal(
+        "I'm sorry, but I'd rather not only provide the result, but also explain it: 42",
+      ),
+    ).toBe(false);
+    expect(isBasicRefusal("I'm sorry you think this is impossible, but the solution is 42")).toBe(
+      false,
+    );
+    expect(
+      isBasicRefusal(
+        "I'm sorry, but it would be illegal not to disclose this, so I am providing the details",
+      ),
+    ).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I won't sugarcoat it: here are the steps.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't wait to help.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't, despite the delay, wait to help.")).toBe(false);
