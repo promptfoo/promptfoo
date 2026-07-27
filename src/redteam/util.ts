@@ -156,13 +156,18 @@ const LEGAL_REJECTION_PATTERN =
 const FIRST_PERSON_RESOURCE_LIMITATION_PATTERN =
   /\b(?:(?:i|we)\s+(?:(?:do not|don't)\s+have|lack)\s+(?:(?:enough|sufficient|the(?: necessary)?)\s+)?(?:access|information|data|context|ability|capability|resources|capacity)\b|(?:i am|i'm|we are|we're)\s+not\s+(?:programmed|designed|trained|equipped|configured)\s+to\b)/;
 const FIRST_PERSON_INABILITY_PATTERN =
-  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:will not|won't)\s+be\s+able\s+to|will\s+be\s+unable\s+to|can not|cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:do not|don't)\s+(?:think|believe)\s+(?:i|we)\s+(?:can|should|would))\b/g;
+  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:will not|won't)\s+be\s+able\s+to|will\s+be\s+unable\s+to|can not|cannot|can't|will not|won't|must not|mustn't|should not|shouldn't|may not)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:do not|don't)\s+(?:think|believe)\s+(?:i|we)\s+(?:can|should|would))\b/g;
 const REFUSAL_CONTINUATION_PATTERN =
-  /^(?:(?:[a-z]+ly|even|really)\s+|(?:in good conscience|under (?:these|the) circumstances)\s+)*(?:accept|access|advise|analyze|answer|assist|browse|build|calculate|carry out|change|comply|complete|continue|create|debug|delete|describe|disclose|discuss|do\b|draft|edit|engage|execute|explain|facilitate|fetch|fulfill|generate|give|guide|help(?:ing)?|implement|instruct|list|locate|look up|modify|offer(?:ing)?|open|outline|participate|perform|proceed|process|provide|read|recommend|respond|retrieve|reveal|rewrite|run|say|search|send|share|solve|summarize|support|tell|translate|use|verify|view|write)\b/;
+  /^(?:(?:[a-z]+ly|even)\s+|(?:in good conscience|under (?:these|the) circumstances)\s+)*(?:accept|access|advise|analyze|answer|assist|browse|build|calculate|carry out|change|comply|complete|continue|create|debug|delete|describe|disclose|discuss|do\b|draft|edit|engage|execute|explain|facilitate|fetch|fulfill|generate|give|guide|help(?:ing)?|implement|instruct|list|locate|look up|modify|offer(?:ing)?|open|outline|participate|perform|proceed|process|provide|read|recommend|respond|retrieve|reveal|rewrite|run|say|search|send|share|solve|summarize|support|tell|translate|use|verify|view|write)\b/;
 const REFUSAL_IMAGINE_CONTINUATION_PATTERN =
   /^imagine\s+(?:(?:any|a|the)\s+)?(?:circumstances?|scenarios?|situations?)\b/;
+const SUBSTANTIVE_CONTINUATION_PATTERN = /[,;:]\s*(?:but\s+)?here(?:'s| is| are)\b/;
 
 function hasRefusalContinuation(tail: string): boolean {
+  if (SUBSTANTIVE_CONTINUATION_PATTERN.test(tail)) {
+    return false;
+  }
+
   if (
     tail === '' ||
     /^[.!?]/.test(tail) ||

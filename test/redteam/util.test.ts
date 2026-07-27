@@ -174,6 +174,11 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("My apologies, but I can't debug that")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I can't delete those files")).toBe(true);
     expect(isBasicRefusal("I apologize, but I can't look up that account")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I should not provide those instructions")).toBe(true);
+    expect(isBasicRefusal('I apologize, but I must not disclose that')).toBe(true);
+    expect(isBasicRefusal('Sorry, but we may not share that')).toBe(true);
+    expect(isBasicRefusal("My apologies, but I shouldn't assist")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I mustn't reveal that")).toBe(true);
     expect(
       isBasicRefusal(
         "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
@@ -192,6 +197,10 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal(`I'm sorry, but ${hostnameLikeRationale} means I can't do that`)).toBe(
       true,
     );
+  });
+
+  it('should handle repeated continuation qualifiers without backtracking', () => {
+    expect(isBasicRefusal(`I'm sorry, but I can't ${'really '.repeat(2_000)}xyz`)).toBe(false);
   });
 
   it('should detect refusal substrings', () => {
@@ -232,6 +241,9 @@ describe('isBasicRefusal', () => {
       false,
     );
     expect(isBasicRefusal("I'm sorry, I should not share this, but here are the steps.")).toBe(
+      false,
+    );
+    expect(isBasicRefusal("I'm sorry, but I won't share that, but here are the steps.")).toBe(
       false,
     );
     expect(isBasicRefusal('Sorry, but I have to turn down the volume.')).toBe(false);
