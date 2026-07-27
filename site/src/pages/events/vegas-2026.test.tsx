@@ -40,7 +40,7 @@ describe('Vegas 2026 event data', () => {
   // Vegas event dates carry explicit Pacific offsets. Reinterpreting them in the build
   // host's timezone can shift the displayed conference dates, so the events index must
   // agree with the dates printed on each page. Generic date-helper coverage lives in
-  // `src/data/events.test.ts`; this pins the two Vegas ranges.
+  // `site/src/data/events.test.ts`; this pins the two Vegas ranges.
   const zones = ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati', 'Asia/Tokyo'];
 
   // vi.stubEnv/unstubAllEnvs rather than assigning process.env.TZ directly: it is the
