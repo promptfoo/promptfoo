@@ -472,14 +472,14 @@ describe('announcement bar', () => {
   // owns it, so the Node-side build decision and the client-side `src/theme/AnnouncementBar`
   // wrapper (which retires the bar on the visitor's clock, since nothing rebuilds this site
   // on a schedule) cannot drift apart. Assert the config still consults it, and that the
-  // date it consults actually clears both conference windows.
-  it('is closeable and expires after the conferences', () => {
+  // date it consults matches the final public booth closing time.
+  it('is closeable and expires when the final public booth closes', () => {
     expect(configSource).toMatch(/isCloseable:\s*true/);
     expect(configSource).toMatch(/isVegasBannerLive\(/);
 
     const defcon = getEventBySlug('defcon-2026');
     expect(defcon).toBeDefined();
-    expect(Date.parse(defcon?.endDate ?? '')).toBeLessThan(VEGAS_BANNER_EXPIRY);
+    expect(Date.parse(defcon?.endDate ?? '')).toBe(VEGAS_BANNER_EXPIRY);
 
     expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY - 1)).toBe(true);
     expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY)).toBe(false);
