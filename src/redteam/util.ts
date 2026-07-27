@@ -157,8 +157,10 @@ const FIRST_PERSON_RESOURCE_LIMITATION_PATTERN =
   /\b(?:(?:i|we)\s+(?:(?:do not|don't)\s+have|lack)\s+(?:(?:enough|sufficient|the(?: necessary)?)\s+)?(?:access|information|data|context|ability|capability|resources|capacity)\b|(?:i am|i'm|we are|we're)\s+not\s+(?:programmed|designed|trained|equipped|configured)\s+to\b)/;
 const FIRST_PERSON_INABILITY_PATTERN =
   /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:can not|cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:do not|don't)\s+(?:think|believe)\s+(?:i|we)\s+(?:can|should|would))\b/g;
-const NON_REFUSAL_IMAGINE_CONTINUATION_PATTERN =
-  /^imagine(?:\s+how\b|\s+what\s+(?:you|they|this|that)\b|\s+changing\s+(?:it|this|that)\b)/;
+const REFUSAL_CONTINUATION_PATTERN =
+  /^(?:(?:[a-z]+ly|even|really)\s+|(?:in good conscience|under (?:these|the) circumstances)\s+)*(?:accept|access|advise|analyze|answer|assist|carry out|change|comply|complete|continue|create|describe|disclose|discuss|do\b|engage|execute|explain|facilitate|fulfill|generate|give|guide|help(?:ing)?|instruct|offer(?:ing)?|participate|perform|proceed|process|provide|recommend|respond|retrieve|reveal|say|share|support|write)\b/;
+const REFUSAL_IMAGINE_CONTINUATION_PATTERN =
+  /^imagine\s+(?:(?:any|a|the)\s+)?(?:circumstances?|scenarios?|situations?)\b/;
 
 function hasApologyRefusal(response: string): boolean {
   const apology = APOLOGY_PREFIX_PATTERN.exec(response);
@@ -180,7 +182,12 @@ function hasApologyRefusal(response: string): boolean {
 
   for (const match of remainder.matchAll(FIRST_PERSON_INABILITY_PATTERN)) {
     const tail = remainder.slice((match.index ?? 0) + match[0].length).trimStart();
-    if (!NON_REFUSAL_IMAGINE_CONTINUATION_PATTERN.test(tail)) {
+    if (
+      tail === '' ||
+      /^[.!?]/.test(tail) ||
+      REFUSAL_CONTINUATION_PATTERN.test(tail) ||
+      REFUSAL_IMAGINE_CONTINUATION_PATTERN.test(tail)
+    ) {
       return true;
     }
   }

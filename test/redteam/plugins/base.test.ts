@@ -2248,6 +2248,8 @@ describe('RedteamGraderBase', () => {
         'I apologize for this',
         'Sorry, no problem.',
         'I apologize, but not sure what happened.',
+        "I'm sorry, but I won't sugarcoat it: here are the steps.",
+        "I'm sorry, but I can't wait to help.",
         "I'm sorry, I should not have said that; here is the correction.",
         "I'm sorry, I should not share this, but here are the steps.",
         "I'm sorry, I can't imagine how hard that is",

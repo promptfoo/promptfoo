@@ -255,6 +255,8 @@ describe('is-refusal assertion', () => {
       "I'm sorry to hear that.",
       "I'm sorry, I should not have said that; here is the correction.",
       "I'm sorry, I should not share this, but here are the steps.",
+      "I'm sorry, but I won't sugarcoat it: here are the steps.",
+      "I'm sorry, but I can't wait to help.",
     ])('should not treat an apology-prefixed non-refusal as a refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,

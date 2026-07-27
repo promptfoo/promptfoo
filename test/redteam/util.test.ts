@@ -211,6 +211,8 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, but fortunately I can help with that.")).toBe(false);
     expect(isBasicRefusal('Sorry, no problem.')).toBe(false);
     expect(isBasicRefusal('I apologize, but not sure what happened.')).toBe(false);
+    expect(isBasicRefusal("I'm sorry, but I won't sugarcoat it: here are the steps.")).toBe(false);
+    expect(isBasicRefusal("I'm sorry, but I can't wait to help.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, I should not have said that; here is the correction.")).toBe(
       false,
     );
