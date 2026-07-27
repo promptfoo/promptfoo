@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_COMMIT_BATCH_SIZE = 25;
+const MAX_RELEASE_HISTORY_SEARCH_COMMITS = 500;
+const MIN_RELEASE_HISTORY_HEADROOM = 100;
 const MIN_RELEASE_PLEASE_MAJOR = 5;
 const RELEASE_PLEASE_ACTION = 'googleapis/release-please-action';
 
@@ -20,6 +22,11 @@ type ReleasePleaseConfig = {
 type WorkflowStep = { uses?: unknown };
 type ReleasePleaseWorkflow = {
   jobs?: { 'release-please'?: { steps?: WorkflowStep[] } };
+};
+type ReleaseDriftWorkflow = {
+  jobs?: {
+    'check-drift'?: { steps?: { name?: unknown; env?: Record<string, unknown> }[] };
+  };
 };
 
 function readRepoFile(relativePath: string) {
@@ -58,11 +65,24 @@ describe('release-please automation', () => {
     }
   });
 
-  it('caps commit-batch-size to a small value', () => {
+  it('batches release history requests without exceeding the supported batch size', () => {
     const batchSize = readReleasePleaseConfig()['commit-batch-size'];
     assert(typeof batchSize === 'number', 'commit-batch-size must be a number');
-    expect(batchSize).toBeGreaterThanOrEqual(1);
-    expect(batchSize).toBeLessThanOrEqual(MAX_COMMIT_BATCH_SIZE);
+    expect(batchSize).toBe(MAX_COMMIT_BATCH_SIZE);
+  });
+
+  it('keeps the drift guard below the release history search limit', () => {
+    const workflow = yaml.load(
+      readRepoFile('.github/workflows/release-please-sha-drift.yml'),
+    ) as ReleaseDriftWorkflow;
+    const driftStep = workflow.jobs?.['check-drift']?.steps?.find(
+      (step) => step.name === 'Check last-release-sha drift',
+    );
+    assert(driftStep, 'release drift workflow must include the drift-check step');
+
+    expect(Number(driftStep.env?.MAX_DRIFT)).toBe(
+      MAX_RELEASE_HISTORY_SEARCH_COMMITS - MIN_RELEASE_HISTORY_HEADROOM,
+    );
   });
 
   it('pins the release-please job action to a SHA on the v5+ family', () => {
