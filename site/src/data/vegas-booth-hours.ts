@@ -1,4 +1,4 @@
-export interface VegasBoothHours {
+interface VegasBoothHours {
   readonly date: string;
   readonly day: string;
   readonly opensAt: string;

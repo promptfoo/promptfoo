@@ -362,7 +362,8 @@ export default function BlackHat2026(): React.ReactElement {
                   ))}
                 </ul>
                 <p className={styles.findBody}>
-                  Trainings run August 1-4; Briefings are August 5-6. All times Pacific.
+                  Trainings run August 1-4; Briefings are August 5-6. All times are Pacific time
+                  (PDT).
                 </p>
               </div>
               <div className={styles.findCard}>
