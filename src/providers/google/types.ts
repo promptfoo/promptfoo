@@ -1,5 +1,6 @@
 import type { GoogleAuthOptions } from 'google-auth-library';
 
+import type { ClaudeEffort } from '../anthropic/types';
 import type { MCPConfig } from '../mcp/types';
 
 /**
@@ -185,6 +186,7 @@ export interface CompletionOptions {
   top_k?: number; // Alternative format for Claude models
   thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
   showThinking?: boolean; // Whether to include thinking output for Claude models
+  effort?: ClaudeEffort; // Reasoning depth for Claude models
 
   // Imagen image generation options
   n?: number; // Number of images to generate
@@ -490,6 +492,7 @@ export interface ClaudeRequest {
   top_k?: number;
   system?: Array<{ type: string; text: string }>;
   thinking?: ClaudeThinkingConfig;
+  output_config?: { effort?: ClaudeEffort };
   messages: ClaudeMessage[];
 }
 
