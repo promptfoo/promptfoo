@@ -111,6 +111,12 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("My apologies, but we're not able to assist")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but due to safety concerns, I can't do that")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but due to U.S. policy, I can't do that")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but due to safety concerns,\nI can't do that")).toBe(true);
+    expect(
+      isBasicRefusal(
+        `I'm sorry, but ${'this requires careful consideration '.repeat(8)}I can't do that`,
+      ),
+    ).toBe(true);
     expect(isBasicRefusal('My apologies; regrettably, we cannot assist with that')).toBe(true);
   });
 

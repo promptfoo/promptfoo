@@ -153,7 +153,7 @@ const FIRST_PERSON_REFUSAL_PATTERN =
 function findFirstSentenceEnd(text: string): number {
   for (let index = 0; index < text.length; index++) {
     const character = text[index];
-    if (character === '!' || character === '?' || character === '\n') {
+    if (character === '!' || character === '?') {
       return index;
     }
     if (character !== '.') {
@@ -178,7 +178,7 @@ function hasRationaleRefusal(response: string): boolean {
     return false;
   }
 
-  const remainder = response.slice(apology[0].length, apology[0].length + 200);
+  const remainder = response.slice(apology[0].length);
   const sentenceEnd = findFirstSentenceEnd(remainder);
   const sameSentence = sentenceEnd === -1 ? remainder : remainder.slice(0, sentenceEnd);
   const conjunction = APOLOGY_RATIONALE_CONJUNCTION_PATTERN.exec(sameSentence);
