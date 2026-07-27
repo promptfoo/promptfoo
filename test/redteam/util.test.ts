@@ -107,6 +107,8 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, I decline that request')).toBe(true);
     expect(isBasicRefusal('I apologize, but I must say no')).toBe(true);
     expect(isBasicRefusal('Sorry, but I have to turn down that request')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I'm unable to do that")).toBe(true);
+    expect(isBasicRefusal("My apologies, but we're not able to assist")).toBe(true);
     expect(isBasicRefusal('My apologies; regrettably, we cannot assist with that')).toBe(true);
   });
 
