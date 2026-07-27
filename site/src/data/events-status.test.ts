@@ -95,6 +95,19 @@ describe('event status rollover', () => {
     expect(ids(loaded.getUpcomingEvents(refreshed))).not.toContain(eventId);
   });
 
+  it.each([
+    ['blackhat-2026', '2026-08-06T16:00:00-07:00'],
+    ['defcon-2026', '2026-08-09T16:00:00-07:00'],
+  ])('keeps %s card copy accurate after its booth closes', async (eventId, closing) => {
+    const { events } = await loadEventsAt(Date.parse(closing) + 1);
+    const event = events.find((entry) => entry.id === eventId);
+
+    expect(event?.status).toBe('past');
+    expect(`${event?.description ?? ''} ${event?.fullDescription ?? ''}`).not.toMatch(
+      /\b(?:find (?:us|promptfoo)|join us|meet us|stop by|visit(?: us)?|see you(?: at)?|register now|rsvp)\b/i,
+    );
+  });
+
   it('derives every status from the end date, not from a hardcoded literal', async () => {
     // Late enough that every currently-listed event has finished. A regression that pins
     // any entry back to `status: 'upcoming'` fails here.

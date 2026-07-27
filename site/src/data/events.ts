@@ -330,9 +330,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #2967',
     description:
-      'Find Promptfoo at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6. See live AI agent attacks, full transcripts, and regression tests.',
+      'Promptfoo at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6. Live AI agent attacks, full transcripts, and regression tests.',
     fullDescription:
-      'Black Hat runs Aug 1-6; its Business Hall and OpenAI booth #2967 are open Aug 4-6. Promptfoo is part of OpenAI. Stop by to see us test a real AI application and turn a confirmed finding into a regression test.',
+      'Black Hat runs Aug 1-6, with the Business Hall and OpenAI booth #2967 open Aug 4-6. Promptfoo is part of OpenAI. Demos cover real AI application attacks, confirmed findings, and regression tests.',
     cardImage: '/img/events/blackhat-2026.jpg',
     heroImage: '/img/events/blackhat-2026.jpg',
     customPageUrl: '/events/blackhat-2026',
@@ -354,9 +354,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #1412',
     description:
-      'Find Promptfoo at OpenAI booth #1412 in West Hall, Aug 7-9. See what happens when an AI agent trusts the wrong document or misuses a tool.',
+      'Promptfoo at OpenAI booth #1412 in West Hall, Aug 7-9. Live tests show what happens when an AI agent trusts the wrong document or misuses a tool.',
     fullDescription:
-      'DEF CON 34 runs Aug 6-9, and its theme is Agency. Visit OpenAI booth #1412 in West Hall, Aug 7-9, to see how Promptfoo tests agent permissions, tool misuse, memory poisoning, and prompt injection. Promptfoo is part of OpenAI.',
+      'DEF CON 34 runs Aug 6-9, and its theme is Agency. OpenAI booth #1412 is in West Hall Aug 7-9. Promptfoo is part of OpenAI. Demos cover agent permissions, tool misuse, memory poisoning, and prompt injection.',
     cardImage: '/img/events/defcon-2026.jpg',
     heroImage: '/img/events/defcon-2026.jpg',
     customPageUrl: '/events/defcon-2026',
