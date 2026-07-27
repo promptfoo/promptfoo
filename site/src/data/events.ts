@@ -354,9 +354,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #1412',
     description:
-      'At OpenAI booth #1412 in West Hall, see Promptfoo test agent permissions, tool abuse, memory poisoning, and indirect prompt injection.',
+      'Aug 7-9 at OpenAI booth #1412 in West Hall: see Promptfoo test agent permissions, tool abuse, memory poisoning, and indirect prompt injection.',
     fullDescription:
-      "DEF CON 34's theme is Agency: charting your own course with the tech you use. Promptfoo is part of OpenAI, so find the team at OpenAI booth #1412 in West Hall, red teaming agents in the open — agent permissions, excessive agency, tool abuse, memory poisoning, and indirect prompt injection.",
+      'DEF CON 34 runs Aug 6-9, with Promptfoo booth demos Aug 7-9. Its theme is Agency: charting your own course with the tech you use. Promptfoo is part of OpenAI, so find the team at OpenAI booth #1412 in West Hall for agent permissions, excessive agency, tool abuse, memory poisoning, and indirect prompt injection.',
     cardImage: '/img/events/defcon-2026.jpg',
     heroImage: '/img/events/defcon-2026.jpg',
     customPageUrl: '/events/defcon-2026',

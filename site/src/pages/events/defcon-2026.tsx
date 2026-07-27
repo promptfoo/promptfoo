@@ -5,6 +5,7 @@ import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
+import { DEF_CON_BOOTH_HOURS } from '../../data/vegas-booth-hours';
 import styles from './defcon-2026.module.css';
 
 const BOOTH = 'Booth #1412';
@@ -49,20 +50,20 @@ export default function Defcon2026(): React.ReactElement {
     }
     const offset = 80; // Offset for the fixed navbar
     const offsetPosition = element.getBoundingClientRect().top + window.scrollY - offset;
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     window.scrollTo({ top: offsetPosition, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
   };
 
   return (
     <Layout
       title="Promptfoo at DEF CON 34"
-      description="Promptfoo is part of OpenAI. Find the Promptfoo team at the OpenAI booth in LVCC West Hall, August 6-9, 2026, for AI agent red teaming."
+      description="Promptfoo is part of OpenAI. Meet the team at OpenAI booth 1412 August 7-9, during DEF CON 34, August 6-9, 2026, in LVCC West Hall."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at DEF CON 34 | AI agent red teaming" />
         <meta
           property="og:description"
-          content="Promptfoo is part of OpenAI. Promptfoo demos at OpenAI booth 1412, LVCC West Hall, Las Vegas, August 6-9, 2026: prompt injection, tool abuse, and excessive agency testing for AI agents."
+          content="DEF CON 34 runs August 6-9. Meet Promptfoo at OpenAI booth 1412 in LVCC West Hall August 7-9 for live prompt injection, tool abuse, and AI agent red teaming."
         />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2026.jpg" />
         <meta property="og:image:width" content="1536" />
@@ -75,7 +76,7 @@ export default function Defcon2026(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo at DEF CON 34 | AI agent red teaming" />
         <meta
           name="twitter:description"
-          content="AI agent red teaming at DEF CON 34. Promptfoo demos at OpenAI booth 1412, LVCC West Hall, Las Vegas, August 6-9, 2026."
+          content="AI agent red teaming at DEF CON 34. Meet Promptfoo at OpenAI booth 1412, LVCC West Hall, Las Vegas, August 7-9, 2026."
         />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/defcon-2026.jpg" />
         <meta name="twitter:site" content="@promptfoo" />
@@ -97,7 +98,7 @@ export default function Defcon2026(): React.ReactElement {
             <div className={styles.heroContent}>
               <div className={styles.eyebrow}>DEF CON 34 // LVCC WEST HALL</div>
               <p className={styles.identity}>
-                Promptfoo is part of OpenAI. Find the team at the OpenAI booth.
+                Promptfoo is part of OpenAI. Find the team at the OpenAI booth August 7-9.
               </p>
               <h1 className={styles.heroTitle}>
                 GIVE YOUR AGENTS
@@ -195,7 +196,6 @@ export default function Defcon2026(): React.ReactElement {
               Exhibitor area rather than the Vendor hall.
               {/* TODO(events): add Exhibitor-hall hours once DEF CON publishes them; only the
                   general con hours (doors by 08:00) are posted this far out. */}
-              {/* TODO(events): add staffed demo hours once the team schedule is confirmed. */}
             </p>
             <div className={styles.cardGrid}>
               <article className={styles.card}>
@@ -207,20 +207,31 @@ export default function Defcon2026(): React.ReactElement {
                 <div className={styles.cardTag}>[LVCC_WEST_HALL]</div>
               </article>
               <article className={styles.card}>
+                <h3 className={styles.cardTitle}>Booth hours</h3>
+                <ul className={styles.boothHours} aria-label="DEF CON booth hours in Pacific time">
+                  {DEF_CON_BOOTH_HOURS.map(({ date, day, opensAt, closesAt }) => (
+                    <li key={date}>
+                      <time className={styles.boothHoursDay} dateTime={date}>
+                        {day}
+                      </time>
+                      <span className={styles.boothHoursTime}>
+                        {opensAt}–{closesAt}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className={styles.hoursNote}>
+                  All times are Pacific time (PDT). Find the team at OpenAI booth 1412 in West Hall.
+                </p>
+                <div className={styles.cardTag}>[AUG_7-9_PDT]</div>
+              </article>
+              <article className={styles.card}>
                 <h3 className={styles.cardTitle}>Part of OpenAI</h3>
                 <p className={styles.cardBody}>
                   Promptfoo is part of OpenAI. The CLI stays open source and model-agnostic. There
                   is no separate Promptfoo booth this year, so look for the OpenAI booth.
                 </p>
                 <div className={styles.cardTag}>[OPENAI]</div>
-              </article>
-              <article className={styles.card}>
-                <h3 className={styles.cardTitle}>Hallway track</h3>
-                <p className={styles.cardBody}>
-                  The best conversations at DEF CON happen standing in a line for something else. If
-                  you spot the foo, say hi, and bring your worst prompt injection.
-                </p>
-                <div className={styles.cardTag}>[BRING_PAYLOADS]</div>
               </article>
             </div>
             <p className={styles.partyNote}>

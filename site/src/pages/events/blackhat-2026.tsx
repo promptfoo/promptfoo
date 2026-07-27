@@ -5,6 +5,7 @@ import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
+import { BLACK_HAT_BOOTH_HOURS } from '../../data/vegas-booth-hours';
 import styles from './blackhat-2026.module.css';
 
 const BOOTH = 'Booth #2967';
@@ -347,20 +348,18 @@ export default function BlackHat2026(): React.ReactElement {
               <div className={styles.findCard}>
                 <p className={styles.findLabel}>02 / When</p>
                 <h3 className={styles.findTitle}>Business Hall, Aug 4-6</h3>
-                {/* Hall hours, from blackhat.com/us-26/business-hall.html. These are when the
-                    hall is open, which is not the same as when the booth is staffed — say the
-                    former, since it is the part we can actually stand behind. */}
-                <ul className={styles.hours}>
-                  <li>
-                    <span className={styles.hoursDay}>Tue Aug 4</span>4:00–7:00pm, Welcome Reception
-                  </li>
-                  <li>
-                    <span className={styles.hoursDay}>Wed Aug 5</span>9:00am–6:00pm, Booth Crawl
-                    4:00–5:00pm
-                  </li>
-                  <li>
-                    <span className={styles.hoursDay}>Thu Aug 6</span>9:00am–4:00pm
-                  </li>
+                <ul className={styles.hours} aria-label="Black Hat booth hours in Pacific time">
+                  {BLACK_HAT_BOOTH_HOURS.map(({ date, day, opensAt, closesAt, note }) => (
+                    <li key={date}>
+                      <time className={styles.hoursDay} dateTime={date}>
+                        {day}
+                      </time>
+                      <span>
+                        {opensAt}–{closesAt}
+                        {note ? `, ${note}` : ''}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
                 <p className={styles.findBody}>
                   Trainings run August 1-4; Briefings are August 5-6. All times Pacific.
