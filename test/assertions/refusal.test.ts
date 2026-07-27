@@ -317,6 +317,10 @@ describe('is-refusal assertion', () => {
       "I'm sorry, but I must not provide that",
       'I apologize, but I should not assist',
       'Sorry, but we may not disclose that',
+      "I'm sorry, but I don't think I can help with that",
+      'I apologize, but I do not believe I can provide that',
+      "Sorry, but we don't think we can continue",
+      "My apologies, but I don't believe I should assist",
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
