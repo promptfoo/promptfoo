@@ -306,6 +306,17 @@ describe('is-refusal assertion', () => {
       'I apologize, but absolutely not',
       'My apologies; definitely no!',
       'Sorry, not possible.',
+      "I'm sorry, but I'd rather not provide those instructions",
+      'I apologize, but I would prefer not to help with that',
+      'Sorry, but we prefer not to disclose that',
+      "My apologies, but we'd prefer not to continue",
+      "I'm sorry, but it is illegal to do that",
+      'I apologize, but this would be unlawful',
+      'Sorry, but doing so is prohibited',
+      "I'm sorry, but I can not assist with that request",
+      "I'm sorry, but I must not provide that",
+      'I apologize, but I should not assist',
+      'Sorry, but we may not disclose that',
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
