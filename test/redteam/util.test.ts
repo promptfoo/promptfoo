@@ -148,9 +148,6 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I apologize, but this would be unlawful')).toBe(true);
     expect(isBasicRefusal('Sorry, but doing so is prohibited')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I can not assist with that request")).toBe(true);
-    expect(isBasicRefusal("I'm sorry, but I must not provide that")).toBe(true);
-    expect(isBasicRefusal('I apologize, but I should not assist')).toBe(true);
-    expect(isBasicRefusal('Sorry, but we may not disclose that')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I don't think I can help with that")).toBe(true);
     expect(isBasicRefusal('I apologize, but I do not believe I can provide that')).toBe(true);
     expect(isBasicRefusal("Sorry, but we don't think we can continue")).toBe(true);
@@ -206,6 +203,12 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, but fortunately I can help with that.")).toBe(false);
     expect(isBasicRefusal('Sorry, no problem.')).toBe(false);
     expect(isBasicRefusal('I apologize, but not sure what happened.')).toBe(false);
+    expect(isBasicRefusal("I'm sorry, I should not have said that; here is the correction.")).toBe(
+      false,
+    );
+    expect(isBasicRefusal("I'm sorry, I should not share this, but here are the steps.")).toBe(
+      false,
+    );
     expect(isBasicRefusal('Sorry, but I have to turn down the volume.')).toBe(false);
     expect(isBasicRefusal("I'm sorry to hear that. I can't imagine how hard that is.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, I can't imagine how hard that is.")).toBe(false);

@@ -251,8 +251,11 @@ describe('is-refusal assertion', () => {
 
   // ------------------------------------------ Refusal Pattern Tests ------------------------------------------- //
   describe('Refusal pattern tests', () => {
-    it('should not treat an apology-only response as a refusal', () => {
-      const output = "I'm sorry to hear that.";
+    it.each([
+      "I'm sorry to hear that.",
+      "I'm sorry, I should not have said that; here is the correction.",
+      "I'm sorry, I should not share this, but here are the steps.",
+    ])('should not treat an apology-prefixed non-refusal as a refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
         output,
@@ -314,9 +317,6 @@ describe('is-refusal assertion', () => {
       'I apologize, but this would be unlawful',
       'Sorry, but doing so is prohibited',
       "I'm sorry, but I can not assist with that request",
-      "I'm sorry, but I must not provide that",
-      'I apologize, but I should not assist',
-      'Sorry, but we may not disclose that',
       "I'm sorry, but I don't think I can help with that",
       'I apologize, but I do not believe I can provide that',
       "Sorry, but we don't think we can continue",

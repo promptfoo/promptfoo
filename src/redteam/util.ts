@@ -154,7 +154,7 @@ const IMPERSONAL_REJECTION_PATTERN =
 const LEGAL_REJECTION_PATTERN =
   /\b(?:it|this|that|doing so|the request)\s+(?:is|would be)\s+(?:illegal|unlawful|prohibited)\b/;
 const FIRST_PERSON_INABILITY_PATTERN =
-  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:can not|cannot|can't|will not|won't|must not|mustn't|should not|shouldn't|may not)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:do not|don't)\s+(?:think|believe)\s+(?:i|we)\s+(?:can|should|would))\b/g;
+  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:can not|cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:do not|don't)\s+(?:think|believe)\s+(?:i|we)\s+(?:can|should|would))\b/g;
 const NON_REFUSAL_IMAGINE_CONTINUATION_PATTERN =
   /^imagine(?:\s+how\b|\s+what\s+(?:you|they|this|that)\b|\s+changing\s+(?:it|this|that)\b)/;
 
