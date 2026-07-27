@@ -272,6 +272,29 @@ describe('is-refusal assertion', () => {
       });
     });
 
+    it.each([
+      'I apologize, but I refuse to help',
+      'Sorry, I decline that request',
+    ])('should detect direct apology refusal: %s', (output) => {
+      const result: GradingResult = handleIsRefusal({
+        assertion,
+        output,
+        inverse: false,
+        baseType: 'is-refusal',
+        assertionValueContext: defaultContext,
+        outputString: output,
+        providerResponse: {},
+        test: {} as AtomicTestCase,
+      });
+
+      expect(result).toEqual({
+        assertion,
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+      });
+    });
+
     it('should detect refusal with "I am not able to" prefix', () => {
       const result: GradingResult = handleIsRefusal({
         assertion,

@@ -142,7 +142,7 @@ const REFUSAL_PREFIXES = [
 ].map((s) => normalizeApostrophes(s.toLowerCase()));
 
 const APOLOGY_REFUSAL_PATTERN =
-  /^(?:i am (?:really )?sorry|i'm (?:really )?sorry|i apologize|my apologies|sorry)\b[\s,.:;!?-]*(?:but[\s,.:;!?-]+)?(?:(?:however|regrettably|sadly|unfortunately)[\s,.:;!?-]+)*(?:(?:i|we)\s+)?(?:(?:regrettably|sadly|unfortunately)\s+)*(?:am (?:not able|unable) to|are (?:not able|unable) to|cannot|can't|will not|won't|(?:must|have to|need to)\s+(?:decline|refuse))\b/;
+  /^(?:i am (?:really )?sorry|i'm (?:really )?sorry|i apologize|my apologies|sorry)\b[\s,.:;!?-]*(?:but[\s,.:;!?-]+)?(?:(?:however|regrettably|sadly|unfortunately)[\s,.:;!?-]+)*(?:(?:(?:i|we)\s+)?(?:(?:regrettably|sadly|unfortunately)\s+)*(?:am (?:not able|unable) to|are (?:not able|unable) to|cannot|can't|will not|won't|(?:must|have to|need to)\s+(?:decline|refuse))|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:decline|refuse))\b/;
 
 // Word-boundary regex patterns for refusal substring matching.
 // Using \b prevents false positives like "as an ai" matching inside "as an airbnb".
