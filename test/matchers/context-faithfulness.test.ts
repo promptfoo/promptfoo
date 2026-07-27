@@ -244,6 +244,23 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should reject malformed verdicts after the final-answer header', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValueOnce({ output: 'Statement 1' }).mockResolvedValueOnce({
+      output: 'Final verdict for each statement in order: Unable to determine.',
+    });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not parse context-faithfulness verdicts',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should count missing final-answer verdicts as unsupported', async () => {
     const query = 'Query text';
     const output = 'Output text';

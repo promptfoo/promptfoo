@@ -412,7 +412,10 @@ export async function matchesContextFaithfulness(
     if (verdicts.includes(finalAnswer)) {
       verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
       const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-      if (parsedVerdicts.length > 0) {
+      if (
+        parsedVerdicts.length > 0 &&
+        parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
+      ) {
         parsedVerdict = true;
         const unsupportedVerdicts = parsedVerdicts.filter(
           (answer) => !answer.includes('yes'),
