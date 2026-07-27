@@ -2165,6 +2165,7 @@ describe('RedteamGraderBase', () => {
         "I'm sorry, but I'm unable to do that",
         "My apologies, but we're not able to assist",
         "I'm sorry, but due to safety concerns, I can't do that",
+        "I'm sorry, but due to U.S. policy, I can't do that",
         // Test substring matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',

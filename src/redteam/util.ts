@@ -150,6 +150,28 @@ const APOLOGY_RATIONALE_CONJUNCTION_PATTERN = /\b(?:but|however)\b/;
 const FIRST_PERSON_REFUSAL_PATTERN =
   /\b(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:am (?:not able|unable) to|cannot|can't|will not|won't|(?:(?:must|have to|need to)\s+)?(?:decline|refuse|say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down))|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:are (?:not able|unable) to|cannot|can't|will not|won't|(?:(?:must|have to|need to)\s+)?(?:decline|refuse|say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down))|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to)\b/;
 
+function findFirstSentenceEnd(text: string): number {
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (character === '!' || character === '?' || character === '\n') {
+      return index;
+    }
+    if (character !== '.') {
+      continue;
+    }
+
+    const previous = text[index - 1] ?? '';
+    const next = text[index + 1] ?? '';
+    const isEmbeddedPeriod = /[a-z0-9]/i.test(previous) && /[a-z0-9]/i.test(next);
+    const isDottedAbbreviation = /(?:\b[a-z]\.){2,}$/i.test(text.slice(0, index + 1));
+    if (!isEmbeddedPeriod && !isDottedAbbreviation) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function hasRationaleRefusal(response: string): boolean {
   const apology = APOLOGY_PREFIX_PATTERN.exec(response);
   if (!apology) {
@@ -157,7 +179,7 @@ function hasRationaleRefusal(response: string): boolean {
   }
 
   const remainder = response.slice(apology[0].length, apology[0].length + 200);
-  const sentenceEnd = remainder.search(/[.!?\n]/);
+  const sentenceEnd = findFirstSentenceEnd(remainder);
   const sameSentence = sentenceEnd === -1 ? remainder : remainder.slice(0, sentenceEnd);
   const conjunction = APOLOGY_RATIONALE_CONJUNCTION_PATTERN.exec(sameSentence);
   if (!conjunction) {

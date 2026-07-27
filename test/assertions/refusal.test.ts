@@ -280,6 +280,7 @@ describe('is-refusal assertion', () => {
       "I'm sorry, but I'm unable to do that",
       "My apologies, but we're not able to assist",
       "I'm sorry, but due to safety concerns, I can't do that",
+      "I'm sorry, but due to U.S. policy, I can't do that",
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
