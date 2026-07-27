@@ -73,11 +73,41 @@ export interface Event {
   customPageUrl?: string; // Custom dedicated page URL for special events
 }
 
-// Helper to determine event status based on date
+/**
+ * Injected by webpack's DefinePlugin (see `site/docusaurus.config.ts`). Declared as
+ * possibly-undefined because it does not exist outside a webpack build (vitest, the
+ * OG-image generation script); `typeof` guards make the reference safe there.
+ */
+declare const __SITE_BUILD_TIMESTAMP__: string | undefined;
+
+/**
+ * The instant every event status is measured against.
+ *
+ * This is deliberately a BUILD-TIME snapshot, not a live clock. The site is statically
+ * generated, so a bare `new Date()` at module scope resolves to two different instants:
+ * build time in the prerendered HTML, and page-load time during hydration. An event that
+ * ends between deploys would then be `upcoming` in the crawled HTML and `past` on the
+ * client, which reorders the event list and swaps the featured event out from under the
+ * reader after hydration.
+ *
+ * DefinePlugin replaces `__SITE_BUILD_TIMESTAMP__` with the same string literal in both
+ * the server and the client bundle, so the two can never disagree. The trade-off is
+ * explicit: **statuses roll over on rebuild, not on the wire.** Rebuild/redeploy the site
+ * to move a finished event into the past list.
+ *
+ * Outside webpack the identifier is undefined and this falls back to the current time,
+ * which is the right behavior for tests and node scripts.
+ */
+const STATUS_REFERENCE_TIME: number = (() => {
+  const injected = typeof __SITE_BUILD_TIMESTAMP__ === 'string' ? __SITE_BUILD_TIMESTAMP__ : null;
+  const parsed = injected === null ? Number.NaN : Date.parse(injected);
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+})();
+
+// Helper to determine event status based on date. Nothing should re-derive this on the
+// client: `Event.status` is computed once here, at module scope, from the snapshot above.
 function getEventStatus(endDate: string): EventStatus {
-  const today = new Date();
-  const eventEnd = new Date(endDate);
-  return eventEnd < today ? 'past' : 'upcoming';
+  return Date.parse(endDate) < STATUS_REFERENCE_TIME ? 'past' : 'upcoming';
 }
 
 // Event Data
@@ -88,7 +118,7 @@ export const events: Event[] = [
     slug: 'bsides-seattle-2026',
     name: 'Promptfoo at BSides Seattle 2026',
     shortName: 'BSides Seattle 2026',
-    status: 'upcoming',
+    status: getEventStatus('2026-02-28T18:00:00-08:00'),
     type: 'conference',
     startDate: '2026-02-27T09:00:00-08:00', // PST
     endDate: '2026-02-28T18:00:00-08:00', // PST
@@ -99,16 +129,16 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Meet the Promptfoo team at BSides Seattle for hands-on AI red teaming demos, hallway-track threat intel, and practical ways to harden LLM apps.',
+      'We ran hands-on AI red teaming demos at BSides Seattle, traded hallway-track threat intel, and worked through practical ways to harden LLM apps.',
     fullDescription:
-      'Meet the Promptfoo team for live demos of AI red teaming: prompt injection, jailbreaks, and data exfiltration against real-world LLM apps. Bring your use case and leave with a testing plan you can run in CI.',
+      'Promptfoo joined BSides Seattle for live demos of AI red teaming: prompt injection, jailbreaks, and data exfiltration against real-world LLM apps. People brought their own use cases and left with a testing plan they could run in CI.',
     cardImage: '/img/events/bsides-seattle-2026.jpg',
     heroImage: '/img/events/bsides-seattle-2026.jpg',
     highlights: [
       {
         icon: '🌲',
         title: 'PNW Community',
-        description: 'Connect with Seattle security pros',
+        description: 'Connected with Seattle security pros',
       },
       {
         icon: '🛠️',
@@ -118,7 +148,7 @@ export const events: Event[] = [
       {
         icon: '🤝',
         title: 'Networking',
-        description: 'Meet security researchers',
+        description: 'Met security researchers',
       },
     ],
     customPageUrl: '/events/bsides-seattle-2026',
@@ -128,7 +158,7 @@ export const events: Event[] = [
     slug: 'rsa-2026',
     name: 'Promptfoo at RSA Conference 2026',
     shortName: 'RSA 2026',
-    status: 'upcoming',
+    status: getEventStatus('2026-03-26T18:00:00-07:00'),
     type: 'conference',
     startDate: '2026-03-23T09:00:00-07:00', // PDT
     endDate: '2026-03-26T18:00:00-07:00', // PDT
@@ -139,25 +169,25 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Meet Promptfoo at RSAC for executive-ready AI security: red teaming, guardrails, and reporting your leadership can act on.',
+      'We brought executive-ready AI security to RSAC: red teaming, guardrails, and reporting security leadership can act on.',
     fullDescription:
-      'Meet Promptfoo to see how security teams build an AI security program that scales: continuous red teaming, runtime guardrails, and reporting that tracks risk reduction over time.',
+      'Promptfoo was at RSA Conference 2026 showing how security teams build an AI security program that scales: continuous red teaming, runtime guardrails, and reporting that tracks risk reduction over time.',
     cardImage: '/img/events/rsa-2026.jpg',
     heroImage: '/img/events/rsa-2026.jpg',
     highlights: [
       {
         icon: '🎯',
         title: 'Live Demos',
-        description: 'Watch AI red teaming attacks in real-time',
+        description: 'AI red teaming attacks, run on the floor',
       },
       {
         icon: '🔒',
-        title: 'Free Assessment',
-        description: 'Get a complimentary AI vulnerability assessment',
+        title: 'Risk Reviews',
+        description: 'Walked through AI vulnerability findings',
       },
       {
         icon: '🎁',
-        title: 'Exclusive Swag',
+        title: 'Swag',
         description: 'Limited edition Promptfoo gear',
       },
     ],
@@ -168,7 +198,7 @@ export const events: Event[] = [
     slug: 'bsides-sf-2026',
     name: 'Promptfoo at BSides SF 2026',
     shortName: 'BSides SF 2026',
-    status: 'upcoming',
+    status: getEventStatus('2026-03-22T18:00:00-07:00'),
     type: 'conference',
     startDate: '2026-03-21T09:00:00-07:00', // PDT
     endDate: '2026-03-22T18:00:00-07:00', // PDT
@@ -181,7 +211,7 @@ export const events: Event[] = [
     description:
       'Practitioner-led AI security during RSA week. Fast demos, deep conversations, and concrete red teaming takeaways.',
     fullDescription:
-      'Stop by to compare notes on prompt injection, agent abuse, and the testing workflows security teams actually run. We show quick demos, then go deep on how to reproduce issues and prevent regressions.',
+      'We compared notes on prompt injection, agent abuse, and the testing workflows security teams actually run. Quick demos first, then the long version: how to reproduce an issue and keep it from coming back.',
     cardImage: '/img/events/bsides-sf-2026.jpg',
     heroImage: '/img/events/bsides-sf-2026.jpg',
     highlights: [
@@ -193,7 +223,7 @@ export const events: Event[] = [
       {
         icon: '🤝',
         title: 'Community',
-        description: 'Connect with security researchers',
+        description: 'Connected with security researchers',
       },
       {
         icon: '🏆',
@@ -208,7 +238,7 @@ export const events: Event[] = [
     slug: 'humanx-2026',
     name: 'Promptfoo at HumanX 2026',
     shortName: 'HumanX 2026',
-    status: 'upcoming',
+    status: getEventStatus('2026-04-09T18:00:00-07:00'),
     type: 'conference',
     startDate: '2026-04-06T09:00:00-07:00', // PDT
     endDate: '2026-04-09T18:00:00-07:00', // PDT
@@ -219,26 +249,26 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'For AI leaders shipping real products: see how to evaluate and secure LLM apps and agents without slowing teams down.',
+      'For AI leaders shipping real products: how to evaluate and secure LLM apps and agents without slowing teams down.',
     fullDescription:
-      'AI is moving fast. Security and evaluation need to keep up. Meet Promptfoo for live demos on testing and securing LLM features across copilots, RAG, and agents, before launch and continuously in production.',
+      'AI is moving fast. Security and evaluation have to keep up. Promptfoo ran live demos on testing and securing LLM features across copilots, RAG, and agents, before launch and continuously in production.',
     cardImage: '/img/events/humanx-2026.jpg',
     heroImage: '/img/events/humanx-2026.jpg',
     highlights: [
       {
         icon: '🧠',
         title: 'AI Leadership',
-        description: 'Connect with AI executives and innovators',
+        description: 'Connected with AI executives and innovators',
       },
       {
         icon: '🎯',
         title: 'Live Demos',
-        description: 'See AI security testing in action',
+        description: 'AI security testing, in action',
       },
       {
         icon: '🤝',
         title: 'Networking',
-        description: 'Meet enterprise AI teams',
+        description: 'Met enterprise AI teams',
       },
     ],
     customPageUrl: '/events/humanx-2026',
@@ -248,7 +278,7 @@ export const events: Event[] = [
     slug: 'gartner-security-2026',
     name: 'Promptfoo at Gartner Security & Risk Management Summit 2026',
     shortName: 'Gartner Security 2026',
-    status: 'upcoming',
+    status: getEventStatus('2026-06-03T18:00:00-04:00'),
     type: 'conference',
     startDate: '2026-06-01T09:00:00-04:00', // EDT
     endDate: '2026-06-03T18:00:00-04:00', // EDT
@@ -259,16 +289,16 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Turn AI risk into a measurable program. Meet Promptfoo for briefings on continuous red teaming, guardrails, and executive reporting.',
+      'Turning AI risk into a measurable program: briefings on continuous red teaming, guardrails, and executive reporting.',
     fullDescription:
-      'If you are building an AI security program, we can help you move from ad hoc testing to continuous coverage. Meet Promptfoo for demos of automated red teaming, runtime guardrails, and reporting security leadership can track.',
+      'We met with teams building AI security programs and mapped the move from ad hoc testing to continuous coverage: automated red teaming, runtime guardrails, and reporting security leadership can track.',
     cardImage: '/img/events/gartner-security-2026.jpg',
     heroImage: '/img/events/gartner-security-2026.jpg',
     highlights: [
       {
         icon: '📊',
         title: 'Analyst Briefings',
-        description: 'Meet with Gartner analysts',
+        description: 'Met with Gartner analysts',
       },
       {
         icon: '🏢',
@@ -288,7 +318,7 @@ export const events: Event[] = [
     slug: 'blackhat-2026',
     name: 'Promptfoo at Black Hat USA 2026',
     shortName: 'Black Hat 2026',
-    status: 'upcoming',
+    status: getEventStatus('2026-08-06T18:00:00-07:00'),
     type: 'conference',
     startDate: '2026-08-01T09:00:00-07:00', // PDT
     endDate: '2026-08-06T18:00:00-07:00', // PDT
@@ -298,30 +328,38 @@ export const events: Event[] = [
       state: 'NV',
       country: 'USA',
     },
+    booth: 'Booth #2967',
     description:
-      'See live AI attack demos at Black Hat USA: prompt injection, jailbreaks, data exfiltration, and how to automate LLM red teaming at scale.',
+      'Promptfoo demos at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6: application-specific agent attacks, full transcripts, and CI regression tests.',
     fullDescription:
-      'Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM vulnerabilities with automated red teaming, repeatable evals, and production guardrails.',
+      'Promptfoo is part of OpenAI. Find the team at OpenAI booth #2967 in the Business Hall, open Aug 4-6. We run automated red teaming against real LLM apps, keep the transcript for every attempt, and show how a confirmed finding becomes a regression test that runs in CI.',
     cardImage: '/img/events/blackhat-2026.jpg',
     heroImage: '/img/events/blackhat-2026.jpg',
-    highlights: [
-      {
-        icon: '🎯',
-        title: 'Attack Demos',
-        description: 'Prompt injection, jailbreaks, data exfiltration',
-      },
-      {
-        icon: '🤖',
-        title: 'Red Team Automation',
-        description: 'Generate application-specific attack variants',
-      },
-      {
-        icon: '🔄',
-        title: 'CI/CD Integration',
-        description: 'Turn findings into regression tests',
-      },
-    ],
     customPageUrl: '/events/blackhat-2026',
+  },
+  {
+    id: 'defcon-2026',
+    slug: 'defcon-2026',
+    name: 'Promptfoo at DEF CON 34',
+    shortName: 'DEF CON 34',
+    status: getEventStatus('2026-08-09T18:00:00-07:00'),
+    type: 'conference',
+    startDate: '2026-08-06T09:00:00-07:00', // PDT
+    endDate: '2026-08-09T18:00:00-07:00', // PDT
+    location: {
+      venue: 'Las Vegas Convention Center (West Hall)',
+      city: 'Las Vegas',
+      state: 'NV',
+      country: 'USA',
+    },
+    booth: 'Booth #1412',
+    description:
+      'At OpenAI booth #1412 in West Hall, see Promptfoo test agent permissions, tool abuse, memory poisoning, and indirect prompt injection.',
+    fullDescription:
+      "DEF CON 34's theme is Agency: charting your own course with the tech you use. Promptfoo is part of OpenAI, so find the team at OpenAI booth #1412 in West Hall, red teaming agents in the open — agent permissions, excessive agency, tool abuse, memory poisoning, and indirect prompt injection.",
+    cardImage: '/img/events/defcon-2026.jpg',
+    heroImage: '/img/events/defcon-2026.jpg',
+    customPageUrl: '/events/defcon-2026',
   },
 
   // Past Events (2025)
@@ -716,9 +754,18 @@ export function getFeaturedEvent(): Event | undefined {
   return upcoming.length > 0 ? upcoming[0] : undefined;
 }
 
+// Event dates carry an explicit offset (e.g. '2026-08-09T18:00:00-07:00'). Handing those to
+// `new Date()` and then reading `getDate()` renders the calendar date in the *build host's*
+// timezone, so an evening PDT event rolls onto the next day on a UTC CI box. Read the
+// calendar date straight off the ISO string instead so the rendered range is stable.
+function parseCalendarDate(isoDate: string): Date {
+  const [year, month, day] = isoDate.slice(0, 10).split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function formatEventDate(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+  const start = parseCalendarDate(startDate);
+  const end = parseCalendarDate(endDate);
 
   const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
   const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
