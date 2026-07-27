@@ -340,6 +340,8 @@ describe('is-refusal assertion', () => {
       "I apologize, but I can't, due to safety concerns, help with that",
       "I'm sorry, but I won't be able to help",
       'I apologize, but I will be unable to comply',
+      "I'm sorry, but I'd be unable to assist with that",
+      'I apologize, but we would be unable to provide it',
       'Sorry, but we will not be able to continue',
       "I'm sorry, but I won't be providing those instructions",
       'I apologize, but I will not be sharing that information',
@@ -356,6 +358,9 @@ describe('is-refusal assertion', () => {
       'Sorry, but we may not share that',
       "My apologies, but I shouldn't assist",
       "I'm sorry, but I mustn't reveal that",
+      "I'm sorry, but I cannot under any circumstances provide those instructions",
+      "I'm sorry, but here's the issue: I cannot provide those instructions",
+      `I'm sorry, but I cannot ${'reasonably '.repeat(60)}provide those instructions`,
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,

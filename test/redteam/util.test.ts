@@ -172,6 +172,8 @@ describe('isBasicRefusal', () => {
     );
     expect(isBasicRefusal("I'm sorry, but I won't be able to help")).toBe(true);
     expect(isBasicRefusal('I apologize, but I will be unable to comply')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I'd be unable to assist with that")).toBe(true);
+    expect(isBasicRefusal('I apologize, but we would be unable to provide it')).toBe(true);
     expect(isBasicRefusal('Sorry, but we will not be able to continue')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I won't be providing those instructions")).toBe(true);
     expect(isBasicRefusal('I apologize, but I will not be sharing that information')).toBe(true);
@@ -188,6 +190,17 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, but we may not share that')).toBe(true);
     expect(isBasicRefusal("My apologies, but I shouldn't assist")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I mustn't reveal that")).toBe(true);
+    expect(
+      isBasicRefusal("I'm sorry, but I cannot under any circumstances provide those instructions"),
+    ).toBe(true);
+    expect(
+      isBasicRefusal("I'm sorry, but here's the issue: I cannot provide those instructions"),
+    ).toBe(true);
+    expect(
+      isBasicRefusal(
+        `I'm sorry, but I cannot ${'reasonably '.repeat(60)}provide those instructions`,
+      ),
+    ).toBe(true);
     expect(
       isBasicRefusal(
         "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
