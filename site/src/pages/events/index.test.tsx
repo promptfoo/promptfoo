@@ -9,6 +9,20 @@ import EventsPage from './index';
 const BLACK_HAT_CLOSE = Date.parse('2026-08-06T16:00:00-07:00');
 const DEF_CON_CLOSE = Date.parse('2026-08-09T16:00:00-07:00');
 
+function getUpcomingFilterButton(): HTMLElement {
+  return screen.getByRole('button', { name: /^Upcoming\s*\d+$/i });
+}
+
+function getUpcomingCount(): number {
+  const match = getUpcomingFilterButton().textContent?.match(/(\d+)\s*$/);
+
+  if (!match) {
+    throw new Error('Upcoming filter does not contain an event count');
+  }
+
+  return Number(match[1]);
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
 });
@@ -22,7 +36,7 @@ describe('event index live status', () => {
     vi.setSystemTime(BLACK_HAT_CLOSE - 1000);
     render(<EventsPage />);
 
-    expect(screen.getByRole('button', { name: /^Upcoming\s*2$/i })).toBeInTheDocument();
+    const initialUpcomingCount = getUpcomingCount();
     expect(
       screen.getByRole('heading', { level: 2, name: 'Promptfoo at Black Hat USA 2026' }),
     ).toBeInTheDocument();
@@ -31,22 +45,22 @@ describe('event index live status', () => {
       vi.advanceTimersByTime(1001);
     });
 
-    expect(screen.getByRole('button', { name: /^Upcoming\s*1$/i })).toBeInTheDocument();
+    expect(getUpcomingCount()).toBe(initialUpcomingCount - 1);
     expect(
       screen.getByRole('heading', { level: 2, name: 'Promptfoo at DEF CON 34' }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Upcoming\s*1$/i }));
+    fireEvent.click(getUpcomingFilterButton());
 
     expect(screen.queryByRole('heading', { name: 'Black Hat 2026' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'DEF CON 34' })).toBeInTheDocument();
   });
 
-  it('removes the featured event when the final DEF CON booth closes', () => {
+  it('removes DEF CON from upcoming events when the final booth closes', () => {
     vi.setSystemTime(DEF_CON_CLOSE - 1000);
     render(<EventsPage />);
 
-    expect(screen.getByRole('button', { name: /^Upcoming\s*1$/i })).toBeInTheDocument();
+    const initialUpcomingCount = getUpcomingCount();
     expect(
       screen.getByRole('heading', { level: 2, name: 'Promptfoo at DEF CON 34' }),
     ).toBeInTheDocument();
@@ -55,8 +69,14 @@ describe('event index live status', () => {
       vi.advanceTimersByTime(1001);
     });
 
-    expect(screen.getByRole('button', { name: /^Upcoming\s*0$/i })).toBeInTheDocument();
-    expect(screen.queryByText('Upcoming Event')).not.toBeInTheDocument();
+    expect(getUpcomingCount()).toBe(initialUpcomingCount - 1);
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Promptfoo at DEF CON 34' }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(getUpcomingFilterButton());
+
+    expect(screen.queryByRole('heading', { name: 'DEF CON 34' })).not.toBeInTheDocument();
   });
 
   it('hydrates stale event markup without a mismatch and then refreshes event status', async () => {
