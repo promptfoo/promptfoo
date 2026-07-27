@@ -152,6 +152,8 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I apologize, but the requested information cannot be provided')).toBe(
       true,
     );
+    expect(isBasicRefusal("I'm sorry, but those instructions cannot be provided")).toBe(true);
+    expect(isBasicRefusal('I apologize, but these instructions will not be shared')).toBe(true);
     expect(isBasicRefusal('Sorry, no.')).toBe(true);
     expect(isBasicRefusal('I apologize, but absolutely not')).toBe(true);
     expect(isBasicRefusal('My apologies; definitely no!')).toBe(true);

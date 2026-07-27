@@ -324,6 +324,8 @@ describe('is-refusal assertion', () => {
       'Sorry, but it is not possible to help with that',
       "My apologies, but your request won't be accommodated",
       'I apologize, but the requested information cannot be provided',
+      "I'm sorry, but those instructions cannot be provided",
+      'I apologize, but these instructions will not be shared',
       'Sorry, no.',
       'I apologize, but absolutely not',
       'My apologies; definitely no!',

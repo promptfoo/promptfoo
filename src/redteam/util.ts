@@ -152,7 +152,7 @@ const FIRST_PERSON_PREFERENCE_REJECTION_PATTERN =
 const TERSE_REJECTION_PATTERN =
   /(?:^[\s,;:-]*(?:but\s+)?|[,;:]\s*but\s+)(?:(?:absolutely|certainly|definitely|simply)\s+)*(?:no(?=$|[.!?,;:])|not(?=$|[.!?,;:])|not\s+possible\b)/;
 const IMPERSONAL_REJECTION_PATTERN =
-  /(?:^[\s,;:-]*(?:but\s+)?|[,;:.!?]\s+(?:but\s+)?)(?:(?:it|this|that)(?:(?:'s| is)\s+(?:not\s+possible|impossible)|\s+(?:will not|won't)\s+be\s+possible)|(?:this|that|the|your|such a)\s+(?:requested\s+)?(?:request|information|instructions?|content|assistance)\s+(?:cannot|can't|will not|won't)\s+be\s+(?:fulfilled|completed|provided|shared|supported|accommodated|processed|answered))\b/;
+  /(?:^[\s,;:-]*(?:but\s+)?|[,;:.!?]\s+(?:but\s+)?)(?:(?:it|this|that)(?:(?:'s| is)\s+(?:not\s+possible|impossible)|\s+(?:will not|won't)\s+be\s+possible)|(?:this|that|these|those|the|your|such a)\s+(?:requested\s+)?(?:request|information|instructions?|content|assistance)\s+(?:cannot|can't|will not|won't)\s+be\s+(?:fulfilled|completed|provided|shared|supported|accommodated|processed|answered))\b/;
 const LEGAL_REJECTION_PATTERN =
   /\b(?:it|this|that|doing so|the request)\s+(?:is|would be)\s+(?:illegal|unlawful|prohibited)\b(?!\s+(?:(?:not|never)\s+to|to\s+(?:not|never))\b)/;
 const FIRST_PERSON_RESOURCE_LIMITATION_PATTERN =
