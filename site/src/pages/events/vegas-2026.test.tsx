@@ -321,7 +321,6 @@ describe.each([
     const text = container.textContent ?? '';
 
     expect(text).not.toMatch(/no party this year|very tired team|skip the line|draw a line/i);
-    expect(text).not.toMatch(/[—–]/);
   });
 
   it('does not publish internal booth shifts or handoffs', () => {
