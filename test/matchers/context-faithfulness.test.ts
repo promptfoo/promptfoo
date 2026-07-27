@@ -122,6 +122,22 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should tag empty statement extraction so inverse assertions preserve it', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ output: '   ' });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not extract context-faithfulness statements',
+      metadata: { graderError: true },
+    });
+    expect(callApiSpy).toHaveBeenCalledOnce();
+  });
+
   it('tracks token usage for multiple API calls', async () => {
     const query = 'Query text';
     const output = 'Output text';
