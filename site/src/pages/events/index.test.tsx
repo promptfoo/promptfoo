@@ -4,10 +4,18 @@ import { renderToString } from 'react-dom/server';
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import EventsPage from './index';
 
 const BLACK_HAT_CLOSE = Date.parse('2026-08-06T16:00:00-07:00');
 const DEF_CON_CLOSE = Date.parse('2026-08-09T16:00:00-07:00');
+
+async function loadEventsPageAt(instant: number) {
+  vi.setSystemTime(instant);
+  vi.resetModules();
+
+  const { default: EventsPage } = await import('./index');
+
+  return EventsPage;
+}
 
 function getUpcomingFilterButton(): HTMLElement {
   return screen.getByRole('button', { name: /^Upcoming\s*\d+$/i });
@@ -29,11 +37,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.resetModules();
 });
 
 describe('event index live status', () => {
-  it('moves Black Hat into past events and features DEF CON when the booth closes', () => {
-    vi.setSystemTime(BLACK_HAT_CLOSE - 1000);
+  it('moves Black Hat into past events and features DEF CON when the booth closes', async () => {
+    const EventsPage = await loadEventsPageAt(BLACK_HAT_CLOSE - 1000);
     render(<EventsPage />);
 
     const initialUpcomingCount = getUpcomingCount();
@@ -56,8 +65,8 @@ describe('event index live status', () => {
     expect(screen.getByRole('heading', { name: 'DEF CON 34' })).toBeInTheDocument();
   });
 
-  it('removes DEF CON from upcoming events when the final booth closes', () => {
-    vi.setSystemTime(DEF_CON_CLOSE - 1000);
+  it('removes DEF CON from upcoming events when the final booth closes', async () => {
+    const EventsPage = await loadEventsPageAt(DEF_CON_CLOSE - 1000);
     render(<EventsPage />);
 
     const initialUpcomingCount = getUpcomingCount();
@@ -80,7 +89,7 @@ describe('event index live status', () => {
   });
 
   it('hydrates stale event markup without a mismatch and then refreshes event status', async () => {
-    vi.setSystemTime(BLACK_HAT_CLOSE - 1000);
+    const EventsPage = await loadEventsPageAt(BLACK_HAT_CLOSE - 1000);
     const serverHtml = renderToString(<EventsPage />);
     const container = document.createElement('div');
     container.innerHTML = serverHtml;
