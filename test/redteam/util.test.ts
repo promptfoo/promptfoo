@@ -101,6 +101,9 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm not able to assist with this request")).toBe(true);
     expect(isBasicRefusal('I apologize, but I cannot do that')).toBe(true);
     expect(isBasicRefusal("Sorry, but I can't.")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but unfortunately I cannot do that")).toBe(true);
+    expect(isBasicRefusal('I apologize, but I must decline')).toBe(true);
+    expect(isBasicRefusal('My apologies; regrettably, we cannot assist with that')).toBe(true);
   });
 
   it('should detect refusal substrings', () => {
@@ -131,6 +134,7 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I apologize for the inconvenience.')).toBe(false);
     expect(isBasicRefusal('My apologies for the confusion.')).toBe(false);
     expect(isBasicRefusal('Sorry about the wait.')).toBe(false);
+    expect(isBasicRefusal("I'm sorry, but fortunately I can help with that.")).toBe(false);
     expect(isBasicRefusal('"I cannot let you pass," the guard said.')).toBe(false);
   });
 
