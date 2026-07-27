@@ -20,6 +20,7 @@ const SITE_ROOT = path.resolve(__dirname, '../../..');
  */
 const BLACKHAT_BOOTH = 'Booth #2967';
 const DEFCON_BOOTH = 'Booth #1412';
+const EVENT_REFERENCE_CASES = events.map((event) => [event.id, event] as const);
 
 /**
  * Promptfoo is part of OpenAI and demos at OpenAI's booth — OpenAI is the exhibitor of
@@ -187,28 +188,25 @@ describe('events data references resolve', () => {
   // A dead cardImage path renders a broken tile on /events/ and a 404 og:image on share —
   // EventCard only falls back to its placeholder when the field is absent, and the
   // Docusaurus build does not validate static asset paths.
-  it.each(events.map((e) => [e.id, e] as const))(
-    '%s resolves its assets and page',
-    (_id, event) => {
-      for (const key of ['cardImage', 'heroImage'] as const) {
-        const assetPath = event[key];
-        if (assetPath) {
-          expect(
-            fs.existsSync(path.join(SITE_ROOT, 'static', assetPath)),
-            `${event.id}.${key} points at ${assetPath}, which does not exist in site/static`,
-          ).toBe(true);
-        }
-      }
-
-      if (event.customPageUrl) {
-        const pagePath = path.join(SITE_ROOT, 'src/pages', `${event.customPageUrl}.tsx`);
+  it.each(EVENT_REFERENCE_CASES)('%s resolves its assets and page', (_id, event) => {
+    for (const key of ['cardImage', 'heroImage'] as const) {
+      const assetPath = event[key];
+      if (assetPath) {
         expect(
-          fs.existsSync(pagePath),
-          `${event.id}.customPageUrl points at ${event.customPageUrl}, which has no page component`,
+          fs.existsSync(path.join(SITE_ROOT, 'static', assetPath)),
+          `${event.id}.${key} points at ${assetPath}, which does not exist in site/static`,
         ).toBe(true);
       }
-    },
-  );
+    }
+
+    if (event.customPageUrl) {
+      const pagePath = path.join(SITE_ROOT, 'src/pages', `${event.customPageUrl}.tsx`);
+      expect(
+        fs.existsSync(pagePath),
+        `${event.id}.customPageUrl points at ${event.customPageUrl}, which has no page component`,
+      ).toBe(true);
+    }
+  });
 });
 
 describe.each([
@@ -234,126 +232,126 @@ describe.each([
     boothHours: DEF_CON_BOOTH_HOURS,
     findUsLabel: /find us in West Hall/i,
   },
-])(
-  '$name page',
-  ({ Component, boothNumber, dates, venue, crossLink, hoursLabel, boothHours, findUsLabel }) => {
-    it('shows the booth number, dates, and venue', () => {
-      const { container } = render(<Component />);
-      const text = container.textContent ?? '';
+])('$name page', (page) => {
+  const { Component, boothNumber, dates, venue, crossLink, hoursLabel, boothHours, findUsLabel } =
+    page;
 
-      expect(text).toMatch(new RegExp(`booth\\s*#?${boothNumber}`, 'i'));
-      expect(text).toMatch(dates);
-      expect(text).toMatch(venue);
+  it('shows the booth number, dates, and venue', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).toMatch(new RegExp(`booth\\s*#?${boothNumber}`, 'i'));
+    expect(text).toMatch(dates);
+    expect(text).toMatch(venue);
+  });
+
+  // The exhibitor of record is OpenAI. The pages must say whose booth it is, and must say
+  // what Promptfoo's relationship to OpenAI actually is, rather than implying two
+  // companies sharing a stand.
+  it('identifies the booth as an OpenAI booth', () => {
+    const { container } = render(<Component />);
+    expect(container.textContent ?? '').toMatch(/OpenAI booth/);
+  });
+
+  it('states that Promptfoo is part of OpenAI', () => {
+    const { container } = render(<Component />);
+    expect(container.textContent ?? '').toMatch(/Promptfoo is part of OpenAI/);
+  });
+
+  it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
+    const { container } = render(<Component />);
+    // innerHTML rather than textContent so meta descriptions, alt text, and aria labels
+    // are covered too.
+    expect(container.innerHTML).not.toMatch(banned);
+  });
+
+  it('links to the other half of the Vegas run', () => {
+    render(<Component />);
+    expect(screen.getAllByText(crossLink).length).toBeGreaterThan(0);
+  });
+
+  it('shows the confirmed public booth hours in Pacific time', () => {
+    const { container } = render(<Component />);
+    const hours = screen.getByRole('list', { name: hoursLabel });
+    const rows = within(hours).getAllByRole('listitem');
+
+    expect(rows).toHaveLength(boothHours.length);
+    expect(container.textContent ?? '').toMatch(/Pacific time|PDT/i);
+
+    for (const day of boothHours) {
+      expect(
+        rows.some(
+          (row) =>
+            row.textContent?.includes(day.day) &&
+            row.textContent.includes(`${day.opensAt}–${day.closesAt}`),
+        ),
+        `Missing ${day.day} ${day.opensAt}–${day.closesAt}`,
+      ).toBe(true);
+    }
+  });
+
+  it('does not publish internal booth shifts or handoffs', () => {
+    const { container } = render(<Component />);
+
+    expect(container.textContent ?? '').not.toMatch(/\b(?:shifts?|staffing|handoffs?)\b/i);
+  });
+
+  it('scrolls to the booth when matchMedia is unavailable', () => {
+    const originalMatchMedia = window.matchMedia;
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: undefined,
+      writable: true,
     });
 
-    // The exhibitor of record is OpenAI. The pages must say whose booth it is, and must say
-    // what Promptfoo's relationship to OpenAI actually is, rather than implying two
-    // companies sharing a stand.
-    it('identifies the booth as an OpenAI booth', () => {
-      const { container } = render(<Component />);
-      expect(container.textContent ?? '').toMatch(/OpenAI booth/);
-    });
-
-    it('states that Promptfoo is part of OpenAI', () => {
-      const { container } = render(<Component />);
-      expect(container.textContent ?? '').toMatch(/Promptfoo is part of OpenAI/);
-    });
-
-    it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
-      const { container } = render(<Component />);
-      // innerHTML rather than textContent so meta descriptions, alt text, and aria labels
-      // are covered too.
-      expect(container.innerHTML).not.toMatch(banned);
-    });
-
-    it('links to the other half of the Vegas run', () => {
+    try {
       render(<Component />);
-      expect(screen.getAllByText(crossLink).length).toBeGreaterThan(0);
-    });
+      fireEvent.click(screen.getByRole('link', { name: findUsLabel }));
 
-    it('shows the confirmed public booth hours in Pacific time', () => {
-      const { container } = render(<Component />);
-      const hours = screen.getByRole('list', { name: hoursLabel });
-      const rows = within(hours).getAllByRole('listitem');
-
-      expect(rows).toHaveLength(boothHours.length);
-      expect(container.textContent ?? '').toMatch(/Pacific time|PDT/i);
-
-      for (const day of boothHours) {
-        expect(
-          rows.some(
-            (row) =>
-              row.textContent?.includes(day.day) &&
-              row.textContent.includes(`${day.opensAt}–${day.closesAt}`),
-          ),
-          `Missing ${day.day} ${day.opensAt}–${day.closesAt}`,
-        ).toBe(true);
-      }
-    });
-
-    it('does not publish internal booth shifts or handoffs', () => {
-      const { container } = render(<Component />);
-
-      expect(container.textContent ?? '').not.toMatch(/\b(?:shifts?|staffing|handoffs?)\b/i);
-    });
-
-    it('scrolls to the booth when matchMedia is unavailable', () => {
-      const originalMatchMedia = window.matchMedia;
-      const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
-
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
+    } finally {
       Object.defineProperty(window, 'matchMedia', {
         configurable: true,
-        value: undefined,
+        value: originalMatchMedia,
         writable: true,
       });
+      scrollTo.mockRestore();
+    }
+  });
 
-      try {
-        render(<Component />);
-        fireEvent.click(screen.getByRole('link', { name: findUsLabel }));
+  it('has exactly one h1', () => {
+    const { container } = render(<Component />);
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+  });
 
-        expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
-      } finally {
-        Object.defineProperty(window, 'matchMedia', {
-          configurable: true,
-          value: originalMatchMedia,
-          writable: true,
-        });
-        scrollTo.mockRestore();
-      }
-    });
+  // There is no Promptfoo party in 2026. The pages are allowed to mention the 2025 one in
+  // prose, so this asserts the absence of an actual invitation, not of the words. The
+  // affordance check is the load-bearing half: prose can negate, a button cannot.
+  it('offers no party affordance', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
 
-    it('has exactly one h1', () => {
-      const { container } = render(<Component />);
-      expect(container.querySelectorAll('h1')).toHaveLength(1);
-    });
+    expect(text).not.toMatch(/open bar/i);
+    expect(text).not.toMatch(/free drinks/i);
+    expect(text).not.toMatch(/lu\.ma/i);
 
-    // There is no Promptfoo party in 2026. The pages are allowed to mention the 2025 one in
-    // prose, so this asserts the absence of an actual invitation, not of the words. The
-    // affordance check is the load-bearing half: prose can negate, a button cannot.
-    it('offers no party affordance', () => {
-      const { container } = render(<Component />);
-      const text = container.textContent ?? '';
+    const invites = [...container.querySelectorAll('a, button')].filter((el) =>
+      /rsvp|party|claim your spot|save your seat/i.test(el.textContent ?? ''),
+    );
+    expect(invites.map((el) => el.textContent)).toEqual([]);
+  });
 
-      expect(text).not.toMatch(/open bar/i);
-      expect(text).not.toMatch(/free drinks/i);
-      expect(text).not.toMatch(/lu\.ma/i);
+  it('does not claim a talk, Arsenal slot, or giveaway', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
 
-      const invites = [...container.querySelectorAll('a, button')].filter((el) =>
-        /rsvp|party|claim your spot|save your seat/i.test(el.textContent ?? ''),
-      );
-      expect(invites.map((el) => el.textContent)).toEqual([]);
-    });
-
-    it('does not claim a talk, Arsenal slot, or giveaway', () => {
-      const { container } = render(<Component />);
-      const text = container.textContent ?? '';
-
-      expect(text).not.toMatch(/arsenal/i);
-      expect(text).not.toMatch(/keynote/i);
-      expect(text).not.toMatch(/giveaway/i);
-    });
-  },
-);
+    expect(text).not.toMatch(/arsenal/i);
+    expect(text).not.toMatch(/keynote/i);
+    expect(text).not.toMatch(/giveaway/i);
+  });
+});
 
 describe('Black Hat USA 2026 page specifics', () => {
   // Business Hall: Tue Aug 4 – Thu Aug 6, with the Welcome Reception on Tue Aug 4.
