@@ -5,6 +5,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationHeaders,
@@ -56,16 +57,21 @@ async function generateLikertPrompts(
       interface LikertGenerationResponse {
         error?: string;
         modifiedPrompts?: string[];
+        tokenUsage?: unknown;
       }
 
-      const { data } = await fetchWithCache<LikertGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
+      const { data } = await trackGenerationFetch(
+        () =>
+          fetchWithCache<LikertGenerationResponse>(
+            getRemoteGenerationUrl(),
+            {
+              method: 'POST',
+              headers: getRemoteGenerationHeaders(),
+              body: JSON.stringify(payload),
+            },
+            getRequestTimeoutMs(),
+          ),
+        config.__trackGenerationTokenUsage,
       );
 
       logger.debug(

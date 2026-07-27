@@ -158,12 +158,27 @@ describe('extractGoalFromPrompt', () => {
       status: 200,
       statusText: 'OK',
       headers: {},
-      data: { intent: 'test goal' },
+      data: {
+        intent: 'test goal',
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      },
       deleteFromCache: async () => {},
     });
 
-    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
+    const trackTokenUsage = vi.fn();
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      trackTokenUsage,
+    );
     expect(result).toBe('test goal');
+    expect(trackTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      cached: false,
+    });
   });
 
   it('should return null on HTTP error', async () => {
@@ -199,6 +214,29 @@ describe('extractGoalFromPrompt', () => {
 
     const result = await extractGoalFromPrompt('test prompt', 'test purpose');
     expect(result).toBeNull();
+  });
+
+  it.each([
+    new Error('network connection failed'),
+    Object.assign(new Error('goal extraction timed out'), { name: 'TimeoutError' }),
+  ])('should track a failed goal extraction request for %s', async (error) => {
+    vi.mocked(fetchWithCache).mockRejectedValue(error);
+    const trackTokenUsage = vi.fn();
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      undefined,
+      trackTokenUsage,
+    );
+
+    expect(result).toBeNull();
+    expect(trackTokenUsage).toHaveBeenCalledExactlyOnceWith({
+      tokenUsage: undefined,
+      cached: false,
+    });
   });
 
   it('should handle empty prompt and purpose', async () => {

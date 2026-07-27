@@ -345,6 +345,7 @@ async function fetchRemoteTestCases(
   n: number,
   config: PluginConfig,
   redteamGenerationContext?: RedteamGenerationContext | string,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<TestCase[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -386,10 +387,12 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
+    tokenUsage?: unknown;
   }
 
+  let responseTracked = false;
   try {
-    const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
+    const { data, status, statusText, cached } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -398,6 +401,8 @@ async function fetchRemoteTestCases(
       },
       getRequestTimeoutMs(),
     );
+    trackTokenUsage?.({ tokenUsage: data?.tokenUsage, cached });
+    responseTracked = true;
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
@@ -409,6 +414,16 @@ async function fetchRemoteTestCases(
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
+    if (!responseTracked) {
+      let errorTokenUsage: unknown;
+      try {
+        errorTokenUsage =
+          err && typeof err === 'object' && 'tokenUsage' in err ? err.tokenUsage : undefined;
+      } catch {
+        errorTokenUsage = undefined;
+      }
+      trackTokenUsage?.({ tokenUsage: errorTokenUsage, cached: false });
+    }
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];
   }
@@ -431,6 +446,7 @@ function createPluginFactory<T extends PluginConfig>(
       config,
       targetId,
       redteamGenerationContext,
+      trackTokenUsage,
     }: PluginActionParams) => {
       const configWithDefaults = applyDefaultGraderExamples(key, config as T);
 
@@ -452,6 +468,7 @@ function createPluginFactory<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
+        trackTokenUsage,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
@@ -578,6 +595,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.n,
         params.config ?? {},
         params.targetId,
+        params.trackTokenUsage,
       );
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
@@ -620,6 +638,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.n,
       params.config ?? {},
       params.targetId,
+      params.trackTokenUsage,
     );
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
@@ -650,6 +669,7 @@ function createRemotePlugin<T extends PluginConfig>(
       config,
       targetId,
       redteamGenerationContext,
+      trackTokenUsage,
     }: PluginActionParams) => {
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
@@ -665,6 +685,7 @@ function createRemotePlugin<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
         redteamGenerationContext ?? targetId,
+        trackTokenUsage,
       );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({

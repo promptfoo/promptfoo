@@ -11,7 +11,6 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -41,6 +40,11 @@ import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
+import {
+  trackGenerationErrorTokenUsage,
+  trackGenerationResponseTokenUsage,
+  trackGenerationTokenUsage,
+} from './providers/generationTokenUsage';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import {
@@ -65,6 +69,7 @@ import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
 import type { Inputs, TokenUsage } from '../types/shared';
 import type {
   FailedPluginInfo,
+  PluginActionParams,
   Policy,
   RedteamGenerationContext,
   RedteamPluginObject,
@@ -73,27 +78,6 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-
-function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
-  const callApi = provider.callApi.bind(provider);
-  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
-    const response = await callApi(...args);
-    accumulateResponseTokenUsage(tokenUsage, response);
-    return response;
-  };
-  trackedCallApi.label = provider.callApi.label;
-
-  return new Proxy(provider, {
-    get(target, property) {
-      if (property === 'callApi') {
-        return trackedCallApi;
-      }
-
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -622,6 +606,7 @@ async function applyStrategies(
   maxCharsPerMessage?: number,
   redteamGenerationContext?: RedteamGenerationContext,
   wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -702,6 +687,7 @@ async function applyStrategies(
         redteamProvider: cliState.config?.redteam?.provider,
         // Generation-time strategies that load a specialized local provider must remain in usage totals.
         __wrapGenerationProvider: wrapGenerationProvider,
+        __trackGenerationTokenUsage: trackTokenUsage,
         excludeTargetOutputFromAgenticAttackGeneration,
         ...remoteGenerationContextPayload(redteamGenerationContext),
       },
@@ -978,27 +964,56 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
  * @param options - The options for test case synthesis.
  * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
  */
-export async function synthesize({
-  abortSignal,
-  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
-  delay,
-  entities: entitiesOverride,
-  injectVar,
-  inputs,
-  language,
-  maxCharsPerMessage,
-  maxConcurrency = 1,
-  plugins,
-  prompts,
-  provider,
-  purpose: purposeOverride,
-  redteamGenerationContext: inputRedteamGenerationContext,
-  strategies,
-  targetIds,
-  showProgressBar: showProgressBarOverride,
-  excludeTargetOutputFromAgenticAttackGeneration,
-  testGenerationInstructions,
-}: SynthesizeOptions): Promise<{
+export async function synthesize(options: SynthesizeOptions): Promise<{
+  purpose: string;
+  entities: string[];
+  testCases: TestCaseWithPlugin[];
+  injectVar: string;
+  failedPlugins: FailedPluginInfo[];
+  generationTokenUsage?: TokenUsage;
+}> {
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
+
+  try {
+    return await synthesizeInternal(options, generationTokenUsage);
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    trackGenerationErrorTokenUsage(generationTokenUsage, error, false);
+    Object.assign(failure, { tokenUsage: generationTokenUsage });
+    throw failure;
+  }
+}
+
+async function synthesizeInternal(
+  {
+    abortSignal,
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    delay,
+    entities: entitiesOverride,
+    injectVar,
+    inputs,
+    language,
+    maxCharsPerMessage,
+    maxConcurrency = 1,
+    plugins,
+    prompts,
+    provider,
+    purpose: purposeOverride,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    strategies,
+    targetIds,
+    showProgressBar: showProgressBarOverride,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    testGenerationInstructions,
+  }: SynthesizeOptions,
+  generationTokenUsage: TokenUsage,
+): Promise<{
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
@@ -1096,14 +1111,10 @@ export async function synthesize({
   const providerForGeneration = await redteamProviderManager.getProvider({
     provider,
   });
-  const generationTokenUsage: TokenUsage = {
-    cached: 0,
-    completion: 0,
-    numRequests: 0,
-    prompt: 0,
-    total: 0,
-  };
   const redteamProvider = trackGenerationTokenUsage(providerForGeneration, generationTokenUsage);
+  const trackTokenUsage: PluginActionParams['trackTokenUsage'] = (response) => {
+    trackGenerationResponseTokenUsage(generationTokenUsage, response);
+  };
 
   const { effectiveStrategyCount, includeBasicTests, totalPluginTests, totalTests } =
     calculateTotalTests(plugins, strategies, language);
@@ -1359,7 +1370,12 @@ export async function synthesize({
   }
   const purpose =
     purposeOverride ||
-    (await extractSystemPurpose(redteamProvider, prompts, redteamGenerationContext));
+    (await extractSystemPurpose(
+      redteamProvider,
+      prompts,
+      redteamGenerationContext,
+      trackTokenUsage,
+    ));
 
   if (showProgressBar) {
     progressBar?.update({ task: 'Extracting entities' });
@@ -1368,7 +1384,7 @@ export async function synthesize({
   }
   const entities: string[] = Array.isArray(entitiesOverride)
     ? entitiesOverride
-    : await extractEntities(redteamProvider, prompts, redteamGenerationContext);
+    : await extractEntities(redteamProvider, prompts, redteamGenerationContext, trackTokenUsage);
 
   logger.debug(`System purpose: ${purpose}`);
 
@@ -1413,6 +1429,7 @@ export async function synthesize({
           delayMs: delay || 0,
           targetId: cloudTargetId,
           redteamGenerationContext,
+          trackTokenUsage,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
@@ -1511,6 +1528,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              trackTokenUsage,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1649,6 +1667,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              trackTokenUsage,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1715,6 +1734,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      trackTokenUsage,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1741,6 +1761,7 @@ export async function synthesize({
       maxCharsPerMessage,
       redteamGenerationContext,
       (providerToWrap) => trackGenerationTokenUsage(providerToWrap, generationTokenUsage),
+      trackTokenUsage,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

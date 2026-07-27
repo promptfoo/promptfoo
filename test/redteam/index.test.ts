@@ -19,6 +19,7 @@ import {
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
+import { trackGenerationTokenUsage } from '../../src/redteam/providers/generationTokenUsage';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -170,11 +171,13 @@ describe('synthesize', () => {
         expect.any(Object),
         ['Test prompt'],
         generationContext,
+        expect.any(Function),
       );
       expect(extractSystemPurpose).toHaveBeenCalledWith(
         expect.any(Object),
         ['Test prompt'],
         generationContext,
+        expect.any(Function),
       );
     });
 
@@ -205,11 +208,13 @@ describe('synthesize', () => {
         expect.any(Object),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         expect.any(Object),
+        expect.any(Function),
       );
       expect(extractEntities).toHaveBeenCalledWith(
         expect.objectContaining({ id: expect.any(Function) }),
         ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         expect.any(Object),
+        expect.any(Function),
       );
     });
   });
@@ -265,7 +270,7 @@ describe('synthesize', () => {
       mockProvider.callApi
         .mockResolvedValueOnce({
           output: 'first',
-          tokenUsage: { completion: 5, numRequests: 1, prompt: 10, total: 15 },
+          tokenUsage: { completion: 5, numRequests: 2, prompt: 10, total: 15 },
         })
         .mockResolvedValueOnce({
           output: 'second',
@@ -298,10 +303,123 @@ describe('synthesize', () => {
       expect(result.generationTokenUsage).toEqual({
         cached: 0,
         completion: 8,
-        numRequests: 3,
+        numRequests: 4,
         prompt: 17,
         total: 25,
       });
+    });
+
+    it('tracks direct-remote plugin and strategy usage callbacks during synthesis', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+          cached: false,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const strategyAction = vi.fn().mockImplementation(async (testCases, _injectVar, config) => {
+        config.__trackGenerationTokenUsage({
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+          cached: false,
+        });
+        return testCases;
+      });
+      const pluginFindSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'contracts' });
+      const strategyFindSpy = vi
+        .spyOn(Strategies, 'find')
+        .mockReturnValue({ action: strategyAction, id: 'citation' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'contracts', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [{ id: 'citation' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          total: 28,
+          prompt: 17,
+          completion: 11,
+          cached: 0,
+          numRequests: 2,
+        });
+      } finally {
+        pluginFindSpy.mockRestore();
+        strategyFindSpy.mockRestore();
+      }
+    });
+
+    it('tracks remote purpose, entities, plugin, and goal extraction usage during synthesis', async () => {
+      vi.mocked(extractSystemPurpose).mockImplementation(
+        async (_provider, _prompts, _context, trackTokenUsage) => {
+          trackTokenUsage?.({
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            cached: false,
+          });
+          return 'Test purpose';
+        },
+      );
+      vi.mocked(extractEntities).mockImplementation(
+        async (_provider, _prompts, _context, trackTokenUsage) => {
+          trackTokenUsage?.({
+            tokenUsage: { total: 8, prompt: 5, completion: 3, numRequests: 1 },
+            cached: false,
+          });
+          return ['entity'];
+        },
+      );
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+      );
+      mockExtractGoal.mockImplementation(
+        async (_prompt, _purpose, _pluginId, _policy, _targetId, trackTokenUsage) => {
+          trackTokenUsage?.({
+            tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+            cached: false,
+          });
+          return 'mocked goal';
+        },
+      );
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+          cached: false,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const pluginFindSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'contracts' });
+
+      try {
+        const result = await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'contracts', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          strategies: [{ id: 'goat' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          total: 45,
+          prompt: 27,
+          completion: 18,
+          cached: 0,
+          numRequests: 4,
+        });
+      } finally {
+        pluginFindSpy.mockRestore();
+      }
     });
 
     it('should preserve custom provider receivers while tracking generation usage', async () => {
@@ -344,6 +462,270 @@ describe('synthesize', () => {
       } finally {
         findSpy.mockRestore();
       }
+    });
+
+    it('should track providers with immutable callApi properties', async () => {
+      const provider = {
+        id: () => 'immutable-generation-provider',
+      } as ApiProvider;
+      Object.defineProperty(provider, 'callApi', {
+        configurable: false,
+        writable: false,
+        value: async () => ({ output: 'Prompt: generated test case' }),
+      });
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('generation prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'immutable-provider-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'immutable-provider-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage?.numRequests).toBe(1);
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('should count live zero-usage and failed generation calls but not cache hits', async () => {
+      const provider = {
+        id: () => 'request-accounting-provider',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({ output: 'Prompt: first', tokenUsage: { numRequests: 0 } })
+          .mockRejectedValueOnce(
+            Object.assign(new Error('generation failed'), {
+              tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 2 },
+            }),
+          )
+          .mockResolvedValueOnce({
+            output: 'Prompt: cached',
+            cached: true,
+            tokenUsage: { cached: 7, total: 7 },
+          }),
+      } as unknown as ApiProvider;
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('first');
+        await trackedProvider.callApi('failed').catch(() => undefined);
+        await trackedProvider.callApi('cached');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'request-accounting-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'request-accounting-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toMatchObject({
+          cached: 7,
+          completion: 3,
+          numRequests: 3,
+          prompt: 2,
+          total: 12,
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('classifies cached direct-remote token totals without counting a live request', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
+          cached: true,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'cached-remote-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'cached-remote-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          cached: 18,
+          completion: 0,
+          numRequests: 0,
+          prompt: 0,
+          total: 18,
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('derives cached direct-remote token totals from prompt and completion usage', async () => {
+      const pluginAction = vi.fn().mockImplementation(async ({ trackTokenUsage }) => {
+        trackTokenUsage({
+          tokenUsage: { prompt: 11, completion: 7, numRequests: 1 },
+          cached: true,
+        });
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'cached-remote-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'cached-remote-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider: mockProvider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toEqual({
+          cached: 18,
+          completion: 0,
+          numRequests: 0,
+          prompt: 0,
+          total: 18,
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('attaches accumulated generation usage when synthesis aborts after a local call', async () => {
+      const abortController = new AbortController();
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('generate');
+        abortController.abort();
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const provider = {
+        id: () => 'abort-accounting-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Prompt: generated',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        }),
+      } as unknown as ApiProvider;
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'abort-accounting-plugin' });
+
+      try {
+        await expect(
+          synthesize({
+            abortSignal: abortController.signal,
+            entities: [],
+            language: 'en',
+            numTests: 1,
+            plugins: [{ id: 'abort-accounting-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            provider,
+            purpose: 'Test purpose',
+            strategies: [],
+            targetIds: ['test-provider'],
+          }),
+        ).rejects.toMatchObject({
+          message: 'Operation cancelled',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, cached: 0, numRequests: 1 },
+        });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('should ignore malformed generation usage without dropping a live request', async () => {
+      const malformedUsage = Object.defineProperty({}, 'total', {
+        enumerable: true,
+        get() {
+          throw new Error('usage getter failed');
+        },
+      });
+      const provider = {
+        id: () => 'malformed-usage-provider',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({ output: 'Prompt: first', tokenUsage: { total: '7' } })
+          .mockResolvedValueOnce({ output: 'Prompt: second', tokenUsage: malformedUsage }),
+      } as unknown as ApiProvider;
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        await trackedProvider.callApi('first');
+        await trackedProvider.callApi('second');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'malformed-usage-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'malformed-usage-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage).toMatchObject({ numRequests: 2, total: 0 });
+      } finally {
+        findSpy.mockRestore();
+      }
+    });
+
+    it('should preserve a successful generation response when its cached getter throws', async () => {
+      const response = Object.defineProperty({ output: 'Prompt: generated prompt' }, 'cached', {
+        enumerable: true,
+        get() {
+          throw new Error('cached getter failed');
+        },
+      });
+      const provider = {
+        id: () => 'malformed-cache-provider',
+        callApi: vi.fn().mockResolvedValue(response),
+      } as unknown as ApiProvider;
+      const usage = {};
+
+      await expect(trackGenerationTokenUsage(provider, usage).callApi('generate')).resolves.toBe(
+        response,
+      );
+      expect(usage).toMatchObject({ numRequests: 1 });
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {

@@ -227,6 +227,7 @@ export interface PluginActionParams {
   /** Cloud target database ID used by remote task handlers to resolve target context. */
   targetId?: string;
   redteamGenerationContext?: RedteamGenerationContext;
+  trackTokenUsage?: (response: { tokenUsage?: unknown; cached?: boolean }) => void;
 }
 
 // Context for testing multiple security contexts/states

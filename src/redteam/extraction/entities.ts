@@ -3,13 +3,14 @@ import logger from '../../logger';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
-import type { ApiProvider, RemoteGenerationContext } from '../../types/index';
+import type { ApiProvider, PluginActionParams, RemoteGenerationContext } from '../../types/index';
 import type { RedTeamTask } from './util';
 
 export async function extractEntities(
   provider: ApiProvider,
   prompts: string[],
   generationContext?: RemoteGenerationContext,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<string[]> {
   if (shouldGenerateRemote()) {
     try {
@@ -17,6 +18,7 @@ export async function extractEntities(
         'entities' as RedTeamTask,
         prompts,
         generationContext,
+        trackTokenUsage,
       );
       return result as string[];
     } catch (error) {

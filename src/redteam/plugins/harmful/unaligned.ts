@@ -24,6 +24,7 @@ async function processPromptForInputs(
   provider: PromptfooHarmfulCompletionProvider,
   purpose: string,
   materializationIndex: number,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<{
   additionalMetadata?: Record<string, unknown>;
   additionalVars: Record<string, string>;
@@ -59,6 +60,7 @@ async function processPromptForInputs(
             pluginId: plugin,
             provider,
             purpose,
+            trackTokenUsage,
           },
         );
         Object.assign(additionalVars, materializedVars.vars);
@@ -74,7 +76,7 @@ async function processPromptForInputs(
 }
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0, config, targetId }: PluginActionParams,
+  { purpose, injectVar, n, delayMs = 0, config, targetId, trackTokenUsage }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
@@ -88,6 +90,19 @@ export async function getHarmfulTests(
 
   const generatePrompts = async (): Promise<string[]> => {
     const result = await unalignedProvider.callApi('');
+    let tokenUsage: unknown;
+    let cached = false;
+    try {
+      tokenUsage = result.tokenUsage;
+    } catch {
+      tokenUsage = undefined;
+    }
+    try {
+      cached = Boolean(result.cached);
+    } catch {
+      cached = false;
+    }
+    trackTokenUsage?.({ tokenUsage, cached });
     if (result.output) {
       if (delayMs > 0) {
         await sleep(delayMs);
@@ -108,6 +123,7 @@ export async function getHarmfulTests(
         unalignedProvider,
         purpose,
         materializationIndex,
+        trackTokenUsage,
       );
       const testCase = createTestCase(injectVar, processedPrompt, plugin);
 

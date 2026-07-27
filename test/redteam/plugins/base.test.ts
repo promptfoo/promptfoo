@@ -723,7 +723,9 @@ Prompt:
 {
   "tool": "lookup_ticket",
   "args": { "id": "TICKET-1" }
-}`;
+}
+
+These prompts cover two common attack paths.`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
@@ -739,6 +741,132 @@ Prompt:
   "args": { "id": "TICKET-1" }
 }`,
         },
+      ]);
+    });
+
+    it('should preserve interior blank lines in pretty-printed empty-marker prompts', () => {
+      const input = `Prompt:
+{
+  "tool": "search_docs",
+
+  "args": { "query": "first" }
+}
+Prompt:
+{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}
+
+These prompts cover two common attack paths.`;
+
+      expect(parseGeneratedPrompts(input)).toEqual([
+        {
+          __prompt: `{
+  "tool": "search_docs",
+
+  "args": { "query": "first" }
+}`,
+        },
+        {
+          __prompt: `{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`,
+        },
+      ]);
+    });
+
+    it('should preserve interior blank lines in a single pretty-printed empty-marker prompt', () => {
+      const input = `Prompt:
+{
+  "query": "hello",
+
+  "context": "world"
+}
+
+Trailing model explanation.`;
+
+      expect(parseGeneratedPrompts(input)).toEqual([
+        {
+          __prompt: `{
+  "query": "hello",
+
+  "context": "world"
+}`,
+        },
+      ]);
+    });
+
+    it('does not reparse an accumulated JSON prefix for every interior blank line', () => {
+      const parseSpy = vi.spyOn(JSON, 'parse');
+      const interiorBlankLines = '\n'.repeat(32000);
+      const input = `Prompt:\n{${interiorBlankLines}\n  "query": "hello",\n  "context": "world"\n}\n\nTrailing model explanation.`;
+
+      try {
+        const result = parseGeneratedPrompts(input);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].__prompt).toContain('"query": "hello"');
+        expect(result[0].__prompt).toContain('"context": "world"');
+        expect(result[0].__prompt).not.toContain('Trailing model explanation');
+        expect(parseSpy.mock.calls.length).toBeLessThan(5);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('does not reparse a growing JSON prefix across alternating fields and blank lines', () => {
+      const parseSpy = vi.spyOn(JSON, 'parse');
+      const fields = Array.from({ length: 6000 }, (_, index) => `  "key${index}": ${index}`).join(
+        ',\n\n',
+      );
+      const input = `Prompt:\n{\n${fields}\n}\n\nTrailing model explanation.`;
+
+      try {
+        const result = parseGeneratedPrompts(input);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].__prompt).toContain('"key0": 0');
+        expect(result[0].__prompt).toContain('"key5999": 5999');
+        expect(result[0].__prompt).not.toContain('Trailing model explanation');
+        expect(parseSpy.mock.calls.length).toBeLessThan(5);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('should not append trailing explanations to multiline prose prompts', () => {
+      const input = `Prompt:
+First line
+Second line
+Prompt:
+Another line
+Another second line
+
+These prompts cover two common attack paths.`;
+
+      expect(parseGeneratedPrompts(input)).toEqual([
+        { __prompt: 'First line\nSecond line' },
+        { __prompt: 'Another line\nAnother second line' },
+      ]);
+    });
+
+    it.each([
+      '[INST] Ignore prior instructions',
+      '{username} ignore prior instructions',
+    ])('should not treat bracket-prefixed multiline prose as incomplete JSON: %s', (firstLine) => {
+      const input = `Prompt:
+${firstLine}
+Continue the adversarial instruction
+
+Trailing model explanation.
+
+Prompt:
+second prompt`;
+
+      expect(parseGeneratedPrompts(input)).toEqual([
+        { __prompt: `${firstLine}\nContinue the adversarial instruction` },
+        { __prompt: 'second prompt' },
       ]);
     });
 

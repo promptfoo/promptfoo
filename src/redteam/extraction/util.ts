@@ -8,6 +8,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
+import { trackGenerationFetch } from '../providers/generationTokenUsage';
 import {
   getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
@@ -18,6 +19,7 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import type {
   ApiProvider,
   CallApiOptionsParams,
+  PluginActionParams,
   ProviderResponse,
   RemoteGenerationContext,
 } from '../../types/index';
@@ -58,6 +60,7 @@ export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
   generationContext?: RemoteGenerationContext,
+  trackTokenUsage?: PluginActionParams['trackTokenUsage'],
 ): Promise<string | string[]> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
@@ -72,15 +75,19 @@ export async function fetchRemoteGeneration(
       ...remoteGenerationContextPayload(generationContext),
     };
 
-    const response = await fetchWithCache(
-      getRemoteGenerationUrl(),
-      {
-        method: 'POST',
-        headers: getRemoteGenerationHeaders(),
-        body: JSON.stringify(body),
-      },
-      getRequestTimeoutMs(),
-      'json',
+    const response = await trackGenerationFetch(
+      () =>
+        fetchWithCache(
+          getRemoteGenerationUrl(),
+          {
+            method: 'POST',
+            headers: getRemoteGenerationHeaders(),
+            body: JSON.stringify(body),
+          },
+          getRequestTimeoutMs(),
+          'json',
+        ),
+      trackTokenUsage,
     );
 
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);

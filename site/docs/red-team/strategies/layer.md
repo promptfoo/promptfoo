@@ -441,15 +441,16 @@ Be aware of test case growth when combining strategies:
 
 The following strategies can be used as the first step with per-turn transforms:
 
-| Strategy          | Type          | Description                       |
-| ----------------- | ------------- | --------------------------------- |
-| `jailbreak:hydra` | Multi-turn    | Branching conversation attack     |
-| `crescendo`       | Multi-turn    | Gradual escalation attack         |
-| `goat`            | Multi-turn    | Goal-oriented adversarial testing |
-| `custom`          | Multi-turn    | Custom multi-turn strategy        |
-| `jailbreak`       | Multi-attempt | Iterative single-turn attempts    |
-| `jailbreak:meta`  | Multi-attempt | Meta-agent attack generation      |
-| `jailbreak:tree`  | Multi-attempt | Tree-based attack search          |
+| Strategy           | Type          | Description                        |
+| ------------------ | ------------- | ---------------------------------- |
+| `jailbreak:hydra`  | Multi-turn    | Branching conversation attack      |
+| `jailbreak:goblin` | Multi-turn    | Adaptive pattern-completion attack |
+| `crescendo`        | Multi-turn    | Gradual escalation attack          |
+| `goat`             | Multi-turn    | Goal-oriented adversarial testing  |
+| `custom`           | Multi-turn    | Custom multi-turn strategy         |
+| `jailbreak`        | Multi-attempt | Iterative single-turn attempts     |
+| `jailbreak:meta`   | Multi-attempt | Meta-agent attack generation       |
+| `jailbreak:tree`   | Multi-attempt | Tree-based attack search           |
 
 ## Related Concepts
 

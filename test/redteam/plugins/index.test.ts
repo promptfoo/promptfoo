@@ -328,6 +328,38 @@ describe('Plugins', () => {
       ]);
     });
 
+    it('reports token usage from a real remote plugin response', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'test content' } }],
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const trackTokenUsage = vi.fn();
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+        trackTokenUsage,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(trackTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        cached: false,
+      });
+    });
+
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
@@ -474,6 +506,7 @@ describe('Plugins', () => {
               },
             },
           ],
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
         },
         cached: false,
         status: 200,
@@ -482,6 +515,7 @@ describe('Plugins', () => {
 
       const plugin = Plugins.find((p) => p.key === 'ssrf');
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const trackTokenUsage = vi.fn();
 
       await expect(
         plugin?.action({
@@ -498,6 +532,7 @@ describe('Plugins', () => {
             },
           },
           delayMs: 0,
+          trackTokenUsage,
         }),
       ).resolves.toEqual([]);
 
@@ -507,6 +542,11 @@ describe('Plugins', () => {
         ),
       );
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('http://test-url'));
+      expect(trackTokenUsage).toHaveBeenCalledTimes(1);
+      expect(trackTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        cached: false,
+      });
     });
 
     it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
@@ -584,9 +624,14 @@ describe('Plugins', () => {
         return true;
       });
 
-      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(
+        Object.assign(new Error('Network error'), {
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        }),
+      );
 
       const plugin = Plugins.find((p) => p.key === 'contracts');
+      const trackTokenUsage = vi.fn();
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -594,9 +639,14 @@ describe('Plugins', () => {
         n: 1,
         config: {},
         delayMs: 0,
+        trackTokenUsage,
       });
 
       expect(result).toEqual([]);
+      expect(trackTokenUsage).toHaveBeenCalledWith({
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        cached: false,
+      });
     });
 
     it('should add harmful assertions for harmful remote plugins', async () => {

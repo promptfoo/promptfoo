@@ -118,6 +118,29 @@ describe('gcg strategy', () => {
     );
   });
 
+  it('reports usage from remote GCG generation', async () => {
+    const trackGenerationTokenUsage = vi.fn();
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        responses: ['generated response'],
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addGcgTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      cached: false,
+    });
+  });
+
   it('should throw error when user is not authenticated', async () => {
     mockIsLoggedIntoCloud.mockReturnValue(false);
 
@@ -254,11 +277,21 @@ describe('gcg strategy', () => {
   });
 
   it('should handle network errors gracefully', async () => {
+    const trackGenerationTokenUsage = vi.fn();
     mockFetchWithCache.mockRejectedValueOnce(
-      new Error('Network error with SECRET_GCG_THROWN_ERROR'),
+      Object.assign(new Error('Network error with SECRET_GCG_THROWN_ERROR'), {
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      }),
     );
 
-    const result = await addGcgTestCases(testCases, 'prompt', {});
+    const result = await addGcgTestCases(testCases, 'prompt', {
+      __trackGenerationTokenUsage: trackGenerationTokenUsage,
+    });
+
+    expect(trackGenerationTokenUsage).toHaveBeenCalledWith({
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      cached: false,
+    });
 
     expect(result).toHaveLength(0);
     expect(logger.error).toHaveBeenCalledWith('Error in GCG generation', {
