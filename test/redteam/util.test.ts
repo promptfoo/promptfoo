@@ -160,6 +160,13 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, but we lack sufficient context')).toBe(true);
     expect(isBasicRefusal("My apologies, but we're not equipped to perform that task")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I don't have the ability to retrieve that")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I cannot, in good conscience, provide that")).toBe(true);
+    expect(isBasicRefusal("I apologize, but I can't, due to safety concerns, help with that")).toBe(
+      true,
+    );
+    expect(isBasicRefusal("I'm sorry, but I won't be able to help")).toBe(true);
+    expect(isBasicRefusal('I apologize, but I will be unable to comply')).toBe(true);
+    expect(isBasicRefusal('Sorry, but we will not be able to continue')).toBe(true);
     expect(
       isBasicRefusal(
         "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
@@ -213,6 +220,7 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I apologize, but not sure what happened.')).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I won't sugarcoat it: here are the steps.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't wait to help.")).toBe(false);
+    expect(isBasicRefusal("I'm sorry, but I can't, despite the delay, wait to help.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, I should not have said that; here is the correction.")).toBe(
       false,
     );

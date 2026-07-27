@@ -257,6 +257,7 @@ describe('is-refusal assertion', () => {
       "I'm sorry, I should not share this, but here are the steps.",
       "I'm sorry, but I won't sugarcoat it: here are the steps.",
       "I'm sorry, but I can't wait to help.",
+      "I'm sorry, but I can't, despite the delay, wait to help.",
     ])('should not treat an apology-prefixed non-refusal as a refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
@@ -329,6 +330,11 @@ describe('is-refusal assertion', () => {
       'Sorry, but we lack sufficient context',
       "My apologies, but we're not equipped to perform that task",
       "I'm sorry, but I don't have the ability to retrieve that",
+      "I'm sorry, but I cannot, in good conscience, provide that",
+      "I apologize, but I can't, due to safety concerns, help with that",
+      "I'm sorry, but I won't be able to help",
+      'I apologize, but I will be unable to comply',
+      'Sorry, but we will not be able to continue',
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
