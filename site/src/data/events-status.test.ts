@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * `events.ts` derives every `Event.status` at MODULE SCOPE, from a single reference
- * instant (`__SITE_BUILD_TIMESTAMP__`, falling back to `Date.now()` outside webpack — i.e.
- * here). Statuses are therefore frozen the first time the module is evaluated, so the only
- * way to exercise the rollover is to re-evaluate the module at a controlled instant:
- * `vi.setSystemTime()` + `vi.resetModules()` + a dynamic `await import('./events')`.
+ * `events.ts` derives initial statuses at module scope from the build timestamp. These
+ * tests pin that snapshot with fake timers and a fresh import, then also verify that
+ * `getEventsAt` can update visitor-facing statuses without reloading the module.
  *
  * This lives in its own file so the fake timers and module resets cannot leak into the
  * other suites (vitest shuffles test order).
@@ -81,6 +79,20 @@ describe('event status rollover', () => {
     expect(closedEvent?.status).toBe('past');
     expect(ids(afterClosing.getPastEvents())).toContain(eventId);
     expect(ids(afterClosing.getUpcomingEvents())).not.toContain(eventId);
+  });
+
+  it.each([
+    ['blackhat-2026', '2026-08-06T16:00:00-07:00'],
+    ['defcon-2026', '2026-08-09T16:00:00-07:00'],
+  ])('refreshes %s after closing without reloading the event module', async (eventId, closing) => {
+    const closingInstant = Date.parse(closing);
+    const loaded = await loadEventsAt(closingInstant);
+    const refreshed = loaded.getEventsAt(closingInstant + 1);
+
+    expect(loaded.events.find((event) => event.id === eventId)?.status).toBe('upcoming');
+    expect(refreshed.find((event) => event.id === eventId)?.status).toBe('past');
+    expect(ids(loaded.getPastEvents(refreshed))).toContain(eventId);
+    expect(ids(loaded.getUpcomingEvents(refreshed))).not.toContain(eventId);
   });
 
   it('derives every status from the end date, not from a hardcoded literal', async () => {

@@ -91,9 +91,9 @@ declare const __SITE_BUILD_TIMESTAMP__: string | undefined;
  * reader after hydration.
  *
  * DefinePlugin replaces `__SITE_BUILD_TIMESTAMP__` with the same string literal in both
- * the server and the client bundle, so the two can never disagree. The trade-off is
- * explicit: **statuses roll over on rebuild, not on the wire.** Rebuild/redeploy the site
- * to move a finished event into the past list.
+ * the server and the client bundle, so their initial renders agree. The events index
+ * refreshes statuses against the visitor's clock after hydration and at each closing
+ * time, so a new deploy is not required to retire a finished event.
  *
  * Outside webpack the identifier is undefined and this falls back to the current time,
  * which is the right behavior for tests and node scripts.
@@ -104,10 +104,10 @@ const STATUS_REFERENCE_TIME: number = (() => {
   return Number.isNaN(parsed) ? Date.now() : parsed;
 })();
 
-// Helper to determine event status based on date. Nothing should re-derive this on the
-// client: `Event.status` is computed once here, at module scope, from the snapshot above.
-function getEventStatus(endDate: string): EventStatus {
-  return Date.parse(endDate) < STATUS_REFERENCE_TIME ? 'past' : 'upcoming';
+// Build-safe initial statuses use the shared snapshot. The events page passes the visitor
+// clock explicitly when it refreshes those statuses after hydration.
+function getEventStatus(endDate: string, referenceTime = STATUS_REFERENCE_TIME): EventStatus {
+  return Date.parse(endDate) < referenceTime ? 'past' : 'upcoming';
 }
 
 // Event Data
@@ -725,14 +725,21 @@ export const events: Event[] = [
 ];
 
 // Helper functions
-export function getUpcomingEvents(): Event[] {
-  return events
+export function getEventsAt(referenceTime: number): Event[] {
+  return events.map((event) => {
+    const status = getEventStatus(event.endDate, referenceTime);
+    return event.status === status ? event : { ...event, status };
+  });
+}
+
+export function getUpcomingEvents(source: readonly Event[] = events): Event[] {
+  return source
     .filter((event) => event.status === 'upcoming')
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 }
 
-export function getPastEvents(): Event[] {
-  return events
+export function getPastEvents(source: readonly Event[] = events): Event[] {
+  return source
     .filter((event) => event.status === 'past')
     .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
 }
@@ -749,8 +756,8 @@ export function getEventsByType(type: EventType): Event[] {
   return events.filter((event) => event.type === type);
 }
 
-export function getFeaturedEvent(): Event | undefined {
-  const upcoming = getUpcomingEvents();
+export function getFeaturedEvent(source: readonly Event[] = events): Event | undefined {
+  const upcoming = getUpcomingEvents(source);
   return upcoming.length > 0 ? upcoming[0] : undefined;
 }
 
