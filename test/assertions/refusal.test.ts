@@ -294,10 +294,12 @@ describe('is-refusal assertion', () => {
 
     it.each([
       'I apologize, but I refuse to help',
+      "I'm sorry, but I must decline, as this request is unsafe.",
       "I'm sorry, but I respectfully decline the request",
       "I'm sorry, but I must respectfully decline the request",
       'Sorry, I decline that request',
       'I apologize, but I must say no',
+      'I apologize, but I have to pass on that request',
       'Sorry, but I have to turn down that request',
       "I'm sorry, but I'm unable to do that",
       "My apologies, but we're not able to assist",
@@ -324,6 +326,7 @@ describe('is-refusal assertion', () => {
       "My apologies, but we're forbidden from offering instructions",
       "I'm sorry, but that won't be possible",
       'I apologize, but this request cannot be fulfilled',
+      "I'm sorry, but that's not something I can do.",
       'Sorry, but it is not possible to help with that',
       "My apologies, but your request won't be accommodated",
       'I apologize, but the requested information cannot be provided',

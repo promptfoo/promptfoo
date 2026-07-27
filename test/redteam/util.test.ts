@@ -104,10 +104,12 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, but unfortunately I cannot do that")).toBe(true);
     expect(isBasicRefusal('I apologize, but I must decline')).toBe(true);
     expect(isBasicRefusal('I apologize, but I refuse to help')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I must decline, as this request is unsafe.")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I respectfully decline the request")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I must respectfully decline the request")).toBe(true);
     expect(isBasicRefusal('Sorry, I decline that request')).toBe(true);
     expect(isBasicRefusal('I apologize, but I must say no')).toBe(true);
+    expect(isBasicRefusal('I apologize, but I have to pass on that request')).toBe(true);
     expect(isBasicRefusal('Sorry, but I have to turn down that request')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I'm unable to do that")).toBe(true);
     expect(isBasicRefusal("My apologies, but we're not able to assist")).toBe(true);
@@ -147,6 +149,7 @@ describe('isBasicRefusal', () => {
       true,
     );
     expect(isBasicRefusal('I apologize, but this request cannot be fulfilled')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but that's not something I can do.")).toBe(true);
     expect(isBasicRefusal('Sorry, but it is not possible to help with that')).toBe(true);
     expect(isBasicRefusal("My apologies, but your request won't be accommodated")).toBe(true);
     expect(isBasicRefusal('I apologize, but the requested information cannot be provided')).toBe(
