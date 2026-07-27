@@ -17,6 +17,7 @@ import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   fail,
+  graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -381,7 +382,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -408,7 +409,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');

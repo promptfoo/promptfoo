@@ -54,11 +54,10 @@ export async function handleContextFaithfulness({
     providerCallContext,
   );
 
-  // `not-context-faithfulness` routes to this handler with `inverse: true`. The
-  // matcher already applied the threshold (`pass` is true when faithfulness is
-  // above it), so invert its verdict for the `not-` variant: an unfaithful
-  // answer (faithfulness below the threshold) should pass the inverted
-  // assertion. This mirrors the other matcher-based assertions (meteor, gleu).
+  if (result.metadata?.graderError === true) {
+    return { assertion, ...result, metadata: { ...result.metadata, context } };
+  }
+
   const pass = inverse ? !result.pass : result.pass;
 
   return {

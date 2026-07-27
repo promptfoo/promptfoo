@@ -107,6 +107,21 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should tag grading provider errors so inverse assertions preserve them', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ error: 'grading provider failed' });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true },
+    });
+  });
+
   it('tracks token usage for multiple API calls', async () => {
     const query = 'Query text';
     const output = 'Output text';

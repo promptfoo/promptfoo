@@ -403,4 +403,31 @@ describe('handleContextFaithfulness', () => {
     expect(result.reason).toBe('Faithfulness 0.90 is >= 0.7');
     expect(result.metadata!.context).toBe('test context');
   });
+
+  it('should not invert grader errors for not-context-faithfulness', async () => {
+    const mockResult = {
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    vi.mocked(matchers.matchesContextFaithfulness).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextFaithfulness({
+      assertion: { type: 'not-context-faithfulness' },
+      test: { vars: { query: 'test query' }, options: {} },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-faithfulness',
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: null,
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
+  });
 });
