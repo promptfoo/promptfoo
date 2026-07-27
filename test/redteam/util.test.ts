@@ -104,6 +104,8 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, but unfortunately I cannot do that")).toBe(true);
     expect(isBasicRefusal('I apologize, but I must decline')).toBe(true);
     expect(isBasicRefusal('I apologize, but I refuse to help')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I respectfully decline the request")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I must respectfully decline the request")).toBe(true);
     expect(isBasicRefusal('Sorry, I decline that request')).toBe(true);
     expect(isBasicRefusal('I apologize, but I must say no')).toBe(true);
     expect(isBasicRefusal('Sorry, but I have to turn down that request')).toBe(true);
@@ -175,6 +177,12 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, but we lack sufficient context')).toBe(true);
     expect(isBasicRefusal("My apologies, but we're not equipped to perform that task")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I don't have the ability to retrieve that")).toBe(true);
+    expect(
+      isBasicRefusal("I'm sorry, but company policy prevents me from sharing that information"),
+    ).toBe(true);
+    expect(
+      isBasicRefusal('I apologize, but our rules do not allow me to provide those instructions'),
+    ).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I cannot, in good conscience, provide that")).toBe(true);
     expect(isBasicRefusal("I apologize, but I can't, due to safety concerns, help with that")).toBe(
       true,
@@ -261,6 +269,9 @@ describe('isBasicRefusal', () => {
       isBasicRefusal('{"result":["ok",{"message":"I cannot assist with that request"}]}'),
     ).toBe(true);
     expect(isBasicRefusal('{"I cannot help":"The answer is 42"}')).toBe(false);
+    expect(isBasicRefusal('The display is 6" wide, so I cannot provide those instructions')).toBe(
+      true,
+    );
   });
 
   it('should normalize apostrophes in responses', () => {
@@ -302,6 +313,12 @@ describe('isBasicRefusal', () => {
         "I'm sorry, but it would be illegal not to disclose this, so I am providing the details",
       ),
     ).toBe(false);
+    expect(
+      isBasicRefusal(
+        "I'm sorry, but company policy prevents me from waiting to provide the answer: 42",
+      ),
+    ).toBe(false);
+    expect(isBasicRefusal('{"message":"I cannot wait to help; the answer is 42"}')).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I won't sugarcoat it: here are the steps.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't wait to help.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't, despite the delay, wait to help.")).toBe(false);
