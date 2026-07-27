@@ -58,13 +58,13 @@ export default function Defcon2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at DEF CON 34"
-      description="Promptfoo is part of OpenAI. Meet the team at OpenAI booth 1412 August 7-9, during DEF CON 34, August 6-9, 2026, in LVCC West Hall."
+      description="Promptfoo is part of OpenAI. Find the team at OpenAI booth #1412 in LVCC West Hall, August 7-9, during DEF CON 34, August 6-9, 2026."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at DEF CON 34 | AI agent red teaming" />
         <meta
           property="og:description"
-          content="DEF CON 34 runs August 6-9. Meet Promptfoo at OpenAI booth 1412 in LVCC West Hall August 7-9 for live prompt injection, tool abuse, and AI agent red teaming."
+          content="DEF CON 34 runs August 6-9. Find Promptfoo at OpenAI booth #1412 in LVCC West Hall, August 7-9, for live AI agent red teaming."
         />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2026.jpg" />
         <meta property="og:image:width" content="1536" />
@@ -77,7 +77,7 @@ export default function Defcon2026(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo at DEF CON 34 | AI agent red teaming" />
         <meta
           name="twitter:description"
-          content="AI agent red teaming at DEF CON 34. Meet Promptfoo at OpenAI booth 1412, LVCC West Hall, Las Vegas, August 7-9, 2026."
+          content="See Promptfoo test AI agents at OpenAI booth #1412 in LVCC West Hall, August 7-9, during DEF CON 34."
         />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/defcon-2026.jpg" />
         <meta name="twitter:site" content="@promptfoo" />
@@ -99,7 +99,7 @@ export default function Defcon2026(): React.ReactElement {
             <div className={styles.heroContent}>
               <div className={styles.eyebrow}>DEF CON 34 // LVCC WEST HALL</div>
               <p className={styles.identity}>
-                Promptfoo is part of OpenAI. Find the team at the OpenAI booth August 7-9.
+                Promptfoo is part of OpenAI. Find us at OpenAI booth #1412, August 7-9.
               </p>
               <h1 className={styles.heroTitle}>
                 GIVE YOUR AGENTS
@@ -107,11 +107,10 @@ export default function Defcon2026(): React.ReactElement {
                 <span className={styles.accent}>LESS AGENCY</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                DEF CON 34's theme is Agency: who controls the technology we use. For agent builders
-                that starts with knowing what an agent can reach, how it can be steered, and where
-                human approval is missing. That is the work we do: prompt injection, tool abuse, and
-                the agent that can read your inbox and call{' '}
-                <code className={styles.inlineCode}>refund()</code>.
+                DEF CON 34's theme is Agency: who stays in control of the technology we use. We ask
+                the same question about AI agents. Stop by to see prompt injection, unauthorized
+                tool calls, and the agent persuaded to call{' '}
+                <code className={styles.inlineCode}>refund()</code> without approval.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -119,10 +118,10 @@ export default function Defcon2026(): React.ReactElement {
                   className={styles.primaryButton}
                   onClick={(e) => handleSmoothScroll(e, '#find-us')}
                 >
-                  Find us in West Hall
+                  Find OpenAI booth #1412
                 </a>
                 <Link to="/contact/" className={styles.secondaryButton}>
-                  Book time with us
+                  Request a meeting
                 </Link>
               </div>
               <div className={styles.eventDetails}>
@@ -141,7 +140,7 @@ export default function Defcon2026(): React.ReactElement {
                       d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                     />
                   </svg>
-                  <span>August 6-9, 2026</span>
+                  <span>Conference: August 6-9, 2026</span>
                 </div>
                 <div className={styles.detail}>
                   <svg
@@ -181,7 +180,7 @@ export default function Defcon2026(): React.ReactElement {
                       d="M3 9l1.5-4.5A2 2 0 016.4 3h11.2a2 2 0 011.9 1.5L21 9M3 9h18M3 9v10a2 2 0 002 2h14a2 2 0 002-2V9M9 13h6"
                     />
                   </svg>
-                  <span>{BOOTH}</span>
+                  <span>{BOOTH}: Aug 7-9</span>
                 </div>
               </div>
             </div>
@@ -193,17 +192,15 @@ export default function Defcon2026(): React.ReactElement {
           <div className={styles.container}>
             <h2 className={styles.sectionHeading}>Find us in West Hall</h2>
             <p className={styles.sectionLead}>
-              DEF CON splits Exhibitors from Vendors and gives them separate space, so look for the
-              Exhibitor area rather than the Vendor hall.
-              {/* TODO(events): add Exhibitor-hall hours once DEF CON publishes them; only the
-                  general con hours (doors by 08:00) are posted this far out. */}
+              Look for the OpenAI booth in the Exhibitor area of LVCC West Hall. The conference
+              starts August 6; our booth opens August 7.
             </p>
             <div className={styles.cardGrid}>
               <article className={styles.card}>
-                <h3 className={styles.cardTitle}>OpenAI booth 1412</h3>
+                <h3 className={styles.cardTitle}>OpenAI booth #1412</h3>
                 <p className={styles.cardBody}>
-                  Walk up and we'll run a scan against a deliberately vulnerable demo agent while
-                  you watch, or talk through the architecture of the one you're shipping.
+                  Watch us scan a deliberately vulnerable demo agent, or bring a sanitized question
+                  about the agent you're building.
                 </p>
                 <div className={styles.cardTag}>[LVCC_WEST_HALL]</div>
               </article>
@@ -216,27 +213,27 @@ export default function Defcon2026(): React.ReactElement {
                         {day}
                       </time>
                       <span className={styles.boothHoursTime}>
-                        {opensAt}–{closesAt}
+                        {opensAt} to {closesAt}
                       </span>
                     </li>
                   ))}
                 </ul>
                 <p className={styles.hoursNote}>
-                  All times are Pacific time (PDT). Find the team at OpenAI booth 1412 in West Hall.
+                  All times are Pacific time (PDT). Find us at OpenAI booth #1412 in West Hall.
                 </p>
                 <div className={styles.cardTag}>[AUG_7-9_PDT]</div>
               </article>
               <article className={styles.card}>
                 <h3 className={styles.cardTitle}>Part of OpenAI</h3>
                 <p className={styles.cardBody}>
-                  Promptfoo is part of OpenAI. The CLI stays open source and model-agnostic. There
-                  is no separate Promptfoo booth this year, so look for the OpenAI booth.
+                  Promptfoo is part of OpenAI. Look for the OpenAI booth. The CLI remains open
+                  source and works across model providers.
                 </p>
                 <div className={styles.cardTag}>[OPENAI]</div>
               </article>
             </div>
-            <p className={styles.partyNote}>
-              No party this year. The 2025 one was a one-off — this year we're at booth 1412.
+            <p className={styles.boothNote}>
+              The conference starts August 6. Our booth is open August 7-9.
             </p>
           </div>
         </section>
@@ -301,34 +298,33 @@ export default function Defcon2026(): React.ReactElement {
           <div className={styles.container}>
             <h2 className={styles.sectionHeading}>The OpenAI security lineup</h2>
             <p className={styles.sectionLead}>
-              Three adjacent efforts, not a hierarchy. Here is what each one covers.
+              Daybreak brings together OpenAI's cyber-defense work. Codex Security tests application
+              code, and Promptfoo tests deployed agents.
             </p>
             <div className={styles.cardGrid}>
               <article className={styles.card}>
                 <h3 className={styles.cardTitle}>Daybreak</h3>
                 <p className={styles.cardBody}>
-                  OpenAI's cyber defense initiative: frontier models pointed at defense rather than
-                  offense, a partner network, and funded work on patching the open source everyone
-                  quietly depends on.
+                  OpenAI's broader cyber-defense initiative. Daybreak brings together advanced
+                  models, Codex Security, and partners to help defenders find and fix software
+                  vulnerabilities.
                 </p>
                 <div className={styles.cardTag}>[INITIATIVE]</div>
               </article>
               <article className={styles.card}>
                 <h3 className={styles.cardTitle}>Codex Security</h3>
                 <p className={styles.cardBody}>
-                  The appsec agent. It builds a threat model of your repo, hunts vulnerabilities
-                  along it, and reproduces each one in a sandbox before it reaches your queue. It
-                  then proposes a minimal patch for human review. It never modifies your repo on its
-                  own.
+                  Codex Security builds a threat model for your repository, reproduces likely
+                  vulnerabilities in a sandbox, and proposes patches for human review. It does not
+                  change your code on its own.
                 </p>
                 <div className={styles.cardTag}>[SCAN_VALIDATE_PROPOSE]</div>
               </article>
               <article className={styles.card}>
                 <h3 className={styles.cardTitle}>Promptfoo</h3>
                 <p className={styles.cardBody}>
-                  Us. Codex Security reads the code you wrote. We go after the agent you shipped:
-                  prompt injection, jailbreaks, tool abuse, excessive agency. Different halves of
-                  the same problem.
+                  We test what your deployed agent can be persuaded to do, including prompt
+                  injection, tool misuse, memory poisoning, and excessive agency.
                 </p>
                 <div className={styles.cardTag}>[RED_TEAM]</div>
               </article>
@@ -409,7 +405,7 @@ export default function Defcon2026(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.runCard}>
               <div className={styles.runHeader}>
-                <div className={styles.runKicker}>AUG 1 → AUG 9</div>
+                <div className={styles.runKicker}>BLACK HAT + DEF CON</div>
                 <h2 className={styles.runTitle}>The Vegas run</h2>
               </div>
               <div className={styles.runTimeline}>
@@ -426,8 +422,8 @@ export default function Defcon2026(): React.ReactElement {
                 </div>
               </div>
               <p className={styles.runNote}>
-                Two conferences, one week. August 6 overlaps: it is Black Hat's last day and DEF
-                CON's first.
+                Black Hat booth #2967 is open Aug 4-6. DEF CON booth #1412 is open Aug 7-9. All
+                booth hours are Pacific time.
               </p>
               <Link to="/events/blackhat-2026/" className={styles.runLink}>
                 See the Black Hat USA 2026 page
@@ -455,15 +451,15 @@ export default function Defcon2026(): React.ReactElement {
           <div className={styles.container}>
             <h2 className={styles.ctaTitle}>Shipping an agent?</h2>
             <p className={styles.ctaText}>
-              You do not have to wait for the show. Clone the repo, point the scanner at your own
-              agent, and read the transcript it writes.
+              You don't have to wait for the conference. Clone the repo, scan your agent, and read
+              the transcript.
             </p>
             <div className={styles.ctaButtons}>
               <Link to={REPO_URL} className={styles.primaryButton}>
                 Run the demo yourself
               </Link>
               <Link to="/contact/" className={styles.secondaryButton}>
-                Book time with us
+                Request a meeting
               </Link>
             </div>
             <p className={styles.ctaFootnote}>

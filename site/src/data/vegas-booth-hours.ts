@@ -12,14 +12,14 @@ export const BLACK_HAT_BOOTH_HOURS: readonly VegasBoothHours[] = [
     day: 'Tue Aug 4',
     opensAt: '4:00pm',
     closesAt: '7:00pm',
-    note: 'Welcome Reception',
+    note: 'Business Hall Welcome Reception',
   },
   {
     date: '2026-08-05',
     day: 'Wed Aug 5',
     opensAt: '9:00am',
     closesAt: '6:00pm',
-    note: 'Booth Crawl 4:00–5:00pm',
+    note: 'Hall-wide Booth Crawl, 4:00pm to 5:00pm',
   },
   {
     date: '2026-08-06',

@@ -318,10 +318,10 @@ export const events: Event[] = [
     slug: 'blackhat-2026',
     name: 'Promptfoo at Black Hat USA 2026',
     shortName: 'Black Hat 2026',
-    status: getEventStatus('2026-08-06T18:00:00-07:00'),
+    status: getEventStatus('2026-08-06T16:00:00-07:00'),
     type: 'conference',
     startDate: '2026-08-01T09:00:00-07:00', // PDT
-    endDate: '2026-08-06T18:00:00-07:00', // PDT
+    endDate: '2026-08-06T16:00:00-07:00', // PDT
     location: {
       venue: 'Mandalay Bay Convention Center',
       city: 'Las Vegas',
@@ -330,9 +330,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #2967',
     description:
-      'Promptfoo demos at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6: application-specific agent attacks, full transcripts, and CI regression tests.',
+      'Find Promptfoo at OpenAI booth #2967 in the Black Hat Business Hall, Aug 4-6. See live AI agent attacks, full transcripts, and regression tests.',
     fullDescription:
-      'Promptfoo is part of OpenAI. Find the team at OpenAI booth #2967 in the Business Hall, open Aug 4-6. We run automated red teaming against real LLM apps, keep the transcript for every attempt, and show how a confirmed finding becomes a regression test that runs in CI.',
+      'Black Hat runs Aug 1-6; its Business Hall and OpenAI booth #2967 are open Aug 4-6. Promptfoo is part of OpenAI. Stop by to see us test a real AI application and turn a confirmed finding into a regression test.',
     cardImage: '/img/events/blackhat-2026.jpg',
     heroImage: '/img/events/blackhat-2026.jpg',
     customPageUrl: '/events/blackhat-2026',
@@ -342,10 +342,10 @@ export const events: Event[] = [
     slug: 'defcon-2026',
     name: 'Promptfoo at DEF CON 34',
     shortName: 'DEF CON 34',
-    status: getEventStatus('2026-08-09T18:00:00-07:00'),
+    status: getEventStatus('2026-08-09T16:00:00-07:00'),
     type: 'conference',
     startDate: '2026-08-06T09:00:00-07:00', // PDT
-    endDate: '2026-08-09T18:00:00-07:00', // PDT
+    endDate: '2026-08-09T16:00:00-07:00', // PDT
     location: {
       venue: 'Las Vegas Convention Center (West Hall)',
       city: 'Las Vegas',
@@ -354,9 +354,9 @@ export const events: Event[] = [
     },
     booth: 'Booth #1412',
     description:
-      'Aug 7-9 at OpenAI booth #1412 in West Hall: see Promptfoo test agent permissions, tool abuse, memory poisoning, and indirect prompt injection.',
+      'Find Promptfoo at OpenAI booth #1412 in West Hall, Aug 7-9. See what happens when an AI agent trusts the wrong document or misuses a tool.',
     fullDescription:
-      'DEF CON 34 runs Aug 6-9, with Promptfoo booth demos Aug 7-9. Its theme is Agency: charting your own course with the tech you use. Promptfoo is part of OpenAI, so find the team at OpenAI booth #1412 in West Hall for agent permissions, excessive agency, tool abuse, memory poisoning, and indirect prompt injection.',
+      'DEF CON 34 runs Aug 6-9, and its theme is Agency. Visit OpenAI booth #1412 in West Hall, Aug 7-9, to see how Promptfoo tests agent permissions, tool misuse, memory poisoning, and prompt injection. Promptfoo is part of OpenAI.',
     cardImage: '/img/events/defcon-2026.jpg',
     heroImage: '/img/events/defcon-2026.jpg',
     customPageUrl: '/events/defcon-2026',

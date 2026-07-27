@@ -37,11 +37,10 @@ const BANNED_BRAND_STRINGS = [
 ];
 
 describe('Vegas 2026 event data', () => {
-  // The 2026 entries all end at 18:00 PDT, which is past midnight UTC. Reading that back
-  // through `new Date(...).getDate()` on a UTC build host rendered the end date a day
-  // late, so the events index disagreed with every string on the event page itself.
-  // (Generic date-helper coverage lives in `src/data/events.test.ts`; this only pins the
-  // two Vegas ranges, which are the ones printed on the pages below.)
+  // Vegas event dates carry explicit Pacific offsets. Reinterpreting them in the build
+  // host's timezone can shift the displayed conference dates, so the events index must
+  // agree with the dates printed on each page. Generic date-helper coverage lives in
+  // `src/data/events.test.ts`; this pins the two Vegas ranges.
   const zones = ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati', 'Asia/Tokyo'];
 
   // vi.stubEnv/unstubAllEnvs rather than assigning process.env.TZ directly: it is the
@@ -93,14 +92,14 @@ describe('Vegas 2026 event data', () => {
         day: 'Tue Aug 4',
         opensAt: '4:00pm',
         closesAt: '7:00pm',
-        note: 'Welcome Reception',
+        note: 'Business Hall Welcome Reception',
       },
       {
         date: '2026-08-05',
         day: 'Wed Aug 5',
         opensAt: '9:00am',
         closesAt: '6:00pm',
-        note: 'Booth Crawl 4:00–5:00pm',
+        note: 'Hall-wide Booth Crawl, 4:00pm to 5:00pm',
       },
       {
         date: '2026-08-06',
@@ -219,6 +218,7 @@ describe.each([
     crossLink: /DEF CON 34/,
     hoursLabel: /Black Hat booth hours in Pacific time/i,
     boothHours: BLACK_HAT_BOOTH_HOURS,
+    boothDates: /Business Hall and booth:\s*Aug 4-6/i,
     findUsLabel: /where to find us/i,
   },
   {
@@ -230,11 +230,21 @@ describe.each([
     crossLink: /Black Hat/,
     hoursLabel: /DEF CON booth hours in Pacific time/i,
     boothHours: DEF_CON_BOOTH_HOURS,
-    findUsLabel: /find us in West Hall/i,
+    boothDates: /Booth #1412:\s*Aug 7-9/i,
+    findUsLabel: /find OpenAI booth #1412/i,
   },
 ])('$name page', (page) => {
-  const { Component, boothNumber, dates, venue, crossLink, hoursLabel, boothHours, findUsLabel } =
-    page;
+  const {
+    Component,
+    boothNumber,
+    dates,
+    venue,
+    crossLink,
+    hoursLabel,
+    boothHours,
+    boothDates,
+    findUsLabel,
+  } = page;
 
   it('shows the booth number, dates, and venue', () => {
     const { container } = render(<Component />);
@@ -243,6 +253,14 @@ describe.each([
     expect(text).toMatch(new RegExp(`booth\\s*#?${boothNumber}`, 'i'));
     expect(text).toMatch(dates);
     expect(text).toMatch(venue);
+  });
+
+  it('labels the conference dates separately from the public booth dates', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).toMatch(/Conference:\s*August/i);
+    expect(text).toMatch(boothDates);
   });
 
   // The exhibitor of record is OpenAI. The pages must say whose booth it is, and must say
@@ -283,11 +301,27 @@ describe.each([
         rows.some(
           (row) =>
             row.textContent?.includes(day.day) &&
-            row.textContent.includes(`${day.opensAt}–${day.closesAt}`),
+            row.textContent.includes(`${day.opensAt} to ${day.closesAt}`),
         ),
-        `Missing ${day.day} ${day.opensAt}–${day.closesAt}`,
+        `Missing ${day.day} ${day.opensAt} to ${day.closesAt}`,
       ).toBe(true);
     }
+  });
+
+  it('does not promise appearances by other OpenAI security teams', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).not.toMatch(/also at the booth/i);
+    expect(text).not.toMatch(/meet the teams behind/i);
+  });
+
+  it('keeps visitor copy direct and free of speculative event claims', () => {
+    const { container } = render(<Component />);
+    const text = container.textContent ?? '';
+
+    expect(text).not.toMatch(/no party this year|very tired team|skip the line|draw a line/i);
+    expect(text).not.toMatch(/[—–]/);
   });
 
   it('does not publish internal booth shifts or handoffs', () => {
@@ -373,8 +407,20 @@ describe('Black Hat USA 2026 page specifics', () => {
     });
     const tuesday = within(visitorHours).getByText('Tue Aug 4').closest('li');
 
-    expect(tuesday).toHaveTextContent('4:00pm–7:00pm');
+    expect(tuesday).toHaveTextContent('4:00pm to 7:00pm');
     expect(tuesday).not.toHaveTextContent('3:00pm');
+  });
+
+  it('identifies the Welcome Reception and Booth Crawl as Business Hall events', () => {
+    render(<BlackHat2026 />);
+
+    const visitorHours = screen.getByRole('list', {
+      name: /Black Hat booth hours in Pacific time/i,
+    });
+
+    expect(visitorHours).toHaveTextContent('Business Hall Welcome Reception');
+    expect(visitorHours).toHaveTextContent('Hall-wide Booth Crawl, 4:00pm to 5:00pm');
+    expect(visitorHours).not.toHaveTextContent(/Booth Crawl sponsor/i);
   });
 });
 
@@ -398,11 +444,14 @@ describe('DEF CON 34 page specifics', () => {
     expect(linkedCta || labelledCta).toBe(true);
   });
 
-  // Daybreak is OpenAI's cyber defense initiative, not a parent product line that
-  // Promptfoo sits under. No public source establishes that hierarchy.
-  it('does not present Daybreak as an umbrella over Promptfoo', () => {
+  it('describes Daybreak accurately without placing Promptfoo under the initiative', () => {
     const { container } = render(<Defcon2026 />);
-    expect(container.innerHTML).not.toMatch(/umbrella/i);
+    const text = container.textContent ?? '';
+
+    expect(text).toMatch(/Daybreak brings together OpenAI's cyber-defense work/i);
+    expect(text).toMatch(/Codex Security/i);
+    expect(text).toMatch(/Promptfoo tests deployed agents/i);
+    expect(text).not.toMatch(/three adjacent efforts|not a hierarchy|Daybreak umbrella/i);
   });
 });
 
@@ -419,6 +468,11 @@ describe('announcement bar', () => {
   // a week we do not staff continuously.
   it('does not advertise a continuous Aug 1-9 presence', () => {
     expect(configSource).not.toMatch(/Aug(?:ust)?\.?\s*1\s*[–-]\s*9/i);
+  });
+
+  it('shows each public booth number and its actual open dates', () => {
+    expect(configSource).toMatch(/Black Hat #2967, Aug 4-6/);
+    expect(configSource).toMatch(/DEF CON 34 #1412, Aug 7-9/);
   });
 
   // The expiry date itself no longer lives in the config: `src/data/announcementBar.ts`

