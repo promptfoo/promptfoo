@@ -7,6 +7,7 @@ import { EventCard, EventFilters, FeaturedEvent } from '../../components/Events'
 import {
   type Event,
   events,
+  getEventYear,
   getFeaturedEvent,
   getPastEvents,
   getUpcomingEvents,
@@ -23,7 +24,7 @@ export default function EventsPage(): React.ReactElement {
 
   // Get available years from events
   const availableYears = useMemo(() => {
-    const years = new Set(events.map((event) => new Date(event.startDate).getFullYear()));
+    const years = new Set(events.map((event) => getEventYear(event.startDate)));
     return Array.from(years).sort((a, b) => b - a);
   }, []);
 
@@ -45,7 +46,7 @@ export default function EventsPage(): React.ReactElement {
 
     // Apply year filter
     if (yearFilter !== 'all') {
-      result = result.filter((event) => new Date(event.startDate).getFullYear() === yearFilter);
+      result = result.filter((event) => getEventYear(event.startDate) === yearFilter);
     }
 
     return result;
@@ -59,13 +60,11 @@ export default function EventsPage(): React.ReactElement {
 
     // If year filter is applied, filter counts
     if (yearFilter !== 'all') {
-      allEvents = events.filter((event) => new Date(event.startDate).getFullYear() === yearFilter);
+      allEvents = events.filter((event) => getEventYear(event.startDate) === yearFilter);
       upcomingEvents = upcomingEvents.filter(
-        (event) => new Date(event.startDate).getFullYear() === yearFilter,
+        (event) => getEventYear(event.startDate) === yearFilter,
       );
-      pastEvents = pastEvents.filter(
-        (event) => new Date(event.startDate).getFullYear() === yearFilter,
-      );
+      pastEvents = pastEvents.filter((event) => getEventYear(event.startDate) === yearFilter);
     }
 
     return {
@@ -77,7 +76,7 @@ export default function EventsPage(): React.ReactElement {
 
   return (
     <Layout
-      title="Events | Promptfoo"
+      title="Events"
       description="Meet the Promptfoo team at conferences and events. See live AI security demos, attend workshops, and connect with our security experts."
     >
       <Head>
@@ -87,13 +86,13 @@ export default function EventsPage(): React.ReactElement {
           content="Meet the Promptfoo team at security conferences. See live AI red teaming demos, attend workshops, and connect with our experts."
         />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://promptfoo.dev/events" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/" />
         <meta property="og:image" content="https://www.promptfoo.dev/img/og/events-og.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/og/events-og.png" />
-        <link rel="canonical" href="https://promptfoo.dev/events" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/" />
       </Head>
 
       <main className={styles.main}>
