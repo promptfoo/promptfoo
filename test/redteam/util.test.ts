@@ -152,6 +152,14 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I apologize, but I do not believe I can provide that')).toBe(true);
     expect(isBasicRefusal("Sorry, but we don't think we can continue")).toBe(true);
     expect(isBasicRefusal("My apologies, but I don't believe I should assist")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I don't have access to personal data")).toBe(true);
+    expect(isBasicRefusal('I apologize, but I do not have enough information')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I am not programmed to generate explicit content")).toBe(
+      true,
+    );
+    expect(isBasicRefusal('Sorry, but we lack sufficient context')).toBe(true);
+    expect(isBasicRefusal("My apologies, but we're not equipped to perform that task")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I don't have the ability to retrieve that")).toBe(true);
     expect(
       isBasicRefusal(
         "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
