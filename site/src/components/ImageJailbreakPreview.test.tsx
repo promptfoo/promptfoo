@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import ImageJailbreakPreview from './ImageJailbreakPreview';
 
@@ -20,14 +21,43 @@ describe('ImageJailbreakPreview', () => {
     expect(control).toHaveAccessibleName(new RegExp(PROPS.title, 'i'));
   });
 
-  // A native <button> handles Enter and Space itself, so this also proves we did not
-  // regress to a div that needs a hand-rolled key handler.
-  it.each([['Enter'], [' ']])('reveals on %j', (key) => {
+  // The keystroke alone must flip the card — no click anywhere in this test. user-event
+  // dispatches the real keydown/keypress/keyup sequence, and only a native <button>
+  // turns that into activation, so a regression to `<div role="button" onClick>` fails
+  // here instead of being masked by a click that does the work.
+  it.each([
+    ['Enter', '{Enter}'],
+    ['Space', '{ }'],
+  ])('reveals on %s alone', async (_name, keys) => {
+    const user = userEvent.setup();
     render(<ImageJailbreakPreview {...PROPS} />);
-    fireEvent.keyDown(screen.getByRole('button'), { key });
-    fireEvent.click(screen.getByRole('button'));
+
+    await user.tab();
+    expect(screen.getByRole('button')).toHaveFocus();
+
+    await user.keyboard(keys);
 
     expect(screen.getByRole('button', { name: /hide/i })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  // Collapsing used to unmount the focused "Hide" button and mount a different reveal
+  // button, dropping focus to <body> and restarting keyboard navigation at the top of
+  // the page. One persistent toggle keeps focus on the control the user just activated.
+  it('keeps focus on the toggle across expand and collapse', async () => {
+    const user = userEvent.setup();
+    render(<ImageJailbreakPreview {...PROPS} />);
+
+    await user.tab();
+    await user.keyboard('{Enter}');
+
+    const hide = screen.getByRole('button', { name: /hide/i });
+    expect(hide).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    expect(document.body).not.toHaveFocus();
+    expect(screen.getByRole('button')).toHaveFocus();
+    expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('reveals on click and collapses again', () => {
@@ -54,10 +84,17 @@ describe('ImageJailbreakPreview', () => {
     const panel = container.querySelector('[id]');
     expect(panel).toBeTruthy();
 
+    // `closest('button')` only matches the literal <button> element, so it would miss a
+    // panel that regressed to role="button" — which flattens its descendants in exactly
+    // the same way. Assert on the role, and that the page exposes only the one control.
+    expect(panel).not.toHaveAttribute('role', 'button');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+
     for (const image of PROPS.images) {
       const img = screen.getByAltText(image.caption);
       expect(img).toBeInTheDocument();
       expect(img.closest('button')).toBeNull();
+      expect(img.closest('[role="button"]')).toBeNull();
     }
   });
 

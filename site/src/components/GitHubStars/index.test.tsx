@@ -52,19 +52,18 @@ describe('GitHubStars', () => {
     const serverMarkup = container.innerHTML;
     expect(serverMarkup).toContain(BUILD_TIME_COUNT);
 
-    const errors: unknown[] = [];
-    const originalError = console.error;
-    console.error = (...args: unknown[]) => errors.push(args.join(' '));
+    // React 19 routes hydration mismatches through onRecoverableError, NOT console.error —
+    // vitest intercepts them before a console spy can see them, which makes a spy-based
+    // assertion here unfalsifiable. Capture them at the source instead.
+    const recoverable: unknown[] = [];
 
     await act(async () => {
-      hydrateRoot(container, <GitHubStars />);
+      hydrateRoot(container, <GitHubStars />, {
+        onRecoverableError: (error) => recoverable.push(error),
+      });
     });
 
-    console.error = originalError;
-
-    expect(
-      errors.filter((e) => String(e).match(/hydrat|did not match|server.*client/i)),
-    ).toHaveLength(0);
+    expect(recoverable).toHaveLength(0);
     expect(container.textContent).toContain('42.3k');
 
     container.remove();

@@ -458,7 +458,11 @@
 
 /* Decorative-only loops (shimmer/pulse/glow); safe to stop entirely. */
 @media (prefers-reduced-motion: reduce) {
+  /* The root's own pseudo-elements need naming explicitly: `.featured *::before`
+     matches descendants only, so `.featured::before` would keep animating. */
   .featured,
+  .featured::before,
+  .featured::after,
   .featured *,
   .featured *::before,
   .featured *::after {

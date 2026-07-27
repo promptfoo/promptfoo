@@ -663,7 +663,14 @@ html {
 /* Respect reduced-motion: this page runs several continuous background
    animations that are decorative only. */
 @media (prefers-reduced-motion: reduce) {
+  /* `.blackhatPage *::before` only matches pseudo-elements on descendants, so the root
+     element's own `::before` — which runs the infinite scanline animation — needs its
+     own selector. `html` is listed because this file sets `scroll-behavior: smooth` on
+     it, and the scrolling element is never inside `.blackhatPage`. */
+  html,
   .blackhatPage,
+  .blackhatPage::before,
+  .blackhatPage::after,
   .blackhatPage *,
   .blackhatPage *::before,
   .blackhatPage *::after {

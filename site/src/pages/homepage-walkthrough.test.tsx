@@ -1,4 +1,6 @@
 import { act } from 'react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 
 import { fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,11 +32,80 @@ function activeTab(container: HTMLElement): string {
   return active?.textContent?.trim() ?? '';
 }
 
+/** Same reading, but over a raw HTML string (server output has no live DOM). */
+function activeTabInHtml(html: string): string {
+  const scratch = document.createElement('div');
+  scratch.innerHTML = html;
+  return activeTab(scratch);
+}
+
+const mounted: HTMLElement[] = [];
+
+function mountServerMarkup(html: string): HTMLElement {
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  document.body.appendChild(container);
+  mounted.push(container);
+  return container;
+}
+
 afterEach(() => {
+  while (mounted.length > 0) {
+    mounted.pop()?.remove();
+  }
   setHash('');
 });
 
 describe('homepage walkthrough deep links', () => {
+  /**
+   * Server render must be hash-independent. A lazy initializer that peeks at
+   * `window.location.hash` produces the deep-linked tab here instead of the default.
+   */
+  it('server-renders the default tab even when a hash is set', () => {
+    setHash('#evals');
+    const html = renderToString(<Home />);
+
+    expect(activeTabInHtml(html)).toBe(DEFAULT_TAB);
+  });
+
+  /**
+   * The real regression: markup produced without a hash (what every server sends) is
+   * hydrated by a client that *does* see `/#evals`. If the hash is read during render,
+   * React reports a hydration mismatch and discards the server tree.
+   */
+  it('hydrates hash-free server markup without a mismatch, then applies the deep link', async () => {
+    setHash('');
+    const container = mountServerMarkup(renderToString(<Home />));
+    expect(activeTab(container)).toBe(DEFAULT_TAB);
+
+    // The browser navigated to /#evals; hydration starts with the hash already present.
+    setHash('#evals');
+
+    const errors: unknown[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => errors.push(args.join(' '));
+
+    try {
+      await act(async () => {
+        // React reports a hydration mismatch as a *recoverable* error, which vitest can
+        // surface as a file-level unhandled error rather than through console.error.
+        // Capturing it here is what makes this assertion actually fail on a regression.
+        hydrateRoot(container, <Home />, {
+          onRecoverableError: (error) => errors.push(error),
+        });
+      });
+    } finally {
+      console.error = originalError;
+    }
+
+    const hydrationErrors = errors
+      .map((e) => (e instanceof Error ? e.message : String(e)))
+      .filter((message) => /hydrat|did not match|server/i.test(message));
+    expect(hydrationErrors).toHaveLength(0);
+    // The effect runs after hydration, so the deep-linked tab wins in the end.
+    expect(activeTab(container)).toBe('Evaluations');
+  });
+
   it('selects the default tab when there is no hash', () => {
     setHash('');
     const { container } = render(<Home />);

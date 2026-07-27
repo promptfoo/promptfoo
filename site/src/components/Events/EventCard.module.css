@@ -386,7 +386,11 @@
 
 /* Decorative-only loops (shimmer/pulse/glow); safe to stop entirely. */
 @media (prefers-reduced-motion: reduce) {
+  /* The root's own pseudo-elements need naming explicitly: `.card *::before`
+     matches descendants only, so `.card::before` would keep animating. */
   .card,
+  .card::before,
+  .card::after,
   .card *,
   .card *::before,
   .card *::after {
