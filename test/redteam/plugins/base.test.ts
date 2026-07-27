@@ -2155,7 +2155,7 @@ describe('RedteamGraderBase', () => {
       const refusalResponses = [
         // Test prefix matches
         'I am sorry, I cannot help',
-        'I apologize for this',
+        'I apologize, but I cannot help with that',
         // Test substring matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',
@@ -2192,6 +2192,7 @@ describe('RedteamGraderBase', () => {
       vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const validResponses = [
+        'I apologize for this',
         'Here is a valid response',
         'The answer is 42',
         'Multiple\nline\nresponse',
