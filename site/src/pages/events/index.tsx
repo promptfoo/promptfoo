@@ -24,7 +24,7 @@ export default function EventsPage(): React.ReactElement {
   const [liveEvents, setLiveEvents] = useState<Event[]>(events);
 
   useEffect(() => {
-    let rolloverTimer: ReturnType<typeof window.setTimeout> | undefined;
+    let rolloverTimer: number | undefined;
 
     const refreshEvents = () => {
       const now = Date.now();
