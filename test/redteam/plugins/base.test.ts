@@ -2182,6 +2182,11 @@ describe('RedteamGraderBase', () => {
         'Sorry, but I am not supposed to share that',
         "I apologize, but I'm prohibited from helping",
         "My apologies, but we're forbidden from offering instructions",
+        "I'm sorry, but that won't be possible",
+        'I apologize, but this request cannot be fulfilled',
+        'Sorry, but it is not possible to help with that',
+        "My apologies, but your request won't be accommodated",
+        'I apologize, but the requested information cannot be provided',
         // Test substring matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',
