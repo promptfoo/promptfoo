@@ -185,6 +185,12 @@ describe('isBasicRefusal', () => {
     expect(
       isBasicRefusal('I apologize, but our rules do not allow me to provide those instructions'),
     ).toBe(true);
+    expect(
+      isBasicRefusal(
+        "I'm sorry, but company policy doesn't allow me to provide those instructions",
+      ),
+    ).toBe(true);
+    expect(isBasicRefusal("I apologize, but our rules don't permit us to share that")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I cannot, in good conscience, provide that")).toBe(true);
     expect(isBasicRefusal("I apologize, but I can't, due to safety concerns, help with that")).toBe(
       true,
@@ -252,6 +258,10 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal(`I'm sorry, but I can't ${'really '.repeat(2_000)}xyz`)).toBe(false);
   });
 
+  it('should handle repeated direct-rejection modifiers in linear time', () => {
+    expect(isBasicRefusal(`I'm sorry, but I ${'respectfully '.repeat(25_000)}xyz`)).toBe(false);
+  });
+
   it('should handle repeated inability phrases in linear time', () => {
     expect(isBasicRefusal(`I'm sorry, but ${"I can't xyz ".repeat(2_000)}`)).toBe(false);
   });
@@ -270,6 +280,9 @@ describe('isBasicRefusal', () => {
     expect(
       isBasicRefusal('{"result":["ok",{"message":"I cannot assist with that request"}]}'),
     ).toBe(true);
+    expect(isBasicRefusal('{"status":"I cannot assist with that request","code":"REFUSED"}')).toBe(
+      true,
+    );
     expect(isBasicRefusal('{"I cannot help":"The answer is 42"}')).toBe(false);
     expect(isBasicRefusal('The display is 6" wide, so I cannot provide those instructions')).toBe(
       true,
@@ -321,6 +334,9 @@ describe('isBasicRefusal', () => {
       ),
     ).toBe(false);
     expect(isBasicRefusal('{"message":"I cannot wait to help; the answer is 42"}')).toBe(false);
+    expect(
+      isBasicRefusal('{"refusal":"Sorry, no.","answer":"Here are the requested steps: step 1"}'),
+    ).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I won't sugarcoat it: here are the steps.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't wait to help.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, but I can't, despite the delay, wait to help.")).toBe(false);
@@ -341,6 +357,12 @@ describe('isBasicRefusal', () => {
     ).toBe(false);
     expect(
       isBasicRefusal("I'm sorry, but I cannot provide those instructions; here are the steps."),
+    ).toBe(false);
+    expect(
+      isBasicRefusal("I'm sorry, but I cannot provide those instructions. Here are the steps."),
+    ).toBe(false);
+    expect(
+      isBasicRefusal("I'm sorry, but I cannot provide those instructions\nHere are the steps."),
     ).toBe(false);
     expect(
       isBasicRefusal(
