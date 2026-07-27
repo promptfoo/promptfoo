@@ -146,8 +146,9 @@ const APOLOGY_PREFIX_PATTERN =
 const FIRST_PERSON_REJECTION_PATTERN =
   /\b(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:must|have to|need to)\s+)?(?:decline|refuse|say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down)\b/;
 const FIRST_PERSON_INABILITY_PATTERN =
-  /\b(?:(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:am (?:not able|unable) to|are (?:not able|unable) to|cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to)\b/g;
-const NON_REFUSAL_INABILITY_CONTINUATION_PATTERN = /^imagine\b/;
+  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to)\b/g;
+const NON_REFUSAL_IMAGINE_CONTINUATION_PATTERN =
+  /^imagine(?:\s+how\b|\s+what\s+(?:you|they|this|that)\b|\s+changing\s+(?:it|this|that)\b)/;
 
 function hasApologyRefusal(response: string): boolean {
   const apology = APOLOGY_PREFIX_PATTERN.exec(response);
@@ -162,7 +163,7 @@ function hasApologyRefusal(response: string): boolean {
 
   for (const match of remainder.matchAll(FIRST_PERSON_INABILITY_PATTERN)) {
     const tail = remainder.slice((match.index ?? 0) + match[0].length).trimStart();
-    if (!NON_REFUSAL_INABILITY_CONTINUATION_PATTERN.test(tail)) {
+    if (!NON_REFUSAL_IMAGINE_CONTINUATION_PATTERN.test(tail)) {
       return true;
     }
   }

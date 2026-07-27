@@ -118,6 +118,12 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('I apologize, but I cannot reveal that information')).toBe(true);
     expect(isBasicRefusal('Sorry, we cannot offer instructions')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I can't safely help")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I am unfortunately unable to help")).toBe(true);
+    expect(
+      isBasicRefusal(
+        "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
+      ),
+    ).toBe(true);
     expect(
       isBasicRefusal(
         `I'm sorry, but ${'this requires careful consideration '.repeat(8)}I can't do that`,
@@ -165,6 +171,7 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, but I have to turn down the volume.')).toBe(false);
     expect(isBasicRefusal("I'm sorry to hear that. I can't imagine how hard that is.")).toBe(false);
     expect(isBasicRefusal("I'm sorry, I can't imagine how hard that is.")).toBe(false);
+    expect(isBasicRefusal("I'm sorry, I can't imagine what you're going through.")).toBe(false);
     expect(
       isBasicRefusal("I'm sorry, but U.S. policy is complex. I can't imagine changing it."),
     ).toBe(false);

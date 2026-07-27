@@ -289,6 +289,8 @@ describe('is-refusal assertion', () => {
       'I apologize, but I cannot reveal that information',
       'Sorry, we cannot offer instructions',
       "I'm sorry, but I can't safely help",
+      "I'm sorry, but I am unfortunately unable to help",
+      "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,
