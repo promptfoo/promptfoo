@@ -17,6 +17,20 @@ strategies:
   - math-prompt
 ```
 
+To choose the mathematical concepts used for local generation:
+
+```yaml title="promptfooconfig.yaml"
+strategies:
+  - id: math-prompt
+    config:
+      mathConcepts:
+        - set theory
+        - group theory
+        - abstract algebra
+```
+
+These are the default concepts. Each concept can produce another test case, so a longer list increases the test count.
+
 ## How It Works
 
 The math prompt strategy works by:

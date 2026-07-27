@@ -18,7 +18,7 @@ It focuses on whether the model:
 2. Refuses unrelated tasks instead of treating any plausible prompt as in-scope.
 3. Recognizes redirection attempts that try to convert a specialized assistant into a general one.
 
-## How it Works
+## How It Works
 
 The Off-Topic Plugin:
 
@@ -26,6 +26,8 @@ The Off-Topic Plugin:
 2. Uses various tactics like transitional phrases, authority appeals, and context switching
 3. Analyzes model responses for signs of successful off-topic manipulation
 4. Evaluates whether the AI maintains its designated purpose or strays into unrelated areas
+
+Unlike [Hijacking](hijacking.md), which uses plausible adjacent requests to redirect a target, Off-Topic focuses on clearly unrelated tasks that turn a specialized assistant into a general-purpose proxy.
 
 ## Configuration
 

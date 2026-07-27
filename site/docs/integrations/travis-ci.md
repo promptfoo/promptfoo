@@ -146,7 +146,7 @@ jobs:
     - stage: evaluate
       script: npx promptfoo eval
       env:
-        - MODEL=claude-3-opus-20240229
+        - MODEL=claude-opus-4-8
 ```
 
 ## Troubleshooting

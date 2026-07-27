@@ -1,73 +1,43 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="800" height="400" viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
-    <!-- Style definitions -->
-    <defs>
-        <style>
-            .title { font-family: -apple-system, system-ui, sans-serif; font-size: 14px; font-weight: bold; }
-            .label { font-family: -apple-system, system-ui, sans-serif; font-size: 12px; }
-            .code { font-family: monospace; font-size: 11px; }
-            .arrow { stroke: #666; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
-            .box { fill: #fff; stroke: #666; stroke-width: 2; }
-            .highlight { fill: #e3f2fd; }
-            .pass { fill: #4caf50; }
-            .fail { fill: #f44336; }
-        </style>
-        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
-        </marker>
-    </defs>
-
-    <!-- Background -->
-    <rect width="100%" height="100%" fill="#ffffff"/>
-
-    <!-- Dataset Box -->
-    <g transform="translate(50,50)">
-        <rect class="box highlight" width="200" height="180" rx="5"/>
-        <text class="title" x="10" y="30">CyberSecEval Dataset</text>
-        <text class="code" x="10" y="60">{</text>
-        <text class="code" x="20" y="85">"test_case_prompt": "...",</text>
-        <text class="code" x="20" y="110">"user_input": "...",</text>
-        <text class="code" x="20" y="135">"judge_question": "...",</text>
-        <text class="code" x="20" y="160">"speaking_language": "..."</text>
-        <text class="code" x="10" y="175">}</text>
-    </g>
-
-    <!-- Plugin Processing Box -->
-    <g transform="translate(300,30)">
-        <rect class="box" width="200" height="200" rx="5"/>
-        <text class="title" x="10" y="30">Plugin Processing</text>
-        <text class="label" x="10" y="70">1. Download test cases</text>
-        <text class="label" x="10" y="100">2. Format as messages</text>
-        <text class="label" x="10" y="130">3. Random selection</text>
-        <text class="label" x="10" y="160">4. Test model</text>
-        <text class="label" x="10" y="190">5. Evaluate response</text>
-    </g>
-
-    <!-- LLM Testing Box -->
-    <g transform="translate(550,50)">
-        <rect class="box highlight" width="200" height="200" rx="5"/>
-        <text class="title" x="10" y="30">LLM Testing</text>
-        <text class="code" x="10" y="60">[{</text>
-        <text class="code" x="20" y="85">"role": "system",</text>
-        <text class="code" x="20" y="110">"content": "..."</text>
-        <text class="code" x="10" y="135">}, {</text>
-        <text class="code" x="20" y="160">"role": "user",</text>
-        <text class="code" x="20" y="185">"content": "..."</text>
-        <text class="code" x="10" y="195">}]</text>
-    </g>
-
-    <!-- Results Box -->
-    <g transform="translate(300,280)">
-        <rect class="box" width="200" height="100" rx="5"/>
-        <text class="title" x="10" y="30">Evaluation Results</text>
-        <text class="pass" x="10" y="60">✓</text>
-        <text class="label" x="25" y="60">PASS: Secure response</text>
-        <text class="fail" x="10" y="85">✗</text>
-        <text class="label" x="25" y="85">FAIL: Vulnerable response</text>
-    </g>
-
-    <!-- Arrows -->
-    <path class="arrow" d="M250,140 H290"/>
-    <path class="arrow" d="M500,140 H540"/>
-    <path class="arrow" d="M400,230 V270"/>
-</svg> 
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" role="img" aria-labelledby="title desc">
+  <title id="title">CyberSecEval test flow</title>
+  <desc id="desc">CyberSecEval test cases are selected and formatted, sent to the target, and graded as secure or vulnerable responses.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#64748b" /></marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #0f172a; }
+      .title { font-size: 24px; font-weight: 700; }
+      .heading { font-size: 17px; font-weight: 600; }
+      .body { font-size: 14px; fill: #475569; }
+      .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; fill: #334155; }
+      .arrow { stroke: #64748b; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="920" height="320" fill="#ffffff" />
+  <text class="title" x="460" y="42" text-anchor="middle">CyberSecEval test flow</text>
+  <rect x="30" y="90" width="220" height="174" rx="10" fill="#eff6ff" stroke="#2563eb" stroke-width="2" />
+  <text class="heading" x="50" y="120">1. Dataset</text>
+  <text class="code" x="50" y="153">test_case_prompt</text>
+  <text class="code" x="50" y="179">user_input</text>
+  <text class="code" x="50" y="205">judge_question</text>
+  <text class="code" x="50" y="231">speaking_language</text>
+  <path class="arrow" d="M250 178H300" />
+  <rect x="300" y="90" width="200" height="174" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" />
+  <text class="heading" x="320" y="120">2. Prepare test</text>
+  <text class="body" x="320" y="153">Select a test case</text>
+  <text class="body" x="320" y="179">Format its messages</text>
+  <text class="body" x="320" y="205">Preserve the judge</text>
+  <text class="body" x="320" y="225">question</text>
+  <path class="arrow" d="M500 178H550" />
+  <rect x="550" y="90" width="150" height="174" rx="10" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" />
+  <text class="heading" x="570" y="120">3. Call target</text>
+  <text class="body" x="570" y="153">Send the</text>
+  <text class="body" x="570" y="173">formatted</text>
+  <text class="body" x="570" y="193">conversation</text>
+  <path class="arrow" d="M700 178H750" />
+  <rect x="750" y="90" width="140" height="174" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" />
+  <text class="heading" x="770" y="120">4. Grade</text>
+  <text class="body" x="770" y="154">Pass: secure</text>
+  <text class="body" x="770" y="174">response</text>
+  <text class="body" x="770" y="210">Fail: vulnerable</text>
+  <text class="body" x="770" y="230">response</text>
+</svg>

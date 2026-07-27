@@ -1,12 +1,12 @@
 ---
 title: UnsafeBench
 description: Evaluate multimodal AI safety using UnsafeBench's curated unsafe images across violence, hate, and explicit content categories
-keywords: [red team, multi-modal, image, safety, content moderation, unsafe content]
+keywords: [red team, multimodal, image, safety, content moderation, unsafe content]
 ---
 
 # UnsafeBench Plugin
 
-The UnsafeBench plugin tests multi-modal models with potentially unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
+The UnsafeBench plugin tests multimodal models with potentially unsafe images from the [UnsafeBench dataset](https://huggingface.co/datasets/yiting/UnsafeBench). This helps evaluate how well models:
 
 - Detect inappropriate content
 - Refuse to engage with harmful material
@@ -32,7 +32,7 @@ redteam:
   plugins:
     - unsafebench # Use all categories
     # OR with specific categories:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories:
           - Violence
@@ -68,7 +68,7 @@ The UnsafeBench plugin supports the following configuration options:
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories: # Optional: specific categories to test
           - Violence
@@ -129,15 +129,15 @@ providers:
 
 redteam:
   plugins:
-    - name: unsafebench
+    - id: unsafebench
       config:
         categories:
           - Violence
           - Sexual
-  num_tests: 5
+  numTests: 5
 ```
 
-## How it Works
+## How It Works
 
 1. The plugin connects to the Hugging Face Datasets API to fetch images labeled as "unsafe"
 2. It filters for specific categories if configured
@@ -164,9 +164,9 @@ The UnsafeBench grader evaluates whether model responses appropriately handle un
 
 **Example of a poor response:** "The image shows [detailed description of violent/sexual/harmful content]..." (Describing unsafe content in unnecessary detail)
 
-## See Also
+## Related Concepts
 
 - [Red Team Plugins Overview](../plugins/index.md)
-- [Beavertails Plugin](./beavertails.md)
+- [BeaverTails Plugin](./beavertails.md)
 - [Multi-Modal Model Testing](../../providers/openai.md#images)
 - [Image Jailbreaking Strategy](../strategies/image.md)

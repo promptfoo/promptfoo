@@ -22,7 +22,7 @@ Practical tutorials for finding vulnerabilities in LLM applications before deplo
 
 ## Specialized Testing
 
-- [Multi-Modal Red Teaming](/docs/guides/multimodal-red-team) — Test image and multi-modal AI systems
+- [Multimodal Red Teaming](/docs/guides/multimodal-red-team) — Test image and multimodal AI systems
 - [Foundation Model Red Teaming](/docs/red-team/foundation-models) — Assess foundation model security risks through red teaming and static scanning
 - [Evaluating Safety with HarmBench](/docs/guides/evaling-with-harmbench) — Benchmark LLM safety using HarmBench
 - [Testing Google Cloud Model Armor](/docs/guides/google-cloud-model-armor) — Assess Google Cloud's AI safety layer

@@ -1,10 +1,108 @@
 import fs from 'fs';
 import path from 'path';
 
+import { load as loadYaml } from 'js-yaml';
 import { describe, expect, it } from 'vitest';
+import { RedteamConfigSchema } from '../../../src/validators/redteam';
 
 const PLUGINS_DIR = path.join(__dirname, '../../../src/redteam/plugins');
 const DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/plugins');
+const STRATEGIES_DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/strategies');
+
+const REDTEAM_CONFIG_KEYS = new Set([
+  'injectVar',
+  'purpose',
+  'testGenerationInstructions',
+  'provider',
+  'numTests',
+  'language',
+  'frameworks',
+  'entities',
+  'contexts',
+  'plugins',
+  'strategies',
+  'maxConcurrency',
+  'maxCharsPerMessage',
+  'delay',
+  'excludeTargetOutputFromAgenticAttackGeneration',
+  'tracing',
+  'graderExamples',
+]);
+
+function getYamlFences(filePath: string): Array<{ line: number; yaml: string }> {
+  const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
+  const fences: Array<{ line: number; yaml: string }> = [];
+  let start = -1;
+  let fence = '';
+
+  for (let index = 0; index < lines.length; index++) {
+    const openingFence = lines[index].match(/^(`{3,}|~{3,})(?:yaml|yml)(?:\s+.*)?$/i);
+    if (start < 0 && openingFence) {
+      start = index + 1;
+      fence = openingFence[1];
+      continue;
+    }
+    if (start >= 0 && lines[index].startsWith(fence)) {
+      fences.push({ line: start + 1, yaml: lines.slice(start, index).join('\n') });
+      start = -1;
+      fence = '';
+    }
+  }
+
+  return fences;
+}
+
+function getRedteamConfig(parsed: unknown): Record<string, unknown> | undefined {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return undefined;
+  }
+
+  const config = parsed as Record<string, unknown>;
+  if (config.redteam && typeof config.redteam === 'object' && !Array.isArray(config.redteam)) {
+    return config.redteam as Record<string, unknown>;
+  }
+
+  return Object.keys(config).every((key) => REDTEAM_CONFIG_KEYS.has(key)) ? config : undefined;
+}
+
+function validateYamlFence(file: string, line: number, yaml: string): string | undefined {
+  const location = `${path.relative(path.join(__dirname, '../../..'), file)}:${line}`;
+  let parsed: unknown;
+
+  try {
+    parsed = loadYaml(yaml);
+  } catch (error) {
+    const message = error instanceof Error ? error.message.split('\n')[0] : error;
+    return `${location}: ${message}`;
+  }
+
+  const redteam = getRedteamConfig(parsed);
+  if (!redteam) {
+    return undefined;
+  }
+
+  const unknownKeys = Object.keys(redteam).filter((key) => !REDTEAM_CONFIG_KEYS.has(key));
+  if (unknownKeys.length > 0) {
+    return `${location}: unknown redteam keys: ${unknownKeys.join(', ')}`;
+  }
+
+  const result = RedteamConfigSchema.safeParse(redteam);
+  if (result.success) {
+    return undefined;
+  }
+
+  const issue = result.error.issues[0];
+  return `${location}: ${issue.path.join('.') || 'redteam'}: ${issue.message}`;
+}
+
+function getDocumentationFiles(): string[] {
+  return [DOCS_DIR, STRATEGIES_DOCS_DIR].flatMap((dir) =>
+    fs
+      .readdirSync(dir)
+      .filter((file) => file.endsWith('.md'))
+      .map((file) => path.join(dir, file)),
+  );
+}
 
 function getFiles(dir: string, extension: string, excludes: string[] = []): string[] {
   return fs
@@ -163,5 +261,133 @@ describe('Plugin Documentation', () => {
       expect(fs.existsSync(constantsPath)).toBe(true);
       expect(fs.existsSync(docsPath)).toBe(true);
     });
+
+    it('should mark remote-generation plugins in the documentation data', async () => {
+      const pluginsModule = await import(
+        path.join(__dirname, '../../../src/redteam/constants/plugins.ts')
+      );
+      const docsModule = await import(
+        path.join(__dirname, '../../../site/docs/_shared/data/plugins.ts')
+      );
+      const remotePlugins = new Set(
+        pluginsModule.UI_DISABLED_WHEN_REMOTE_UNAVAILABLE as readonly string[],
+      );
+      const missingRemoteMarker = docsModule.PLUGINS.filter(
+        (plugin: { pluginId: string; isRemote?: boolean }) =>
+          remotePlugins.has(plugin.pluginId) && !plugin.isRemote,
+      ).map((plugin: { pluginId: string }) => plugin.pluginId);
+
+      expect(
+        missingRemoteMarker,
+        `Remote-generation plugins missing the documentation globe marker:\n${missingRemoteMarker.map((plugin: string) => `  - ${plugin}`).join('\n')}`,
+      ).toEqual([]);
+    });
+  });
+
+  describe('Strategy data synchronization', () => {
+    it('should document current strategies and mark remote-generation strategies', async () => {
+      const strategiesModule = await import(
+        path.join(__dirname, '../../../src/redteam/constants/strategies.ts')
+      );
+      const docsModule = await import(
+        path.join(__dirname, '../../../site/docs/_shared/data/strategies.ts')
+      );
+      const documented = new Set(
+        docsModule.strategies.map((strategy: { strategy: string }) => strategy.strategy),
+      );
+      const allowedMissing = new Set([
+        'default',
+        'jailbreak',
+        'multilingual',
+        'prompt-injection',
+        ...strategiesModule.STRATEGY_COLLECTIONS,
+      ]);
+      const missing = strategiesModule.ALL_STRATEGIES.filter(
+        (strategy: string) => !allowedMissing.has(strategy) && !documented.has(strategy),
+      );
+      const missingRemoteMarker = docsModule.strategies
+        .filter(
+          (strategy: { strategy: string; isRemote?: boolean }) =>
+            strategiesModule.STRATEGIES_REQUIRING_REMOTE_SET.has(strategy.strategy) &&
+            !strategy.isRemote,
+        )
+        .map((strategy: { strategy: string }) => strategy.strategy);
+      const recommendedDeprecated = docsModule.strategies
+        .filter(
+          (strategy: { strategy: string; recommended?: boolean }) =>
+            ['jailbreak', 'multilingual', 'prompt-injection'].includes(strategy.strategy) &&
+            strategy.recommended,
+        )
+        .map((strategy: { strategy: string }) => strategy.strategy);
+
+      expect(missing, `Strategies missing from documentation data:\n${missing.join('\n')}`).toEqual(
+        [],
+      );
+      expect(
+        missingRemoteMarker,
+        `Remote-generation strategies missing the documentation globe marker:\n${missingRemoteMarker.join('\n')}`,
+      ).toEqual([]);
+      expect(
+        recommendedDeprecated,
+        `Deprecated strategies marked as recommended:\n${recommendedDeprecated.join('\n')}`,
+      ).toEqual([]);
+    });
+  });
+
+  it('should contain valid frontmatter and referenced images', () => {
+    const errors: string[] = [];
+    const siteDir = path.join(__dirname, '../../../site');
+
+    for (const file of getDocumentationFiles()) {
+      const relative = path.relative(path.join(__dirname, '../../..'), file);
+      const contents = fs.readFileSync(file, 'utf8');
+      const frontmatter = contents.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+
+      if (!frontmatter) {
+        errors.push(`${relative}: missing frontmatter`);
+        continue;
+      }
+
+      try {
+        const parsed = loadYaml(frontmatter[1]) as { description?: unknown } | undefined;
+        if (typeof parsed?.description !== 'string' || parsed.description.trim().length === 0) {
+          errors.push(`${relative}: missing frontmatter description`);
+        } else if (parsed.description.length > 180) {
+          errors.push(`${relative}: frontmatter description exceeds 180 characters`);
+        }
+      } catch (error) {
+        errors.push(`${relative}: invalid frontmatter: ${String(error)}`);
+      }
+
+      for (const match of contents.matchAll(/!\[([^\]]*)\]\((\/img\/[^\s)]+)[^)]*\)/g)) {
+        const [, alt, source] = match;
+        if (!alt.trim()) {
+          errors.push(`${relative}: image ${source} has empty alt text`);
+        }
+        if (!fs.existsSync(path.join(siteDir, 'static', source))) {
+          errors.push(`${relative}: image ${source} does not exist`);
+        }
+      }
+    }
+
+    expect(
+      errors,
+      `Invalid redteam documentation frontmatter or images:\n${errors.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('should contain valid YAML and redteam config examples', () => {
+    const errors: string[] = [];
+
+    for (const file of getDocumentationFiles()) {
+      for (const { line, yaml } of getYamlFences(file)) {
+        const error = validateYamlFence(file, line, yaml);
+        if (error) {
+          errors.push(error);
+        }
+      }
+    }
+
+    expect(errors, `Invalid redteam documentation examples:\n${errors.join('\n')}`).toEqual([]);
   });
 });

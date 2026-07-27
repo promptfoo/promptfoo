@@ -9,9 +9,9 @@ This guide shows how to integrate Promptfoo's application-level jailbreak creati
 
 The end result is a Burp Suite Intruder configuration that can be used to test for LLM jailbreak vulnerabilities.
 
-![Burp Suite Intruder](/img/docs/burp/burp-jailbreak-intruder.png)
+![Burp Suite Intruder results highlighting an unsafe target response](/img/docs/burp/burp-jailbreak-intruder.png)
 
-(In the above example, we've jailbroken the OpenAI API directly to return an unhinged response.)
+The example shows the OpenAI API returning an unsafe response after a successful jailbreak.
 
 ## Overview
 
@@ -38,7 +38,7 @@ If you've already run an evaluation with test cases, you can export them directl
 
 This will generate a `.burp` file containing all unique test inputs from your evaluation, with proper JSON escaping and URL encoding.
 
-![Burp Suite export](/img/docs/burp/burp-export-frontend.png)
+![Promptfoo eval actions showing the Burp Suite payload export option](/img/docs/burp/burp-export-frontend.png)
 
 ### Option 2: Using the Command Line
 
@@ -61,9 +61,9 @@ The `--burp-escape-json` flag is important when your payloads will be inserted i
    - Mark the injection points where you want to test the payloads
    - Go to the "Payloads" tab
    - Click "Load" and select your `payloads.burp` file
-4. Under "Payload processing", enable URL-decoding (promptfoo's .burp output is URL-encoded to support multi-line payloads)
+4. Under "Payload processing", enable URL-decoding (Promptfoo's `.burp` output is URL-encoded to support multi-line payloads).
 
-![Burp Intruder LLM red teaming configuration](/img/docs/burp/burp-jailbreak-intruder-setup.png)
+![Burp Intruder configured with a prompt payload position and decoding rules](/img/docs/burp/burp-jailbreak-intruder-setup.png)
 
 #### Example Configuration
 
@@ -74,7 +74,7 @@ redteam:
   plugins:
     - harmful
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
     - jailbreak-templates
 ```

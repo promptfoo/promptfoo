@@ -8,6 +8,7 @@ const categoryOrder: (typeof strategies)[number]['category'][] = [
   'Static (Single-Turn)',
   'Dynamic (Single-Turn)',
   'Multi-turn',
+  'Indirect Prompt Injection',
   'Regression',
   'Custom',
 ];
@@ -46,7 +47,6 @@ interface StrategyTableProps {
   shouldRenderDescription?: boolean;
   shouldRenderLongDescription?: boolean;
   shouldRenderCost?: boolean;
-  shouldRenderAsrIncrease?: boolean;
   showRemoteStatus?: boolean;
 }
 
@@ -56,7 +56,6 @@ const StrategyTable = ({
   shouldRenderDescription = true,
   shouldRenderLongDescription = true,
   shouldRenderCost = true,
-  shouldRenderAsrIncrease = true,
   showRemoteStatus = false,
 }: StrategyTableProps) => {
   return (
@@ -71,17 +70,6 @@ const StrategyTable = ({
             {shouldRenderDescription && <th>Description</th>}
             {shouldRenderLongDescription && <th>Details</th>}
             {shouldRenderCost && <th>Cost</th>}
-            {shouldRenderAsrIncrease && (
-              <th>
-                ASR Increase
-                <sup
-                  style={{ cursor: 'help' }}
-                  title="Relative increase in Attack Success Rate compared to running the same test without any strategy"
-                >
-                  *
-                </sup>
-              </th>
-            )}
           </tr>
         </thead>
         <tbody>
@@ -127,9 +115,6 @@ const StrategyTable = ({
                       <td className="details-cell">{strategy.longDescription}</td>
                     )}
                     {shouldRenderCost && <td className="metric-cell">{strategy.cost}</td>}
-                    {shouldRenderAsrIncrease && (
-                      <td className="metric-cell">{strategy.asrIncrease}</td>
-                    )}
                   </tr>
                 ))}
               </React.Fragment>
@@ -137,12 +122,6 @@ const StrategyTable = ({
           })}
         </tbody>
       </table>
-      {shouldRenderAsrIncrease && (
-        <div style={{ fontSize: '0.8em', marginTop: '8px', color: 'var(--ifm-color-gray-600)' }}>
-          * ASR Increase: Relative increase in Attack Success Rate compared to running the same test
-          without any strategy
-        </div>
-      )}
     </div>
   );
 };

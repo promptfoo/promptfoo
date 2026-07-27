@@ -50,7 +50,7 @@ redteam:
     - overreliance
     - hijacking
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -143,7 +143,7 @@ redteam:
     - debug-access
     - reasoning-dos
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -179,7 +179,7 @@ redteam:
     - bola
     - tool-discovery
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
     - jailbreak:composite
 ```

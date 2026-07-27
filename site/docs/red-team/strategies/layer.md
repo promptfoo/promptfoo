@@ -6,7 +6,7 @@ sidebar_label: Layer
 
 # Layer Strategy
 
-The Layer strategy allows you to compose multiple red team strategies sequentially, creating sophisticated attack chains by feeding the output of one strategy into the next. This enables complex transformations like applying multiple encoding layers or combining agentic attacks with multi-modal output (audio/image).
+The Layer strategy composes multiple red team strategies sequentially by feeding the output of one strategy into the next. Use it to apply multiple encoding layers or combine agentic attacks with multimodal output such as audio or images.
 
 ## Quick Start
 
@@ -26,6 +26,8 @@ redteam:
 
 The Layer strategy operates in two distinct modes depending on the types of steps you include:
 
+![Layer modes showing a pre-eval transform chain and an attack strategy with per-turn transforms](/img/docs/layer-strategy.svg)
+
 ### Mode 1: Transform Chain (No Agentic Steps)
 
 When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a simple pipeline:
@@ -37,11 +39,11 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 
 ### Mode 2: Agentic + Per-Turn Transforms
 
-When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:
+When a step is an agentic strategy (Hydra, Goblin, Crescendo, GOAT, Meta, etc.), layer applies the steps after it to each turn or attempt. Steps before it run once against the initial test case.
 
 1. **Agentic Orchestration**: The agentic strategy controls the attack loop
 2. **Per-Turn Transforms**: Remaining steps (e.g., audio, image) are applied to each turn dynamically
-3. **Multi-Modal Attacks**: Combine conversation-based attacks with audio/image delivery
+3. **Multimodal Attacks**: Combine conversation-based attacks with audio or image delivery
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -64,53 +66,68 @@ redteam:
     - id: layer
       config:
         steps:
-          - id: jailbreak
+          - id: jailbreak:meta
             config:
-              maxIterations: 2
+              numIterations: 2
           - audio
 ```
 
-## Ordering Rules
+## Limitations and Ordering Rules
 
-Agentic strategies (hydra, crescendo, goat, jailbreak) must come first (max 1), and multi-modal strategies (audio, image) must come last (max 1). Text transforms (base64, rot13, leetspeak) can be chained in between.
+Layer supports one orchestrating attack strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, `custom`, `jailbreak:meta`, or `jailbreak:tree` first when later steps should transform each turn or attempt. Chain text transforms such as `base64`, `rot13`, and `leetspeak` after it, then add an output transform such as `audio` or `image`.
+
+Key limitations:
+
+- Steps before an agentic strategy transform the initial goal once, not each turn.
+- Only the first supported attack strategy orchestrates the attack; do not chain multiple attack strategies.
+- `mischievous-user` and `simba` do not support per-turn transforms.
+- Audio and image transforms require a target and prompt that accept the resulting payload. Use one multimodal output transform at the end of the layer.
+- `indirect-web-pwn` requires Promptfoo Cloud and a target that can fetch public URLs.
+- Crescendo and Custom do not transform unblocking prompts. If `PROMPTFOO_ENABLE_UNBLOCKING=true`, an audio- or image-only target can still receive a text turn.
 
 ### Valid Patterns
 
 ```yaml
 # Transform chain (no agentic)
 steps: [base64, rot13]
+```
 
-# Transform + multi-modal
+```yaml
+# Transform + multimodal
 steps: [leetspeak, audio]
+```
 
+```yaml
 # Agentic only
 steps: [jailbreak:hydra]
+```
 
-# Agentic + multi-modal (recommended for voice/vision targets)
+```yaml
+# Agentic + multimodal (recommended for voice/vision targets)
 steps: [jailbreak:hydra, audio]
 ```
 
-### Invalid Patterns
+### Patterns to Avoid
 
 ```yaml
-# ❌ Wrong: Agentic not first (transforms will corrupt the goal)
+# Transforms the initial goal, not each turn
 steps: [base64, jailbreak:hydra]
-
-# ❌ Wrong: Multi-modal not last
-steps: [audio, base64]
-
-# ❌ Wrong: Multiple agentic strategies
-steps: [hydra, crescendo]
-
-# ❌ Wrong: Multiple multi-modal strategies
-steps: [audio, image]
 ```
 
-:::warning
+```yaml
+# Transforms the generated audio payload instead of its transcript
+steps: [audio, base64]
+```
 
-Transforms before an agentic strategy modify the attack goal, not each turn—rarely useful.
+```yaml
+# Only the first agentic strategy orchestrates
+steps: [jailbreak:hydra, crescendo]
+```
 
-:::
+```yaml
+# A target generally accepts one multimodal payload format
+steps: [audio, image]
+```
 
 ## Configuration Options
 
@@ -165,9 +182,9 @@ redteam:
       config:
         steps:
           # Step with custom configuration
-          - id: jailbreak
+          - id: jailbreak:meta
             config:
-              maxIterations: 10
+              numIterations: 10
 
           # Simple step
           - hex
@@ -190,7 +207,7 @@ redteam:
         plugins: ['harmful', 'pii'] # Default for all steps
         steps:
           # Override for specific step
-          - id: jailbreak
+          - id: jailbreak:meta
             config:
               plugins: ['harmful'] # Only apply to harmful plugin
 
@@ -205,9 +222,30 @@ redteam:
 
 ## Example Scenarios
 
+### Multi-Turn Web Injection Attack
+
+Test a browsing agent with adaptive attacks that place prompt injections in fetched web content:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  purpose: An assistant that can fetch and summarize public web pages.
+  plugins:
+    - data-exfil
+    - pii:direct
+  strategies:
+    - id: layer
+      config:
+        label: hydra-web-injection
+        steps:
+          - jailbreak:hydra
+          - indirect-web-pwn
+```
+
+Hydra adapts the conversation while `indirect-web-pwn` generates and tracks an injected page for each attempt. Enable a browser, web-fetch or HTTP-fetch tool, or an MCP browsing tool on the target. See [Indirect Web Pwn](/docs/red-team/strategies/indirect-web-pwn/) for a runnable target configuration.
+
 ### Multi-Turn Audio Attack
 
-Test voice-enabled AI agents with sophisticated jailbreak attempts:
+Test voice-enabled AI agents with adaptive jailbreak attempts:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -215,11 +253,11 @@ redteam:
     - id: layer
       config:
         steps:
-          - jailbreak:hydra # Multi-turn jailbreak
+          - jailbreak:goblin # Multi-turn jailbreak
           - audio # Convert each turn to speech
 ```
 
-Hydra will orchestrate the attack, and each turn's prompt will be converted to audio before being sent to your target. Your custom provider receives a hybrid payload with conversation history (as text) and the current turn (as audio).
+Goblin orchestrates the attack, and each turn's prompt is converted to audio before being sent to your target. Your custom provider receives a hybrid payload with conversation history (as text) and the current turn (as audio).
 
 ### Multi-Turn Image Attack
 
@@ -237,7 +275,7 @@ redteam:
 
 ### Single-Turn Audio Attack
 
-For multi-attempt strategies (jailbreak, jailbreak:meta, jailbreak:tree), each independent attempt is converted to audio:
+For multi-attempt strategies such as `jailbreak:meta` and `jailbreak:tree`, each independent attempt is converted to audio:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -360,10 +398,13 @@ class AudioProvider {
             });
           }
         }
-      } catch (e) {
-        // Fallback to treating as plain text
-        messages = [{ role: 'user', content: prompt }];
+      } catch {
+        // Treat invalid JSON as plain text below
       }
+    }
+
+    if (messages.length === 0) {
+      messages = [{ role: 'user', content: prompt }];
     }
 
     // Call your audio-capable API (e.g., OpenAI gpt-audio-1.5)
@@ -409,7 +450,7 @@ The hybrid payload structure:
 Be aware of test case growth when combining strategies:
 
 - Some strategies may multiply test cases (e.g., if you set global `language: ['en', 'es', 'fr']`, all test cases multiply by 3)
-- Layered strategies process sequentially, so test count growth is usually linear
+- Layered strategies process sequentially, so expanding steps can compound test count growth
 - Plan your test counts accordingly to avoid excessive evaluation time
 
 ### Optimization Tips
@@ -422,40 +463,43 @@ Be aware of test case growth when combining strategies:
 ## Implementation Notes
 
 - **Empty Step Handling**: If any step returns no test cases, subsequent steps receive an empty array
-- **Error Handling**: Failed steps are logged and skipped; the pipeline continues
+- **Error Handling**: Unknown or unloadable steps are logged and skipped. Errors raised while a step transforms test cases stop the layer.
 - **Metadata Preservation**: Each step preserves and extends test case metadata
 - **Strategy Resolution**: Supports both built-in strategies and `file://` custom strategies
 
 ## Tips and Best Practices
 
-1. **Agentic First**: When combining agentic with transforms, always place the agentic strategy first
-2. **Multi-Modal Last**: Audio and image transforms must be the final step
+1. **Agentic First**: Place the agentic strategy first when transforms should apply to every turn
+2. **Multimodal Last**: Put audio and image transforms at the end so the target receives the expected payload
 3. **Logical Combinations**: Stack strategies that make semantic sense together
 4. **Debug Incrementally**: Test each step individually before combining
 5. **Document Complex Layers**: Add comments explaining the attack chain logic
-6. **Consider Target Models**: Voice/vision targets need appropriate multi-modal steps
+6. **Consider Target Models**: Voice/vision targets need appropriate multimodal steps
 7. **Use Plugin Targeting**: Focus different steps on different vulnerability types
-8. **Custom Provider Required**: Audio/image attacks require a custom provider that handles the hybrid payload format
+8. **Provider Support**: Audio/image attacks may require a custom provider that handles the hybrid payload format
 
 ## Supported Agentic Strategies
 
-The following strategies can be used as the first step with per-turn transforms:
+The following strategies can orchestrate a layer and apply later steps as per-turn transforms:
 
-| Strategy          | Type          | Description                       |
-| ----------------- | ------------- | --------------------------------- |
-| `jailbreak:hydra` | Multi-turn    | Branching conversation attack     |
-| `crescendo`       | Multi-turn    | Gradual escalation attack         |
-| `goat`            | Multi-turn    | Goal-oriented adversarial testing |
-| `custom`          | Multi-turn    | Custom multi-turn strategy        |
-| `jailbreak`       | Multi-attempt | Iterative single-turn attempts    |
-| `jailbreak:meta`  | Multi-attempt | Meta-agent attack generation      |
-| `jailbreak:tree`  | Multi-attempt | Tree-based attack search          |
+| Strategy           | Type          | Description                       |
+| ------------------ | ------------- | --------------------------------- |
+| `jailbreak:hydra`  | Multi-turn    | Branching conversation attack     |
+| `jailbreak:goblin` | Multi-turn    | IICL-inspired conversation attack |
+| `crescendo`        | Multi-turn    | Gradual escalation attack         |
+| `goat`             | Multi-turn    | Generative Offensive Agent Tester |
+| `custom`           | Multi-turn    | Custom multi-turn strategy        |
+| `jailbreak:meta`   | Multi-attempt | Meta-agent attack generation      |
+| `jailbreak:tree`   | Multi-attempt | Tree-based attack search          |
+
+The deprecated bare `jailbreak` ID resolves to the legacy iterative provider inside a layer. Use `jailbreak:meta` instead.
 
 ## Related Concepts
 
 - [Audio Strategy](./audio.md) - Text-to-speech conversion
 - [Image Strategy](./image.md) - Text-to-image conversion
-- [Hydra Strategy](./multi-turn.md) - Multi-turn jailbreak attacks
+- [Hydra Strategy](./hydra.md) - Multi-turn jailbreak attacks
+- [Goblin Strategy](./goblin.md) - IICL-inspired multi-turn attacks
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies

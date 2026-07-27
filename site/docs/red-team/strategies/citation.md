@@ -21,10 +21,11 @@ You can apply it to specific plugins by adding a `plugins` config. For example:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
-  - citation:
-    plugins:
-      - harmful:hate
-      - pii
+  - id: citation
+    config:
+      plugins:
+        - harmful:hate
+        - pii
 ```
 
 ## How It Works
@@ -90,6 +91,6 @@ Reference:
 ## Related Concepts
 
 - [Multi-turn Jailbreaks](multi-turn.md) - Related jailbreaking approach
-- [Prompt Injection](prompt-injection.md) - Another technique to bypass safety controls
+- [Jailbreak Templates](jailbreak-templates.md) - Static jailbreak templates
 - [Authority Bias in LLMs](https://arxiv.org/pdf/2411.11407) - Research on academic framing
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

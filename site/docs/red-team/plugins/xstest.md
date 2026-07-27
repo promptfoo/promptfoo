@@ -15,7 +15,7 @@ The XSTest plugin tests how well LLMs handle ambiguous words (homonyms) that can
 
 Each test includes metadata about the homonym, category, and expected safety label.
 
-## How it works
+## How It Works
 
 The plugin:
 

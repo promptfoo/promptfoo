@@ -50,7 +50,7 @@ The strategy helps identify:
 
 ## Related Concepts
 
-- [Prompt Injection](prompt-injection.md) - Similar security bypass technique
+- [Jailbreak Templates](jailbreak-templates.md) - Static jailbreak templates
 - [ROT13 Encoding](rot13.md) - Alternative encoding strategy
 - [Leetspeak](leetspeak.md) - Text obfuscation technique
 - [Hex Encoding](hex.md) - Similar encoding strategy using hexadecimal

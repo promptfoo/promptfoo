@@ -7,7 +7,7 @@ description: Red team LLM apps against OWASP Top 10 vulnerabilities to protect A
 
 The OWASP Top 10 for Large Language Model Applications educates developers about security risks in deploying and managing LLMs. It lists the top critical vulnerabilities in LLM applications based on impact, exploitability, and prevalence. OWASP [recently released](https://owasp.org/www-project-top-10-for-large-language-model-applications/) its updated version of the Top 10 for LLMs for 2025.
 
-![OWASP LLM Top 10](/img/docs/owasp-llm-top10.svg)
+![The ten OWASP risk categories for LLM applications](/img/docs/owasp-llm-top10.svg)
 
 The current top 10 are:
 
@@ -30,11 +30,11 @@ Promptfoo is an open-source tool that helps identify and remediate many of the v
 
 The end result is a comprehensive report card that enumerates the OWASP Top 10 vulnerabilities and their severities:
 
-![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
+![Promptfoo risk report showing framework-compliance results, including OWASP LLM Top 10](/img/docs/compliance.png)
 
 To set up the scan through the Promptfoo UI, select the OWASP LLM Top 10 option in the list of presets on the Plugins page.
 
-![Promptfoo OWASP LLM Top 10 configuration](/img/docs/owasp-selection.png)
+![Promptfoo plugin configuration highlighting the available OWASP presets](/img/docs/owasp-selection.png)
 
 ## 1. Prompt Injection (LLM01)
 
@@ -60,8 +60,8 @@ redteam:
   strategies:
     # Add the jailbreak-templates strategy
     - jailbreak-templates
-    # Additional strategies such as "jailbreak" are related to prompt injection
-    - jailbreak
+    # Add adaptive single-turn attacks
+    - jailbreak:meta
 ```
 
 ## 2. Sensitive Information Disclosure (LLM02)
@@ -103,7 +103,7 @@ redteam:
   strategies:
     # Apply additional techniques to extract PII
     - jailbreak-templates
-    - jailbreak
+    - jailbreak:meta
 ```
 
 Or, using the OWASP shorthand:
@@ -167,7 +167,7 @@ redteam:
     - harmful
     - pii
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -429,7 +429,7 @@ In addition to the OWASP LLM Top 10, OWASP has published best practices for red 
 
 You can find this option in the list of presets:
 
-![OWASP Gen AI red team preset](/img/docs/owasp-genai-red-team-preset.png)
+![Promptfoo plugin configuration with the OWASP Gen AI Red Team preset selected](/img/docs/owasp-genai-red-team-preset.png)
 
 Or you can use Promptfoo to automate testing across all four phases using the `owasp:llm:redteam` shorthand:
 
@@ -495,7 +495,7 @@ redteam:
     - owasp:llm
   strategies:
     - jailbreak-templates
-    - jailbreak
+    - jailbreak:meta
 ```
 
 To learn more about setting up Promptfoo and finding LLM vulnerabilities, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).

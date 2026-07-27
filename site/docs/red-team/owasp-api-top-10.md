@@ -42,7 +42,7 @@ redteam:
   plugins:
     - owasp:api
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -432,7 +432,7 @@ redteam:
   plugins:
     - owasp:api
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 
@@ -457,7 +457,7 @@ redteam:
     - owasp:api
     - owasp:llm
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak-templates
 ```
 

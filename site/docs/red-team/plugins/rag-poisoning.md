@@ -13,7 +13,7 @@ Poisoning occurs when an attacker injects malicious content into the RAG context
 
 RAG (Retrieval Augmented Generation) systems are vulnerable to several types of document poisoning attacks:
 
-1. **Direct Injection**: Inserting malicious instructions or content directly into documents (see [prompt injection](/docs/red-team/strategies/prompt-injection))
+1. **Direct Injection**: Inserting malicious instructions or content directly into documents (see [Indirect Prompt Injection](indirect-prompt-injection.md))
 2. **Context Manipulation**: Adding content that changes how the LLM interprets legitimate documents
 3. **Retrieval Hijacking**: Crafting documents that are more likely to be retrieved than legitimate ones
 4. **Data Extraction**: Embedding instructions that trick the LLM into revealing sensitive information (see [indirect prompt injection](/docs/red-team/plugins/indirect-prompt-injection))
@@ -212,7 +212,7 @@ Here are some common document poisoning patterns that the plugin tests:
 
 ## Related Concepts
 
-- [Prompt Injection](/docs/red-team/strategies/prompt-injection)
+- [Indirect Prompt Injection](indirect-prompt-injection.md)
 - [Information Disclosure](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
 - [System Prompt Extraction](/docs/red-team/plugins/prompt-extraction)
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

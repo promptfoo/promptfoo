@@ -33,7 +33,7 @@ The model follows the injected instruction instead of answering the travel quest
 | **Typical vectors**     | Chat input, form fields | RAG docs, emails, profiles, tickets            |
 | **Why it's riskier**    | Scoped to one session   | Can affect unaware users in privileged context |
 
-## How it works
+## How It Works
 
 1. Specify which template variable contains untrusted data
 2. Promptfoo injects adversarial payloads into that variable
@@ -104,4 +104,4 @@ Response: Here are a few ways to find budget flights to Paris...
 - [RAG Poisoning](/docs/red-team/plugins/rag-poisoning)
 - [RAG Document Exfiltration](/docs/red-team/plugins/rag-document-exfiltration)
 - [Prompt Extraction](/docs/red-team/plugins/prompt-extraction)
-- [Prompt Injection Strategies](/docs/red-team/strategies/prompt-injection)
+- [Jailbreak Templates](/docs/red-team/strategies/jailbreak-templates)

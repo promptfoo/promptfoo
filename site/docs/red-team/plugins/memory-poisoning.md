@@ -20,7 +20,7 @@ Memory poisoning attacks attempt to inject malicious instructions into an agent'
 3. Manipulate the agent's decision-making process
 4. Bypass security controls in subsequent interactions
 
-## How it Works
+## How It Works
 
 The Memory Poisoning plugin:
 

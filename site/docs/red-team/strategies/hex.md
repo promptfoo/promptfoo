@@ -6,7 +6,7 @@ description: Evaluate AI robustness against hexadecimal-encoded attacks designed
 
 # Hex Encoding Strategy
 
-The Hex Encoding strategy tests an AI system's ability to resist ASCII hex-encoded inputs that might bypass security controls. Hex encoding (using characters 0-9, A-F) exploits a potential gap in safety mechanisms by representing text as a sequence of hexadecimal bytes.
+The Hex Encoding strategy tests an AI system's ability to resist UTF-8 hex-encoded inputs that might bypass security controls. Hex encoding (using characters 0-9, A-F) represents the input as a sequence of hexadecimal bytes.
 
 ## Why It Works
 

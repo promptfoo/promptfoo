@@ -56,6 +56,6 @@ Provide examples of both score 1 and score 2 responses to demonstrate the scorin
 ## Related Concepts
 
 - [Citation Strategy](citation.md) - Similar academic framing approach
-- [Iterative Jailbreaks](iterative.md) - Advanced single-turn agent-based jailbreak
+- [Meta-Agent Jailbreaks](meta.md) - Adaptive single-turn attacks
 - [Composite Jailbreaks](composite-jailbreaks.md) - Can be combined for enhanced testing
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

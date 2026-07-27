@@ -44,5 +44,5 @@ The strategy helps identify:
 
 - [Base64 Encoding](base64.md) - More complex but widely recognized encoding
 - [Leetspeak](leetspeak.md) - Similar character-level obfuscation
-- [Prompt Injection](prompt-injection.md) - Can be combined with ROT13
+- [Jailbreak Templates](jailbreak-templates.md) - Can be combined with ROT13
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

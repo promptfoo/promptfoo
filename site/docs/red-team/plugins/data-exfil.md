@@ -22,7 +22,7 @@ An attacker creates a web page containing:
 
 When the agent visits the attacker's page, it follows the embedded instruction and leaks sensitive data to the attacker's server.
 
-## How it works
+## How It Works
 
 1. Promptfoo creates dynamic web pages containing exfiltration instructions
 2. The agent is prompted to visit and analyze these pages

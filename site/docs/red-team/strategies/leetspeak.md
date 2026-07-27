@@ -46,5 +46,5 @@ The strategy helps identify:
 
 - [Base64 Encoding](base64.md) - More formal encoding scheme
 - [ROT13 Encoding](rot13.md) - More systematic substitution
-- [Prompt Injection](prompt-injection.md) - Can be combined with Leetspeak
+- [Jailbreak Templates](jailbreak-templates.md) - Can be combined with Leetspeak
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

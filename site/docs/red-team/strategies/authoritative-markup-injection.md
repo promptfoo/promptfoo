@@ -28,17 +28,26 @@ This technique is distinct from simple prompt injection because it focuses speci
 Add it to your `promptfooconfig.yaml`:
 
 ```yaml title="promptfooconfig.yaml"
-strategies:
-  # Basic usage
-  - authoritative-markup-injection
+redteam:
+  strategies:
+    - authoritative-markup-injection
+```
 
-  # With configuration (specify which variable to inject into)
-  - id: authoritative-markup-injection
-    config:
-      injectVar: query
+To specify which prompt variable receives the generated markup:
+
+```yaml title="promptfooconfig.yaml"
+redteam:
+  strategies:
+    - id: authoritative-markup-injection
+      config:
+        injectVar: query
 ```
 
 The `injectVar` parameter specifies which variable in your prompt template should receive the authoritative markup injection. If not specified, the strategy will use the default `prompt` injection variable.
+
+:::info Remote Generation Required
+This strategy generates authoritative markup through a hosted generation endpoint. It cannot run when remote red team generation is disabled.
+:::
 
 Combine with red team plugins to test specific vulnerability categories:
 
@@ -85,7 +94,7 @@ This strategy helps identify vulnerabilities where models prioritize structural 
 ## Related Concepts
 
 - [Citation Strategy](citation.md) - Tests academic authority bias
-- [Prompt Injection](prompt-injection.md) - Direct injection attacks
-- [Jailbreak Strategies](iterative.md) - Iterative bypass techniques
+- [Jailbreak Templates](jailbreak-templates.md) - Static jailbreak templates
+- [Meta-Agent Jailbreaks](meta.md) - Adaptive single-turn attacks
 - [Composite Jailbreaks](composite-jailbreaks.md) - Combined attack techniques
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
