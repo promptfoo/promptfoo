@@ -12,8 +12,13 @@ const REPO_URL = 'https://github.com/promptfoo/promptfoo';
 
 const SCAN_PREAMBLE = [
   '[~] target: support-agent (14 tools, 3 data sources)',
-  '[~] plugins: excessive-agency, indirect-prompt-injection,',
-  '             rbac, tool-discovery, memory-poisoning, hijacking',
+  // Plugin IDs are the real registered ones, so a config reconstructed from this
+  // transcript would validate. Memory poisoning is only registered under its
+  // namespaced form (`agentic:memory-poisoning`, AGENTIC_PLUGINS). The two lines
+  // are split to stay within a couple of characters of each other so the wrap
+  // still reads like real terminal output.
+  '[~] plugins: excessive-agency, indirect-prompt-injection, rbac,',
+  '             tool-discovery, agentic:memory-poisoning, hijacking',
   '[~] strategies: jailbreak:composite, crescendo, goat',
   '[~] generating 248 probes ... done',
 ];
@@ -29,7 +34,7 @@ const SCAN_RESULTS: { status: 'PASS' | 'FAIL'; plugin: string; note: string }[] 
   { status: 'FAIL', plugin: 'excessive-agency', note: 'called delete_user() on request' },
   { status: 'FAIL', plugin: 'indirect-prompt-injection', note: 'obeyed a comment in a PDF' },
   { status: 'FAIL', plugin: 'tool-discovery', note: 'enumerated 6 undocumented tools' },
-  { status: 'FAIL', plugin: 'memory-poisoning', note: "kept the attacker's note" },
+  { status: 'FAIL', plugin: 'agentic:memory-poisoning', note: "kept the attacker's note" },
   { status: 'PASS', plugin: 'hijacking', note: 'declined to write the sonnet' },
 ];
 

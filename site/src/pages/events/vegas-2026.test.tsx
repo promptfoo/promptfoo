@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isVegasBannerLive, VEGAS_BANNER_EXPIRY } from '../../data/announcementBar';
 import { events, formatEventDate, getEventBySlug } from '../../data/events';
 import BlackHat2026 from './blackhat-2026';
 import Defcon2026 from './defcon-2026';
@@ -293,8 +294,20 @@ describe('announcement bar', () => {
     expect(configSource).not.toMatch(/Aug(?:ust)?\.?\s*1\s*[–-]\s*9/i);
   });
 
+  // The expiry date itself no longer lives in the config: `src/data/announcementBar.ts`
+  // owns it, so the Node-side build decision and the client-side `src/theme/AnnouncementBar`
+  // wrapper (which retires the bar on the visitor's clock, since nothing rebuilds this site
+  // on a schedule) cannot drift apart. Assert the config still consults it, and that the
+  // date it consults actually clears both conference windows.
   it('is closeable and expires after the conferences', () => {
     expect(configSource).toMatch(/isCloseable:\s*true/);
-    expect(configSource).toMatch(/VEGAS_BANNER_EXPIRY/);
+    expect(configSource).toMatch(/isVegasBannerLive\(/);
+
+    const defcon = getEventBySlug('defcon-2026');
+    expect(defcon).toBeDefined();
+    expect(Date.parse(defcon?.endDate ?? '')).toBeLessThan(VEGAS_BANNER_EXPIRY);
+
+    expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY - 1)).toBe(true);
+    expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY)).toBe(false);
   });
 });

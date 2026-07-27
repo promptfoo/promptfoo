@@ -411,10 +411,12 @@
   font-weight: 700;
 }
 
-/* Result rows are laid out, not padded, so no `padEnd` column is needed. */
+/* Result rows are laid out, not padded, so no `padEnd` column is needed. The
+   plugin column is sized for the longest registered ID in the transcript
+   (`indirect-prompt-injection`, 25ch) so no name breaks mid-word. */
 .resultRow {
   display: grid;
-  grid-template-columns: 4ch minmax(0, 24ch) minmax(0, 1fr);
+  grid-template-columns: 4ch minmax(0, 26ch) minmax(0, 1fr);
   column-gap: 1.5rem;
   color: var(--dc-text);
 }

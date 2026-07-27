@@ -3,6 +3,11 @@ import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import webpack from 'webpack';
+import {
+  EVERGREEN_ANNOUNCEMENT_BAR_ID,
+  isVegasBannerLive,
+  VEGAS_ANNOUNCEMENT_BAR_ID,
+} from './src/data/announcementBar';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
@@ -53,14 +58,18 @@ function buildTimestampPlugin(): Plugin {
 }
 
 /**
- * The Vegas banner is a build-time snapshot, like every other date-dependent thing here:
- * it is chosen when this config is evaluated, so the site must be rebuilt (any deploy will
- * do) for the evergreen bar to take over once the conferences are over.
+ * Which bar gets prerendered is a build-time decision, like every other date-dependent
+ * thing here: it is made when this config is evaluated, so a rebuild (any deploy will do)
+ * is what swaps the evergreen bar into the static HTML once the conferences are over.
  *
- * Expiry is the end of DEF CON 34's last day, Aug 9 2026 (PDT).
+ * That is not sufficient on its own. Nothing rebuilds this site on a schedule — CI builds
+ * on pull requests, pushes and manual dispatch — so if the last deploy before the expiry
+ * stays live, the prerendered HTML would advertise two finished conferences forever.
+ * `src/theme/AnnouncementBar` closes that gap by re-checking the same expiry against the
+ * visitor's clock after hydration and dropping the bar. The shared constant lives in
+ * `src/data/announcementBar.ts` so the date is written down exactly once.
  */
-const VEGAS_BANNER_EXPIRY = Date.parse('2026-08-10T00:00:00-07:00');
-const isVegasBannerLive = Date.parse(BUILD_TIMESTAMP) < VEGAS_BANNER_EXPIRY;
+const showVegasBanner = isVegasBannerLive(Date.parse(BUILD_TIMESTAMP));
 
 // Near-black rather than Promptfoo red: the bar sits above both the red Black Hat page and
 // the green DEF CON page, and has to belong to neither. `src/css/custom.css` forces
@@ -70,7 +79,7 @@ const ANNOUNCEMENT_BAR_BACKGROUND = '#111113';
 const ANNOUNCEMENT_BAR_TEXT = '#ffffff';
 
 const vegasAnnouncementBar = {
-  id: 'vegas-2026',
+  id: VEGAS_ANNOUNCEMENT_BAR_ID,
   content:
     '<strong>Meet Promptfoo at the OpenAI booths in Vegas:</strong> <a href="/events/blackhat-2026/">Black Hat booth 2967</a> &middot; <a href="/events/defcon-2026/">DEF CON 34 booth 1412</a>',
   backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
@@ -79,7 +88,7 @@ const vegasAnnouncementBar = {
 };
 
 const evergreenAnnouncementBar = {
-  id: 'events-evergreen',
+  id: EVERGREEN_ANNOUNCEMENT_BAR_ID,
   content: 'Promptfoo is part of OpenAI. <a href="/events/">See where the team will be next</a>.',
   backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
   textColor: ANNOUNCEMENT_BAR_TEXT,
@@ -158,7 +167,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    announcementBar: isVegasBannerLive ? vegasAnnouncementBar : evergreenAnnouncementBar,
+    announcementBar: showVegasBanner ? vegasAnnouncementBar : evergreenAnnouncementBar,
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
