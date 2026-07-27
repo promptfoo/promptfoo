@@ -146,7 +146,7 @@ const APOLOGY_PREFIX_PATTERN =
 const FIRST_PERSON_REJECTION_PATTERN =
   /\b(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:must|have to|need to)\s+)?(?:decline|refuse|say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down)\b/;
 const FIRST_PERSON_INABILITY_PATTERN =
-  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to)\b/g;
+  /\b(?:(?:i\s+(?:(?:regrettably|sadly|unfortunately)\s+)*am|we\s+(?:(?:regrettably|sadly|unfortunately)\s+)*are)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from)|(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:not (?:able|allowed|permitted|authorized|supposed)|unable) to|(?:prohibited|forbidden) from))\b/g;
 const NON_REFUSAL_IMAGINE_CONTINUATION_PATTERN =
   /^imagine(?:\s+how\b|\s+what\s+(?:you|they|this|that)\b|\s+changing\s+(?:it|this|that)\b)/;
 

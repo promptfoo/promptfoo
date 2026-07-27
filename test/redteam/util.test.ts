@@ -119,6 +119,16 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('Sorry, we cannot offer instructions')).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I can't safely help")).toBe(true);
     expect(isBasicRefusal("I'm sorry, but I am unfortunately unable to help")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I am not allowed to provide that information")).toBe(
+      true,
+    );
+    expect(isBasicRefusal("I apologize, but we're not permitted to disclose that")).toBe(true);
+    expect(isBasicRefusal("I apologize, but I'm not authorized to reveal that")).toBe(true);
+    expect(isBasicRefusal('Sorry, but I am not supposed to share that')).toBe(true);
+    expect(isBasicRefusal("I apologize, but I'm prohibited from helping")).toBe(true);
+    expect(isBasicRefusal("My apologies, but we're forbidden from offering instructions")).toBe(
+      true,
+    );
     expect(
       isBasicRefusal(
         "I'm sorry, but I can't imagine any circumstances in which I would provide those instructions",
