@@ -188,6 +188,34 @@ describe('server OpenAPI generation', () => {
     );
   });
 
+  it('preserves required OpenAPI 3.1 response descriptions and media schemas', () => {
+    const document = createServerOpenApiDocument();
+
+    for (const { method, path, operation } of operations(document)) {
+      const responses = (
+        operation as {
+          responses?: Record<
+            string,
+            { description?: string; content?: Record<string, { schema?: unknown }> }
+          >;
+        }
+      ).responses;
+
+      for (const [status, response] of Object.entries(responses ?? {})) {
+        expect(response.description, `${method.toUpperCase()} ${path} ${status}`).toEqual(
+          expect.any(String),
+        );
+
+        for (const [mediaType, content] of Object.entries(response.content ?? {})) {
+          expect(
+            content.schema,
+            `${method.toUpperCase()} ${path} ${status} ${mediaType}`,
+          ).toBeDefined();
+        }
+      }
+    }
+  });
+
   it('documents explicit server-error response paths', () => {
     const paths = createServerOpenApiDocument().paths ?? {};
     const explicitServerErrorOperations = [

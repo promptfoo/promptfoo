@@ -107,7 +107,7 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@actions/core,@actions/exec,@actions/github,@octokit/rest,@vitest/coverage-v8,langium,block-no-verify,yaml\" --ignore-dirs=\"dist,site,examples\"",
+    "depcheck": "depcheck --ignores=\"@types/*,@typescript/native,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@actions/core,@actions/exec,@actions/github,@octokit/rest,@vitest/coverage-v8,langium,block-no-verify,yaml\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -218,7 +218,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.208",
-    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "@asteasolutions/zod-to-openapi": "^9.0.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -247,6 +247,7 @@
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
+    "@typescript/native": "npm:typescript@^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
@@ -268,7 +269,7 @@
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
     "tsdown": "0.21.9",
-    "typescript": "^6.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0",
     "yaml": "^2.9.0"
@@ -296,7 +297,7 @@
     "@opencode-ai/sdk": "^1.14.33",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
-    "@slack/web-api": "^7.15.2",
+    "@slack/web-api": "^8.0.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.15.41",
     "@swc/core-darwin-arm64": "^1.15.41",
