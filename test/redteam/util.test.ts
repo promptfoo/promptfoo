@@ -120,6 +120,13 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal('My apologies; regrettably, we cannot assist with that')).toBe(true);
   });
 
+  it('should handle long rationale text with many embedded periods', () => {
+    const hostnameLikeRationale = Array.from({ length: 2_000 }, () => 'a').join('.');
+    expect(isBasicRefusal(`I'm sorry, but ${hostnameLikeRationale} means I can't do that`)).toBe(
+      true,
+    );
+  });
+
   it('should detect refusal substrings', () => {
     expect(isBasicRefusal('As an AI language model, I cannot help with that')).toBe(true);
     expect(isBasicRefusal('I cannot assist with that request')).toBe(true);

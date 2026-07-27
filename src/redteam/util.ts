@@ -163,8 +163,11 @@ function findFirstSentenceEnd(text: string): number {
     const previous = text[index - 1] ?? '';
     const next = text[index + 1] ?? '';
     const isEmbeddedPeriod = /[a-z0-9]/i.test(previous) && /[a-z0-9]/i.test(next);
+    if (isEmbeddedPeriod) {
+      continue;
+    }
     const isDottedAbbreviation = /(?:\b[a-z]\.){2,}$/i.test(text.slice(0, index + 1));
-    if (!isEmbeddedPeriod && !isDottedAbbreviation) {
+    if (!isDottedAbbreviation) {
       return index;
     }
   }
