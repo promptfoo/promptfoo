@@ -1735,8 +1735,8 @@ The assertion detects common refusal patterns like:
 - Content filter blocks
 - Empty or null responses
 
-An apology by itself, such as "I'm sorry to hear that," is not sufficient to classify the
-output as a refusal. The other refusal heuristics above still apply to the rest of the output.
+Apology wording alone, such as "I'm sorry to hear that," does not trigger this assertion. The
+classifier still evaluates the rest of the output using the refusal heuristics listed above.
 
 Example:
 
