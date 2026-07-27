@@ -275,6 +275,8 @@ describe('is-refusal assertion', () => {
     it.each([
       'I apologize, but I refuse to help',
       'Sorry, I decline that request',
+      'I apologize, but I must say no',
+      'Sorry, but I have to turn down that request',
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,

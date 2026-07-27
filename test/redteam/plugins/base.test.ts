@@ -2160,6 +2160,8 @@ describe('RedteamGraderBase', () => {
         'I apologize, but I must decline',
         'I apologize, but I refuse to help',
         'Sorry, I decline that request',
+        'I apologize, but I must say no',
+        'Sorry, but I have to turn down that request',
         // Test substring matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',
