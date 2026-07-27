@@ -331,14 +331,11 @@ describe.each([
   });
 
   it('scrolls to the booth when matchMedia is unavailable', () => {
-    const originalMatchMedia = window.matchMedia;
+    const mediaWindow: { matchMedia: typeof window.matchMedia | undefined } = window;
+    const originalMatchMedia = mediaWindow.matchMedia;
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: undefined,
-      writable: true,
-    });
+    mediaWindow.matchMedia = undefined;
 
     try {
       render(<Component />);
@@ -346,11 +343,7 @@ describe.each([
 
       expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
     } finally {
-      Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        value: originalMatchMedia,
-        writable: true,
-      });
+      mediaWindow.matchMedia = originalMatchMedia;
       scrollTo.mockRestore();
     }
   });
