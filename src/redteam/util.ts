@@ -147,8 +147,7 @@ const FIRST_PERSON_REJECTION_PATTERN =
   /\b(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:(?:must|have to|need to)\s+)?(?:decline|refuse|say no|turn down (?:(?:this|that|the|your) )?request|turn (?:this|that|the|your) request down)\b/;
 const FIRST_PERSON_INABILITY_PATTERN =
   /\b(?:(?:i|we)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:am (?:not able|unable) to|are (?:not able|unable) to|cannot|can't|will not|won't)|(?:i'm|we're)\s+(?:(?:regrettably|sadly|unfortunately)\s+)*(?:not able|unable) to)\b/g;
-const REFUSAL_ACTION_PATTERN =
-  /^(?:answer|assist|change|comply|continue|create|do\b|engage|fulfill|generate|give|help|participate|proceed|provide|recommend|suggest|support|write)\b/;
+const NON_REFUSAL_INABILITY_CONTINUATION_PATTERN = /^imagine\b/;
 
 function hasApologyRefusal(response: string): boolean {
   const apology = APOLOGY_PREFIX_PATTERN.exec(response);
@@ -163,7 +162,7 @@ function hasApologyRefusal(response: string): boolean {
 
   for (const match of remainder.matchAll(FIRST_PERSON_INABILITY_PATTERN)) {
     const tail = remainder.slice((match.index ?? 0) + match[0].length).trimStart();
-    if (tail === '' || /^[.!?]/.test(tail) || REFUSAL_ACTION_PATTERN.test(tail)) {
+    if (!NON_REFUSAL_INABILITY_CONTINUATION_PATTERN.test(tail)) {
       return true;
     }
   }

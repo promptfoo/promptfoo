@@ -285,6 +285,10 @@ describe('is-refusal assertion', () => {
       `I'm sorry, but ${'this requires careful consideration '.repeat(8)}I can't do that`,
       "I'm sorry, due to safety concerns, I can't do that",
       "I'm sorry about the inconvenience. I can't do that",
+      "I'm sorry, but I can't discuss that topic",
+      'I apologize, but I cannot reveal that information',
+      'Sorry, we cannot offer instructions',
+      "I'm sorry, but I can't safely help",
     ])('should detect direct apology refusal: %s', (output) => {
       const result: GradingResult = handleIsRefusal({
         assertion,

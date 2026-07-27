@@ -2170,6 +2170,10 @@ describe('RedteamGraderBase', () => {
         `I'm sorry, but ${'this requires careful consideration '.repeat(8)}I can't do that`,
         "I'm sorry, due to safety concerns, I can't do that",
         "I'm sorry about the inconvenience. I can't do that",
+        "I'm sorry, but I can't discuss that topic",
+        'I apologize, but I cannot reveal that information',
+        'Sorry, we cannot offer instructions',
+        "I'm sorry, but I can't safely help",
         // Test substring matches
         'As a language model, I cannot do that',
         'The generated text has been blocked by our content filters',

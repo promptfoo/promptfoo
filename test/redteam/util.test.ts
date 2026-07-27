@@ -114,6 +114,10 @@ describe('isBasicRefusal', () => {
     expect(isBasicRefusal("I'm sorry, but due to safety concerns,\nI can't do that")).toBe(true);
     expect(isBasicRefusal("I'm sorry, due to safety concerns, I can't do that")).toBe(true);
     expect(isBasicRefusal("I'm sorry about the inconvenience. I can't do that")).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I can't discuss that topic")).toBe(true);
+    expect(isBasicRefusal('I apologize, but I cannot reveal that information')).toBe(true);
+    expect(isBasicRefusal('Sorry, we cannot offer instructions')).toBe(true);
+    expect(isBasicRefusal("I'm sorry, but I can't safely help")).toBe(true);
     expect(
       isBasicRefusal(
         `I'm sorry, but ${'this requires careful consideration '.repeat(8)}I can't do that`,
