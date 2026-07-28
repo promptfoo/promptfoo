@@ -31,7 +31,8 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * @param minN - Minimum n-gram length to consider (default: 1)
  * @param maxN - Maximum n-gram length to consider (default: 4)
  * @returns GLEU score between 0 and 1, where higher scores indicate better matches
- * @throws When candidate or references are invalid
+ *   (0 for an empty or whitespace-only candidate)
+ * @throws When the candidate is null/undefined or references is empty
  */
 export function calculateGleuScore(
   candidate: string,
@@ -39,8 +40,13 @@ export function calculateGleuScore(
   minN: number = 1,
   maxN: number = 4,
 ): number {
-  if (!candidate || references.length === 0) {
+  if (candidate == null || references.length === 0) {
     throw new Error('Invalid inputs');
+  }
+  // An empty or whitespace-only candidate (a refusal/truncated generation) shares no
+  // n-grams with any reference; return 0 like bleu/rouge instead of throwing on ''.
+  if (candidate.trim() === '') {
+    return 0;
   }
 
   const candidateWords = candidate
