@@ -72,18 +72,24 @@ providers:
 
 ## OpenAI-compatible endpoints
 
-For OpenAI-compatible services, keep the `openai:chat` provider and set `apiBaseUrl` and `apiKeyEnvar`. For example, [Modelsell](https://modelsell.com/) can be configured without a dedicated provider:
+For OpenAI-compatible services, keep the `openai:chat` provider and set `apiBaseUrl` and an explicit `apiKey`. For example, [Modelsell](https://modelsell.com/) can be configured without a dedicated provider:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: 'openai:chat:{{env.MODELSELL_MODEL}}'
     config:
       apiBaseUrl: https://modelsell.com/v1
-      apiKeyEnvar: MODELSELL_API_KEY
+      apiKey: '{{ env.MODELSELL_API_KEY }}'
 ```
 
 Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
+
+:::warning
+
+Run Modelsell evals with `OPENAI_ORGANIZATION` unset. The generic OpenAI provider forwards this variable to custom endpoints, where it can disclose your OpenAI organization identifier.
+
+:::
 
 Requests sent by built-in OpenAI providers to the OpenAI API include the
 `X-OpenAI-Originator: promptfoo` header for source attribution. To route requests with a
