@@ -81,7 +81,7 @@ const ANNOUNCEMENT_BAR_TEXT = '#ffffff';
 const vegasAnnouncementBar = {
   id: VEGAS_ANNOUNCEMENT_BAR_ID,
   content:
-    '<strong>Meet Promptfoo at the OpenAI booths in Vegas:</strong> <a href="/events/blackhat-2026/">Black Hat booth 2967</a> &middot; <a href="/events/defcon-2026/">DEF CON 34 booth 1412</a>',
+    '<strong>Meet Promptfoo at the OpenAI booths:</strong> <a href="/events/blackhat-2026/">Black Hat #2967, Aug 4-6</a> &middot; <a href="/events/defcon-2026/">DEF CON 34 #1412, Aug 7-9</a>',
   backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
   textColor: ANNOUNCEMENT_BAR_TEXT,
   isCloseable: true,
