@@ -80,10 +80,10 @@ providers:
   - id: 'openai:chat:{{env.MODELSELL_MODEL}}'
     config:
       apiBaseUrl: https://modelsell.com/v1
-      apiKey: '{{ env.MODELSELL_API_KEY }}'
+      apiKey: "{{ env.MODELSELL_API_KEY | default('missing-modelsell-api-key', true) }}"
 ```
 
-Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
+The fallback value ensures a missing or blank Modelsell key fails authentication instead of causing the generic provider to reuse `OPENAI_API_KEY`. Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference/%E8%B4%A6%E6%88%B7%E7%AE%A1%E7%90%86/listModels) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
 
 :::warning
 
