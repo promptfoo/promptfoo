@@ -281,6 +281,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'unicode-normalization',
+    displayName: 'Unicode Normalization',
+    description: 'Canonical and compatibility forms',
+    longDescription:
+      'Tests handling of canonically or compatibility-equivalent Unicode sequences using NFC, NFD, NFKC, or NFKD normalization',
+    cost: 'Low',
+    asrIncrease: 'Varies',
+    link: '/docs/red-team/strategies/unicode-normalization/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'basic',
     displayName: 'Basic',
     description: 'Plugin-generated test cases',

@@ -640,6 +640,36 @@ describe('TestCaseGenerationProvider', () => {
       expect(generatedPromptComponent).toHaveTextContent('Generated test prompt #1');
     });
 
+    it('should stop loading and explain when a strategy produces no transformed test cases', async () => {
+      const user = userEvent.setup();
+      callApiMock.mockImplementation((path) => {
+        if (path === '/redteam/generate-test') {
+          return Promise.resolve(createJsonResponse({ testCases: [], count: 0 }));
+        }
+        throw new Error(`Unhandled callApi path: ${path}`);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin="harmful:hate" testStrategy="unicode-normalization" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+      expect(
+        screen.getByText(
+          'The selected strategy did not modify any generated test cases. Try a different plugin or strategy configuration.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId('chat-message-0')).not.toBeInTheDocument();
+    });
+
     it('should use cached test cases on regenerate without API call', async () => {
       const user = userEvent.setup();
       const testPlugin = 'harmful:hate';

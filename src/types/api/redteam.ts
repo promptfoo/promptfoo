@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
+import {
+  ALL_PLUGINS,
+  ALL_STRATEGIES,
+  findInvalidUnicodeNormalizationForms,
+} from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
@@ -12,32 +16,47 @@ import type { Plugin, Strategy } from '../../redteam/constants';
 
 // POST /api/redteam/generate-test
 
-export const TestCaseGenerationSchema = z.object({
-  plugin: z.object({
-    id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
-      message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
-    }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.catchall(z.unknown()).optional().prefault({}),
-  }),
-  strategy: z.object({
-    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
-      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().prefault({}),
-  }),
-  config: z.object({
-    applicationDefinition: z.object({
-      purpose: z.string().nullable().optional(),
+export const TestCaseGenerationSchema = z
+  .object({
+    plugin: z.object({
+      id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
+        message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
+      }) as unknown as z.ZodType<Plugin>,
+      config: PluginConfigSchema.catchall(z.unknown()).optional().prefault({}),
     }),
-  }),
-  turn: z.int().min(0).optional().prefault(0),
-  maxTurns: z.int().min(1).optional(),
-  history: z.array(ConversationMessageSchema).optional().prefault([]),
-  goal: z.string().optional(),
-  stateful: z.boolean().optional(),
-  // Batch generation: number of test cases to generate (1-10, default 1)
-  count: z.int().min(1).max(10).optional().prefault(1),
-});
+    strategy: z.object({
+      id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
+        message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
+      }) as unknown as z.ZodType<Strategy>,
+      config: StrategyConfigSchema.optional().prefault({}),
+    }),
+    config: z.object({
+      applicationDefinition: z.object({
+        purpose: z.string().nullable().optional(),
+      }),
+    }),
+    turn: z.int().min(0).optional().prefault(0),
+    maxTurns: z.int().min(1).optional(),
+    history: z.array(ConversationMessageSchema).optional().prefault([]),
+    goal: z.string().optional(),
+    stateful: z.boolean().optional(),
+    // Batch generation: number of test cases to generate (1-10, default 1)
+    count: z.int().min(1).max(10).optional().prefault(1),
+  })
+  .superRefine(({ strategy }, ctx) => {
+    const invalidForms = findInvalidUnicodeNormalizationForms(strategy.id, strategy.config, [
+      'strategy',
+      'config',
+    ]);
+
+    for (const invalidForm of invalidForms) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
+        path: invalidForm.path,
+      });
+    }
+  });
 
 export type TestCaseGeneration = z.infer<typeof TestCaseGenerationSchema>;
 

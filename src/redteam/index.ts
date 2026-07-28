@@ -17,12 +17,14 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
   DATASET_EXEMPT_PLUGINS,
+  DEFAULT_UNICODE_NORMALIZATION_FORM,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
+  isUnicodeNormalizationOnlyStrategy,
   MEDICAL_PLUGINS,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
@@ -712,6 +714,7 @@ async function applyStrategies(
     let resultTestCases = strategyTestCases.filter(
       (t): t is NonNullable<typeof t> => t !== null && t !== undefined,
     );
+    const strategyOutputWasEmpty = resultTestCases.length === 0;
 
     // Post-cap safety net for strategies that generate more outputs than inputs (1:N fan-out)
     if (typeof numTestsLimit === 'number' && Number.isFinite(numTestsLimit) && numTestsLimit > 0) {
@@ -773,12 +776,21 @@ async function applyStrategies(
     );
 
     // Compute a display id for reporting (helpful for layered strategies)
-    const displayId =
-      strategy.id === 'layer' && Array.isArray(strategy.config?.steps)
-        ? `layer(${(strategy.config!.steps as any[])
-            .map((st) => (typeof st === 'string' ? st : st.id))
-            .join('→')})`
-        : strategy.id;
+    let displayId = strategy.id;
+    if (strategy.id === 'layer' && Array.isArray(strategy.config?.steps)) {
+      displayId = `layer(${(strategy.config!.steps as any[])
+        .map((st) => (typeof st === 'string' ? st : st.id))
+        .join('→')})`;
+    } else if (strategy.id === 'unicode-normalization') {
+      displayId = `unicode-normalization (${String(
+        strategy.config?.form ?? DEFAULT_UNICODE_NORMALIZATION_FORM,
+      )})`;
+    }
+
+    const intentionalNoOp =
+      isUnicodeNormalizationOnlyStrategy(strategy.id, strategy.config) &&
+      testCasesToProcess.length > 0 &&
+      strategyOutputWasEmpty;
 
     // Check if strategy generated tests across multiple languages
     // Language can be in metadata.language or metadata.modifiers.language
@@ -829,7 +841,7 @@ async function applyStrategies(
     } else if (strategy.id === 'layer') {
       // Layer strategy: requested count is same as applicable test cases
       strategyResults[displayId] = {
-        requested: applyNumTestsCap(applicableTestCases.length),
+        requested: intentionalNoOp ? 0 : applyNumTestsCap(applicableTestCases.length),
         generated: resultTestCases.length,
       };
     } else {
@@ -842,7 +854,7 @@ async function applyStrategies(
       }
 
       strategyResults[displayId] = {
-        requested: applyNumTestsCap(applicableTestCases.length * n),
+        requested: intentionalNoOp ? 0 : applyNumTestsCap(applicableTestCases.length * n),
         generated: resultTestCases.length,
       };
     }

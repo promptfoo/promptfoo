@@ -36,6 +36,8 @@ const DEFAULT_PLUGIN = 'harmful:hate';
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
 const ERROR_MSG_DURATION = 7500; // 7.5s duration
+const NO_TRANSFORM_RESULTS_MESSAGE =
+  'The selected strategy did not modify any generated test cases. Try a different plugin or strategy configuration.';
 
 // Batch generation constants
 const BATCH_SIZE = 5; // Number of test cases to generate per batch
@@ -671,6 +673,11 @@ export const TestCaseGenerationProvider: React.FC<{
               setTestCaseBatch(batch);
               setBatchIndex(0);
               setGeneratedTestCases([batch[0]]);
+            } else if (batch) {
+              // An empty batch is a valid outcome for strategies that intentionally
+              // filter no-op transformations. Stop the loading state and explain it.
+              setIsGenerating(false);
+              toast.showToast(NO_TRANSFORM_RESULTS_MESSAGE, 'info', ERROR_MSG_DURATION);
             }
           })
           .catch((error) => {

@@ -40,6 +40,7 @@ describe('validateStrategies', () => {
       { id: 'camelcase' },
       { id: 'emoji' },
       { id: 'mischievous-user' },
+      { id: 'unicode-normalization', config: { form: 'NFD' } },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
   });
@@ -55,6 +56,40 @@ describe('validateStrategies', () => {
     ];
     await expect(validateStrategies(strategies)).rejects.toThrow(
       'Basic strategy enabled config must be a boolean',
+    );
+  });
+
+  it('should throw an error for an invalid Unicode normalization form', async () => {
+    const strategies: RedteamStrategyObject[] = [
+      { id: 'unicode-normalization', config: { form: 'nfkd' } },
+    ];
+
+    await expect(validateStrategies(strategies)).rejects.toThrow(
+      'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
+    );
+  });
+
+  it('should validate Unicode normalization forms nested in Layer steps', async () => {
+    const validStrategies: RedteamStrategyObject[] = [
+      {
+        id: 'layer',
+        config: {
+          steps: [{ id: 'unicode-normalization', config: { form: 'NFC' } }, 'rot13'],
+        },
+      },
+    ];
+    const invalidStrategies: RedteamStrategyObject[] = [
+      {
+        id: 'layer',
+        config: {
+          steps: [{ id: 'unicode-normalization', config: { form: 'nfkd' } }],
+        },
+      },
+    ];
+
+    await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
+    await expect(validateStrategies(invalidStrategies)).rejects.toThrow(
+      'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
     );
   });
 
@@ -161,6 +196,40 @@ describe('loadStrategy', () => {
       expect.stringContaining('Adding mischievous user test cases'),
     );
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Added'));
+  });
+
+  it('should apply Unicode normalization through the registered strategy', async () => {
+    const strategy = await loadStrategy('unicode-normalization');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { prompt: '\uff21dmin' }, metadata: { pluginId: 'test' } },
+    ];
+
+    const results = await strategy.action(testCases, 'prompt', { form: 'NFKC' });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      vars: { prompt: 'Admin' },
+      metadata: {
+        pluginId: 'test',
+        strategyId: 'unicode-normalization',
+        originalText: '\uff21dmin',
+        normalizationForm: 'NFKC',
+      },
+    });
+    expect(logger.debug).toHaveBeenCalledWith('Adding Unicode normalization to 1 test cases');
+    expect(logger.debug).toHaveBeenCalledWith('Added 1 Unicode-normalized test cases');
+  });
+
+  it('should skip unchanged Unicode normalization probes through the registered strategy', async () => {
+    const strategy = await loadStrategy('unicode-normalization');
+    const testCases: TestCaseWithPlugin[] = [
+      { vars: { prompt: 'plain ASCII' }, metadata: { pluginId: 'test' } },
+    ];
+
+    const results = await strategy.action(testCases, 'prompt', { form: 'NFKD' });
+
+    expect(results).toEqual([]);
+    expect(logger.debug).toHaveBeenCalledWith('Added 0 Unicode-normalized test cases');
   });
 
   it('should throw error for non-existent strategy', async () => {

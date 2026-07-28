@@ -327,6 +327,29 @@ describe('StrategyItem', () => {
       expect(screen.getByRole('button', { name: 'Configure Test Strategy' })).toBeInTheDocument();
     });
 
+    it('shows settings for Unicode normalization and opens its configuration', async () => {
+      const user = userEvent.setup();
+      const unicodeNormalizationStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'unicode-normalization',
+        name: 'Unicode Normalization',
+      };
+
+      renderStrategyItem({
+        isDisabled: false,
+        isRemoteGenerationDisabled: false,
+        strategy: unicodeNormalizationStrategy,
+        isSelected: true,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+
+      await user.click(screen.getByRole('button', { name: 'Configure Unicode Normalization' }));
+
+      expect(mockOnConfigClick).toHaveBeenCalledWith('unicode-normalization');
+      expect(mockOnToggle).not.toHaveBeenCalled();
+    });
+
     it('shows settings button for hydra when selected and enabled', () => {
       const hydraStrategy: StrategyCardData = {
         ...baseStrategy,

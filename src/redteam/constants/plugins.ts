@@ -445,6 +445,7 @@ export const CANARY_BREAKING_STRATEGY_IDS = [
   'base64',
   'hex',
   'homoglyph',
+  'unicode-normalization',
   'leetspeak',
   'rot13',
   'multilingual',

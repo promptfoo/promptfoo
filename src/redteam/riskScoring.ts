@@ -70,6 +70,7 @@ const STRATEGY_METADATA: Record<string, StrategyMetadata> = {
   'math-prompt': { humanExploitable: true, humanComplexity: 'medium' },
   citation: { humanExploitable: true, humanComplexity: 'medium' },
   homoglyph: { humanExploitable: true, humanComplexity: 'medium' },
+  'unicode-normalization': { humanExploitable: true, humanComplexity: 'low' },
   custom: { humanExploitable: true, humanComplexity: 'high' },
   'best-of-n': { humanExploitable: false, humanComplexity: 'high' },
   retry: { humanExploitable: true, humanComplexity: 'low' },

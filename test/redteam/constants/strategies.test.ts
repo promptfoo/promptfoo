@@ -6,6 +6,7 @@ import {
   getDefaultNFanout,
   isCustomStrategy,
   isFanoutStrategy,
+  isUnicodeNormalizationForm,
   STRATEGY_COLLECTIONS,
 } from '../../../src/redteam/constants/strategies';
 
@@ -38,5 +39,12 @@ describe('strategies constants', () => {
     expect(getDefaultNFanout('gcg')).toBeGreaterThanOrEqual(1);
 
     expect(isFanoutStrategy('base64')).toBe(false);
+  });
+
+  it('should identify supported Unicode normalization forms', () => {
+    expect(isUnicodeNormalizationForm('NFC')).toBe(true);
+    expect(isUnicodeNormalizationForm('NFKD')).toBe(true);
+    expect(isUnicodeNormalizationForm('nfkd')).toBe(false);
+    expect(isUnicodeNormalizationForm(undefined)).toBe(false);
   });
 });
