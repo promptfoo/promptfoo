@@ -70,6 +70,21 @@ providers:
 
 > **Note:** OpenAI models can also be accessed through [Azure OpenAI](/docs/providers/azure/), which offers additional enterprise features, compliance options, and regional availability.
 
+## OpenAI-compatible endpoints
+
+For OpenAI-compatible services, keep the `openai:chat` provider and set `apiBaseUrl` and `apiKeyEnvar`. For example, [Modelsell](https://modelsell.com/) can be configured without a dedicated provider:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: 'openai:chat:{{env.MODELSELL_MODEL}}'
+    config:
+      apiBaseUrl: https://modelsell.com/v1
+      apiKeyEnvar: MODELSELL_API_KEY
+```
+
+Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
+
 Requests sent by built-in OpenAI providers to the OpenAI API include the
 `X-OpenAI-Originator: promptfoo` header for source attribution. To route requests with a
 different originator value, override this header through the `headers` configuration option.
@@ -162,7 +177,10 @@ interface OpenAiConfig {
   function_call?: 'none' | 'auto' | { name: string };
   tools?: OpenAiTool[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
-  response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
+  response_format?: {
+    type: 'json_object' | 'json_schema';
+    json_schema?: object;
+  };
   stop?: string[];
   seed?: number;
   user?: string;
