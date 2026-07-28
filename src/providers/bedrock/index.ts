@@ -8,6 +8,7 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
+  isThinkingOnByDefaultClaudeModel,
   normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
@@ -97,14 +98,8 @@ export interface BedrockClaudeMessagesCompletionOptions extends BedrockOptions {
     type: 'any' | 'auto' | 'tool';
     name?: string;
   };
-  thinking?:
-    | {
-        type: 'enabled';
-        budget_tokens: number;
-        display?: 'summarized' | 'omitted';
-      }
-    | { type: 'adaptive'; display?: 'summarized' | 'omitted' }
-    | { type: 'disabled' };
+  /** Same shape the Anthropic Messages provider accepts; see normalizeClaudeThinkingConfig. */
+  thinking?: Anthropic.Messages.ThinkingConfigParam;
 }
 
 interface BedrockLlamaGenerationOptions extends BedrockOptions {
@@ -1605,12 +1600,24 @@ export const BEDROCK_MODEL = {
         undefined,
         'bedrock-2023-05-31',
       );
+      // Models that think by default (Opus 5) spend part of max_tokens on thinking even
+      // when the request carries no `thinking` field, so the bare 1024 default truncates
+      // ordinary answers. Give those the same headroom the Anthropic Messages path uses.
+      //
+      // Intentionally narrower than the shared claudeThinkingConsumesTokens(): that helper
+      // also returns true for an explicitly-enabled `thinking` block, which would raise this
+      // path's default from 1024 to 2048 for every Claude model, not just the thinks-by-
+      // default ones. That may well be the right default here too, but it is a behavior
+      // change for existing configs and belongs in its own change.
+      const thinksByDefault = modelName
+        ? isThinkingOnByDefaultClaudeModel(modelName) && config?.thinking?.type !== 'disabled'
+        : false;
       addConfigParam(
         params,
         'max_tokens',
         config?.max_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
-        1024,
+        thinksByDefault ? 2048 : 1024,
       );
       // Newer Claude models deprecate manual sampling controls at the model
       // level — Bedrock relays the resulting 400 as a ValidationException. Drop
@@ -1625,13 +1632,6 @@ export const BEDROCK_MODEL = {
       if (!samplingParamsDeprecated) {
         addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
       }
-      addConfigParam(
-        params,
-        'anthropic_version',
-        config?.anthropic_version,
-        undefined,
-        'bedrock-2023-05-31',
-      );
       addConfigParam(
         params,
         'tools',
@@ -1652,7 +1652,8 @@ export const BEDROCK_MODEL = {
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
       const thinking = modelName
-        ? normalizeClaudeThinkingConfig(modelName, config?.thinking)
+        ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
+          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
         : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {
@@ -2347,6 +2348,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2414,6 +2416,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2447,6 +2450,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2536,6 +2540,12 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // set as Opus 4.7, with no older `apac.` prefix).
   'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
+
+  // Claude Opus 5 global cross-region inference profile. Verified via
+  // `aws bedrock list-inference-profiles`: Opus 5 exposes base + `us.`/`eu.`/`global.`
+  // only — unlike Opus 4.7/4.8 there is no `jp.` profile (the JP regions surface just
+  // `global.`), and no older `apac.` prefix.
+  'global.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // Claude Fable 5 base, global, and geo inference profiles.
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
