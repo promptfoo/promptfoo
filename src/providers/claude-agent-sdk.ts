@@ -1489,8 +1489,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // session's stream before the main agent's terminal `result` arrives.
           // As of @anthropic-ai/claude-agent-sdk 0.2.126, result messages carry
           // `origin.kind`: the user-prompted main result is `human` and background
-          // sub-agent completions are `task-notification` followups. Prefer the
-          // last non-task-notification result, falling back to the last result
+          // sub-agent completions are `task-notification` followups. Scheduled
+          // prompts are also task notifications, but SDK >= 0.3.214 identifies
+          // them with `origin.subkind: 'scheduled-trigger'`. Prefer the last
+          // main-agent result, falling back to the last result
           // overall for older SDK servers that don't emit `origin` (in which case
           // the pre-0.2.126 position heuristic still applies — the main agent's
           // result is the last one in the stream). Otherwise we'd return the
@@ -1558,12 +1560,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
-              // SDK >= 0.2.126: prefer the user-prompted ("human") result and
-              // skip task-notification followups from background sub-agents.
-              // Treat absent origin (older SDKs) and any non-task-notification
-              // kind as a candidate for the main result; the position-based
-              // last-wins fallback below preserves prior behavior in that case.
-              if (msg.origin?.kind !== 'task-notification') {
+              // Scheduled triggers are main-agent prompts, not background-task
+              // completions, even though both use the task-notification kind.
+              const isScheduledTrigger =
+                msg.origin?.kind === 'task-notification' &&
+                'subkind' in msg.origin &&
+                msg.origin.subkind === 'scheduled-trigger';
+              // Treat absent origin (older SDKs), other origin kinds, and
+              // scheduled triggers as candidates for the main-agent result.
+              if (msg.origin?.kind !== 'task-notification' || isScheduledTrigger) {
                 lastMainResultMsg = msg;
               }
             }
