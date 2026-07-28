@@ -86,6 +86,7 @@ export async function addLayerTestCases(
         'promptfoo:redteam:crescendo',
         'promptfoo:redteam:custom',
         'promptfoo:redteam:iterative',
+        'promptfoo:redteam:iterative:meta',
         'promptfoo:redteam:iterative:tree',
       ].includes(providerId);
       const metricSuffix = getMetricSuffix(stepObj.id);

@@ -699,6 +699,14 @@ describe('addLayerTestCases', () => {
         mockLoadStrategy,
         runtimeContext,
       );
+      const meta = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:meta', 'audio'] },
+        mockStrategies,
+        mockLoadStrategy,
+        runtimeContext,
+      );
       const hydra = await addLayerTestCases(
         testCases,
         'input',
@@ -711,6 +719,7 @@ describe('addLayerTestCases', () => {
       expect((crescendo[0].provider as any)?.config?.redteamProvider).toBe(
         'anthropic:claude-sonnet-4',
       );
+      expect((meta[0].provider as any)?.config?.redteamProvider).toBe('anthropic:claude-sonnet-4');
       expect((hydra[0].provider as any)?.config).not.toHaveProperty('redteamProvider');
     });
 

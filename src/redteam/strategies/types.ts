@@ -44,7 +44,7 @@ export async function getStrategyGenerationProvider({
       ? runtimeContext.wrapGenerationProvider(provider)
       : provider;
 
-  if (!selection || selection.source === 'default') {
+  if (!selection || selection.source === 'default' || selection.source === 'cache') {
     if (preferMultilingualProvider) {
       const multilingualProvider = await redteamProviderManager.getMultilingualProvider();
       if (multilingualProvider) {
@@ -52,9 +52,10 @@ export async function getStrategyGenerationProvider({
       }
     }
 
-    const provider = selection
-      ? await redteamProviderManager.getDefaultProvider({ jsonOnly, preferSmallModel })
-      : await redteamProviderManager.getProvider({ jsonOnly, preferSmallModel });
+    const provider =
+      selection?.source === 'default'
+        ? await redteamProviderManager.getDefaultProvider({ jsonOnly, preferSmallModel })
+        : await redteamProviderManager.getProvider({ jsonOnly, preferSmallModel });
     return wrap(provider);
   }
 

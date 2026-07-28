@@ -188,6 +188,7 @@ describe('server OpenAPI generation', () => {
         type: 'object',
       }),
     );
+    expect(providerTestRequest.properties.providerOptions.properties.env).toBeUndefined();
   });
 
   it('matches preview provider input placement validation', () => {

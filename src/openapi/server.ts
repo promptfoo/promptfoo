@@ -43,7 +43,14 @@ const OpenApiCreateJobRequestSchema = z
   })
   .passthrough();
 
-const OpenApiProviderOptionsWithIdSchema = JsonProviderOptionsWithIdSchema;
+// Provider test routes still parse ProviderOptionsWithIdSchema at runtime. Keep
+// their OpenAPI shape intentionally loose instead of advertising preview-only
+// JSON env semantics that those routes do not preserve.
+const OpenApiProviderOptionsWithIdSchema = z
+  .object({
+    id: z.string().min(1),
+  })
+  .passthrough();
 
 const OpenApiTestProviderRequestSchema = z.object({
   prompt: z.string().optional(),

@@ -43,6 +43,9 @@ async function generateCitations(
       const payload = {
         task: 'citation',
         topic: testCase.vars[injectVar],
+        ...(typeof config.useAcademic === 'boolean' && { useAcademic: config.useAcademic }),
+        ...(typeof config.useJournals === 'boolean' && { useJournals: config.useJournals }),
+        ...(typeof config.useBooks === 'boolean' && { useBooks: config.useBooks }),
         ...remoteGenerationContextPayload(config.targetId),
       };
 

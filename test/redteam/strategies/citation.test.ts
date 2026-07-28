@@ -137,6 +137,36 @@ describe('citation strategy', () => {
     expect(body).not.toContain('secret');
   });
 
+  it('forwards supported citation options without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+    });
+    expect(body).not.toContain('secret');
+  });
+
   it('should throw error when remote generation is disabled', async () => {
     mockNeverGenerateRemote.mockReturnValue(true);
 

@@ -1,5 +1,60 @@
-import { describe, expect, it } from 'vitest';
-import { withPersistableGenerationProvider } from '../../../src/redteam/strategies/types';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import {
+  getStrategyGenerationProvider,
+  withPersistableGenerationProvider,
+} from '../../../src/redteam/strategies/types';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('getStrategyGenerationProvider', () => {
+  it('reuses cached provider variants instead of reloading their spec', async () => {
+    const cachedJsonProvider = { id: () => 'cached-json' } as any;
+    const getProvider = vi
+      .spyOn(redteamProviderManager, 'getProvider')
+      .mockResolvedValue(cachedJsonProvider);
+
+    const result = await getStrategyGenerationProvider({
+      runtimeContext: {
+        generationProviderSelection: {
+          provider: { id: () => 'cached-regular' } as any,
+          source: 'cache',
+          localProviderSpec: 'openai:chat:cached-provider',
+        },
+      },
+      jsonOnly: true,
+      preferSmallModel: true,
+    });
+
+    expect(result).toBe(cachedJsonProvider);
+    expect(getProvider).toHaveBeenCalledWith({ jsonOnly: true, preferSmallModel: true });
+  });
+
+  it('prefers the dedicated multilingual cache for cached selections', async () => {
+    const multilingualProvider = { id: () => 'cached-multilingual' } as any;
+    const getMultilingualProvider = vi
+      .spyOn(redteamProviderManager, 'getMultilingualProvider')
+      .mockResolvedValue(multilingualProvider);
+    const getProvider = vi.spyOn(redteamProviderManager, 'getProvider');
+
+    const result = await getStrategyGenerationProvider({
+      runtimeContext: {
+        generationProviderSelection: {
+          provider: { id: () => 'cached-regular' } as any,
+          source: 'cache',
+          localProviderSpec: 'openai:chat:cached-provider',
+        },
+      },
+      preferMultilingualProvider: true,
+    });
+
+    expect(result).toBe(multilingualProvider);
+    expect(getMultilingualProvider).toHaveBeenCalledTimes(1);
+    expect(getProvider).not.toHaveBeenCalled();
+  });
+});
 
 describe('withPersistableGenerationProvider', () => {
   it('persists a provider ID for generated attack-provider configs', () => {
