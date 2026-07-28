@@ -72,7 +72,8 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
 
 export const SERVER_OPENAPI_ROUTE_COUNT = 67;
 
-type OpenApiSchema = ZodMediaTypeObject['schema'];
+type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
+type OpenApiResponse = ResponseConfig & { description: string };
 type RouteRequest = NonNullable<RouteConfig['request']>;
 type RegisteredRouteConfig = RouteConfig & {
   operationId: string;
@@ -114,7 +115,7 @@ export function createServerOpenApiRegistry() {
     name: string,
     zodSchema: z.ZodType,
     description = 'Successful response',
-  ): ResponseConfig {
+  ): OpenApiResponse {
     return {
       description,
       content: {
@@ -125,7 +126,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function evalTableResponse(): ResponseConfig {
+  function evalTableResponse(): OpenApiResponse {
     return {
       description:
         'Evaluation table data. `format=json` returns an exported table object and `format=csv` returns CSV.',
@@ -142,7 +143,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function rawJsonResponse(description: string, openApiSchema: OpenApiSchema): ResponseConfig {
+  function rawJsonResponse(description: string, openApiSchema: OpenApiSchema): OpenApiResponse {
     return {
       description,
       content: {
@@ -153,7 +154,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function errorResponse(description: string): ResponseConfig {
+  function errorResponse(description: string): OpenApiResponse {
     return jsonResponse('ErrorResponse', ErrorResponseSchema, description);
   }
 
@@ -169,11 +170,11 @@ export function createServerOpenApiRegistry() {
     return errorResponse('Server error');
   }
 
-  function noContent(description = 'No content'): ResponseConfig {
+  function noContent(description = 'No content'): OpenApiResponse {
     return { description };
   }
 
-  function binaryResponse(description: string): ResponseConfig {
+  function binaryResponse(description: string): OpenApiResponse {
     return {
       description,
       content: {
@@ -187,7 +188,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function redirectResponse(description: string): ResponseConfig {
+  function redirectResponse(description: string): OpenApiResponse {
     return {
       description,
       headers: {
