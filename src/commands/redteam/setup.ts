@@ -42,7 +42,7 @@ export function redteamSetupCommand(program: Command) {
         if (isRunning) {
           await openBrowser(browserBehavior);
         } else {
-          await startServer(cmdObj.port, browserBehavior);
+          void (await startServer(cmdObj.port, browserBehavior));
         }
       },
     );

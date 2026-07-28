@@ -952,7 +952,7 @@ export async function doEval(
         cmdObj.tableCellMaxLength ?? commandLineOptions?.tableCellMaxLength,
       );
 
-      logger.info('\n' + outputTable.toString());
+      logger.info('\n' + outputTable);
       if (table.body.length > 25) {
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
@@ -1047,7 +1047,7 @@ export async function doEval(
 
         try {
           shareableUrl = await sharePromise;
-          if (shareableUrl) {
+          if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
             evalRecord.shared = true;
             spinner.succeed(shareableUrl);
           } else {
@@ -1061,7 +1061,7 @@ export async function doEval(
         // CI mode - just await and log result
         try {
           shareableUrl = await sharePromise;
-          if (shareableUrl) {
+          if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
             evalRecord.shared = true;
             logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
           }

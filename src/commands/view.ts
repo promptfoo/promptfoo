@@ -50,7 +50,7 @@ export function viewCommand(program: Command) {
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
 
-        await startServer(cmdObj.port, browserBehavior);
+        void (await startServer(cmdObj.port, browserBehavior));
       },
     );
 }

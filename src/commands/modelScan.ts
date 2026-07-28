@@ -750,7 +750,7 @@ async function processJsonResults(
 
       try {
         const shareableUrl = await sharePromise;
-        if (shareableUrl) {
+        if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
           spinner.succeed(shareableUrl);
         } else {
           spinner.fail(chalk.red('Share failed'));
@@ -763,7 +763,7 @@ async function processJsonResults(
       // CI mode - direct log
       try {
         const shareableUrl = await sharePromise;
-        if (shareableUrl) {
+        if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
           logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
         }
       } catch (error) {

@@ -1132,9 +1132,12 @@ describe('root test hygiene', () => {
         '}',
       ].join('\n'),
     ],
-  ])('allows module-scope persistent mocks when paired with reset or scoped per-test in %#', (source) => {
-    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
-  });
+  ])(
+    'allows module-scope persistent mocks when paired with reset or scoped per-test in %#',
+    (source) => {
+      expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
 
   it('treats vi.restoreAllMocks() as insufficient for module-scope vi.fn() defaults', () => {
     // vi.restoreAllMocks() is documented as targeting vi.spyOn mocks; relying

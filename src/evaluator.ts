@@ -3707,7 +3707,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       await this.store.appendPrompts(prompts);
     };
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
-      await this.processEvalStep(evalStep, index, { precomputedRows: rows }, processingContext);
+      void (await this.processEvalStep(
+        evalStep,
+        index,
+        { precomputedRows: rows },
+        processingContext,
+      ));
       processedIndices.add(index);
       await flushPromptMetrics();
     };
@@ -3828,7 +3833,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       checkAbort();
       logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
-      await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+      void (await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext));
       processedIndices.add(idx);
       const now = Date.now();
       if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
@@ -3860,7 +3865,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       async (evalStep) => {
         checkAbort();
         const idx = evalStepIndexMap.get(evalStep)!;
-        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+        void (await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext));
         processedIndices.add(idx);
         const now = Date.now();
         if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {

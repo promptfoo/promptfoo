@@ -392,7 +392,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       });
 
       logger.debug('Sending system prompt');
-      await this.sendSystemPrompt(sessionId, context?.test?.metadata?.systemPrompt || '');
+      void (await this.sendSystemPrompt(sessionId, context?.test?.metadata?.systemPrompt || ''));
 
       logger.debug('Processing conversation history');
       let promptText = prompt;

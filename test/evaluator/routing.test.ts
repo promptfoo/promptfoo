@@ -267,57 +267,55 @@ describeEvaluator('evaluator prompt and provider routing', () => {
       secondId: 'duplicate-provider',
       conversationId: 'shared-conversation',
     },
-  ])('isolates conversation histories for $description', async ({
-    firstId,
-    secondId,
-    label,
-    conversationId,
-  }) => {
-    const firstProvider = duplicateProvider(firstId, 'First provider output', label);
-    const secondProvider = duplicateProvider(secondId, 'Second provider output', label);
-    const metadata = conversationId ? { conversationId } : undefined;
+  ])(
+    'isolates conversation histories for $description',
+    async ({ firstId, secondId, label, conversationId }) => {
+      const firstProvider = duplicateProvider(firstId, 'First provider output', label);
+      const secondProvider = duplicateProvider(secondId, 'Second provider output', label);
+      const metadata = conversationId ? { conversationId } : undefined;
 
-    const testSuite: TestSuite = {
-      providers: [firstProvider, secondProvider],
-      prompts: [
-        toPrompt(
-          '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ input }}',
-        ),
-      ],
-      tests: [
-        { vars: { input: 'first' }, metadata },
-        { vars: { input: 'second' }, metadata },
-      ],
-    };
+      const testSuite: TestSuite = {
+        providers: [firstProvider, secondProvider],
+        prompts: [
+          toPrompt(
+            '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ input }}',
+          ),
+        ],
+        tests: [
+          { vars: { input: 'first' }, metadata },
+          { vars: { input: 'second' }, metadata },
+        ],
+      };
 
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
 
-    expect(firstProvider.callApi).toHaveBeenNthCalledWith(
-      1,
-      'now=first',
-      expect.anything(),
-      undefined,
-    );
-    expect(secondProvider.callApi).toHaveBeenNthCalledWith(
-      1,
-      'now=first',
-      expect.anything(),
-      undefined,
-    );
-    expect(firstProvider.callApi).toHaveBeenNthCalledWith(
-      2,
-      'prior=First provider output now=second',
-      expect.anything(),
-      undefined,
-    );
-    expect(secondProvider.callApi).toHaveBeenNthCalledWith(
-      2,
-      'prior=Second provider output now=second',
-      expect.anything(),
-      undefined,
-    );
-  });
+      expect(firstProvider.callApi).toHaveBeenNthCalledWith(
+        1,
+        'now=first',
+        expect.anything(),
+        undefined,
+      );
+      expect(secondProvider.callApi).toHaveBeenNthCalledWith(
+        1,
+        'now=first',
+        expect.anything(),
+        undefined,
+      );
+      expect(firstProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'prior=First provider output now=second',
+        expect.anything(),
+        undefined,
+      );
+      expect(secondProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'prior=Second provider output now=second',
+        expect.anything(),
+        undefined,
+      );
+    },
+  );
 
   it('isolates conversation histories for prompts that share a label', async () => {
     const provider = createMockProvider({

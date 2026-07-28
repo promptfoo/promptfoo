@@ -372,37 +372,40 @@ describe('CLI Smoke Tests', () => {
           });
         },
       ],
-    ])('1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug', async (_label, outputArgs, assertPayload) => {
-      const { stdout, stderr, exitCode } = await runEntrypointAsync(
-        [
-          'code-scans',
-          'run',
-          repoDir,
-          '--diffs-only',
-          '--api-host',
-          apiHost,
-          '--base',
-          'main',
-          '--compare',
-          'HEAD',
-          ...outputArgs,
-          '--verbose',
-        ],
-        {
-          env: {
-            LOG_LEVEL: 'debug',
-            NODE_NO_WARNINGS: '1',
-            PROMPTFOO_DISABLE_UPDATE: 'true',
+    ])(
+      '1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug',
+      async (_label, outputArgs, assertPayload) => {
+        const { stdout, stderr, exitCode } = await runEntrypointAsync(
+          [
+            'code-scans',
+            'run',
+            repoDir,
+            '--diffs-only',
+            '--api-host',
+            apiHost,
+            '--base',
+            'main',
+            '--compare',
+            'HEAD',
+            ...outputArgs,
+            '--verbose',
+          ],
+          {
+            env: {
+              LOG_LEVEL: 'debug',
+              NODE_NO_WARNINGS: '1',
+              PROMPTFOO_DISABLE_UPDATE: 'true',
+            },
           },
-        },
-      );
+        );
 
-      expect(exitCode).toBe(0);
-      expect(stderr).toBe('');
+        expect(exitCode).toBe(0);
+        expect(stderr).toBe('');
 
-      const payload = JSON.parse(stdout) as Record<string, unknown>;
-      assertPayload(payload);
-    });
+        const payload = JSON.parse(stdout) as Record<string, unknown>;
+        assertPayload(payload);
+      },
+    );
 
     it('1.8.2 - keeps structured config failures off stdout', async () => {
       const missingConfigPath = path.join(repoDir, 'definitely-missing-code-scan-config.yaml');

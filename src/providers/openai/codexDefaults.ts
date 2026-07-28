@@ -317,7 +317,7 @@ function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBu
     provider.callApi = async (...args) => {
       // If the bundle was shut down (or is mid-shutdown) but a holder still has a
       // reference, resurrect it so the call proceeds against re-registered providers.
-      if (providers.shutdownPromise) {
+      if (providers.shutdownPromise !== undefined) {
         await resurrectCodexDefaultProviderBundle(providers);
       }
       clearCodexDefaultProviderShutdownTimer(providers);

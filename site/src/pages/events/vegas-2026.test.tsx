@@ -131,27 +131,28 @@ describe('events data references resolve', () => {
   // A dead cardImage path renders a broken tile on /events/ and a 404 og:image on share —
   // EventCard only falls back to its placeholder when the field is absent, and the
   // Docusaurus build does not validate static asset paths.
-  it.each(
-    events.map((e) => [e.id, e] as const),
-  )('%s resolves its assets and page', (_id, event) => {
-    for (const key of ['cardImage', 'heroImage'] as const) {
-      const assetPath = event[key];
-      if (assetPath) {
+  it.each(events.map((e) => [e.id, e] as const))(
+    '%s resolves its assets and page',
+    (_id, event) => {
+      for (const key of ['cardImage', 'heroImage'] as const) {
+        const assetPath = event[key];
+        if (assetPath) {
+          expect(
+            fs.existsSync(path.join(SITE_ROOT, 'static', assetPath)),
+            `${event.id}.${key} points at ${assetPath}, which does not exist in site/static`,
+          ).toBe(true);
+        }
+      }
+
+      if (event.customPageUrl) {
+        const pagePath = path.join(SITE_ROOT, 'src/pages', `${event.customPageUrl}.tsx`);
         expect(
-          fs.existsSync(path.join(SITE_ROOT, 'static', assetPath)),
-          `${event.id}.${key} points at ${assetPath}, which does not exist in site/static`,
+          fs.existsSync(pagePath),
+          `${event.id}.customPageUrl points at ${event.customPageUrl}, which has no page component`,
         ).toBe(true);
       }
-    }
-
-    if (event.customPageUrl) {
-      const pagePath = path.join(SITE_ROOT, 'src/pages', `${event.customPageUrl}.tsx`);
-      expect(
-        fs.existsSync(pagePath),
-        `${event.id}.customPageUrl points at ${event.customPageUrl}, which has no page component`,
-      ).toBe(true);
-    }
-  });
+    },
+  );
 });
 
 describe.each([

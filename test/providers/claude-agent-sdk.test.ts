@@ -1241,53 +1241,53 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata).not.toHaveProperty('assistantErrors');
       });
 
-      it.each([
-        'model_not_found',
-        'overloaded',
-      ] as const)('annotates error result messages with the %s assistant error code', async (assistantError) => {
-        // The SDK formalized model_not_found in 0.3.144 and overloaded in
-        // 0.3.161. Both should be promoted from a dropped detail to the error
-        // string and metadata so consumers can distinguish the upstream cause
-        // from the generic terminal subtype.
-        mockQuery.mockReturnValue(
-          createMockQuery([
-            buildAssistantMessage(assistantError, {
-              uuid: '33333333-3333-3333-3333-333333333333',
-            }),
+      it.each(['model_not_found', 'overloaded'] as const)(
+        'annotates error result messages with the %s assistant error code',
+        async (assistantError) => {
+          // The SDK formalized model_not_found in 0.3.144 and overloaded in
+          // 0.3.161. Both should be promoted from a dropped detail to the error
+          // string and metadata so consumers can distinguish the upstream cause
+          // from the generic terminal subtype.
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              buildAssistantMessage(assistantError, {
+                uuid: '33333333-3333-3333-3333-333333333333',
+              }),
+              {
+                type: 'result',
+                subtype: 'error_during_execution',
+                session_id: 'error-session',
+                uuid: '87654321-4321-4321-4321-210987654321' as `${string}-${string}-${string}-${string}-${string}`,
+                usage: createMockUsage(10, 0),
+                total_cost_usd: 0,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: true,
+                num_turns: 1,
+                permission_denials: [],
+                modelUsage: {},
+                errors: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe(
+            `Claude Agent SDK call failed: error_during_execution (${assistantError})`,
+          );
+          expect(result.metadata?.assistantErrors).toEqual([
             {
-              type: 'result',
-              subtype: 'error_during_execution',
-              session_id: 'error-session',
-              uuid: '87654321-4321-4321-4321-210987654321' as `${string}-${string}-${string}-${string}-${string}`,
-              usage: createMockUsage(10, 0),
-              total_cost_usd: 0,
-              duration_ms: 500,
-              duration_api_ms: 400,
-              is_error: true,
-              num_turns: 1,
-              permission_denials: [],
-              modelUsage: {},
-              errors: [],
+              error: assistantError,
+              uuid: '33333333-3333-3333-3333-333333333333',
+              parentToolUseId: null,
             },
-          ]),
-        );
-
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        const result = await provider.callApi('Test prompt');
-
-        expect(result.error).toBe(
-          `Claude Agent SDK call failed: error_during_execution (${assistantError})`,
-        );
-        expect(result.metadata?.assistantErrors).toEqual([
-          {
-            error: assistantError,
-            uuid: '33333333-3333-3333-3333-333333333333',
-            parentToolUseId: null,
-          },
-        ]);
-      });
+          ]);
+        },
+      );
     });
 
     describe('checkProviderApiKeys pre-check', () => {
