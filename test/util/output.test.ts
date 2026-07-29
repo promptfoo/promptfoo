@@ -48,6 +48,103 @@ const JSONL_TEMP_DIRECTORY = '/tmp/promptfoo-jsonl-test';
 const JSONL_BACKUP_PATH = path.join(JSONL_TEMP_DIRECTORY, 'backup.jsonl');
 const JSONL_REPLACEMENT_PATH = path.join(JSONL_TEMP_DIRECTORY, 'replacement.jsonl');
 
+function createLegacyV2Summary() {
+  return {
+    version: 2,
+    timestamp: '2026-01-01T00:00:00.000Z',
+    results: [],
+    stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+    table: {
+      head: {
+        prompts: [
+          {
+            display: 'head-prompt-display-secret',
+            raw: 'head-prompt-secret {{safe}}',
+            label: 'head-prompt-label-secret',
+            provider: 'provider',
+            config: {
+              apiKey: 'head-prompt-api-key-secret',
+              temperature: 0.1,
+            },
+          },
+        ],
+        vars: ['apiKey', 'safe', 'config'],
+      },
+      body: [
+        {
+          description: '',
+          testIdx: 0,
+          vars: [
+            'row-api-key-secret',
+            'keep-row',
+            '{"apiKey":"nested-row-api-key-secret","safe":"keep-nested"}',
+          ],
+          test: {
+            vars: {
+              apiKey: 'test-api-key-secret',
+              safe: 'keep-me',
+              config: { apiKey: 'nested-row-api-key-secret', safe: 'keep-nested' },
+            },
+          },
+          outputs: [
+            {
+              id: 'o1',
+              pass: true,
+              failureReason: 0,
+              score: 1,
+              cost: 0,
+              latencyMs: 1,
+              namedScores: {},
+              text: 'response-text-secret',
+              prompt: 'rendered-prompt-secret',
+              provider: 'provider',
+              vars: {
+                apiKey: 'output-api-key-secret',
+                safe: 'keep-output',
+                config: { apiKey: 'nested-output-api-key-secret', safe: 'keep-nested-output' },
+              },
+              testCase: {
+                vars: {
+                  apiKey: 'test-api-key-secret',
+                  safe: 'keep-me',
+                  config: { apiKey: 'nested-row-api-key-secret', safe: 'keep-nested' },
+                },
+              },
+              response: {
+                audio: { data: 'response-audio-secret' },
+                images: [{ data: 'response-image-secret' }],
+                output: 'response-output-secret',
+                prompt: 'provider-prompt-secret',
+                video: { url: 'response-video-secret' },
+                metadata: {
+                  blobUris: ['promptfoo://blob/secret-media'],
+                  headers: {
+                    'x-request-id': 'legacy_should_not_persist',
+                    'x-safe-debug': 'keep-legacy',
+                  },
+                  http: {
+                    status: 200,
+                    statusText: 'OK',
+                    headers: { 'set-cookie': 'session=secret' },
+                    requestHeaders: {
+                      authorization: 'Bearer sk-should-not-persist',
+                      'api-key': 'azure-api-key-should-not-persist',
+                      'x-safe-debug': 'keep-me',
+                    },
+                  },
+                },
+              },
+              audio: { data: 'audio-output-secret' },
+              video: { url: 'video-output-secret' },
+              images: [{ data: 'image-output-secret' }],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
@@ -264,6 +361,365 @@ describe('writeOutput', () => {
     } finally {
       restoreEnv();
     }
+  });
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])('redacts credential headers and secret vars from non-persisted $extension output', async ({
+    extension,
+    parse,
+  }) => {
+    // A non-persisted eval (new Eval) holds raw in-memory rows; header redaction normally
+    // happens at the DB / JSONL boundary, so the file export must redact at its own boundary.
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'provider' },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      response: {
+        output: 'Test output',
+        metadata: {
+          headers: {
+            'x-request-id': 'legacy_should_not_persist',
+            'x-safe-debug': 'keep-legacy',
+          },
+          http: {
+            status: 200,
+            statusText: 'OK',
+            headers: {
+              'set-cookie': 'session=secret',
+              'x-request-id': 'req_should_not_persist',
+            },
+            requestHeaders: {
+              authorization: 'Bearer sk-should-not-persist',
+              'api-key': 'azure-api-key-should-not-persist',
+              'x-safe-debug': 'keep-me',
+            },
+          },
+        },
+      },
+      vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' } },
+      promptId: 'prompt',
+    });
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = parse(written);
+    const result = parsed.results.results[0];
+    expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+    expect(result.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+    expect(result.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+    expect(result.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+    expect(result.vars.apiKey).toBe('[REDACTED]');
+    expect(result.vars.safe).toBe('keep-me');
+    expect(written).not.toContain('session=secret');
+    expect(written).not.toContain('sk-should-not-persist');
+    expect(written).not.toContain('azure-api-key-should-not-persist');
+    expect(written).not.toContain('sk-var-should-not-persist');
+  });
+
+  it('honors prompt stripping across V3 summary prompt copies', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
+
+    try {
+      const eval_ = new Eval({});
+      await eval_.addPrompts([
+        {
+          id: 'a'.repeat(64),
+          display: 'summary-prompt-display-secret',
+          raw: 'summary-prompt-secret',
+          label: 'summary-prompt-label-secret',
+          provider: 'provider',
+          config: { apiKey: 'summary-prompt-api-key-secret', temperature: 0.1 },
+        },
+      ]);
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: { raw: 'summary-prompt-secret', label: 'summary-prompt-label-secret' },
+        response: { output: 'Test output' },
+        vars: {},
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        promptId: 'prompt',
+      });
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const summaryPrompt = JSON.parse(written).results.prompts[0];
+      expect(summaryPrompt.raw).toBe('[prompt stripped]');
+      expect(summaryPrompt.label).toBe('[prompt stripped]');
+      expect(summaryPrompt.display).toBe('[prompt stripped]');
+      expect(summaryPrompt.id).toBe('a'.repeat(64));
+      expect(summaryPrompt.config.apiKey).toBe('[REDACTED]');
+      expect(summaryPrompt.config.temperature).toBe(0.1);
+      expect(written).not.toContain('summary-prompt-secret');
+      expect(written).not.toContain('summary-prompt-label-secret');
+      expect(written).not.toContain('summary-prompt-display-secret');
+      expect(written).not.toContain('summary-prompt-api-key-secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('honors prompt and test-var stripping in the exported config', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({
+        prompts: [
+          'inline prompt secret',
+          {
+            id: 'prompt-id',
+            raw: 'raw prompt secret',
+            label: 'prompt label secret',
+          },
+        ],
+        tests: [
+          { vars: { customer: 'test-var secret' }, assert: [{ type: 'contains', value: 'ok' }] },
+        ],
+        defaultTest: { vars: { defaultCustomer: 'default-var secret' } },
+        scenarios: [
+          {
+            config: [{ vars: { scenarioDefault: 'scenario-config secret' } }],
+            tests: [{ vars: { scenarioCustomer: 'scenario-test secret' } }],
+          },
+        ],
+      });
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const config = JSON.parse(written).config;
+      expect(config.prompts).toEqual([
+        '[prompt stripped]',
+        {
+          id: 'prompt-id',
+          raw: '[prompt stripped]',
+          label: '[prompt stripped]',
+        },
+      ]);
+      expect(config.tests[0].vars).toBeUndefined();
+      expect(config.defaultTest.vars).toBeUndefined();
+      expect(config.scenarios[0].config[0].vars).toBeUndefined();
+      expect(config.scenarios[0].tests[0].vars).toBeUndefined();
+      expect(written).not.toContain('inline prompt secret');
+      expect(written).not.toContain('raw prompt secret');
+      expect(written).not.toContain('prompt label secret');
+      expect(written).not.toContain('test-var secret');
+      expect(written).not.toContain('default-var secret');
+      expect(written).not.toContain('scenario-config secret');
+      expect(written).not.toContain('scenario-test secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves malformed legacy summary rows instead of crashing export', async () => {
+    const eval_ = new Eval({});
+    const summary = await eval_.toEvaluateSummary();
+    (summary as { results: unknown[] }).results = [
+      null,
+      'legacy-row',
+      { success: true, response: {} },
+    ];
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(summary);
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(JSON.parse(written).results.results).toEqual([
+      null,
+      'legacy-row',
+      expect.objectContaining({ success: true }),
+    ]);
+  });
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])('projects a legacy V2 summary table on $extension export', async ({ extension, parse }) => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = parse(written);
+    const table = parsed.results.table;
+    const output = table.body[0].outputs[0];
+    expect(table.head.prompts[0].raw).toBe('head-prompt-secret {{safe}}');
+    expect(table.head.prompts[0].label).toBe('head-prompt-label-secret');
+    expect(table.head.prompts[0].config.apiKey).toBe('[REDACTED]');
+    expect(table.head.prompts[0].config.temperature).toBe(0.1);
+    expect(table.body[0].vars).toEqual([
+      '[REDACTED]',
+      'keep-row',
+      '{"apiKey":"[REDACTED]","safe":"keep-nested"}',
+    ]);
+    expect(output.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+    expect(output.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+    expect(output.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+    expect(output.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+    expect(output.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+    expect(output.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+    expect(output.vars.apiKey).toBe('[REDACTED]');
+    expect(output.vars.safe).toBe('keep-output');
+    expect(output.vars.config.apiKey).toBe('[REDACTED]');
+    expect(output.vars.config.safe).toBe('keep-nested-output');
+    expect(output.testCase.vars.apiKey).toBe('[REDACTED]');
+    expect(output.testCase.vars.safe).toBe('keep-me');
+    expect(table.body[0].test.vars.apiKey).toBe('[REDACTED]');
+    expect(output.prompt).toBe('rendered-prompt-secret');
+    expect(output.text).toBe('response-text-secret');
+    expect(output.audio.data).toBe('audio-output-secret');
+    expect(output.video.url).toBe('video-output-secret');
+    expect(output.images[0].data).toBe('image-output-secret');
+    expect(written).not.toContain('session=secret');
+    expect(written).not.toContain('sk-should-not-persist');
+    expect(written).not.toContain('azure-api-key-should-not-persist');
+    expect(written).not.toContain('head-prompt-api-key-secret');
+    expect(written).not.toContain('row-api-key-secret');
+    expect(written).not.toContain('nested-row-api-key-secret');
+    expect(written).not.toContain('output-api-key-secret');
+    expect(written).not.toContain('nested-output-api-key-secret');
+    expect(written).not.toContain('test-api-key-secret');
+  });
+
+  it('honors strip flags across legacy V2 table copies', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({});
+      const v2Summary = createLegacyV2Summary();
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+
+      await writeOutput('output.json', eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const table = JSON.parse(written).results.table;
+      const output = table.body[0].outputs[0];
+      expect(table.head.prompts[0].raw).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].label).toBe('[prompt stripped]');
+      expect(table.head.prompts[0].display).toBe('[prompt stripped]');
+      expect(table.body[0].vars).toEqual(['', '', '']);
+      expect(table.body[0].test.vars).toBeUndefined();
+      expect(output.vars).toEqual({});
+      expect(output.testCase.vars).toBeUndefined();
+      expect(output.prompt).toBe('[prompt stripped]');
+      expect(output.text).toBe('[output stripped]');
+      expect(output.response.output).toBe('[output stripped]');
+      expect(output.response.prompt).toBe('[prompt stripped]');
+      expect(output.response.audio).toBeUndefined();
+      expect(output.response.images).toBeUndefined();
+      expect(output.response.video).toBeUndefined();
+      expect(output.response.metadata.blobUris).toBeUndefined();
+      expect(output.audio).toBeUndefined();
+      expect(output.video).toBeUndefined();
+      expect(output.images).toBeUndefined();
+      expect(written).not.toContain('head-prompt-secret');
+      expect(written).not.toContain('head-prompt-label-secret');
+      expect(written).not.toContain('head-prompt-display-secret');
+      expect(written).not.toContain('rendered-prompt-secret');
+      expect(written).not.toContain('response-text-secret');
+      expect(written).not.toContain('response-output-secret');
+      expect(written).not.toContain('provider-prompt-secret');
+      expect(written).not.toContain('response-audio-secret');
+      expect(written).not.toContain('response-image-secret');
+      expect(written).not.toContain('response-video-secret');
+      expect(written).not.toContain('promptfoo://blob/secret-media');
+      expect(written).not.toContain('audio-output-secret');
+      expect(written).not.toContain('video-output-secret');
+      expect(written).not.toContain('image-output-secret');
+      expect(written).not.toContain('keep-row');
+      expect(written).not.toContain('keep-output');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('preserves nullish and sparse legacy V2 table output cells', async () => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    const output = v2Summary.table.body[0].outputs[0];
+    const sparseOutputs: any[] = new Array(3);
+    sparseOutputs[0] = null;
+    sparseOutputs[2] = output;
+    v2Summary.table.body[0].outputs = sparseOutputs;
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const outputs = JSON.parse(written).results.table.body[0].outputs;
+    expect(outputs).toHaveLength(3);
+    expect(outputs[0]).toBeNull();
+    expect(outputs[1]).toBeNull();
+    expect(outputs[2].response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+  });
+
+  it.each([
+    { name: 'missing head', head: undefined },
+    { name: 'missing prompts', head: { vars: [] } },
+    { name: 'malformed prompts', head: { prompts: 'invalid', vars: [] } },
+  ])('tolerates a legacy V2 table with $name', async ({ head }) => {
+    const eval_ = new Eval({});
+    const v2Summary = createLegacyV2Summary();
+    (v2Summary.table as any).head = head;
+    vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+      v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+    );
+
+    await writeOutput('output.json', eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const table = JSON.parse(written).results.table;
+    expect(table.body[0].outputs[0].response.metadata.http.headers['set-cookie']).toBe(
+      '[REDACTED]',
+    );
   });
 
   it.each([
@@ -1584,6 +2040,44 @@ describe('writeOutput', () => {
     expect(html).toContain('Variables');
     expect(html).toContain('data-report-search');
     expect(html).toContain('No rows match the current search and status filters.');
+  });
+
+  it('writeOutput with HTML projects legacy table data and tolerates nullish cells', async () => {
+    const realFs = await vi.importActual<typeof import('fs')>('fs');
+    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
+    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
+    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({ description: 'Legacy HTML projection' });
+      const v2Summary = createLegacyV2Summary();
+      const output = v2Summary.table.body[0].outputs[0];
+      v2Summary.table.body[0].outputs = [null, output] as any[];
+      vi.spyOn(eval_, 'getTable').mockResolvedValue(
+        v2Summary.table as unknown as Awaited<ReturnType<typeof eval_.getTable>>,
+      );
+      vi.spyOn(eval_, 'toEvaluateSummary').mockResolvedValue(
+        v2Summary as unknown as Awaited<ReturnType<typeof eval_.toEvaluateSummary>>,
+      );
+
+      await writeOutput('output.html', eval_, null);
+
+      const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(html).toContain('[prompt stripped]');
+      expect(html).toContain('[output stripped]');
+      expect(html).toContain('Result detail - row 1, prompt 2');
+      expect(html).not.toContain('rendered-prompt-secret');
+      expect(html).not.toContain('response-text-secret');
+      expect(html).not.toContain('row-api-key-secret');
+      expect(html).not.toContain('keep-row');
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('writeOutput with HTML classifies non-error failures as failures', async () => {

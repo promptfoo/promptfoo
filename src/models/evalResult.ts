@@ -12,6 +12,8 @@ import {
   type ApiProvider,
   type AtomicTestCase,
   type EvaluateResult,
+  type EvaluateTable,
+  type EvaluateTableOutput,
   type GradingResult,
   isResultFailureReason,
   type Prompt,
@@ -40,34 +42,60 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
 
 function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean },
+  options: { stripMetadata: boolean; stripOutput: boolean; stripPrompt: boolean },
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput) {
+  if (!options.stripMetadata && !options.stripOutput && !options.stripPrompt) {
     return response;
   }
 
-  const projectedResponse = options.stripMetadata
+  const projectedResponse: ProviderResponse = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
+    delete projectedResponse.audio;
+    delete projectedResponse.images;
+    delete projectedResponse.video;
+    if (projectedResponse.metadata) {
+      const { blobUris: _blobUris, ...metadata } = projectedResponse.metadata;
+      projectedResponse.metadata = metadata;
+    }
+  }
+
+  if (options.stripPrompt) {
+    projectedResponse.prompt = '[prompt stripped]';
   }
 
   return projectedResponse;
 }
 
-function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
-  return stripPromptText
-    ? {
-        ...prompt,
-        raw: '[prompt stripped]',
-      }
-    : prompt;
+function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
+  return (
+    stripPromptText
+      ? {
+          ...prompt,
+          ...('display' in prompt ? { display: '[prompt stripped]' } : {}),
+          label: '[prompt stripped]',
+          raw: '[prompt stripped]',
+        }
+      : prompt
+  ) as T;
+}
+
+export function sanitizePromptForArtifact<T extends Prompt>(
+  prompt: T,
+  stripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
+): T {
+  const sanitized = sanitizeForDbWithSecrets(prompt);
+  if ('id' in prompt) {
+    sanitized.id = prompt.id;
+  }
+  return projectPrompt(sanitized, stripPromptText);
 }
 
 function projectTestCase(
@@ -567,6 +595,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
+    stripPrompt: shouldStripPromptText,
   });
 
   return {
@@ -589,10 +618,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }),
     ...(artifactResult.prompt
       ? {
-          prompt: projectPrompt(
-            sanitizeForDbWithSecrets(artifactResult.prompt as Prompt),
-            shouldStripPromptText,
-          ),
+          prompt: sanitizePromptForArtifact(artifactResult.prompt as Prompt, shouldStripPromptText),
         }
       : {}),
     ...(artifactResult.provider
@@ -607,6 +633,133 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata ? {} : redacted.metadata,
   } as T;
+}
+
+/**
+ * Sanitize the denormalized visualization `table` carried by a legacy (V2) summary or rendered
+ * into an HTML artifact. The table mirrors result data across its head prompts, row display vars,
+ * and output cells, so every copy must honor the same credential redaction and
+ * `PROMPTFOO_STRIP_*` projections as `summary.results`. Non-mutating: returns a projected copy,
+ * leaving in-memory rows real for hooks.
+ */
+export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
+  if (!table || !Array.isArray(table.body)) {
+    return table;
+  }
+
+  const artifactTable = table as unknown as Omit<EvaluateTable, 'head'> & {
+    head?: Partial<EvaluateTable['head']>;
+  };
+  const tableHead =
+    typeof artifactTable.head === 'object' && artifactTable.head !== null
+      ? artifactTable.head
+      : undefined;
+  const headPrompts = Array.isArray(tableHead?.prompts) ? tableHead.prompts : undefined;
+  const headVars = Array.isArray(tableHead?.vars) ? tableHead.vars : [];
+
+  const {
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+    shouldStripTestVars,
+  } = getStripFlags();
+
+  const sanitizeTestCase = (testCase: AtomicTestCase | undefined) =>
+    testCase
+      ? projectTestCase(sanitizeForDbWithSecrets(testCase), {
+          stripMetadata: shouldStripMetadata,
+          stripVars: shouldStripTestVars,
+        })
+      : testCase;
+
+  const stringifyDisplayVar = (value: unknown): string =>
+    typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
+
+  const sanitizeDisplayVars = (vars: string[], testCase: AtomicTestCase | undefined): string[] => {
+    if (shouldStripTestVars) {
+      return vars.map(() => '');
+    }
+    return vars.map((value, index) => {
+      const varName = headVars[index];
+      if (varName === undefined) {
+        return sanitizeForDbWithSecrets(value);
+      }
+      const rawValue = testCase?.vars?.[varName];
+      if (rawValue !== undefined) {
+        const sanitizedRawValue = sanitizeForDbWithSecrets({ [varName]: rawValue })[varName];
+        if (!isDeepStrictEqual(rawValue, sanitizedRawValue)) {
+          return stringifyDisplayVar(sanitizedRawValue);
+        }
+      }
+      return sanitizeForDbWithSecrets({ [varName]: value })[varName];
+    });
+  };
+
+  const sanitizeOutput = (
+    output: EvaluateTableOutput | null | undefined,
+  ): EvaluateTableOutput | null | undefined => {
+    if (output == null) {
+      return output;
+    }
+
+    const artifactOutput = output as EvaluateTableOutput & Record<string, unknown>;
+    const projectedOutput = { ...artifactOutput };
+    if (shouldStripResponseOutput) {
+      delete projectedOutput.audio;
+      delete projectedOutput.images;
+      delete projectedOutput.video;
+    }
+    const redacted = redactSensitiveResultFieldsForDb({
+      response: sanitizeForDb(output.response),
+      gradingResult: sanitizeForDb(output.gradingResult),
+      metadata: sanitizeForDb(output.metadata),
+    });
+    return {
+      ...projectedOutput,
+      ...(artifactOutput.vars === undefined
+        ? {}
+        : {
+            vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactOutput.vars),
+          }),
+      prompt: shouldStripPromptText ? '[prompt stripped]' : output.prompt,
+      text: shouldStripResponseOutput ? '[output stripped]' : output.text,
+      response: projectProviderResponse(redacted.response ?? undefined, {
+        stripMetadata: shouldStripMetadata,
+        stripOutput: shouldStripResponseOutput,
+        stripPrompt: shouldStripPromptText,
+      }),
+      gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+      metadata: shouldStripMetadata ? {} : redacted.metadata,
+      testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
+    } as EvaluateTableOutput;
+  };
+
+  return {
+    ...artifactTable,
+    ...(tableHead
+      ? {
+          head: {
+            ...tableHead,
+            ...(headPrompts
+              ? {
+                  prompts: headPrompts.map((prompt) =>
+                    sanitizePromptForArtifact(prompt, shouldStripPromptText),
+                  ),
+                }
+              : {}),
+          },
+        }
+      : {}),
+    body: table.body.map((row) => ({
+      ...row,
+      vars: Array.isArray(row.vars) ? sanitizeDisplayVars(row.vars, row.test) : row.vars,
+      test: sanitizeTestCase(row.test) as AtomicTestCase,
+      outputs: Array.isArray(row.outputs)
+        ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
+        : row.outputs,
+    })),
+  } as EvaluateTable;
 }
 
 export default class EvalResult {
@@ -975,6 +1128,7 @@ export default class EvalResult {
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
+      stripPrompt: shouldStripPromptText,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
