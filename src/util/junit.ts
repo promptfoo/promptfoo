@@ -81,7 +81,7 @@ function getSuiteKey(result: JunitProjectedResult): string {
   // Distinguish providers that share an id but differ by label (and vice versa)
   // so multi-target redteam runs do not collapse into a single suite.
   const providerKey = `${result.provider.id ?? ''}${SUITE_PROVIDER_SEPARATOR}${result.provider.label ?? ''}`;
-  const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+  const promptKey = `prompt-index:${result.promptIdx}`;
   return `${providerKey}${SUITE_KEY_SEPARATOR}${promptKey}`;
 }
 
@@ -209,7 +209,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     let suite = suites.get(key);
     if (!suite) {
       const providerName = getProviderName(result);
-      const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+      const promptKey = `prompt-index:${result.promptIdx}`;
       let promptOrdinals = promptOrdinalsByProvider.get(providerName);
       if (!promptOrdinals) {
         promptOrdinals = new Map();
