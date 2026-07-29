@@ -5,7 +5,8 @@ import type { ParsedRateLimitHeaders } from '../../src/scheduler/headerParser';
 
 describe('SlotQueue', () => {
   // Scoped unhandledRejection handler - saves and restores original listeners
-  // Note: Vitest may still report these as "unhandled errors" but they won't fail tests
+  // Vitest may still report these as unhandled errors. Strict handling fails
+  // the overall run even when every assertion passes.
   let originalListeners: NodeJS.UnhandledRejectionListener[];
 
   beforeAll(() => {
