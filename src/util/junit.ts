@@ -199,9 +199,8 @@ async function* iterateJunitProjectedResults(
 
 async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const suites = new Map<string, JunitSuite>();
-  // Assign each unique provider+prompt combination a stable 1-based ordinal so
-  // the suite display name (and every contained testcase classname) match
-  // regardless of which result happened to insert the suite first.
+  // Assign each result column a 1-based ordinal within its provider display name so
+  // the suite display name and every contained testcase classname stay consistent.
   const promptOrdinalsByProvider = new Map<string, Map<string, number>>();
 
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
