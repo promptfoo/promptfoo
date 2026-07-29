@@ -940,7 +940,7 @@ describe('writeOutput', () => {
     ]);
   });
 
-  it('separates JUnit suites when result columns share provider and prompt identity', async () => {
+  it('separates JUnit suites in column order when result columns share identity', async () => {
     const baseResult = (promptIdx: number, success: boolean): EvaluateResult => ({
       success,
       failureReason: success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
@@ -959,7 +959,7 @@ describe('writeOutput', () => {
     const eval_ = {
       createdAt: '2026-05-03T15:00:00.000Z',
       fetchResultsBatched: vi.fn(),
-      getResults: vi.fn().mockResolvedValue([baseResult(0, true), baseResult(1, false)]),
+      getResults: vi.fn().mockResolvedValue([baseResult(1, false), baseResult(0, true)]),
       persisted: false,
       results: [],
       useOldResults: () => true,
