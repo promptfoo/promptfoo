@@ -115,10 +115,5 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
   const parsedReference = parseExecutableFileReference(urlWithoutProtocol);
-  return {
-    filePath: normalizeFilePath(parsedReference.filePath),
-    ...(parsedReference.functionName !== undefined && {
-      functionName: parsedReference.functionName,
-    }),
-  };
+  return { ...parsedReference, filePath: normalizeFilePath(parsedReference.filePath) };
 }

@@ -163,13 +163,13 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  if (expected.startsWith('python:') || isPythonFileReference(expected)) {
-    const functionBody = expected.startsWith('python:')
-      ? expected.slice('python:'.length).trim()
-      : expected;
+  const hasPythonPrefix = expected.startsWith('python:');
+  if (hasPythonPrefix || isPythonFileReference(expected)) {
+    // The prefixed form carries an inline function body; the unprefixed form is a
+    // `file://` reference that the assertion layer resolves later.
     return {
       type: 'python',
-      value: functionBody,
+      value: hasPythonPrefix ? expected.slice('python:'.length).trim() : expected,
     };
   }
 
