@@ -20,6 +20,14 @@ function readPackageJson<T>(relativePath: string): T {
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.3';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
+const SWC_PACKAGE_NAMES = [
+  '@swc/core',
+  '@swc/core-darwin-arm64',
+  '@swc/core-darwin-x64',
+  '@swc/core-linux-x64-gnu',
+  '@swc/core-linux-x64-musl',
+  '@swc/core-win32-x64-msvc',
+] as const;
 const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
@@ -192,6 +200,42 @@ describe('package manifests', () => {
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('5.6.0'),
     ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps native SWC packages optional and aligned across root and docs manifests', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+
+    for (const dependencyName of SWC_PACKAGE_NAMES) {
+      const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
+
+      expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
+      expect(minVersion(optionalRange!)?.compare('1.15.46')).toBeGreaterThanOrEqual(0);
+      expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
+      expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+      expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+      expect(
+        minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
+          '1.15.46',
+        ),
+      ).toBeGreaterThanOrEqual(0);
+    }
+
+    expect(sitePackageJson.devDependencies?.['@swc/core']).toBe(
+      rootPackageJson.optionalDependencies?.['@swc/core'],
+    );
+    expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
+      sitePackageJson.devDependencies?.['@swc/core'],
+    );
   });
 
   it('keeps jsdom out of root runtime dependencies', () => {
