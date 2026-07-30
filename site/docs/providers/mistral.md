@@ -542,7 +542,7 @@ export MISTRAL_API_HOST="api.mistral.ai"
 providers:
   - id: mistral:mistral-medium-3-5
     config:
-      max_tokens: 8000 # Leave room for 128k input context
+      max_tokens: 8000 # Leave room for 256k input context
       temperature: 0.7
 ```
 

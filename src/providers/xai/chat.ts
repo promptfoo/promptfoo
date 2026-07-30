@@ -676,8 +676,14 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       return result;
     }
 
-    const passthrough = result.config.passthrough as { max_tokens?: number } | undefined;
-    const maxTokens = passthrough?.max_tokens ?? result.config.max_tokens;
+    const passthrough = result.config.passthrough as
+      | { max_tokens?: number; max_completion_tokens?: number }
+      | undefined;
+    const maxTokens =
+      passthrough?.max_tokens ??
+      result.config.max_tokens ??
+      passthrough?.max_completion_tokens ??
+      result.config.max_completion_tokens;
     if (GROK_BUILD_CHAT_MODELS.has(this.modelName) && maxTokens !== undefined) {
       result.body.max_tokens = maxTokens;
       delete result.body.max_completion_tokens;

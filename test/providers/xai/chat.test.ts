@@ -503,8 +503,13 @@ describe('xAI Chat Provider', () => {
       'grok-code-fast-1',
       'grok-code-fast',
       'grok-code-fast-1-0825',
-    ])('preserves max_tokens for Grok Build chat requests using %s', async (modelName) => {
-      for (const config of [{ max_tokens: 321 }, { passthrough: { max_tokens: 321 } }]) {
+    ])('uses max_tokens for Grok Build chat requests using %s', async (modelName) => {
+      for (const config of [
+        { max_tokens: 321 },
+        { passthrough: { max_tokens: 321 } },
+        { max_completion_tokens: 321 },
+        { passthrough: { max_completion_tokens: 321 } },
+      ]) {
         const provider = createXAIProvider(`xai:${modelName}`) as any;
         const result = await provider.getOpenAiBody('test prompt', {
           prompt: {
