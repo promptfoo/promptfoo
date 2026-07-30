@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Function calling with Llama 4 for mathematical problem solving
+description: Function calling with GPT OSS for mathematical problem solving
 prompts:
   - file://tool_prompts.txt
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
@@ -19,6 +19,7 @@ providers:
                   type: 'string'
                   description: 'The mathematical expression to evaluate'
               required: ['expression']
+              additionalProperties: false
             strict: true
 tests:
   - vars:

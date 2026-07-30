@@ -1,9 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Schema-enforced JSON recipe generation with Llama 4
+description: Schema-enforced JSON recipe generation with GPT OSS
 prompts:
   - file://structured_prompts.txt
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
@@ -30,6 +30,7 @@ providers:
                     name: { 'type': 'string' }
                     amount: { 'type': 'string' }
                   required: ['name', 'amount']
+                  additionalProperties: false
               instructions:
                 type: 'array'
                 items: { 'type': 'string' }

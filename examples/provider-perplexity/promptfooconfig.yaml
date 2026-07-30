@@ -14,7 +14,6 @@ providers:
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
       return_related_questions: true
-      usage_tier: 'low'
       web_search_options:
         search_context_size: 'medium'
 
@@ -24,17 +23,17 @@ providers:
       max_tokens: 2000
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
-      usage_tier: 'medium'
       web_search_options:
         search_context_size: 'high'
 
-  - id: perplexity:sonar-reasoning
+  - id: perplexity:sonar-reasoning-pro
     config:
       temperature: 0.3
       max_tokens: 2500
       search_domain_filter: ['nature.com', 'science.org', 'newscientist.com']
       search_recency_filter: 'month'
-      usage_tier: 'high'
+      web_search_options:
+        search_context_size: 'high'
 
 tests:
   - vars:

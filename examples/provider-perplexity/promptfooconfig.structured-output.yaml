@@ -10,7 +10,6 @@ providers:
     config:
       temperature: 0.1
       max_tokens: 1000
-      usage_tier: 'medium' # For cost calculation
       response_format:
         type: 'json_schema'
         json_schema:
@@ -29,7 +28,6 @@ providers:
     config:
       temperature: 0.1
       max_tokens: 150
-      usage_tier: 'low' # For cost calculation
       response_format:
         type: 'regex'
         regex:

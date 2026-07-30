@@ -39,11 +39,11 @@ This example includes multiple configuration files to demonstrate different Perp
 
 ### 1. Basic Model Comparison (`promptfooconfig.yaml`)
 
-Compares different Perplexity search models against a traditional non-search model (GPT-4o-mini):
+Compares different Perplexity search models against a traditional non-search model (GPT-5 mini):
 
 - `sonar`: Lightweight search model
 - `sonar-pro`: Advanced search model with high context
-- `sonar-reasoning`: Fast reasoning model with step-by-step thinking
+- `sonar-reasoning-pro`: Advanced reasoning with step-by-step thinking
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml
@@ -78,7 +78,6 @@ Demonstrates specialized models for research and reasoning:
 
 - `sonar-deep-research`: Comprehensive research model
 - `sonar-reasoning-pro`: Advanced reasoning with Chain of Thought
-- `r1-1776`: Offline model without search capabilities
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.research-reasoning.yaml
