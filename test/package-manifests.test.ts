@@ -194,6 +194,28 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the OpenAPI generator manifest and lockfile on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = '@asteasolutions/zod-to-openapi';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+
+    expect(developmentRange).toBeDefined();
+    expect(minVersion(developmentRange!)?.compare('9.1.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.1.0'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
