@@ -109,6 +109,22 @@ describe('handleIsJson', () => {
       ),
     ).toThrow('is-json assertion must have a string or object value');
   });
+
+  it.each([
+    ['false', false],
+    ['0', 0],
+    ['null', null],
+  ])('rejects the unsupported schema value %s instead of skipping validation', (_label, value) => {
+    expect(() =>
+      handleIsJson(
+        makeParams({
+          assertion: { type: 'is-json' },
+          renderedValue: value as unknown as AssertionValue,
+          outputString: '{"a": 1}',
+        }),
+      ),
+    ).toThrow('is-json assertion must have a string or object value');
+  });
 });
 
 describe('handleContainsJson', () => {
@@ -179,6 +195,22 @@ describe('handleContainsJson', () => {
           assertion: { type: 'contains-json' },
           renderedValue: 42 as unknown as AssertionValue,
           outputString: '{"a": 1}',
+        }),
+      ),
+    ).toThrow('contains-json assertion must have a string or object value');
+  });
+
+  it.each([
+    ['false', false],
+    ['0', 0],
+    ['null', null],
+  ])('rejects the unsupported schema value %s instead of skipping validation', (_label, value) => {
+    expect(() =>
+      handleContainsJson(
+        makeParams({
+          assertion: { type: 'contains-json' },
+          renderedValue: value as unknown as AssertionValue,
+          outputString: 'result: {"a": 1}',
         }),
       ),
     ).toThrow('contains-json assertion must have a string or object value');

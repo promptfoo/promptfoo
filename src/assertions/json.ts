@@ -21,7 +21,7 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (parsedJson !== undefined && renderedValue) {
+  if (parsedJson !== undefined && renderedValue !== undefined) {
     let validate: ValidateFunction;
     if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
@@ -33,7 +33,7 @@ export function handleIsJson({
         const scheme = loadYaml(renderedValue) as object;
         validate = getAjv().compile(scheme);
       }
-    } else if (typeof renderedValue === 'object') {
+    } else if (renderedValue !== null && typeof renderedValue === 'object') {
       validate = getAjv().compile(renderedValue);
     } else {
       throw new Error('is-json assertion must have a string or object value');
@@ -73,7 +73,7 @@ export function handleContainsJson({
   const jsonObjects = extractJsonObjects(outputString);
   let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
   for (const jsonObject of jsonObjects) {
-    if (renderedValue) {
+    if (renderedValue !== undefined) {
       let validate: ValidateFunction;
       if (typeof renderedValue === 'string') {
         if (renderedValue.startsWith('file://')) {
@@ -85,7 +85,7 @@ export function handleContainsJson({
           const scheme = loadYaml(renderedValue) as object;
           validate = getAjv().compile(scheme);
         }
-      } else if (typeof renderedValue === 'object') {
+      } else if (renderedValue !== null && typeof renderedValue === 'object') {
         validate = getAjv().compile(renderedValue);
       } else {
         throw new Error('contains-json assertion must have a string or object value');
