@@ -109,6 +109,28 @@ describe('matchesCitationFaithfulness', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it('fails a no-citation answer cleanly even when the grader cannot be resolved', async () => {
+    // The deterministic no-[N] guard must run before grading-provider resolution:
+    // a locally-classifiable answer should fail cleanly rather than surface a
+    // provider/config error when the configured grader cannot be loaded.
+    const providers = await import('../../src/matchers/providers');
+    const spy = vi
+      .spyOn(providers, 'getAndCheckProvider')
+      .mockRejectedValue(new Error('grader unavailable'));
+
+    const result = await matchesCitationFaithfulness(
+      query,
+      'The Eiffel Tower is tall and old.', // no [N] markers
+      context,
+      1,
+      { provider: 'bogus:unloadable-grader' },
+    );
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('no [N] citation markers');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('tags a malformed grader response as graderError without echoing raw output', async () => {
     const secret = 'SENSITIVE PASSAGE TEXT';
     const mockCallApi = vi.fn().mockResolvedValue({

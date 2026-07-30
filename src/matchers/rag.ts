@@ -477,21 +477,23 @@ export async function matchesCitationFaithfulness(
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  const tokensUsed = normalizeMatcherTokenUsage(undefined);
+
+  // Deterministic precheck: an answer with no [N] citation markers has nothing to
+  // attribute, so it cannot be citation-faithful. Fail it directly rather than
+  // letting the grader pass it vacuously (and save an API call). Run this before
+  // resolving the grading provider so a locally-classifiable answer fails cleanly
+  // even when no grader is configured, instead of throwing a provider/config error.
+  if (!/\[\d+\]/.test(output)) {
+    return fail('Answer contains no [N] citation markers to evaluate.', tokensUsed);
+  }
+
   const textProvider = await getAndCheckProvider(
     'text',
     grading?.provider,
     (await getDefaultProviders()).gradingProvider,
     'citation-faithfulness check',
   );
-
-  const tokensUsed = normalizeMatcherTokenUsage(undefined);
-
-  // Deterministic precheck: an answer with no [N] citation markers has nothing to
-  // attribute, so it cannot be citation-faithful. Fail it directly rather than
-  // letting the grader pass it vacuously (and save an API call).
-  if (!/\[\d+\]/.test(output)) {
-    return fail('Answer contains no [N] citation markers to evaluate.', tokensUsed);
-  }
 
   if (grading?.rubricPrompt) {
     invariant(
