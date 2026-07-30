@@ -123,6 +123,37 @@ describe('handleIsJson', () => {
   });
 
   it.each([
+    0,
+    null,
+  ])('rejects unsupported schema value %j even when the output is not JSON', (renderedValue) => {
+    expect(() =>
+      handleIsJson(
+        makeParams({
+          assertion: { type: 'is-json' },
+          renderedValue: renderedValue as unknown as AssertionValue,
+          inverse: true,
+          outputString: 'not json at all',
+        }),
+      ),
+    ).toThrow('is-json assertion must have a string, object, or boolean value');
+  });
+
+  it.each([
+    ['empty string', ''],
+    ['whitespace only', '   '],
+    ['comment only', '# no schema yet'],
+  ])('treats a %s schema document as no schema', (_label, value) => {
+    const result = handleIsJson(
+      makeParams({
+        assertion: { type: 'is-json', value },
+        renderedValue: value as AssertionValue,
+        outputString: '{"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([
     { schema: true, expectedPass: true },
     { schema: false, expectedPass: false },
   ])('evaluates boolean schema $schema', ({ schema, expectedPass }) => {
@@ -220,6 +251,37 @@ describe('handleContainsJson', () => {
         }),
       ),
     ).toThrow('contains-json assertion must have a string, object, or boolean value');
+  });
+
+  it.each([
+    0,
+    null,
+  ])('rejects unsupported schema value %j even when no JSON is extracted', (renderedValue) => {
+    expect(() =>
+      handleContainsJson(
+        makeParams({
+          assertion: { type: 'contains-json' },
+          renderedValue: renderedValue as unknown as AssertionValue,
+          inverse: true,
+          outputString: 'no json here at all',
+        }),
+      ),
+    ).toThrow('contains-json assertion must have a string, object, or boolean value');
+  });
+
+  it.each([
+    ['empty string', ''],
+    ['whitespace only', '   '],
+    ['comment only', '# no schema yet'],
+  ])('treats a %s schema document as no schema', (_label, value) => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json', value },
+        renderedValue: value as AssertionValue,
+        outputString: 'result: {"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(true);
   });
 
   it.each([
