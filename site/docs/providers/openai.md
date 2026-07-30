@@ -240,7 +240,7 @@ Fine-tuned model IDs can be used with their corresponding endpoint, for example
 `openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name::ID` or
 `openai:completion:ft:babbage-002:company-name::ID`. Promptfoo recognizes the published
 inference rates for fine-tuned GPT-4.1, GPT-4o, GPT-3.5, GPT-4, o4-mini, Babbage, and Davinci
-bases, including cached-input and Batch rates where available. Flex and Priority pricing is not
+bases, including cached-input and Batch rates where available. Flex and Fast pricing is not
 inferred for fine-tuned models. See the
 [OpenAI supervised fine-tuning guide](https://developers.openai.com/api/docs/guides/supervised-fine-tuning)
 for currently supported training bases and lifecycle information.
@@ -569,12 +569,12 @@ the explicit `openai:chat:` or `openai:responses:` prefix when endpoint selectio
 | Model           | Tier                    | Input      | Cached input | Output      |
 | --------------- | ----------------------- | ---------- | ------------ | ----------- |
 | `gpt-5.6-sol`   | Flagship                | $5.00 / 1M | $0.50 / 1M   | $30.00 / 1M |
-| `gpt-5.6-terra` | Balanced                | $2.50 / 1M | $0.25 / 1M   | $15.00 / 1M |
-| `gpt-5.6-luna`  | Fast and cost-efficient | $1.00 / 1M | $0.10 / 1M   | $6.00 / 1M  |
+| `gpt-5.6-terra` | Balanced                | $2.00 / 1M | $0.20 / 1M   | $12.00 / 1M |
+| `gpt-5.6-luna`  | Fast and cost-efficient | $0.20 / 1M | $0.02 / 1M   | $1.20 / 1M  |
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
-Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
+Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Fast mode does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -618,7 +618,7 @@ GPT-5.5 is a high-capability GPT-5 family model for professional work and agenti
 - **Reasoning effort**: `gpt-5.5` supports `none`, `low`, `medium`, `high`, and `xhigh`. In Chat Completions, set `reasoning_effort`; in Responses API, set `reasoning.effort`.
 - **Endpoint support**: `gpt-5.5` supports Chat Completions and Responses API. `gpt-5.5-pro` is Responses API only and supports Batch API.
 - **Cached input**: `gpt-5.5` cached input tokens are $0.50 per 1M. `gpt-5.5-pro` has no cached-input discount.
-- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and infers Batch, Flex, or Priority rates when the API response or configured `service_tier` identifies that tier.
+- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and infers Batch, Flex, or Fast rates when the API response or configured `service_tier` identifies that tier. OpenAI also accepts the legacy `priority` value as an alias for Fast mode.
 - **Long-running requests**: `gpt-5.5-pro` automatically receives the same 10-minute timeout as other GPT-5 pro models.
 
 #### Usage Examples
@@ -2197,8 +2197,8 @@ The Responses API supports a wide range of models, including:
 
 - `gpt-5.6` - Alias for GPT-5.6 Sol ($5/$30 per 1M tokens)
 - `gpt-5.6-sol` - GPT-5.6 flagship model ($5/$30 per 1M tokens)
-- `gpt-5.6-terra` - GPT-5.6 balanced model ($2.50/$15 per 1M tokens)
-- `gpt-5.6-luna` - GPT-5.6 efficient model ($1/$6 per 1M tokens)
+- `gpt-5.6-terra` - GPT-5.6 balanced model ($2/$12 per 1M tokens)
+- `gpt-5.6-luna` - GPT-5.6 efficient model ($0.20/$1.20 per 1M tokens)
 - `gpt-5.5` - GPT-5.5 model ($5/$30 per 1M tokens)
 - `gpt-5.5-2026-04-23` - Dated snapshot of gpt-5.5
 - `gpt-5.5-pro` - Premium GPT-5.5 model ($30/$180 per 1M tokens)

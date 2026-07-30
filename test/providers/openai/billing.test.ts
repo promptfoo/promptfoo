@@ -153,7 +153,7 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
-  it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex and Priority unset', () => {
+  it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex and Fast unset', () => {
     const model = 'ft:gpt-4.1-mini-2025-04-14:company::model';
     const usage = {
       prompt_tokens: 2_000,
@@ -257,8 +257,8 @@ describe('OpenAI billing helpers', () => {
   it.each([
     ['gpt-5.6', 5, 0.5, 30],
     ['gpt-5.6-sol', 5, 0.5, 30],
-    ['gpt-5.6-terra', 2.5, 0.25, 15],
-    ['gpt-5.6-luna', 1, 0.1, 6],
+    ['gpt-5.6-terra', 2, 0.2, 12],
+    ['gpt-5.6-luna', 0.2, 0.02, 1.2],
   ])('prices %s cached input at the published 90%% discount', (model, inputRate, cachedRate, outputRate) => {
     const usage = {
       prompt_tokens: 2_000,
@@ -275,8 +275,8 @@ describe('OpenAI billing helpers', () => {
   it.each([
     ['gpt-5.6', 5, 30],
     ['gpt-5.6-sol', 5, 30],
-    ['gpt-5.6-terra', 2.5, 15],
-    ['gpt-5.6-luna', 1, 6],
+    ['gpt-5.6-terra', 2, 12],
+    ['gpt-5.6-luna', 0.2, 1.2],
   ])('prices %s image input tokens at the text input rate', (model, inputRate, outputRate) => {
     expect(
       calculateOpenAIUsageCost(
@@ -369,7 +369,7 @@ describe('OpenAI billing helpers', () => {
           cache_write_input_tokens: 0,
         },
       ),
-    ).toBeCloseTo((2_000 * 2.5 + 1_000 * 15) / 1e6, 10);
+    ).toBeCloseTo((2_000 * 2 + 1_000 * 12) / 1e6, 10);
   });
 
   it.each([
@@ -487,7 +487,7 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_250 * 5 + 500 * 0.5 + 250 * 6.25 + 1_000 * 30) / 1e6, 10);
   });
 
-  it('uses GPT-5.6 Flex long-context rates and rejects unsupported Priority long context', () => {
+  it('uses GPT-5.6 Flex long-context rates and rejects unsupported Fast long context', () => {
     const usage = {
       input_tokens: 300_000,
       output_tokens: 1_000,
@@ -495,35 +495,40 @@ describe('OpenAI billing helpers', () => {
     };
 
     expect(calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage)).toBeCloseTo(
-      (150_000 * 5 + 100_000 * 0.5 + 50_000 * 6.25 + 1_000 * 22.5) / 1e6,
+      (150_000 * 4 + 100_000 * 0.4 + 50_000 * 5 + 1_000 * 18) / 1e6,
       10,
     );
     expect(
       calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'flex' }),
-    ).toBeCloseTo((150_000 * 2.5 + 100_000 * 0.25 + 50_000 * 3.125 + 1_000 * 11.25) / 1e6, 10);
-    expect(
-      calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'priority' }),
-    ).toBeUndefined();
+    ).toBeCloseTo((150_000 * 2 + 100_000 * 0.2 + 50_000 * 2.5 + 1_000 * 9) / 1e6, 10);
+    for (const serviceTier of ['fast', 'priority']) {
+      expect(calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier })).toBeUndefined();
+    }
   });
 
-  it('uses GPT-5.6 Priority rates through the 272K input limit', () => {
+  it.each([
+    ['gpt-5.6-terra', 4, 0.4, 5, 24],
+    ['gpt-5.6-luna', 0.4, 0.04, 0.5, 2.4],
+  ])('uses GPT-5.6 Fast rates for %s through the 272K input limit', (model, inputRate, cachedRate, cacheWriteRate, outputRate) => {
     const usage = {
       input_tokens: 272_000,
       output_tokens: 1_000,
       input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
     };
 
-    expect(
-      calculateOpenAIUsageCost('gpt-5.6-terra', {}, usage, { serviceTier: 'priority' }),
-    ).toBeCloseTo((122_000 * 5 + 100_000 * 0.5 + 50_000 * 6.25 + 1_000 * 30) / 1e6, 10);
-    expect(
-      calculateOpenAIUsageCost(
-        'gpt-5.6-terra',
-        {},
-        { ...usage, input_tokens: 272_001 },
-        { serviceTier: 'priority' },
-      ),
-    ).toBeUndefined();
+    for (const serviceTier of ['fast', 'priority']) {
+      expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier })).toBeCloseTo(
+        (122_000 * inputRate +
+          100_000 * cachedRate +
+          50_000 * cacheWriteRate +
+          1_000 * outputRate) /
+          1e6,
+        10,
+      );
+      expect(
+        calculateOpenAIUsageCost(model, {}, { ...usage, input_tokens: 272_001 }, { serviceTier }),
+      ).toBeUndefined();
+    }
   });
 
   it('prices chat-latest cached input at the published discount', () => {
@@ -540,7 +545,7 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 10);
   });
 
-  it('uses returned service tiers when pricing flex and priority work', () => {
+  it('uses returned service tiers when pricing flex and fast work', () => {
     const usage = {
       input_tokens: 1_000,
       output_tokens: 100,
@@ -554,6 +559,10 @@ describe('OpenAI billing helpers', () => {
     expect(
       calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'priority' }),
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
+    expect(calculateOpenAIUsageCost('gpt-5-mini', {}, usage, { serviceTier: 'fast' })).toBeCloseTo(
+      (600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6,
+      10,
+    );
   });
 
   it('uses current long-context flex rates for supported pro models', () => {
