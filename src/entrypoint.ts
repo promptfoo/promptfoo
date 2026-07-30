@@ -40,8 +40,6 @@ const nodeEngineComparatorSets =
   typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
     ? fallbackNodeEngineComparatorSets
     : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
-const deprecatedNodeMajorVersions = new Set([20]);
-
 function parseNodeEngineVersion(
   version: string,
   options: ParseNodeEngineVersionOptions = {},
@@ -118,15 +116,6 @@ function isSupportedNodeEngineVersion(currentVersion: string): boolean | null {
   );
 }
 
-function shouldWarnForDeprecatedNodeVersion(currentVersion: string): boolean {
-  const parsedCurrentVersion = parseNodeEngineVersion(currentVersion);
-  return (
-    parsedCurrentVersion !== null &&
-    isSupportedNodeEngineVersion(currentVersion) === true &&
-    deprecatedNodeMajorVersions.has(parsedCurrentVersion[0])
-  );
-}
-
 function formatUnsupportedNodeVersionMessage(currentVersion: string): string {
   return [
     '\x1b[33mpromptfoo requires a supported Node.js runtime.',
@@ -147,17 +136,6 @@ function formatMalformedNodeVersionMessage(currentVersion: string): string {
   ].join('\n');
 }
 
-function formatDeprecatedNodeVersionMessage(currentVersion: string): string {
-  return [
-    '\x1b[33mWarning: Node.js 20 has reached end-of-life and is deprecated in promptfoo.',
-    '',
-    `Detected: ${currentVersion}`,
-    'Recommended: Node.js >=22.22.0 (Node.js 24 LTS preferred)',
-    '',
-    'Upgrade your Node.js runtime to avoid disruption in a future promptfoo release.\x1b[0m',
-  ].join('\n');
-}
-
 // Skip version check for alternative runtimes (Bun, Deno) - they support modern JS features
 const isBun = typeof (globalThis as Record<string, unknown>).Bun !== 'undefined';
 const isDeno = typeof (globalThis as Record<string, unknown>).Deno !== 'undefined';
@@ -171,9 +149,6 @@ if (!isBun && !isDeno) {
   if (!isSupportedVersion) {
     console.error(formatUnsupportedNodeVersionMessage(process.version));
     process.exit(1);
-  }
-  if (shouldWarnForDeprecatedNodeVersion(process.version)) {
-    console.warn(formatDeprecatedNodeVersionMessage(process.version));
   }
 }
 

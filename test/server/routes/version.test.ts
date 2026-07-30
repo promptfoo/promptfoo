@@ -1,6 +1,11 @@
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
 import { describe, expect, it } from 'vitest';
+import {
+  getRuntimeNoticeForVersionResponse,
+  getRuntimePolicyForVersionResponse,
+  isUpdateAvailableForRuntime,
+} from '../../../src/server/routes/versionUtils';
 
 /**
  * These tests verify the logic used in src/server/routes/version.ts
@@ -117,5 +122,41 @@ describe('isUpdateAvailable', () => {
       expect(isUpdateAvailable('abc', 'def')).toBe(true); // Different strings
       expect(isUpdateAvailable('abc', 'abc')).toBe(false); // Same strings
     });
+  });
+});
+
+describe('getRuntimeNoticeForVersionResponse', () => {
+  it('should omit runtime notices when runtime warnings are disabled', () => {
+    expect(getRuntimeNoticeForVersionResponse('v20.20.2', true)).toBeNull();
+  });
+
+  it('should return applicable runtime notices when warnings are enabled', () => {
+    expect(getRuntimeNoticeForVersionResponse('v20.20.2', false)).toMatchObject({
+      currentMajor: 20,
+      id: 'node20-removal-2026-07-30',
+    });
+  });
+});
+
+describe('getRuntimePolicyForVersionResponse', () => {
+  it('should retain cutoff metadata when runtime warnings are disabled', () => {
+    expect(getRuntimePolicyForVersionResponse('v20.20.2')).toEqual({
+      supportEndDate: '2026-07-30',
+    });
+  });
+
+  it('should omit cutoff metadata for unaffected runtimes', () => {
+    expect(getRuntimePolicyForVersionResponse('v22.22.0')).toBeNull();
+  });
+});
+
+describe('isUpdateAvailableForRuntime', () => {
+  it('should hide runtime-blocked updates from legacy clients', () => {
+    expect(isUpdateAvailableForRuntime(true, true)).toBe(false);
+  });
+
+  it('should preserve compatible updates such as Docker image pulls', () => {
+    expect(isUpdateAvailableForRuntime(true, false)).toBe(true);
+    expect(isUpdateAvailableForRuntime(false, false)).toBe(false);
   });
 });

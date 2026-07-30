@@ -3,7 +3,7 @@
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is triggered by the release-please workflow,
 # published human-created releases, workflow dispatch, pull requests to main that
-# modify the Dockerfile, and pushes to main.
+# modify the Docker/runtime update contract, and matching pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
 run-name: |
@@ -35,12 +35,30 @@ on:
     branches:
       - main
     paths:
+      - '.github/workflows/docker.yml'
       - 'Dockerfile'
+      - 'src/envars.ts'
+      - 'src/globalConfig/runtimeNoticeState.ts'
+      - 'src/runtimeCompatibility*.ts'
+      - 'src/server/routes/version*.ts'
+      - 'src/types/api/version.ts'
+      - 'src/types/runtimeCompatibility.ts'
+      - 'src/updates.ts'
+      - 'src/updates/**'
   push:
     branches:
       - main
     paths:
+      - '.github/workflows/docker.yml'
       - 'Dockerfile'
+      - 'src/envars.ts'
+      - 'src/globalConfig/runtimeNoticeState.ts'
+      - 'src/runtimeCompatibility*.ts'
+      - 'src/server/routes/version*.ts'
+      - 'src/types/api/version.ts'
+      - 'src/types/runtimeCompatibility.ts'
+      - 'src/updates.ts'
+      - 'src/updates/**'
 
 concurrency:
   # Reusable workflow calls inherit the caller's github.workflow value. Keep this
@@ -91,9 +109,10 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - name: Resolve source commit
@@ -106,43 +125,63 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
 
-      - name: Build Docker image for testing
+      - name: Build official Docker image for testing
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
           context: .
           push: false
           load: true
-          tags: local-test-image:latest
+          tags: local-test-image:official
           platforms: linux/amd64
           build-args: |
             BUILD_VERSION=${{ env.BUILD_VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
+            PROMPTFOO_OFFICIAL_DOCKER_IMAGE=1
 
-      - name: Run Docker container for testing
-        run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
+      - name: Build custom Docker image for contract testing
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
+        with:
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
+          context: .
+          push: false
+          load: true
+          tags: local-test-image:custom
+          platforms: linux/amd64
+          build-args: |
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            GIT_SHA=${{ steps.source.outputs.sha }}
+            PROMPTFOO_OFFICIAL_DOCKER_IMAGE=0
+
+      - name: Run Docker containers for testing
+        run: |
+          docker run -d --name promptfoo-container -p 3000:3000 local-test-image:official
+          docker run -d --name promptfoo-custom-container -p 3001:3000 local-test-image:custom
 
       - name: Run health check
         run: |
-          # Wait for server to be fully ready (including database migrations)
-          # before running any CLI commands that also trigger migrations
-          for ((retry=1; retry<=10; retry++)); do
-            if curl -f http://localhost:3000/health; then
-              echo -e "\nHealth check passed"
-              HEALTH_CHECK_PASS=true
-              break
-            else
-              echo "Health check failed, retrying in 2 seconds..."
-              sleep 2
+          # Wait for both servers to be fully ready (including database migrations)
+          # before running any CLI commands that also trigger migrations.
+          for port in 3000 3001; do
+            HEALTH_CHECK_PASS=
+            for ((retry=1; retry<=10; retry++)); do
+              if curl -f "http://localhost:${port}/health"; then
+                echo -e "\nHealth check passed on port ${port}"
+                HEALTH_CHECK_PASS=true
+                break
+              else
+                echo "Health check on port ${port} failed, retrying in 2 seconds..."
+                sleep 2
+              fi
+            done
+
+            if [ -z "$HEALTH_CHECK_PASS" ]; then
+              echo -e "\nHealth check on port ${port} failed after multiple attempts" >&2
+              exit 1
             fi
           done
-
-          # If health check did not pass after retries, exit with an error
-          if [ -z "$HEALTH_CHECK_PASS" ]; then
-            echo -e "\nHealth check failed after multiple attempts" >&2
-            exit 1
-          fi
 
       - name: Verify Python and promptfoo
         run: |
@@ -164,6 +203,22 @@ jobs:
             exit 1
           fi
 
+          echo "Checking container update markers and API guidance:"
+          test "$(docker exec promptfoo-container printenv PROMPTFOO_RUNNING_IN_DOCKER)" = "1"
+          test "$(docker exec promptfoo-container printenv PROMPTFOO_OFFICIAL_DOCKER_IMAGE)" = "1"
+          test "$(docker exec promptfoo-custom-container printenv PROMPTFOO_RUNNING_IN_DOCKER)" = "1"
+          test "$(docker exec promptfoo-custom-container printenv PROMPTFOO_OFFICIAL_DOCKER_IMAGE)" = "0"
+
+          curl -fsS http://localhost:3000/api/version | jq -e '
+            .commandType == "docker" and
+            .updateCommands.primary == "docker pull ghcr.io/promptfoo/promptfoo:latest"
+          '
+          curl -fsS http://localhost:3001/api/version | jq -e '
+            .commandType == "npm" and
+            .updateCommands.primary == "" and
+            .updateCommands.isCustomContainer == true
+          '
+
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -172,7 +227,7 @@ jobs:
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
-        run: npm install -g npm@11.11.0
+        run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
 
       - name: run promptfoo eval
         id: eval
@@ -180,7 +235,7 @@ jobs:
           PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:3000
           PROMPTFOO_SHARING_APP_BASE_URL: http://localhost:3000
         run: |
-          npm install
+          npm install --registry=https://registry.npmjs.org/
           npm run local -- eval -c .github/assets/promptfooconfig.yaml --share
 
       - name: Test that the eval results are uploaded
@@ -200,7 +255,7 @@ jobs:
 
       - name: Stop and remove Docker container
         if: always()
-        run: docker rm -f promptfoo-container || true
+        run: docker rm -f promptfoo-container promptfoo-custom-container || true
 
       - name: Clean up Docker images
         if: always()
@@ -234,7 +289,7 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
 
@@ -278,6 +333,7 @@ jobs:
             BUILD_VERSION=${{ env.BUILD_VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ steps.source.outputs.sha }}
+            PROMPTFOO_OFFICIAL_DOCKER_IMAGE=${{ github.repository == 'promptfoo/promptfoo' && '1' || '0' }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
@@ -380,7 +436,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
         with:
           subject-name: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
           subject-digest: '${{ needs.merge-docker-digests.outputs.manifest_digest }}'

@@ -21,7 +21,7 @@ cd config-websockets/streaming
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
 - An OpenAI API key set as `OPENAI_API_KEY`
 
 ## 1) Start the local WebSocket server

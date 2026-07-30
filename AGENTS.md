@@ -355,6 +355,18 @@ See `test/AGENTS.md` for testing patterns.
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
 
+## Knip (dead-code CI check)
+
+CI runs a full Knip audit (`npm run knip -- --no-progress --reporter github-actions`) in the Style Check job. It fails the build on unused files, exports, and dependencies, and annotates the offending lines on the PR.
+
+When it fails on your PR:
+
+- **Actually dead?** Delete the code. That's the point of the check.
+- **Loaded by convention or path string** (worker, browser replacement, fixture)? Add an `entry` in `knip.jsonc` with a comment stating the loading mechanism.
+- **Consumed by promptfoo-cloud?** The cloud repo compiles `@promptfoo/*` directly from this repo's `src/`, so an export can be load-bearing with zero references here. Add it to the appropriate allowlist in `knip.jsonc` with a comment naming the consuming cloud path.
+
+Every allowlist entry in `knip.jsonc` must have a comment explaining why it exists — never remove an entry (or a "dead" export it protects) without checking its stated consumer first. Config-drift hints are not enforced in CI; maintainers can audit them periodically with `npm run knip -- --treat-config-hints-as-errors`.
+
 ## Adversarial and Redteam Bias
 
 For security, model scanning, redteam, and coding-agent work, test like an attacker first. Look for false negatives, bypasses, hidden payloads, unsafe tool use, prompt injection, exfiltration, cache misuse, and evidence gaps. When a bypass is found, add a focused regression test before or alongside the fix.

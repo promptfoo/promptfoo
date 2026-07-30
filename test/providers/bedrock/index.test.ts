@@ -676,6 +676,48 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
+      // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
+      // `thinking` field, so the bare 1024 default would truncate ordinary answers.
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it('keeps the 1024 default for Opus 5 when thinking is explicitly disabled', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(1024);
+    });
+
+    it('keeps the 1024 default for models that do not think by default', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-4-8',
+      );
+      expect(params.max_tokens).toBe(1024);
+    });
+
+    it('lets an explicit max_tokens win over the thinking headroom default', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', max_tokens: 77 },
+        'hi',
+        undefined,
+        'global.anthropic.claude-opus-5',
+      );
+      expect(params.max_tokens).toBe(77);
+    });
+
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -910,6 +952,34 @@ describe('AwsBedrockGenericProvider', () => {
     it('should throw an error for API errors', async () => {
       const mockErrorResponse = { error: 'API Error' };
       expect(() => modelHandler.output({}, mockErrorResponse)).toThrow('AI21 API error: API Error');
+    });
+  });
+
+  describe('BEDROCK_MODEL TITAN_TEXT', () => {
+    const modelHandler = BEDROCK_MODEL.TITAN_TEXT;
+
+    it('should extract outputText from the first result', () => {
+      const mockResponse = { results: [{ outputText: 'This is a test response.' }] };
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined when results are missing instead of throwing', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+      expect(modelHandler.output({}, { results: [] })).toBeUndefined();
+    });
+  });
+
+  describe('BEDROCK_MODEL COHERE_COMMAND', () => {
+    const modelHandler = BEDROCK_MODEL.COHERE_COMMAND;
+
+    it('should extract text from the first generation', () => {
+      const mockResponse = { generations: [{ text: 'This is a test response.' }] };
+      expect(modelHandler.output({}, mockResponse)).toBe('This is a test response.');
+    });
+
+    it('should return undefined when generations are missing instead of throwing', () => {
+      expect(modelHandler.output({}, {})).toBeUndefined();
+      expect(modelHandler.output({}, { generations: [] })).toBeUndefined();
     });
   });
 
@@ -3293,6 +3363,30 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it('maps Claude Opus 5 across the base and regional inference profiles', () => {
+    // Verified via `aws bedrock list-inference-profiles`: Opus 5 exposes base +
+    // us./eu./global. only — unlike Opus 4.7/4.8 there is no `jp.` profile.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-5']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-5']).toBeUndefined();
+    expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+  });
+
+  it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
+    // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-sonnet-5']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+    expect(getHandlerForModel('us.anthropic.claude-sonnet-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+  });
+
   it('should have the correct model mappings', async () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20241022-v2:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -3381,6 +3475,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // so they must not appear in the InvokeModel model map.
     expect(AWS_BEDROCK_MODELS['openai.gpt-5.5']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['openai.gpt-5.4']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-sol']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-terra']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['openai.gpt-5.6-luna']).toBeUndefined();
   });
 
   describe('getHandlerForModel OpenAI routing', () => {
@@ -3404,6 +3501,9 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       // a direct/forced InvokeModel resolution should explain that rather than silently try.
       expect(() => getHandlerForModel('openai.gpt-5.5')).toThrow(/Responses API/);
       expect(() => getHandlerForModel('openai.gpt-5.4')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-sol')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-terra')).toThrow(/Responses API/);
+      expect(() => getHandlerForModel('openai.gpt-5.6-luna')).toThrow(/Responses API/);
     });
 
     it('should suggest the bare frontier id when a region/geo-prefixed frontier id is forced down InvokeModel', () => {

@@ -46,4 +46,4 @@ redteam:
   strategies:
     - best-of-n
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates

@@ -303,7 +303,7 @@ It also tests for a variety of harmful input and output scenarios from the [ML C
 By default, all of the above will be included in the redteam. To use specific types of tests, use `--plugins`:
 
 ```yaml
-npx promptfoo@latest redteam generate --plugins 'harmful,jailbreak,hijacking'
+npx promptfoo@latest redteam generate --plugins 'harmful,hijacking'
 ```
 
 The following plugins are enabled by default:
@@ -316,11 +316,9 @@ The following plugins are enabled by default:
 | harmful          | Tests for the generation of harmful or offensive content.                    |
 | imitation        | Tests if the model imitates a person, brand, or organization.                |
 | hijacking        | Tests the model's vulnerability to being used for unintended tasks.          |
-| jailbreak        | Tests if the model can be manipulated to bypass its safety mechanisms.       |
 | overreliance     | Tests for excessive trust in LLM output without oversight.                   |
 | pii              | Tests for inadvertent disclosure of personally identifiable information.     |
 | politics         | Tests for political opinions and statements about political figures.         |
-| prompt-injection | Tests the model's susceptibility to prompt injection attacks.                |
 
 These additional plugins can be optionally enabled:
 

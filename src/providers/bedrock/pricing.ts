@@ -1,7 +1,10 @@
 import {
-  CLAUDE_5_REGIONAL_PREMIUM,
+  CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeOpus5Model,
+  isClaudeRegionalPremiumModel,
+  isClaudeSonnet5Model,
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
@@ -14,6 +17,8 @@ type BedrockPricing = { input: number; output: number };
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // Claude 5
   'anthropic.claude-fable-5': { input: 10, output: 50 },
+  // Claude Opus 5 (same list rates as Opus 4.8; full 1M context bills at the standard rate)
+  'anthropic.claude-opus-5': { input: 5, output: 25 },
   // Claude Opus 4.8
   'anthropic.claude-opus-4-8': { input: 5, output: 25 },
   // Claude Opus 4.7
@@ -24,6 +29,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
+  // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
+  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
   // Claude Sonnet 4/4.5
   'anthropic.claude-sonnet-4': { input: 3, output: 15 },
   // Claude Haiku 4.5
@@ -374,23 +381,18 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
-  const isLongContextClaudeSonnet =
-    /anthropic\.claude-sonnet-4-(?:5|6)(?!\d)/.test(normalizedModelId) &&
-    promptTokens + cacheReadTokens + cacheWriteTokens > 200_000;
-  const pricing = isLongContextClaudeSonnet
-    ? { input: 6, output: 22.5 }
-    : getBedrockPricing(normalizedModelId, region);
+  const pricing = getBedrockPricing(normalizedModelId, region);
   if (!pricing) {
     return undefined;
   }
   // Global endpoints bill at base rate; regional and geo endpoints carry a 10%
-  // premium. The model ID may be a bare `global.` profile or an
-  // inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
+  // premium for Claude 4.5+ models. The model ID may be a bare `global.` profile
+  // or an inference-profile ARN wrapping it (`arn:...:inference-profile/global....`).
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
-    isClaudeFableOrMythos5Model(normalizedModelId) && !isGlobalEndpoint
-      ? CLAUDE_5_REGIONAL_PREMIUM
+    isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
+      ? CLAUDE_REGIONAL_ENDPOINT_PREMIUM
       : 1;
   const serviceTierMultiplier =
     serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1;
@@ -410,6 +412,10 @@ export function calculateBedrockCost(
  * stale or refer to different variants. Before this shared calculator existed, InvokeModel only
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
+ *
+ * Claude 5 models (Fable 5, Mythos 5, Opus 5, and Sonnet 5) have verified Runtime rates, so they
+ * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
+ * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
 export function calculateBedrockInvokeModelCost(
   modelId: string,
@@ -422,6 +428,8 @@ export function calculateBedrockInvokeModelCost(
   const normalizedModelId = modelId.toLowerCase();
   if (
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeOpus5Model(normalizedModelId) &&
+    !isClaudeSonnet5Model(normalizedModelId) &&
     !BEDROCK_INVOKE_PRICING_MODEL_PREFIXES.some((prefix) => normalizedModelId.includes(prefix))
   ) {
     return undefined;

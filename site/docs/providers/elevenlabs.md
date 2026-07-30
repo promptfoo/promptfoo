@@ -32,7 +32,7 @@ Get started with ElevenLabs in 3 steps:
      - 'Welcome to our customer service. How can I help you today?'
 
    providers:
-     - id: elevenlabs:tts
+     - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
 
    tests:
      - description: Generate welcome message
@@ -80,7 +80,7 @@ The ElevenLabs provider supports multiple capabilities:
 
 Generate high-quality voice synthesis with multiple models and voices:
 
-- `elevenlabs:tts:<voice_id>` - TTS with a specified voice ID (for example, `elevenlabs:tts:21m00Tcm4TlvDq8ikWAM`)
+- `elevenlabs:tts:<voice_id>` - TTS with specified voice ID (e.g., `elevenlabs:tts:21m00Tcm4TlvDq8ikWAM` for Rachel)
 - `elevenlabs:tts` - TTS with default voice
 
 **Models available:**
@@ -185,17 +185,18 @@ All providers support these common parameters:
 
 ### TTS-Specific Parameters
 
-| Parameter                 | Description                                               |
-| ------------------------- | --------------------------------------------------------- |
-| `modelId`                 | TTS model (e.g., `eleven_flash_v2_5`)                     |
-| `voiceId`                 | Voice ID (for example, `21m00Tcm4TlvDq8ikWAM`)            |
-| `voiceSettings`           | Voice customization (stability, similarity, style, speed) |
-| `outputFormat`            | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)         |
-| `seed`                    | Seed for deterministic output                             |
-| `streaming`               | Enable WebSocket streaming for low latency                |
-| `pronunciationDictionary` | Custom pronunciation rules                                |
-| `voiceDesign`             | Generate voice from text description                      |
-| `voiceRemix`              | Modify voice characteristics (gender, accent, age)        |
+| Parameter                   | Description                                               |
+| --------------------------- | --------------------------------------------------------- |
+| `modelId`                   | TTS model (e.g., `eleven_flash_v2_5`)                     |
+| `voiceId`                   | Voice ID (e.g., `21m00Tcm4TlvDq8ikWAM`)                   |
+| `voiceSettings`             | Voice customization (stability, similarity, style, speed) |
+| `outputFormat`              | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)         |
+| `seed`                      | Seed for deterministic output                             |
+| `streaming`                 | Enable WebSocket streaming for low latency                |
+| `pronunciationRules`        | Custom pronunciation rules (creates a dictionary at init) |
+| `pronunciationDictionaryId` | Apply an existing pronunciation dictionary by ID          |
+| `voiceDesign`               | Generate voice from text description                      |
+| `voiceRemix`                | Modify voice characteristics (gender, accent, age)        |
 
 ### STT-Specific Parameters
 
@@ -335,11 +336,12 @@ Customize pronunciation for technical terms:
 providers:
   - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
     config:
-      pronunciationDictionary:
+      pronunciationRules:
         - word: 'API'
           pronunciation: 'A P I'
         - word: 'OAuth'
           phoneme: 'əʊɔːθ'
+          alphabet: 'ipa'
 ```
 
 ### Voice Design
@@ -504,7 +506,13 @@ prompts:
   - '{{audioFile}}'
 
 providers:
-  - id: elevenlabs:stt
+  - id: tts-generator
+    label: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
+    config:
+      modelId: eleven_flash_v2_5
+
+  - id: stt-transcriber
+    label: elevenlabs:stt
     config:
       calculateWER: true
       referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
@@ -841,15 +849,12 @@ promptfoo eval --max-concurrency 2
 
 **Error: `Voice ID not found`**
 
-Solution: Use correct voice ID or name:
+Solution: Use a voice ID (voice names are not resolved):
 
 ```yaml
 providers:
-  # Use official voice ID (preferred)
+  # Use the official voice ID from your voice library
   - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
-
-  # Or use voice name (case-sensitive)
-  - id: elevenlabs:tts:Rachel
 ```
 
 List available voices:

@@ -251,6 +251,9 @@
         "CLAUDE_CODE_USE_VERTEX": {
           "type": "string"
         },
+        "CLAUDE_CONFIG_DIR": {
+          "type": "string"
+        },
         "CLOUDFLARE_ACCOUNT_ID": {
           "type": "string"
         },
@@ -378,6 +381,9 @@
           "type": "string"
         },
         "MLFLOW_GATEWAY_URL": {
+          "type": "string"
+        },
+        "MODEL_API_KEY": {
           "type": "string"
         },
         "MODELSLAB_API_KEY": {
@@ -1719,6 +1725,9 @@
                     "CLAUDE_CODE_USE_VERTEX": {
                       "type": "string"
                     },
+                    "CLAUDE_CONFIG_DIR": {
+                      "type": "string"
+                    },
                     "CLOUDFLARE_ACCOUNT_ID": {
                       "type": "string"
                     },
@@ -1846,6 +1855,9 @@
                       "type": "string"
                     },
                     "MLFLOW_GATEWAY_URL": {
+                      "type": "string"
+                    },
+                    "MODEL_API_KEY": {
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {
@@ -2855,6 +2867,7 @@
                       "jailbreak",
                       "jailbreak-templates",
                       "jailbreak:composite",
+                      "jailbreak:goblin",
                       "jailbreak:hydra",
                       "jailbreak:likert",
                       "jailbreak:meta",
@@ -2909,6 +2922,7 @@
                           "jailbreak",
                           "jailbreak-templates",
                           "jailbreak:composite",
+                          "jailbreak:goblin",
                           "jailbreak:hydra",
                           "jailbreak:likert",
                           "jailbreak:meta",
@@ -2949,7 +2963,7 @@
               }
             ]
           },
-          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
+          "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, indirect-web-pwn, jailbreak, jailbreak-templates, jailbreak:composite, jailbreak:goblin, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, video"
         },
         "maxConcurrency": {
           "description": "Maximum number of concurrent API calls",

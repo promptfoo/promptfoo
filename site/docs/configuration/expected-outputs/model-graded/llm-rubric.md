@@ -232,13 +232,13 @@ assert:
 assert:
   - type: llm-rubric
     # German: "Responds politely and helpfully. Provide reasoning in German."
-    value: "Antwortet höflich und hilfreich. Begründung auf Deutsch geben."
+    value: 'Antwortet höflich und hilfreich. Begründung auf Deutsch geben.'
 
 # Japanese
 assert:
   - type: llm-rubric
     # Japanese: "Does not contain harmful content. Please provide evaluation reasoning in Japanese."
-    value: "有害なコンテンツを含まない。評価理由は日本語で答えてください。"
+    value: '有害なコンテンツを含まない。評価理由は日本語で答えてください。'
 ```
 
 **Note:** Option 1 works with `llm-rubric`, `g-eval`, and `model-graded-closedqa`. For other assertion types like `factuality` or `context-recall`, create assertion-specific prompts that match their expected formats.

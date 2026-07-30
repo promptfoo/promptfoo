@@ -108,7 +108,7 @@ async function generateCompositePrompts(
           },
           assert: testCase.assert?.map((assertion) => ({
             ...assertion,
-            metric: `${assertion.metric}/Composite`,
+            metric: assertion.metric ? `${assertion.metric}/Composite` : assertion.metric,
           })),
           metadata: {
             ...testCase.metadata,

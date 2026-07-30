@@ -21,7 +21,7 @@ cd redteam-medical-agent
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js ^20.20.0 or >=22.22.0 (Node.js 20 support ends July 30, 2026; Node.js 24 LTS recommended)
 - npm or yarn
 - OpenAI API key for the agent
 

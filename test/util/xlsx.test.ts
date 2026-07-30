@@ -170,6 +170,23 @@ describe('parseXlsxFile', () => {
       expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
     });
 
+    it('should select sheet by index when the index has a leading plus sign', async () => {
+      const mockRows = [
+        ['col1', 'col2'],
+        ['sheet2data', 'value2'],
+      ];
+
+      mockReadXlsxFile.mockResolvedValue([
+        createMockSheet('Sheet1'),
+        createMockSheet('Sheet2', mockRows),
+      ]);
+
+      const result = await parseXlsxFile('test.xlsx#+2');
+
+      expect(result).toEqual([{ col1: 'sheet2data', col2: 'value2' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
+    });
+
     it('should throw error when sheet name does not exist', async () => {
       mockReadXlsxFile.mockResolvedValue([
         createMockSheet('Sheet1'),
@@ -240,6 +257,35 @@ describe('parseXlsxFile', () => {
 
       expect(result).toEqual([{ col1: 'data', col2: 'value' }]);
       expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
+    });
+
+    it.each([
+      '2024-Q1',
+      '1H-results',
+      '2.9',
+    ])('should select sheet by name when the name starts with digits: %s', async (sheetName) => {
+      const mockRows = [
+        ['col1', 'col2'],
+        ['data', 'value'],
+      ];
+
+      mockReadXlsxFile.mockResolvedValue([
+        createMockSheet('Summary'),
+        createMockSheet(sheetName, mockRows),
+      ]);
+
+      const result = await parseXlsxFile(`test.xlsx#${sheetName}`);
+
+      expect(result).toEqual([{ col1: 'data', col2: 'value' }]);
+      expect(mockReadXlsxFile).toHaveBeenCalledWith('test.xlsx');
+    });
+
+    it('should throw not-found for a digit-prefixed name instead of out-of-range', async () => {
+      mockReadXlsxFile.mockResolvedValue([createMockSheet('Sheet1'), createMockSheet('Sheet2')]);
+
+      await expect(parseXlsxFile('test.xlsx#1H')).rejects.toThrow(
+        'Sheet "1H" not found. Available sheets: Sheet1, Sheet2',
+      );
     });
   });
 });

@@ -101,7 +101,7 @@ redteam:
   strategies:
     - jailbreak
     - jailbreak:tree
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ### Key Components

@@ -806,7 +806,7 @@ scenarios:
 # Incorrect - will fail validation
 scenarios:
   - config:
-      region: US  # This is wrong
+      region: US # This is wrong
     tests:
       - vars: { name: Alice }
 ```

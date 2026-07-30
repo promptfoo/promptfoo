@@ -20,11 +20,11 @@ The Slack provider enables human-in-the-loop evaluations by sending prompts to S
 The Slack provider requires the `@slack/web-api` package to be installed separately:
 
 ```bash
-npm install @slack/web-api
+npm install @slack/web-api@^8
 ```
 
 :::note
-This is an optional dependency and only needs to be installed if you want to use the Slack provider.
+This optional dependency requires Node.js 20 or newer and only needs to be installed if you want to use the Slack provider.
 :::
 
 ### Slack App Setup
@@ -64,6 +64,8 @@ This is an optional dependency and only needs to be installed if you want to use
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
 ```
 
+Slack requests respect the `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` environment variables on all supported Node.js versions.
+
 ### Basic Configuration
 
 ```yaml
@@ -80,10 +82,10 @@ The Slack provider supports multiple formats:
 ```yaml
 # Basic format with channel in config
 providers:
-  - id: slack  # Uses SLACK_BOT_TOKEN env var
+  - id: slack # Uses SLACK_BOT_TOKEN env var
     config:
       # token: "{{ env.SLACK_BOT_TOKEN }}"  # optional, auto-detected
-      channel: "C0123456789"
+      channel: 'C0123456789'
 
 # Short format - channel ID directly in provider string
 providers:

@@ -55,7 +55,7 @@ providers:
 
 ## Configuration
 
-The Replicate provider supports several [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/replicate.ts#L9-L17) that can be used to customize the behavior of the models, like so:
+The Replicate provider supports several [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/replicate.ts#L24) that can be used to customize the behavior of the models, like so:
 
 | Parameter            | Description                                                   |
 | -------------------- | ------------------------------------------------------------- |

@@ -146,7 +146,7 @@ redteam:
   strategies:
     - jailbreak # Direct jailbreak attempts
     - jailbreak:composite # Combination attacks
-    - prompt-injection # Hidden instructions
+    - jailbreak-templates # Static jailbreak templates
     - crescendo # Gradual escalation
     - rot13 # Encoding attacks
 ```

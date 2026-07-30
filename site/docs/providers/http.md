@@ -1593,7 +1593,7 @@ Example Response
 Session Parser value:
 
 ```yaml
-sessionParser: 'data.body.responses[0]?.sessionId
+sessionParser: 'data.body.responses[0]?.sessionId'
 ```
 
 The parser can take a string, file or function like the response parser.
@@ -1628,8 +1628,14 @@ sessionParser: 'data.body.sessionId'
 ```
 
 ```yaml
-sessionParser: 'data.headers.["x-session-Id"]'
+sessionParser: 'data.headers["x-session-id"]'
 ```
+
+:::note
+
+Response header names are normalized to lowercase, so a server that returns `X-Session-Id` is accessed as `data.headers["x-session-id"]`.
+
+:::
 
 ### Client-side session management
 
@@ -1805,12 +1811,12 @@ providers:
     config:
       url: 'https://example.com/api'
       # Function-based validation
-      validateStatus: (status) => status < 500  # Accept any status below 500
+      validateStatus: (status) => status < 500 # Accept any status below 500
       # Or string-based expression
-      validateStatus: 'status >= 200 && status <= 299'  # Accept only 2xx responses
+      validateStatus: 'status >= 200 && status <= 299' # Accept only 2xx responses
       # Or load from file
-      validateStatus: 'file://validators/status.js'  # Load default export
-      validateStatus: 'file://validators/status.js:validateStatus'  # Load specific function
+      validateStatus: 'file://validators/status.js' # Load default export
+      validateStatus: 'file://validators/status.js:validateStatus' # Load specific function
 ```
 
 Example validator file (`validators/status.js`):

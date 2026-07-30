@@ -37,7 +37,6 @@ import type {
   HookEvent,
   OnElicitation,
   OutputFormat,
-  PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
   SDKAssistantMessage,
@@ -339,13 +338,21 @@ export interface ClaudeCodeOptions {
   /**
    * Permission mode for controlling how tool executions are handled:
    * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'manual' - Alias for 'default', prompts for dangerous operations
    * - 'plan' - Planning mode, no actual tool execution
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
    * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
+  permission_mode?:
+    | 'default'
+    | 'manual'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'dontAsk'
+    | 'auto';
 
   /**
    * Custom workflow instructions for plan mode. Only takes effect when
@@ -700,6 +707,9 @@ export interface ClaudeCodeOptions {
    *   - `allowAllUnixSockets` - Allow all Unix socket connections
    *   - `httpProxyPort` - HTTP proxy port for network access
    *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `credentials` - Credential protection configuration:
+   *   - `envVars` - Environment variables to deny or mask, with optional `injectHosts`
+   *   - `allowPlaintextInject` - Allow masked credentials over plain HTTP (unsafe)
    * - `ripgrep` - Custom ripgrep configuration:
    *   - `command` - Path to ripgrep executable
    *   - `args` - Additional arguments for ripgrep
@@ -920,7 +930,7 @@ function createAskUserQuestionCanUseTool(
   behavior: 'first_option' | 'random' | 'deny' = 'first_option',
   wrappedCanUseTool?: CanUseTool,
 ): CanUseTool {
-  return async (toolName, input, options): Promise<PermissionResult> => {
+  return async (toolName, input, options) => {
     // Only handle AskUserQuestion tool
     if (toolName !== 'AskUserQuestion') {
       // Defer to wrapped callback or allow by default
@@ -1126,6 +1136,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ).sort();
     }
 
+    // Bare allowedTools entries bypass canUseTool, so keep AskUserQuestion out of
+    // the allow list when the convenience callback needs to answer it.
+    if (config.ask_user_question) {
+      allowedTools = allowedTools?.filter((tool) => tool !== 'AskUserQuestion');
+    }
+
     const disallowedTools = config.disallowed_tools
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
@@ -1171,7 +1187,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode,
+      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt

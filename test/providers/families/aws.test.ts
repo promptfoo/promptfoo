@@ -19,17 +19,23 @@ describe('aws bedrock provider factory routing', () => {
     restoreEnv = undefined;
   });
 
-  it('routes frontier gpt-5.x ids to the OpenAI Responses provider on the mantle endpoint', async () => {
+  it.each([
+    ['bedrock:openai.gpt-5.6-sol', 'us-east-2'],
+    ['bedrock:openai.gpt-5.6-terra', 'us-west-2'],
+    ['bedrock:openai.gpt-5.6-luna', 'us-east-1'],
+    ['bedrock:openai.gpt-5.5', 'us-east-2'],
+    ['bedrock:openai.gpt-5.4', 'us-west-2'],
+  ])('routes frontier id %s to the OpenAI Responses provider', async (id, region) => {
     const provider = await bedrockFactory.create(
-      'bedrock:openai.gpt-5.5',
-      { config: { region: 'us-east-2', apiKey: 'bedrock-key' } },
+      id,
+      { config: { region, apiKey: 'bedrock-key' } },
       ctx,
     );
     expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
     expect((provider as any).config.apiBaseUrl).toBe(
-      'https://bedrock-mantle.us-east-2.api.aws/openai/v1',
+      `https://bedrock-mantle.${region}.api.aws/openai/v1`,
     );
-    expect(provider.id()).toBe('bedrock:openai.gpt-5.5');
+    expect(provider.id()).toBe(id);
   });
 
   it('routes xai.grok ids to the Responses provider on the us-west-2 mantle endpoint', async () => {
@@ -266,6 +272,9 @@ describe('aws bedrock provider factory routing', () => {
   });
 
   it.each([
+    'bedrock:us.openai.gpt-5.6-sol',
+    'bedrock:eu.openai.gpt-5.6-terra',
+    'bedrock:global.openai.gpt-5.6-luna',
     'bedrock:us.openai.gpt-5.5',
     'bedrock:eu.openai.gpt-5.4',
     'bedrock:global.openai.gpt-5.5',

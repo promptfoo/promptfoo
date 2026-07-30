@@ -55,7 +55,7 @@ redteam:
   strategies:
     - jailbreak:meta
     - jailbreak:composite
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 Run the initial scan:
