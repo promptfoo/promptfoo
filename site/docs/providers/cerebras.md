@@ -1,14 +1,13 @@
 ---
 sidebar_label: Cerebras
-description: Configure Cerebras models through its OpenAI-compatible inference API
+description: Configure Cerebras' high-speed inference models through its OpenAI-compatible API, with support for structured outputs and tool calling
 ---
 
 # Cerebras
 
-This provider enables you to use Cerebras models through their [Inference API](https://docs.cerebras.ai).
+This provider enables you to use Cerebras models through their [Inference API](https://inference-docs.cerebras.ai).
 
-Cerebras offers an OpenAI-compatible chat completions API. Use a model ID returned by the
-Cerebras model catalog or `/models` endpoint.
+Cerebras offers an OpenAI-compatible API for high-speed inference. You can use it as a drop-in replacement for applications currently using the [OpenAI API](/docs/providers/openai/) chat endpoints.
 
 ## Setup
 
@@ -35,11 +34,18 @@ The Cerebras provider uses a simple format:
 
 ## Available Models
 
-The Cerebras model catalog changes as models are added and retired. Use the `/models` endpoint as
-the source of truth before pinning a model in a long-lived config:
+The Cerebras public Inference API currently supports these models:
+
+| Model          | ID             | Availability                     |
+| -------------- | -------------- | -------------------------------- |
+| OpenAI GPT OSS | `gpt-oss-120b` | Production                       |
+| Gemma 4 31B    | `gemma-4-31b`  | Preview                          |
+| Z.ai GLM 4.7   | `zai-glm-4.7`  | Preview; retires August 17, 2026 |
+
+The preview lineup can change on short notice. To get the current public model catalog:
 
 ```bash
-curl https://api.cerebras.ai/v1/models -H "Authorization: Bearer your_api_key_here"
+curl -sS https://api.cerebras.ai/public/v1/models | jq
 ```
 
 ## Parameters
@@ -52,7 +58,6 @@ The provider accepts standard OpenAI chat parameters:
 - `stop` - Sequences where the API will stop generating further tokens
 - `seed` - Seed for deterministic generation
 - `response_format` - Controls the format of the model response (e.g., for JSON output)
-- `logprobs` - Whether to return log probabilities of the output tokens
 
 ## Advanced Capabilities
 
@@ -103,6 +108,7 @@ providers:
                   type: 'string'
                   description: 'The mathematical expression to evaluate'
               required: ['expression']
+              additionalProperties: false
             strict: true
 ```
 
@@ -120,7 +126,7 @@ providers:
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:zai-glm-4.7
+  - id: cerebras:gemma-4-31b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
@@ -143,6 +149,6 @@ tests:
 
 - [OpenAI Provider](/docs/providers/openai) - Compatible API format used by Cerebras
 - [Configuration Reference](/docs/configuration/reference.md) - Full configuration options for providers
-- [Cerebras API Documentation](https://docs.cerebras.ai) - Official API reference
-- [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/) - Learn more about JSON schema enforcement
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities
+- [Cerebras API Documentation](https://inference-docs.cerebras.ai) - Official API reference
+- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs/) - Learn more about JSON schema enforcement
+- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use/) - Learn more about tool calling capabilities

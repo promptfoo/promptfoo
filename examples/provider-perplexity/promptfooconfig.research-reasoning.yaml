@@ -11,8 +11,7 @@ providers:
       temperature: 0.1
       max_tokens: 4000
       search_domain_filter: ['arxiv.org', 'researchgate.net', 'scholar.google.com']
-      web_search_options:
-        search_context_size: 'high'
+      reasoning_effort: 'high'
       # This provider will be used for the first prompt only
 
   - id: perplexity:sonar-reasoning-pro
@@ -20,12 +19,6 @@ providers:
       temperature: 0.2
       max_tokens: 3000
       # This provider will be used for the second prompt only
-
-  - id: perplexity:r1-1776
-    config:
-      temperature: 0.2
-      max_tokens: 2000
-      # Offline model without search capabilities
 
 tests:
   - vars:
