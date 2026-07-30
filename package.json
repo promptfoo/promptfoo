@@ -116,6 +116,7 @@
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.1",
+    "postcss": "8.5.22",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
     },
