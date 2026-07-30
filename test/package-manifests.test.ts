@@ -183,6 +183,22 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps the Docker runtime on the patched Node release', () => {
+    const expectedVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
+    const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+    const baseImageVersion = dockerfile.match(/^FROM node:([\d.]+)-alpine\b/m)?.[1];
+
+    expect(baseImageVersion).toBeDefined();
+
+    if (minVersion(baseImageVersion!)!.compare(expectedVersion) < 0) {
+      const alpineNodeVersion = dockerfile.match(/apk add[^\n]*['"]nodejs>=([\d.]+)['"]/)?.[1];
+
+      expect(alpineNodeVersion).toBeDefined();
+      expect(minVersion(alpineNodeVersion!)!.compare(expectedVersion)).toBeGreaterThanOrEqual(0);
+      expect(dockerfile).toMatch(/ln -sf \/usr\/bin\/node \/usr\/local\/bin\/node/);
+    }
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;
