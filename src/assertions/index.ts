@@ -573,12 +573,15 @@ export async function runAssertion({
       );
     }
 
-    // Validate the script didn't return boolean or GradingResult
-    // These are only valid for javascript/python/ruby assertion types
-    if (typeof valueFromScript === 'boolean') {
+    // Boolean results are also valid JSON Schemas for JSON assertions.
+    if (
+      typeof valueFromScript === 'boolean' &&
+      baseType !== 'is-json' &&
+      baseType !== 'contains-json'
+    ) {
       throw new Error(
         `Script for "${assertion.type}" assertion returned a boolean. ` +
-          `Only javascript/python/ruby assertion types can return boolean values. ` +
+          `Only javascript/python/ruby, is-json, and contains-json assertion types can return boolean values. ` +
           `For other assertion types, return the expected value (string, number, array, or object).`,
       );
     }
