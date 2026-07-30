@@ -477,7 +477,7 @@ tests:
 | ------------------ | ------ | ------------------------------------------------------------------------------------------------------ |
 | `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                         |
 | `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k requires Veo 3.1 or 3.1 Fast, and extension is 720p-only        |
-| `durationSeconds`  | number | 4, 6, or 8 seconds; extension, reference images, and 1080p/4k output require 8 seconds                 |
+| `durationSeconds`  | number | Veo 3.x: 4, 6, or 8 seconds; Veo 2: 5, 6, or 8. Extension, reference images, and 1080p/4k require 8    |
 | `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                  |
 | `negativePrompt`   | string | Concepts to avoid in the generated video                                                               |
 | `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                       |

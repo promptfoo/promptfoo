@@ -101,6 +101,16 @@ interface PerplexityProviderOptions extends ProviderOptions {
   };
 }
 
+const PERPLEXITY_PASSTHROUGH_FIELDS = [
+  'search_domain_filter',
+  'search_recency_filter',
+  'return_related_questions',
+  'return_images',
+  'search_after_date_filter',
+  'search_before_date_filter',
+  'web_search_options',
+] as const;
+
 /**
  * Perplexity API provider
  *
@@ -115,28 +125,12 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: PerplexityProviderOptions = {}) {
     // Handle the case when config is nested inside config
     const actualConfig = providerOptions.config?.config || providerOptions.config || {};
-    const providerSpecificOptions = {
-      search_domain_filter: actualConfig.search_domain_filter,
-      search_recency_filter: actualConfig.search_recency_filter,
-      return_related_questions: actualConfig.return_related_questions,
-      return_images: actualConfig.return_images,
-      search_after_date_filter: actualConfig.search_after_date_filter,
-      search_before_date_filter: actualConfig.search_before_date_filter,
-      web_search_options: actualConfig.web_search_options,
-    };
-    const passthrough = Object.fromEntries(
-      Object.entries(providerSpecificOptions).filter(([, value]) => value !== undefined),
-    );
 
     // Create provider options with the correct config structure
     const normalizedOptions = {
       ...providerOptions,
       config: {
         ...actualConfig,
-        passthrough: {
-          ...passthrough,
-          ...(actualConfig.passthrough || {}),
-        },
         apiBaseUrl: 'https://api.perplexity.ai',
         apiKeyEnvar: 'PERPLEXITY_API_KEY',
       },
@@ -152,6 +146,30 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
 
     // Store the usage tier for cost calculation
     this.usageTier = normalizedOptions.config?.usage_tier || 'medium';
+  }
+
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const promptConfig = context?.prompt?.config as Record<string, any> | undefined;
+    const promptPassthrough = promptConfig?.passthrough as Record<string, any> | undefined;
+    const providerPassthrough = this.config?.passthrough as Record<string, any> | undefined;
+
+    for (const field of PERPLEXITY_PASSTHROUGH_FIELDS) {
+      const value =
+        promptPassthrough?.[field] ??
+        promptConfig?.[field] ??
+        providerPassthrough?.[field] ??
+        this.config?.[field];
+      if (value !== undefined) {
+        result.body[field] = value;
+      }
+    }
+
+    return result;
   }
 
   /**

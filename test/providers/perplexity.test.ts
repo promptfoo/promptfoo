@@ -95,22 +95,47 @@ describe('Perplexity Provider', () => {
         },
       });
 
-      const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          config: {
+            search_domain_filter: ['prompt.example'],
+            web_search_options: {
+              search_context_size: 'low',
+            },
+          },
+        },
+      });
 
       expect(body).toMatchObject({
-        search_domain_filter: ['example.com'],
+        search_domain_filter: ['prompt.example'],
         search_recency_filter: 'week',
         return_related_questions: true,
         return_images: true,
         search_after_date_filter: '01/01/2026',
         search_before_date_filter: '02/01/2026',
         web_search_options: {
-          search_context_size: 'high',
-          user_location: {
-            latitude: 37.7749,
-            longitude: -122.4194,
-            country: 'US',
+          search_context_size: 'low',
+        },
+      });
+
+      const { body: passthroughBody } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          config: {
+            search_domain_filter: ['prompt.example'],
+            passthrough: {
+              search_domain_filter: ['passthrough.example'],
+              web_search_options: {
+                search_context_size: 'medium',
+              },
+            },
           },
+        },
+      });
+
+      expect(passthroughBody).toMatchObject({
+        search_domain_filter: ['passthrough.example'],
+        web_search_options: {
+          search_context_size: 'medium',
         },
       });
     });

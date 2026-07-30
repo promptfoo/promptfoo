@@ -59,8 +59,7 @@ providers:
 providers:
   - id: github:openai/gpt-5-mini # Uses GITHUB_TOKEN env var
     config:
-      temperature: 0.7
-      max_tokens: 4096
+      max_completion_tokens: 4096
       # apiKey: "{{ env.GITHUB_TOKEN }}"  # optional, auto-detected
 ```
 
@@ -69,16 +68,10 @@ providers:
 ```yaml
 providers:
   - id: github:openai/gpt-5-nano
-    config:
-      temperature: 0.5
 
   - id: github:openai/gpt-5-mini
-    config:
-      temperature: 0.6
 
   - id: github:openai/gpt-5
-    config:
-      temperature: 0.7
 
   - id: github:meta/llama-4-maverick-17b-128e-instruct-fp8
     config:

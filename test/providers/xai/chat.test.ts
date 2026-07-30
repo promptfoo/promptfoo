@@ -42,6 +42,7 @@ describe('xAI Chat Provider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('Provider creation and configuration', () => {
@@ -520,6 +521,13 @@ describe('xAI Chat Provider', () => {
         expect(result.body.max_tokens).toBe(321);
         expect(result.body.max_completion_tokens).toBeUndefined();
       }
+
+      vi.stubEnv('OPENAI_MAX_COMPLETION_TOKENS', '654');
+      const provider = createXAIProvider(`xai:${modelName}`) as any;
+      const result = await provider.getOpenAiBody('test prompt');
+
+      expect(result.body.max_tokens).toBe(654);
+      expect(result.body.max_completion_tokens).toBeUndefined();
     });
 
     it('filters unsupported parameters for Grok 4 Fast models', async () => {

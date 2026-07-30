@@ -96,6 +96,9 @@ providers:
     config:
       max_tokens: 8000
       showThinking: true # Include reasoning content in output (default)
+      passthrough:
+        thinking:
+          type: enabled
   - id: openai:chat:gpt-5.6
 
 prompts:
