@@ -232,7 +232,7 @@ providers:
   - id: xai:grok-build-0.1
     config:
       temperature: 0.1 # Lower temperature often preferred for coding tasks
-      max_completion_tokens: 4096
+      max_tokens: 4096
 ```
 
 ### Region Support

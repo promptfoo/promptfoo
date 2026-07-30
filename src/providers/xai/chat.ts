@@ -117,24 +117,6 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
-type XAIModelCost = {
-  input: number;
-  output: number;
-  cache_read?: number;
-  longContext?: {
-    threshold: number;
-    input: number;
-    output: number;
-    cache_read?: number;
-  };
-};
-
-type XAIChatModel = {
-  id: string;
-  cost: XAIModelCost;
-  aliases?: string[];
-};
-
 // Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
 // reports USD cents per 100M tokens (equivalent to $1e-10 per-token increments).
 // Response billing uses the same scale in `usage.cost_in_usd_ticks`.
@@ -492,6 +474,13 @@ export const GROK_REASONING_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
+const GROK_BUILD_CHAT_MODELS = new Set([
+  'grok-build-0.1',
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-code-fast-1-0825',
+]);
+
 // Grok-4+ models that have specific sampling-parameter restrictions.
 export const GROK_4_MODELS = [
   // Grok 4.5 (rejects presence_penalty, frequency_penalty, and stop; verified live 2026-07-09)
@@ -605,12 +594,6 @@ export function calculateXAICost(
     return undefined;
   }
 
-  // xAI's `long_context_threshold` API field applies long-context rates at or
-  // above the threshold. Prompt tokens include cached tokens here.
-  const longContextCost =
-    model.cost.longContext && promptTokens >= model.cost.longContext.threshold
-      ? model.cost.longContext
-      : undefined;
   const inputCostOverride = config.inputCost ?? config.cost;
   // xAI's language-model REST schema defines long_context_threshold as the token
   // count "at or above" which long-context prices apply.
@@ -691,6 +674,13 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     // Ensure we have a valid result
     if (!result || !result.body) {
       return result;
+    }
+
+    const passthrough = result.config.passthrough as { max_tokens?: number } | undefined;
+    const maxTokens = passthrough?.max_tokens ?? result.config.max_tokens;
+    if (GROK_BUILD_CHAT_MODELS.has(this.modelName) && maxTokens !== undefined) {
+      result.body.max_tokens = maxTokens;
+      delete result.body.max_completion_tokens;
     }
 
     // Filter out unsupported sampling controls for Grok-4-family models.

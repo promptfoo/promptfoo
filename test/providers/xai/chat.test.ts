@@ -498,6 +498,25 @@ describe('xAI Chat Provider', () => {
       expect(result.body.max_completion_tokens).toBe(2048);
     });
 
+    it.each([
+      'grok-build-0.1',
+      'grok-code-fast-1',
+      'grok-code-fast',
+      'grok-code-fast-1-0825',
+    ])('preserves max_tokens for Grok Build chat requests using %s', async (modelName) => {
+      for (const config of [{ max_tokens: 321 }, { passthrough: { max_tokens: 321 } }]) {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config,
+          },
+        });
+
+        expect(result.body.max_tokens).toBe(321);
+        expect(result.body.max_completion_tokens).toBeUndefined();
+      }
+    });
+
     it('filters unsupported parameters for Grok 4 Fast models', async () => {
       const provider = createXAIProvider('xai:grok-4-fast-reasoning') as any;
       const mockContext = {

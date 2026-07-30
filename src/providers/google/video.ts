@@ -97,6 +97,10 @@ export function validateAspectRatio(ratio: string): { valid: boolean; message?: 
 export function validateDuration(
   model: string,
   duration: number,
+  config: Pick<
+    GoogleVideoOptions,
+    'referenceImages' | 'extendVideoId' | 'sourceVideo' | 'resolution'
+  > = {},
 ): { valid: boolean; message?: string } {
   const isVeo2 = model.includes('veo-2');
   const validDurations = isVeo2 ? VEO_2_DURATIONS : VEO_3_DURATIONS;
@@ -107,6 +111,27 @@ export function validateDuration(
       message: `Invalid duration ${duration}s for ${model}. Valid: ${validDurations.join(', ')}s`,
     };
   }
+
+  const usesVideoExtension = Boolean(config.extendVideoId || config.sourceVideo);
+  const usesReferenceImages = Boolean(config.referenceImages?.length);
+  const usesHighResolution = config.resolution === '1080p' || config.resolution === '4k';
+
+  if (model.includes('veo-3.1-lite') && (usesVideoExtension || usesReferenceImages)) {
+    return {
+      valid: false,
+      message: 'Veo 3.1 Lite does not support video extension or reference images.',
+    };
+  }
+
+  if (duration !== 8 && (usesVideoExtension || usesReferenceImages || usesHighResolution)) {
+    return {
+      valid: false,
+      message:
+        'This configuration requires durationSeconds: 8 when using video extension, ' +
+        `reference images, or 1080p/4k resolution (received ${duration}).`,
+    };
+  }
+
   return { valid: true };
 }
 
@@ -114,13 +139,35 @@ export function validateResolution(
   model: string,
   aspectRatio: string,
   resolution: string,
+  config: Pick<GoogleVideoOptions, 'extendVideoId' | 'sourceVideo'> = {},
 ): { valid: boolean; message?: string } {
+  if (!['720p', '1080p', '4k'].includes(resolution)) {
+    return {
+      valid: false,
+      message: `Invalid resolution "${resolution}". Valid resolutions: 720p, 1080p, 4k`,
+    };
+  }
+
+  if ((config.extendVideoId || config.sourceVideo) && resolution !== '720p') {
+    return {
+      valid: false,
+      message: `Video extension requires 720p resolution (received ${resolution}).`,
+    };
+  }
+
+  if (resolution === '4k' && (!model.includes('veo-3.1') || model.includes('lite'))) {
+    return {
+      valid: false,
+      message: `${model} does not support 4k resolution. Use Veo 3.1 or Veo 3.1 Fast.`,
+    };
+  }
+
   // Veo 3 only supports 1080p for 16:9 aspect ratio
   if (model.includes('veo-3') && !model.includes('veo-3.1') && aspectRatio === '9:16') {
-    if (resolution === '1080p') {
+    if (resolution === '1080p' || resolution === '4k') {
       return {
         valid: false,
-        message: `Veo 3 only supports 1080p for 16:9 aspect ratio. Use 720p for 9:16.`,
+        message: `Veo 3 only supports ${resolution} for 16:9 aspect ratio. Use 720p for 9:16.`,
       };
     }
   }
@@ -426,7 +473,7 @@ export class GoogleVideoProvider implements ApiProvider {
       if (sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Use `vertex:video:*` with `extendVideoId`, or provide base64/file:// video data via `sourceVideo`.',
+            'Google AI Studio Veo does not accept operation IDs for video extension. Provide base64/file:// video data via `sourceVideo`.',
         };
       }
       const { data: videoData, error } = this.loadVideoData(sourceVideo);
@@ -835,6 +882,13 @@ export class GoogleVideoProvider implements ApiProvider {
         ...(projectId ? { projectId } : {}),
       };
     } else if (!this.getApiKey(effectiveConfig)) {
+      const missingApiKeyError =
+        'Google Veo video generation via Google AI Studio requires an API key. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.';
+
+      if (effectiveConfig.vertexai === false) {
+        return { error: missingApiKeyError };
+      }
+
       try {
         const adcProjectId = await resolveProjectId(effectiveConfig, this.env);
         if (adcProjectId) {
@@ -844,16 +898,10 @@ export class GoogleVideoProvider implements ApiProvider {
             projectId: adcProjectId,
           };
         } else {
-          return {
-            error:
-              'Google Veo video generation via Google AI Studio requires an API key. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.',
-          };
+          return { error: missingApiKeyError };
         }
       } catch {
-        return {
-          error:
-            'Google Veo video generation via Google AI Studio requires an API key. Set GOOGLE_API_KEY or GEMINI_API_KEY, or add `apiKey` to the provider config.',
-        };
+        return { error: missingApiKeyError };
       }
     }
 
@@ -871,13 +919,18 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Validate duration
-    const durationValidation = validateDuration(model, durationSeconds);
+    const durationValidation = validateDuration(model, durationSeconds, effectiveConfig);
     if (!durationValidation.valid) {
       return { error: durationValidation.message };
     }
 
     // Validate resolution
-    const resolutionValidation = validateResolution(model, aspectRatio, resolution);
+    const resolutionValidation = validateResolution(
+      model,
+      aspectRatio,
+      resolution,
+      effectiveConfig,
+    );
     if (!resolutionValidation.valid) {
       return { error: resolutionValidation.message };
     }

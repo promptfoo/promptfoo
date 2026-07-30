@@ -521,10 +521,14 @@ export interface ClaudeResponse {
  */
 export type GoogleVideoModel =
   | 'veo-3.1-generate-preview'
-  | 'veo-3.1-fast-preview'
-  | 'veo-3-generate'
-  | 'veo-3-fast'
-  | 'veo-2-generate';
+  | 'veo-3.1-fast-generate-preview'
+  | 'veo-3.1-lite-generate-preview'
+  | 'veo-3.1-generate-001'
+  | 'veo-3.1-fast-generate-001'
+  | 'veo-3.1-lite-generate-001'
+  | 'veo-3.0-generate-001'
+  | 'veo-3.0-fast-generate-001'
+  | 'veo-2.0-generate-001';
 
 /**
  * Supported aspect ratios for Veo video generation
@@ -534,7 +538,7 @@ export type GoogleVideoAspectRatio = '16:9' | '9:16';
 /**
  * Supported resolutions for Veo video generation
  */
-export type GoogleVideoResolution = '720p' | '1080p';
+export type GoogleVideoResolution = '720p' | '1080p' | '4k';
 
 /**
  * Valid video durations by model

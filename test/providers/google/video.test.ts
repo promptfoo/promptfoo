@@ -10,6 +10,7 @@ import {
 } from '../../../src/providers/google/video';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { GoogleVideoOptions } from '../../../src/providers/google/types';
 import type { CallApiContextParams } from '../../../src/types/providers';
 
 // Mock the Google client
@@ -49,6 +50,19 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
+
+const durationConstrainedConfigs = [
+  ['reference images', { referenceImages: ['file://reference.png'] }],
+  ['extendVideoId', { extendVideoId: 'projects/test/operations/123' }],
+  ['sourceVideo', { sourceVideo: 'file://source.mp4' }],
+  ['1080p resolution', { resolution: '1080p' }],
+  ['4k resolution', { resolution: '4k' }],
+] satisfies Array<
+  [
+    string,
+    Pick<GoogleVideoOptions, 'referenceImages' | 'extendVideoId' | 'sourceVideo' | 'resolution'>,
+  ]
+>;
 
 describe('GoogleVideoProvider', () => {
   beforeEach(() => {
@@ -151,15 +165,15 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should accept 4, 6, 8 for Veo 3', () => {
-      expect(validateDuration('veo-3-generate', 4)).toEqual({ valid: true });
-      expect(validateDuration('veo-3-generate', 6)).toEqual({ valid: true });
-      expect(validateDuration('veo-3-generate', 8)).toEqual({ valid: true });
+      expect(validateDuration('veo-3.0-generate-001', 4)).toEqual({ valid: true });
+      expect(validateDuration('veo-3.0-generate-001', 6)).toEqual({ valid: true });
+      expect(validateDuration('veo-3.0-generate-001', 8)).toEqual({ valid: true });
     });
 
     it('should accept 5, 6, 8 for Veo 2', () => {
-      expect(validateDuration('veo-2-generate', 5)).toEqual({ valid: true });
-      expect(validateDuration('veo-2-generate', 6)).toEqual({ valid: true });
-      expect(validateDuration('veo-2-generate', 8)).toEqual({ valid: true });
+      expect(validateDuration('veo-2.0-generate-001', 5)).toEqual({ valid: true });
+      expect(validateDuration('veo-2.0-generate-001', 6)).toEqual({ valid: true });
+      expect(validateDuration('veo-2.0-generate-001', 8)).toEqual({ valid: true });
     });
 
     it('should reject 5 for Veo 3', () => {
@@ -169,9 +183,29 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should reject 4 for Veo 2', () => {
-      const result = validateDuration('veo-2-generate', 4);
+      const result = validateDuration('veo-2.0-generate-001', 4);
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Invalid duration');
+    });
+
+    it.each(
+      durationConstrainedConfigs,
+    )('should require 8 seconds for Veo requests using %s', (_feature, config) => {
+      const result = validateDuration('veo-3.1-generate-preview', 6, config);
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('requires durationSeconds: 8');
+      expect(validateDuration('veo-3.1-generate-preview', 8, config)).toEqual({
+        valid: true,
+      });
+    });
+
+    it.each([
+      ['reference images', { referenceImages: ['file://reference.png'] }],
+      ['video extension', { sourceVideo: 'file://source.mp4' }],
+    ])('should reject %s for Veo 3.1 Lite', (_feature, config) => {
+      const result = validateDuration('veo-3.1-lite-generate-preview', 8, config);
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('Veo 3.1 Lite');
     });
   });
 
@@ -186,15 +220,30 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should reject 1080p for Veo 3 with 9:16 aspect ratio', () => {
-      const result = validateResolution('veo-3-generate', '9:16', '1080p');
+      const result = validateResolution('veo-3.0-generate-001', '9:16', '1080p');
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Veo 3 only supports 1080p for 16:9');
     });
 
     it('should reject 1080p for Veo 2', () => {
-      const result = validateResolution('veo-2-generate', '16:9', '1080p');
+      const result = validateResolution('veo-2.0-generate-001', '16:9', '1080p');
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Veo 2 only supports 720p');
+    });
+
+    it('should reject 4k for Veo 3.1 Lite', () => {
+      const result = validateResolution('veo-3.1-lite-generate-preview', '16:9', '4k');
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('does not support 4k');
+    });
+
+    it.each([
+      ['extendVideoId', { extendVideoId: 'projects/test/operations/123' }],
+      ['sourceVideo', { sourceVideo: 'file://source.mp4' }],
+    ])('should require 720p for video extension using %s', (_feature, config) => {
+      const result = validateResolution('veo-3.1-generate-preview', '16:9', '1080p', config);
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('Video extension requires 720p');
     });
   });
 
@@ -252,6 +301,24 @@ describe('GoogleVideoProvider', () => {
 
       expect(result.error).toContain('Google AI Studio');
       expect(result.error).toContain('GOOGLE_API_KEY');
+    });
+
+    it('should not fall back to Vertex when Google AI Studio is explicitly selected', async () => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          vertexai: false,
+          sourceVideo: 'file://source.mp4',
+          durationSeconds: 8,
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Google AI Studio');
+      expect(result.error).toContain('GOOGLE_API_KEY');
+      expect(mockResolveProjectId).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
     });
 
     it('should return error when Vertex project ID is missing and ADC fails', async () => {
@@ -321,7 +388,7 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should return error for invalid duration', async () => {
-      const provider = new GoogleVideoProvider('veo-2-generate', {
+      const provider = new GoogleVideoProvider('veo-2.0-generate-001', {
         config: {
           durationSeconds: 4,
         },
@@ -330,6 +397,39 @@ describe('GoogleVideoProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Invalid duration');
+    });
+
+    it.each(
+      durationConstrainedConfigs,
+    )('should reject a 6-second Veo request using %s before network I/O', async (_feature, config) => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          ...config,
+          durationSeconds: 6,
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('requires durationSeconds: 8');
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it('should reject non-720p video extension before network I/O', async () => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          durationSeconds: 8,
+          extendVideoId: 'projects/test/operations/123',
+          resolution: '1080p',
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Video extension requires 720p');
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
     });
 
     it('should create video job, poll for completion, and store to blob storage', async () => {

@@ -506,13 +506,7 @@ prompts:
   - '{{audioFile}}'
 
 providers:
-  - id: tts-generator
-    label: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
-    config:
-      modelId: eleven_flash_v2_5
-
-  - id: stt-transcriber
-    label: elevenlabs:stt
+  - id: elevenlabs:stt
     config:
       calculateWER: true
       referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'

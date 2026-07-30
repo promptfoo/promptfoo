@@ -443,6 +443,9 @@ Google's Veo models enable AI-powered video generation from text prompts. Use th
 | `google:video:veo-3.1-generate-preview`      | Veo 3.1 model                                              |
 | `google:video:veo-3.1-fast-generate-preview` | Fast Veo 3.1 model                                         |
 | `google:video:veo-3.1-lite-generate-preview` | Lite Veo 3.1 model; no reference images or video extension |
+| `google:video:veo-3.0-generate-001`          | Deprecated Veo 3 model; migrate to Veo 3.1                 |
+| `google:video:veo-3.0-fast-generate-001`     | Deprecated Veo 3 Fast model; migrate to Veo 3.1 Fast       |
+| `google:video:veo-2.0-generate-001`          | Deprecated Veo 2 model; migrate to Veo 3.1                 |
 
 #### Basic Usage
 
@@ -453,7 +456,7 @@ providers:
     config:
       # Uses GOOGLE_API_KEY / GEMINI_API_KEY by default
       aspectRatio: '16:9' # or '9:16'
-      resolution: '720p' # or '1080p'
+      resolution: '720p' # 1080p/4k require 8 seconds
       durationSeconds: 6 # 4, 6, or 8 seconds
 
 prompts:
@@ -465,7 +468,7 @@ tests:
 ```
 
 :::note
-`google:video:*` uses Google AI Studio by default and can auto-detect Vertex AI when project-based auth is configured. Existing project-based `google:video:*` configs remain compatible, but `vertex:video:*` is the recommended explicit path for Vertex-only flows like `extendVideoId`.
+`google:video:*` uses Google AI Studio by default and can auto-detect Vertex AI when project-based auth is configured. Existing project-based `google:video:*` configs remain compatible; use `vertex:video:*` when you want explicit Vertex AI routing.
 :::
 
 #### Configuration Options
@@ -473,14 +476,14 @@ tests:
 | Option             | Type   | Description                                                                                            |
 | ------------------ | ------ | ------------------------------------------------------------------------------------------------------ |
 | `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                         |
-| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                          |
-| `durationSeconds`  | number | Video duration: 4, 6, or 8 seconds                                                                     |
+| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k requires Veo 3.1 or 3.1 Fast, and extension is 720p-only        |
+| `durationSeconds`  | number | 4, 6, or 8 seconds; extension, reference images, and 1080p/4k output require 8 seconds                 |
 | `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                  |
 | `negativePrompt`   | string | Concepts to avoid in the generated video                                                               |
 | `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                       |
 | `image`            | string | Source image for image-to-video generation                                                             |
 | `lastImage`        | string | End frame for interpolation (requires `image`)                                                         |
-| `extendVideoId`    | string | Previous Vertex Veo operation ID (Veo 3.1 and 3.1 Fast, not Lite)                                      |
+| `extendVideoId`    | string | Legacy Vertex operation-ID input; availability depends on the selected Vertex model                    |
 | `sourceVideo`      | string | Source video input for Veo 3.1 and 3.1 Fast, not Lite. Use base64, `file://`, or a Vertex operation ID |
 
 #### Image-to-Video Generation
@@ -521,15 +524,16 @@ prompts:
 
 #### Video Extension (Veo 3.1 Only)
 
-Extend a previously generated Veo video using its operation ID:
+Extend a previously generated Veo video using video data:
 
 ```yaml
 providers:
-  - id: vertex:video:veo-3.1-generate-preview
+  - id: google:video:veo-3.1-generate-preview
     config:
-      # Use the operation ID from a previous Veo generation
-      extendVideoId: projects/my-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/abc123
-      durationSeconds: 6
+      vertexai: false # sourceVideo with file:// uses the Google AI Studio route
+      sourceVideo: file://assets/veo-input.mp4
+      resolution: '720p'
+      durationSeconds: 8
 
 prompts:
   - 'Continue this video with {{continuation}}'
@@ -540,7 +544,9 @@ tests:
 ```
 
 :::note
-`extendVideoId` is a Vertex AI flow and requires an operation ID from a previous Veo generation. For Google AI Studio, pass base64 or a `file://` video via `sourceVideo` instead. Older `google:video:*` configs with project-based auth still work through Vertex auto-detection, but `vertex:video:*` is the clearer form.
+This example requires `GOOGLE_API_KEY` or `GEMINI_API_KEY` and explicitly uses the Google AI
+Studio route. The Gemini API only extends videos generated by Veo. Pass the prior video as
+base64 or a `file://` path through `sourceVideo`; operation IDs are not accepted on this route.
 :::
 
 #### Reference Images
@@ -556,7 +562,7 @@ providers:
         - file://assets/style-ref-1.jpg
         - file://assets/style-ref-2.jpg
       aspectRatio: '16:9'
-      durationSeconds: 6
+      durationSeconds: 8
 ```
 
 You can also use the object format to specify the reference type:

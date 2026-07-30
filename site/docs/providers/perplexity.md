@@ -9,7 +9,7 @@ The [Perplexity Sonar API](https://docs.perplexity.ai/docs/sonar/quickstart) pro
 
 Perplexity follows OpenAI's chat completion API format - see our [OpenAI documentation](https://promptfoo.dev/docs/providers/openai) for the base API details.
 
-This integration accepts the four Sonar model IDs listed below. Perplexity's separate [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) supports third-party models and vendor-qualified IDs through a different endpoint.
+The four model IDs below are Perplexity's current Sonar catalog. The provider forwards model IDs without a local allow-list, but it targets the Sonar chat-completions endpoint. Perplexity's separate [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) uses vendor-qualified IDs through a different endpoint.
 
 ## Setup
 
@@ -156,7 +156,8 @@ providers:
       temperature: 0.1
       max_tokens: 4000
       search_domain_filter: ['arxiv.org', 'researchgate.net', 'scholar.google.com']
-      reasoning_effort: 'high'
+      passthrough:
+        reasoning_effort: 'high' # low, medium (default), or high
 ```
 
 ### Step-by-Step Reasoning
@@ -170,6 +171,11 @@ providers:
       temperature: 0.2
       max_tokens: 3000
 ```
+
+### Offline Creative Tasks
+
+Perplexity's current catalog focuses on online Sonar models. The former offline `r1-1776`
+model is retired, so use another provider when a task must run without web search.
 
 ## Best Practices
 
@@ -185,7 +191,7 @@ providers:
 - Set `search_domain_filter` to trusted domains for higher quality citations
 - Use `search_recency_filter` for time-sensitive topics
 - For Sonar, Sonar Pro, and Sonar Reasoning Pro, set `web_search_options.search_context_size` to "low" to reduce request fees
-- For Deep Research, use `reasoning_effort` to balance depth and cost
+- For Deep Research, set `passthrough.reasoning_effort` to balance depth and cost
 
 ### Structured Output Tips
 

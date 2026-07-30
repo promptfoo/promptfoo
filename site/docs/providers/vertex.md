@@ -202,15 +202,13 @@ Imagen models are available through [Google AI Studio](/docs/providers/google#im
 
 Use the `vertex:video:` prefix for Veo on Vertex AI:
 
-- `vertex:video:veo-3.1-generate-preview`
-- `vertex:video:veo-3.1-fast-preview`
-- `vertex:video:veo-3-generate`
-- `vertex:video:veo-3-fast`
-- `vertex:video:veo-2-generate`
+- `vertex:video:veo-3.1-generate-001`
+- `vertex:video:veo-3.1-fast-generate-001`
+- `vertex:video:veo-3.1-lite-generate-001`
 
 ```yaml
 providers:
-  - id: vertex:video:veo-3.1-generate-preview
+  - id: vertex:video:veo-3.1-generate-001
     config:
       projectId: your-project-id
       region: us-central1

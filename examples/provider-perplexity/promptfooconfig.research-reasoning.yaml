@@ -11,7 +11,8 @@ providers:
       temperature: 0.1
       max_tokens: 4000
       search_domain_filter: ['arxiv.org', 'researchgate.net', 'scholar.google.com']
-      reasoning_effort: 'high'
+      passthrough:
+        reasoning_effort: 'high' # low, medium (default), or high
       # This provider will be used for the first prompt only
 
   - id: perplexity:sonar-reasoning-pro

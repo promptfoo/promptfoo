@@ -49,7 +49,7 @@ providers:
 
 :::note
 
-The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` were scheduled for discontinuation on July 24, 2026 and are no longer listed in the current catalog.
+The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepSeek scheduled the legacy `deepseek-chat` and `deepseek-reasoner` aliases for discontinuation on July 24, 2026, and no longer lists them in the current catalog. Promptfoo still recognizes both aliases for backward-compatible configuration, and `deepseek:` currently defaults to `deepseek-chat`; DeepSeek controls whether alias requests remain available upstream, so use explicit V4 IDs for new configs.
 
 :::
 
@@ -66,6 +66,18 @@ The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The l
 - 1M context window, up to 384K output tokens
 - Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
 - Output: $0.87/1M
+
+### Legacy aliases
+
+### deepseek-chat
+
+- Retained by Promptfoo for backward-compatible configuration
+- No longer listed in DeepSeek's current catalog; use `deepseek-v4-flash` for new configs
+
+### deepseek-reasoner
+
+- Retained by Promptfoo for backward-compatible configuration
+- No longer listed in DeepSeek's current catalog; use an explicit V4 model with thinking enabled
 
 :::warning
 
