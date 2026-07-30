@@ -97,6 +97,8 @@ describe('Perplexity Provider', () => {
 
       const { body } = await provider.getOpenAiBody('Test prompt', {
         prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
           config: {
             search_domain_filter: ['prompt.example'],
             web_search_options: {
@@ -104,6 +106,7 @@ describe('Perplexity Provider', () => {
             },
           },
         },
+        vars: {},
       });
 
       expect(body).toMatchObject({
@@ -120,6 +123,8 @@ describe('Perplexity Provider', () => {
 
       const { body: passthroughBody } = await provider.getOpenAiBody('Test prompt', {
         prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
           config: {
             search_domain_filter: ['prompt.example'],
             passthrough: {
@@ -130,6 +135,7 @@ describe('Perplexity Provider', () => {
             },
           },
         },
+        vars: {},
       });
 
       expect(passthroughBody).toMatchObject({
