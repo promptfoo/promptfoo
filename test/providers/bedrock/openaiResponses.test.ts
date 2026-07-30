@@ -278,8 +278,8 @@ describe('bedrock openaiResponses helper', () => {
 
     it.each([
       ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
+      ['openai.gpt-5.6-terra', 2, 12],
+      ['openai.gpt-5.6-luna', 0.2, 1.2],
     ])('applies first-party-equivalent cache read/write and output rates to %s', (modelId, input, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
@@ -317,8 +317,8 @@ describe('bedrock openaiResponses helper', () => {
 
     it.each([
       ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
+      ['openai.gpt-5.6-terra', 2, 12],
+      ['openai.gpt-5.6-luna', 0.2, 1.2],
     ])('applies the long-context rates without a first-party regional uplift to %s', (modelId, input, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key', region: 'us-east-1' },
