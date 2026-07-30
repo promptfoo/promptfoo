@@ -323,10 +323,28 @@ export async function matchesContextRelevance(
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
   const normalizedContext = normalizeForMatch(contextString);
-  const isFromContext = (text: string) => {
+  const matchesContext = (text: string) => {
     const normalized = normalizeForMatch(text);
     return normalized.length > 0 && normalizedContext.includes(normalized);
   };
+
+  // A grader may put its cue on the same line as the first extraction
+  // ("candidate sentences: Alpha is first."). The label is only dropped when doing so
+  // turns a non-matching segment into a verbatim context sentence, so a context
+  // sentence that legitimately contains a colon is left alone.
+  const withoutInlineLabel = (text: string) => {
+    const stripped = text.replace(/^[^:\n]{0,80}:\s+/, '');
+    return stripped !== text && matchesContext(stripped) ? stripped : text;
+  };
+
+  // A segment that is nothing but a list marker carries no content. Sentence-mode
+  // splitting leaves `A.` standing alone, and it normalises to `a` — a substring of
+  // very nearly any context — so without this it would be counted as a relevant
+  // sentence and inflate the numerator, which is the failure this filter exists to
+  // prevent. `splitTextIntoSentences` already drops the numeric form.
+  const isMarkerOnly = (text: string) => /^\s*\(?[\p{N}A-Za-z][.)]\s*$/u.test(text);
+
+  const isFromContext = (text: string) => !isMarkerOnly(text) && matchesContext(text);
 
   // Chatter is dropped BEFORE segmentation rather than after. `splitTextIntoSentences`
   // picks line mode as soon as the completion spans two or more non-empty lines, so an
@@ -336,12 +354,16 @@ export async function matchesContextRelevance(
   // would have had without it.
   const graderOutput = resp.output
     .split('\n')
-    .filter((line) => line.trim() === '' || splitTextIntoSentences(line).some(isFromContext))
+    .filter(
+      (line) =>
+        line.trim() === '' ||
+        splitTextIntoSentences(line).map(withoutInlineLabel).some(isFromContext),
+    )
     .join('\n');
 
   const relevantSentences = insufficientInformation
     ? []
-    : [...new Set(segmentRelevant(graderOutput))].filter(isFromContext);
+    : [...new Set(segmentRelevant(graderOutput).map(withoutInlineLabel))].filter(isFromContext);
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 

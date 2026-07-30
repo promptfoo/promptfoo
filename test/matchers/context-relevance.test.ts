@@ -521,4 +521,40 @@ This policy excludes all staff going on any outgoing structured programs, short 
     expect(result.metadata?.relevantSentenceCount).toBe(1);
     expect(result.score).toBeCloseTo(0.33, 2);
   });
+
+  it('should count both sentences when the cue shares a line with the first', async () => {
+    // Segmenting leaves the cue attached to the first sentence, so the membership
+    // check rejected an otherwise verbatim extraction and 2/3 became 1/3.
+    const input = 'What comes first and second?';
+    const context = 'Alpha is first. Beta is second. Gamma is third.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences: Alpha is first. Beta is second.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+    expect(result.score).toBeCloseTo(0.67, 2);
+  });
+
+  it('should not count a bare list marker left standing by sentence splitting', async () => {
+    // `A.` splits into its own segment and normalizes to `a`, which is a substring of
+    // nearly any context — counting it inflates the numerator, the very failure this
+    // filter exists to prevent.
+    const input = 'What is the capital of France?';
+    const context = 'Paris is the capital of France. Berlin is the capital of Germany.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'A. Paris is the capital of France.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France.']);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.5, 2);
+  });
 });
