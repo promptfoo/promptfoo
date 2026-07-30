@@ -13,6 +13,7 @@ import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matcher
 import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
+  matchesCitationFaithfulness,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
@@ -885,6 +886,7 @@ export default {
   matchesFactuality,
   matchesClosedQa,
   matchesAnswerRelevance,
+  matchesCitationFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
   matchesContextFaithfulness,

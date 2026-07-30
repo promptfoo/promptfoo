@@ -185,9 +185,13 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   // These assertions require special handling and should always use metadata.context
   if (
     result.assertion?.type &&
-    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
-      result.assertion.type,
-    ) &&
+    [
+      'citation-faithfulness',
+      'not-citation-faithfulness',
+      'context-faithfulness',
+      'context-recall',
+      'context-relevance',
+    ].includes(result.assertion.type) &&
     result.metadata?.context
   ) {
     const context = result.metadata.context;

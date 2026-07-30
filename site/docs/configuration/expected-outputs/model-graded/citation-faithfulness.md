@@ -50,11 +50,16 @@ tests:
       context:
         - 'The Eiffel Tower stands 330 metres tall in Paris.'
         - 'The Eiffel Tower was completed in 1889 for the World Fair.'
+    # Keep the whole passage array in a single test case. By default promptfoo
+    # expands a string array into one row per entry, which would hand the grader
+    # a single passage instead of the full numbered list.
+    options:
+      disableVarExpansion: true
     assert:
       - type: citation-faithfulness
 ```
 
-When `context` is an array, each entry is automatically numbered (`[1] ...`, `[2] ...`) before being shown to the judge, so the `[N]` markers in the answer resolve to the right passage. If you pass `context` as a single string, it is used as-is, so embed your own `[N]` markers in that case.
+When `context` is an array, each entry is automatically numbered (`[1] ...`, `[2] ...`) before being shown to the judge, so the `[N]` markers in the answer resolve to the right passage. Set `options.disableVarExpansion: true` on the test (as above) so promptfoo does not split the array into separate rows; without it, each passage becomes its own test case and the grader only ever sees one passage at a time. If you pass `context` as a single string, it is used as-is, so embed your own `[N]` markers in that case, and no `disableVarExpansion` is needed.
 
 ### Dynamic context extraction
 
