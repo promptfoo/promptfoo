@@ -75,6 +75,46 @@ describe('Perplexity Provider', () => {
       expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
     });
 
+    it('should forward Perplexity-specific search options', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          search_domain_filter: ['example.com'],
+          search_recency_filter: 'week',
+          return_related_questions: true,
+          return_images: true,
+          search_after_date_filter: '01/01/2026',
+          search_before_date_filter: '02/01/2026',
+          web_search_options: {
+            search_context_size: 'high',
+            user_location: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              country: 'US',
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body).toMatchObject({
+        search_domain_filter: ['example.com'],
+        search_recency_filter: 'week',
+        return_related_questions: true,
+        return_images: true,
+        search_after_date_filter: '01/01/2026',
+        search_before_date_filter: '02/01/2026',
+        web_search_options: {
+          search_context_size: 'high',
+          user_location: {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            country: 'US',
+          },
+        },
+      });
+    });
+
     it('should set the correct usage tier', () => {
       const tiers = ['high', 'medium', 'low'] as const;
 

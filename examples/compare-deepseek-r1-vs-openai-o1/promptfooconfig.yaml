@@ -17,7 +17,12 @@ prompts:
 
 providers:
   - openai:chat:gpt-5.6
-  - deepseek:deepseek-v4-pro
+  - id: deepseek:deepseek-v4-pro
+    config:
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
 
 defaultTest:
   assert:

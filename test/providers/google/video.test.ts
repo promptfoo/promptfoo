@@ -513,6 +513,7 @@ describe('GoogleVideoProvider', () => {
       const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
       const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';
       const videoBytes = Buffer.from('fake ai studio video data');
+      const sourceVideo = Buffer.from('source video data').toString('base64');
 
       mockFetchWithTimeout
         .mockResolvedValueOnce(
@@ -549,6 +550,7 @@ describe('GoogleVideoProvider', () => {
         config: {
           pollIntervalMs: 10,
           maxPollTimeMs: 5000,
+          sourceVideo,
         },
       });
 
@@ -589,6 +591,13 @@ describe('GoogleVideoProvider', () => {
         '"prompt":"A cinematic shot of a lighthouse in a storm"',
       );
       expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain('"durationSeconds":8');
+      const requestBody = JSON.parse(mockFetchWithTimeout.mock.calls[0]?.[1]?.body as string);
+      expect(requestBody.instances[0].video).toEqual({
+        inlineData: {
+          mimeType: 'video/mp4',
+          data: sourceVideo,
+        },
+      });
       expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
         2,
         'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview/operations/test-op',

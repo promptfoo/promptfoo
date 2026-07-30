@@ -115,12 +115,28 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: PerplexityProviderOptions = {}) {
     // Handle the case when config is nested inside config
     const actualConfig = providerOptions.config?.config || providerOptions.config || {};
+    const providerSpecificOptions = {
+      search_domain_filter: actualConfig.search_domain_filter,
+      search_recency_filter: actualConfig.search_recency_filter,
+      return_related_questions: actualConfig.return_related_questions,
+      return_images: actualConfig.return_images,
+      search_after_date_filter: actualConfig.search_after_date_filter,
+      search_before_date_filter: actualConfig.search_before_date_filter,
+      web_search_options: actualConfig.web_search_options,
+    };
+    const passthrough = Object.fromEntries(
+      Object.entries(providerSpecificOptions).filter(([, value]) => value !== undefined),
+    );
 
     // Create provider options with the correct config structure
     const normalizedOptions = {
       ...providerOptions,
       config: {
         ...actualConfig,
+        passthrough: {
+          ...passthrough,
+          ...(actualConfig.passthrough || {}),
+        },
         apiBaseUrl: 'https://api.perplexity.ai',
         apiKeyEnvar: 'PERPLEXITY_API_KEY',
       },
