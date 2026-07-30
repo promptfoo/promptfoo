@@ -282,11 +282,37 @@ export async function matchesContextRelevance(
   // text with no newlines, so counting by line alone would treat a multi-sentence
   // answer as one unit and undercount relevance (e.g. echoing the whole context
   // would score 1/N instead of 1.0).
+  //
+  // Only units that actually occur in the context count. The rubric requires verbatim
+  // extraction ("you're not allowed to make any changes to sentences from given
+  // context"), so anything absent from the context is the grader talking rather than
+  // extracting. Most often that is the rubric's own trailing `candidate sentences:`
+  // cue echoed back by chat models, which segmented into a unit and inflated the
+  // numerator — the denominator is derived from the context, so counting free text on
+  // the other side of the ratio made the score model-dependent.
+  //
+  // Matching is on normalised containment, not equality: graders routinely echo a
+  // sentence without its terminal punctuation or with altered whitespace, and a
+  // pre-segmented context may hold several sentences per unit.
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
+  // A leading list marker is the grader's formatting, not part of the extracted
+  // sentence, so it is dropped before matching — `1. Paris is…` must still match
+  // `Paris is…` in the context. The marker must be followed by whitespace, so a
+  // sentence that genuinely opens with a number ("1991 saw…") is left alone.
+  const normalizeForMatch = (text: string) =>
+    text
+      .replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const normalizedContext = normalizeForMatch(contextString);
   const relevantSentences = insufficientInformation
     ? []
-    : [...new Set(segmentRelevant(resp.output))];
+    : [...new Set(segmentRelevant(resp.output))].filter((sentence) => {
+        const normalized = normalizeForMatch(sentence);
+        return normalized.length > 0 && normalizedContext.includes(normalized);
+      });
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 

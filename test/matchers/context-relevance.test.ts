@@ -438,4 +438,32 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.relevantSentenceCount).toBe(1);
     });
   });
+  it('should not count the grader echoing the prompt cue as a relevant sentence', async () => {
+    // The rubric ends with a `candidate sentences:` cue; chat models frequently echo it
+    // back before answering. Segmenting the raw completion turned that echo into an
+    // extracted sentence, so the numerator counted it and the score came out double.
+    const input = 'Who created Python?';
+    const context =
+      'Python is a high-level, general-purpose programming language known for readability. ' +
+      'It has a large standard library. ' +
+      'It was created by Guido van Rossum and released in 1991. ' +
+      'Python is widely used in data science, web development, and automation.';
+    const threshold = 0.2;
+
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences:\nIt was created by Guido van Rossum and released in 1991.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, threshold);
+
+    // one of four context sentences is relevant
+    expect(result.metadata?.totalContextUnits).toBe(4);
+    expect(result.metadata?.extractedSentences).toEqual([
+      'It was created by Guido van Rossum and released in 1991.',
+    ]);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.25, 2);
+  });
 });
