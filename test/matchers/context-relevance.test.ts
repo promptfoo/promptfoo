@@ -466,4 +466,59 @@ This policy excludes all staff going on any outgoing structured programs, short 
     expect(result.metadata?.relevantSentenceCount).toBe(1);
     expect(result.score).toBeCloseTo(0.25, 2);
   });
+
+  it('should keep verbatim extractions written in non-Latin scripts', async () => {
+    // The membership check must use Unicode letter/number properties. An ASCII-only
+    // class erases CJK, Arabic and Cyrillic entirely, so every extraction normalizes
+    // to the empty string and a correct grader scores 0.
+    const input = '法国的首都是哪里？';
+    const context = '巴黎是法国的首都。法国位于欧洲大陆。今天天气很好。';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '巴黎是法国的首都。',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeGreaterThan(0);
+  });
+
+  it('should still segment by sentence when the grader echoes the cue on its own line', async () => {
+    // The echoed cue adds a second line, which flips splitTextIntoSentences into line
+    // mode for the whole response. Dropping chatter before segmentation keeps the two
+    // relevant sentences on the remaining line counted separately.
+    const input = 'What comes first and second?';
+    const context = 'Alpha is first. Beta is second. Gamma is third.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences:\nAlpha is first. Beta is second.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+    expect(result.score).toBeCloseTo(0.67, 2);
+  });
+
+  it('should accept list markers beyond "1." when matching extractions', async () => {
+    // Graders vary their list formatting; a marker the stripper does not recognise
+    // leaves the candidate unmatchable and silently drops a real extraction.
+    const input = 'Who created Python?';
+    const context =
+      'Python is known for readability. It was created by Guido van Rossum. It is widely used.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '(1) It was created by Guido van Rossum.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.33, 2);
+  });
 });

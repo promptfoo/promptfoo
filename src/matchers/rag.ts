@@ -225,6 +225,31 @@ export async function matchesContextRecall(
   };
 }
 
+/**
+ * A leading list marker is the grader's formatting, not part of the extracted sentence,
+ * so `1. Paris is…`, `(2) Paris is…` and `a) Paris is…` all still match `Paris is…` in
+ * the context. The marker must be followed by whitespace, so a sentence that genuinely
+ * opens with a number ("1991 saw…") is left alone. Only ASCII letters are treated as
+ * markers — a CJK sentence can begin with a single character that is a word, not a label.
+ */
+const LIST_MARKER_PREFIX = /^\s*(?:[-*\u2022\u2013\u2014]|\(?\d+[.)]|\(?[a-zA-Z][.)])\s+/;
+
+/**
+ * Normalises text for context membership checks: strips a leading list marker, lowercases,
+ * and collapses everything that is not a letter or number into single spaces.
+ *
+ * Uses the Unicode letter/number properties rather than `[a-z0-9]`. An ASCII-only class
+ * erases CJK, Arabic, Cyrillic and similar scripts entirely, which would drop every
+ * extraction in a non-Latin RAG eval and score it 0.
+ */
+function normalizeForMatch(text: string): string {
+  return text
+    .replace(LIST_MARKER_PREFIX, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
 export async function matchesContextRelevance(
   question: string,
   context: string | string[],
@@ -293,26 +318,30 @@ export async function matchesContextRelevance(
   //
   // Matching is on normalised containment, not equality: graders routinely echo a
   // sentence without its terminal punctuation or with altered whitespace, and a
-  // pre-segmented context may hold several sentences per unit.
+  // pre-segmented context may hold several sentences per unit. See
+  // {@link normalizeForMatch}.
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
-  // A leading list marker is the grader's formatting, not part of the extracted
-  // sentence, so it is dropped before matching — `1. Paris is…` must still match
-  // `Paris is…` in the context. The marker must be followed by whitespace, so a
-  // sentence that genuinely opens with a number ("1991 saw…") is left alone.
-  const normalizeForMatch = (text: string) =>
-    text
-      .replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
   const normalizedContext = normalizeForMatch(contextString);
+  const isFromContext = (text: string) => {
+    const normalized = normalizeForMatch(text);
+    return normalized.length > 0 && normalizedContext.includes(normalized);
+  };
+
+  // Chatter is dropped BEFORE segmentation rather than after. `splitTextIntoSentences`
+  // picks line mode as soon as the completion spans two or more non-empty lines, so an
+  // echoed cue on its own line switches the rest of the response to line mode too — a
+  // line carrying two context sentences would then count as one unit, turning a 2/3
+  // score into 1/3. Removing the chatter first restores the segmentation the response
+  // would have had without it.
+  const graderOutput = resp.output
+    .split('\n')
+    .filter((line) => line.trim() === '' || splitTextIntoSentences(line).some(isFromContext))
+    .join('\n');
+
   const relevantSentences = insufficientInformation
     ? []
-    : [...new Set(segmentRelevant(resp.output))].filter((sentence) => {
-        const normalized = normalizeForMatch(sentence);
-        return normalized.length > 0 && normalizedContext.includes(normalized);
-      });
+    : [...new Set(segmentRelevant(graderOutput))].filter(isFromContext);
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 
