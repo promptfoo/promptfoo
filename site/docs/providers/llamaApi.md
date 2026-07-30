@@ -48,8 +48,9 @@ providers:
       top_p: 0.9 # Nucleus sampling parameter
       frequency_penalty: 0 # Reduce repetition (-2.0 to 2.0)
       presence_penalty: 0 # Encourage topic diversity (-2.0 to 2.0)
-      stream: false # Enable streaming responses
 ```
+
+Promptfoo's Llama API provider currently sends non-streaming requests.
 
 ## Available Models
 
@@ -236,29 +237,6 @@ tests:
         value: JSON.parse(output[0].function.arguments).location.includes('New York')
 ```
 
-### Streaming
-
-Enable real-time response streaming:
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-providers:
-  - id: llamaapi:Llama-3.3-8B-Instruct
-    config:
-      stream: true
-      temperature: 0.7
-
-prompts:
-  - 'Write a short story about {{topic}}'
-
-tests:
-  - vars:
-      topic: 'time travel'
-    assert:
-      - type: contains
-        value: 'time'
-```
-
 ## Rate Limits and Quotas
 
 All rate limits are applied per team (across all API keys):
@@ -322,8 +300,7 @@ Rate limit information is available in response headers:
 ### Performance Optimization
 
 1. **Choose the right model**: Balance quality vs. speed vs. cost
-2. **Use streaming**: For better user experience with long responses
-3. **Cache responses**: When appropriate for your use case
+2. **Cache responses**: When appropriate for your use case
 
 ## Troubleshooting
 
@@ -384,7 +361,7 @@ Meta Llama API has strong data commitments:
 | Multimodal     | ✅ (Llama 4) | ✅     | ✅        |
 | Tool Calling   | ✅           | ✅     | ✅        |
 | JSON Schema    | ✅           | ✅     | ❌        |
-| Streaming      | ✅           | ✅     | ✅        |
+| Streaming      | ❌           | ✅     | ✅        |
 | Context Window | 32k-128k     | 128k   | 200k      |
 | Data Training  | ❌           | ✅     | ❌        |
 
