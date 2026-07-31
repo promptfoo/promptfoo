@@ -670,6 +670,26 @@ describe('Provider Registry', () => {
       ).rejects.toThrow('Unknown Azure moderation model: typo-model');
     });
 
+    it.each([
+      ['openai:gpt-4.1', 'OpenAiChatCompletionProvider', 'gpt-4.1'],
+      ['openai:gpt-3.5-turbo-instruct', 'OpenAiCompletionProvider', 'gpt-3.5-turbo-instruct'],
+    ])('validates the route model for bare provider %s when config.model is ignored', async (providerPath, expectedProvider, expectedModel) => {
+      const factory = providerMap.find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        providerPath,
+        {
+          ...mockProviderOptions,
+          config: { ...mockProviderOptions.config, model: 'gpt-transcribe' },
+        },
+        mockContext,
+      );
+
+      expect(provider.constructor.name).toBe(expectedProvider);
+      expect((provider as { modelName?: string }).modelName).toBe(expectedModel);
+    });
+
     it('routes transcription-only OpenAI models without falling back to chat', async () => {
       const factory = providerMap.find((f) => f.test('openai:gpt-transcribe'));
       expect(factory).toBeDefined();

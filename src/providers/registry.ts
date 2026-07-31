@@ -161,16 +161,22 @@ function getEffectiveOpenAiApiModel(
     return configuredModel || modelName || modelType;
   }
 
-  const selectedModel =
-    modelType === 'speech' || modelType === 'tts'
-      ? configuredModel || modelName || modelType
-      : modelName || configuredModel || modelType;
+  const retiredRoute = getRetiredOpenAiModelRoute(modelType);
+  const explicitRouteUsesConfiguredModel =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || OPENAI_FIXED_MODEL_ROUTES.has(modelType);
+  const providerOverridesModelFromConfig =
+    modelType === 'speech' ||
+    modelType === 'tts' ||
+    OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+    retiredRoute === 'tts';
+  const selectedModel = providerOverridesModelFromConfig
+    ? configuredModel || modelName || modelType
+    : modelName || (explicitRouteUsesConfiguredModel ? configuredModel : undefined) || modelType;
 
   if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
     return selectedModel;
   }
 
-  const retiredRoute = getRetiredOpenAiModelRoute(modelType);
   const bareModelUsesPassthrough =
     !modelName &&
     (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType) ||
