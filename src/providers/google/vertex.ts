@@ -84,6 +84,81 @@ const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
   output: 22.5 / 1e6,
 };
 
+const VERTEX_LLAMA_4_MODELS = new Set([
+  'llama-4-maverick-17b-128e-instruct-maas',
+  'llama-4-scout-17b-16e-instruct-maas',
+]);
+
+interface VertexLlamaModelSafetySettings {
+  enabled: boolean;
+  llama_guard_settings: Record<string, unknown>;
+}
+
+type VertexLlamaSafetyRequestConfig =
+  | {
+      bodyFields: {
+        extra_body?: {
+          google: {
+            model_safety_settings: VertexLlamaModelSafetySettings;
+          };
+        };
+      };
+      enabled: boolean;
+      settingCount: number;
+    }
+  | { error: string };
+
+function getRequiredVertexLlamaRegion(modelName: string): 'us-central1' | 'us-east5' {
+  return VERTEX_LLAMA_4_MODELS.has(modelName) ? 'us-east5' : 'us-central1';
+}
+
+function getVertexLlamaRegionError(modelName: string, region: string): string | undefined {
+  const requiredRegion = getRequiredVertexLlamaRegion(modelName);
+  if (region === requiredRegion) {
+    return undefined;
+  }
+
+  const availabilitySubject = VERTEX_LLAMA_4_MODELS.has(modelName)
+    ? `Llama model ${modelName} is`
+    : 'Llama models are';
+  return `${availabilitySubject} only available in the ${requiredRegion} region. Current region: ${region}. Please set region: '${requiredRegion}' in your configuration.`;
+}
+
+function getVertexLlamaSafetyRequestConfig(
+  modelName: string,
+  llamaConfig: GoogleProviderConfig['llamaConfig'],
+): VertexLlamaSafetyRequestConfig {
+  if (VERTEX_LLAMA_4_MODELS.has(modelName)) {
+    return { bodyFields: {}, enabled: false, settingCount: 0 };
+  }
+
+  const llamaGuardSettings = llamaConfig?.safetySettings?.llama_guard_settings;
+  if (
+    llamaGuardSettings !== undefined &&
+    (typeof llamaGuardSettings !== 'object' || llamaGuardSettings === null)
+  ) {
+    return {
+      error: `Invalid llama_guard_settings: must be an object, received ${typeof llamaGuardSettings}`,
+    };
+  }
+
+  const modelSafetySettings: VertexLlamaModelSafetySettings = {
+    enabled: llamaConfig?.safetySettings?.enabled !== false,
+    llama_guard_settings: llamaGuardSettings || {},
+  };
+  return {
+    bodyFields: {
+      extra_body: {
+        google: {
+          model_safety_settings: modelSafetySettings,
+        },
+      },
+    },
+    enabled: modelSafetySettings.enabled,
+    settingCount: Object.keys(modelSafetySettings.llama_guard_settings).length,
+  };
+}
+
 function applyVertexClaudeLongContextPricing(
   modelName: string,
   config: GoogleProviderConfig,
@@ -1059,12 +1134,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callLlamaApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Validate region for Llama models (only available in us-central1)
     const region = this.getRegion();
-    if (region !== 'us-central1') {
-      return {
-        error: `Llama models are only available in the us-central1 region. Current region: ${region}. Please set region: 'us-central1' in your configuration.`,
-      };
+    const regionError = getVertexLlamaRegionError(this.modelName, region);
+    if (regionError) {
+      return { error: regionError };
     }
 
     // Parse the chat prompt into Llama format
@@ -1075,28 +1148,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       },
     ]);
 
-    // Define proper type for Llama model safety settings
-    interface LlamaModelSafetySettings {
-      enabled: boolean;
-      llama_guard_settings: Record<string, unknown>;
+    const safetyRequestConfig = getVertexLlamaSafetyRequestConfig(
+      this.modelName,
+      this.config.llamaConfig,
+    );
+    if ('error' in safetyRequestConfig) {
+      return { error: safetyRequestConfig.error };
     }
-
-    // Validate llama_guard_settings if provided
-    const llamaGuardSettings = this.config.llamaConfig?.safetySettings?.llama_guard_settings;
-    if (
-      llamaGuardSettings !== undefined &&
-      (typeof llamaGuardSettings !== 'object' || llamaGuardSettings === null)
-    ) {
-      return {
-        error: `Invalid llama_guard_settings: must be an object, received ${typeof llamaGuardSettings}`,
-      };
-    }
-
-    // Extract safety settings from config - default to enabled if not specified
-    const modelSafetySettings: LlamaModelSafetySettings = {
-      enabled: this.config.llamaConfig?.safetySettings?.enabled !== false, // Default to true
-      llama_guard_settings: llamaGuardSettings || {},
-    };
 
     // Prepare the request body for Llama models
     const body = {
@@ -1107,11 +1165,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       top_p: this.config.topP,
       top_k: this.config.topK,
-      extra_body: {
-        google: {
-          model_safety_settings: modelSafetySettings,
-        },
-      },
+      ...safetyRequestConfig.bodyFields,
     };
 
     const cache = await getCache();
@@ -1119,14 +1173,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,
-      region: this.getRegion(),
+      region,
       messageCount: messages.length,
       maxTokens: body.max_tokens,
       temperature: body.temperature,
       topP: body.top_p,
       topK: body.top_k,
-      safetySettingsEnabled: modelSafetySettings.enabled,
-      llamaGuardSettingCount: Object.keys(modelSafetySettings.llama_guard_settings).length,
+      safetySettingsEnabled: safetyRequestConfig.enabled,
+      llamaGuardSettingCount: safetyRequestConfig.settingCount,
       cacheKey,
     });
 
@@ -1166,7 +1220,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
       // Llama models use a different endpoint format
-      const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
+      const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${region}/endpoints/openapi/chat/completions`;
 
       const res = await client.request({
         url,

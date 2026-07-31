@@ -2031,7 +2031,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
     vi.clearAllMocks();
   });
 
-  it('should enforce us-central1 region for Llama models', async () => {
+  it('should enforce us-central1 region for legacy Llama models', async () => {
     // Create provider with non-us-central1 region
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
       config: { region: 'europe-west1' },
@@ -2044,6 +2044,49 @@ describe('VertexChatProvider.callLlamaApi', () => {
       error:
         "Llama models are only available in the us-central1 region. Current region: europe-west1. Please set region: 'us-central1' in your configuration.",
     });
+  });
+
+  it.each([
+    'llama-4-scout-17b-16e-instruct-maas',
+    'llama-4-maverick-17b-128e-instruct-maas',
+  ])('should call the current Llama 4 model %s in us-east5', async (modelName) => {
+    const mockRequest = mockVertexRequest({
+      choices: [{ message: { content: 'Llama 4 response content' } }],
+      usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+    });
+    provider = new VertexChatProvider(modelName, {
+      config: { region: 'us-east5' },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response.error).toBeUndefined();
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining('/locations/us-east5/endpoints/openapi/chat/completions'),
+        data: expect.objectContaining({
+          model: `meta/${modelName}`,
+        }),
+      }),
+    );
+    expect(mockRequest.mock.calls[0][0].data).not.toHaveProperty('extra_body');
+  });
+
+  it('should reject Llama 4 in the legacy us-central1 region', async () => {
+    const mockRequest = mockVertexRequest({
+      choices: [{ message: { content: 'unexpected response' } }],
+    });
+    provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+      config: { region: 'us-central1' },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response).toEqual({
+      error:
+        "Llama model llama-4-scout-17b-16e-instruct-maas is only available in the us-east5 region. Current region: us-central1. Please set region: 'us-east5' in your configuration.",
+    });
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   it('should validate llama_guard_settings is a valid object', async () => {
