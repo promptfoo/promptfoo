@@ -213,25 +213,29 @@ describe('OpenAiResponsesProvider request building', () => {
     });
 
     const { body: providerBody } = await provider.getOpenAiBody('Use the provider tier');
-    const { body: promptBody } = await provider.getOpenAiBody('Use the prompt tier', {
-      prompt: { config: { service_tier: 'fast' } },
-    } as any);
+    const { body: promptBody, config: promptConfig } = await provider.getOpenAiBody(
+      'Use the prompt tier',
+      {
+        prompt: { config: { service_tier: 'fast' } },
+      } as any,
+    );
     const { body: passthroughBody, config: passthroughConfig } = await provider.getOpenAiBody(
       'Use the passthrough tier',
       {
         prompt: {
           config: {
             service_tier: 'fast',
-            passthrough: { service_tier: 'priority' },
+            passthrough: { service_tier: 'fast' },
           },
         },
       } as any,
     );
 
     expect(providerBody.service_tier).toBe('flex');
-    expect(promptBody.service_tier).toBe('fast');
+    expect(promptBody.service_tier).toBe('priority');
+    expect(promptConfig.service_tier).toBe('fast');
     expect(passthroughBody.service_tier).toBe('priority');
-    expect(passthroughConfig.service_tier).toBe('priority');
+    expect(passthroughConfig.service_tier).toBe('fast');
   });
 
   it('should let lowercase Authorization replace the default Responses credential', async () => {

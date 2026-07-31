@@ -33,8 +33,10 @@ import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
   normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -82,10 +84,14 @@ function getChatSearchCitations(
 }
 
 function getChatSearchSurcharge(modelName: string): number {
-  if (/(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)) {
+  const billingModelName = normalizeOpenAiBillingModelName(modelName);
+  if (billingModelName.includes('/')) {
+    return 0;
+  }
+  if (/^gpt-5-search-api(?:-|$)/.test(billingModelName)) {
     return 0.01;
   }
-  if (/(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)) {
+  if (/^gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(billingModelName)) {
     return 0.025;
   }
   return 0;
@@ -248,6 +254,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(config);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -358,6 +365,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : { service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier) }),
       ...(capabilityModelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],
@@ -379,9 +389,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     // Add other basic parameters
-    if (config.service_tier) {
-      body.service_tier = config.service_tier;
-    }
     if (config.user) {
       body.user = config.user;
     }
@@ -399,7 +406,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
-    return { body, config };
+    return {
+      body,
+      config: {
+        ...config,
+        service_tier: effectiveServiceTier,
+      },
+    };
   }
 
   /**

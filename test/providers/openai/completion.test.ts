@@ -130,6 +130,51 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeUndefined();
     });
 
+    it('should send the configured fast tier as priority while retaining fast billing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Fast output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'fast',
+        },
+      });
+
+      const result = await provider.callApi('Answer quickly');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should bill the effective passthrough service tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Priority output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'flex',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer with priority');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

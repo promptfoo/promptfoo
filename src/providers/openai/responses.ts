@@ -36,10 +36,12 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
   normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -922,6 +924,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(config);
 
     let input;
     try {
@@ -1080,6 +1083,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : { service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier) }),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
@@ -1101,7 +1107,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        service_tier: body.service_tier,
+        service_tier: effectiveServiceTier,
         tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
       },

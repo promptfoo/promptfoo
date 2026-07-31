@@ -8,8 +8,10 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
   normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
@@ -66,6 +68,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config);
     const body = {
       model: this.modelName,
       prompt,
@@ -80,6 +83,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : { service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier) }),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
@@ -125,7 +131,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
-          serviceTier: data.service_tier ?? this.config.service_tier,
+          serviceTier: data.service_tier ?? effectiveServiceTier,
         }),
       };
     } catch (err) {

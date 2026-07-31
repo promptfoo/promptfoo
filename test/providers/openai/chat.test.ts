@@ -515,6 +515,72 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo(0.02125, 10);
     });
 
+    it.each([
+      'vendor/gpt-5-search-api',
+      'vendor/openai/gpt-4o-mini-search-preview',
+    ])('should not apply OpenAI Chat search fees to another gateway namespace: %s', async (model) => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Vendor answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await new OpenAiChatCompletionProvider(model, {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      }).callApi('What happened today?');
+
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should send the configured fast tier as priority while retaining fast billing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Fast answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: { service_tier: 'fast' },
+      });
+
+      const result = await provider.callApi('Answer quickly');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should bill the effective passthrough service tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Priority answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: {
+          service_tier: 'flex',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer with priority');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {

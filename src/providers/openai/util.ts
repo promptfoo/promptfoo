@@ -551,6 +551,21 @@ export function normalizeOpenAiBillingModelName(modelName: string): string {
   return modelName;
 }
 
+export function getOpenAiEffectiveServiceTier<
+  TServiceTier extends string | null | undefined,
+>(config: { service_tier?: TServiceTier; passthrough?: object }): TServiceTier | undefined {
+  const passthroughServiceTier = (config.passthrough as { service_tier?: TServiceTier } | undefined)
+    ?.service_tier;
+
+  return passthroughServiceTier === undefined ? config.service_tier : passthroughServiceTier;
+}
+
+export function normalizeOpenAiServiceTierForWire(
+  serviceTier: string | null | undefined,
+): string | null | undefined {
+  return serviceTier === 'fast' ? 'priority' : serviceTier;
+}
+
 export function assertOpenAiModelEndpointCompatibility(
   model: unknown,
   options: { allowTranscription?: boolean } = {},
