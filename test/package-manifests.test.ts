@@ -216,6 +216,48 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the Langium parser override present and reproducible in the lockfile', () => {
+    const dependencyName = 'chevrotain-allstar';
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          integrity?: string;
+          resolved?: string;
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const parserOverride = packageJson.overrides?.[dependencyName];
+    const langiumOverride = packageJson.overrides?.langium;
+
+    expect(parserOverride).toEqual(
+      expect.objectContaining({
+        '.': expect.any(String),
+        chevrotain: '11.2.0',
+      }),
+    );
+    const parserVersion = (parserOverride as Record<string, string>)['.'];
+
+    expect(minVersion(parserVersion)?.compare('0.4.4')).toBeGreaterThanOrEqual(0);
+    expect(langiumOverride).toEqual(
+      expect.objectContaining({
+        [dependencyName]: parserVersion,
+        chevrotain: '11.2.0',
+      }),
+    );
+    expect(packageLock.packages[`node_modules/${dependencyName}`]).toEqual(
+      expect.objectContaining({
+        integrity: expect.stringMatching(/^sha512-/),
+        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${parserVersion}.tgz`,
+        version: parserVersion,
+      }),
+    );
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
