@@ -211,15 +211,13 @@ Imagen models are available through [Google AI Studio](/docs/providers/google#im
 
 Use the `vertex:video:` prefix for Veo on Vertex AI:
 
-- `vertex:video:veo-3.1-generate-preview`
-- `vertex:video:veo-3.1-fast-preview`
-- `vertex:video:veo-3-generate`
-- `vertex:video:veo-3-fast`
-- `vertex:video:veo-2-generate`
+- `vertex:video:veo-3.1-generate-001` (GA)
+- `vertex:video:veo-3.1-fast-generate-001` (GA)
+- `vertex:video:veo-3.1-lite-generate-001` (Preview)
 
 ```yaml
 providers:
-  - id: vertex:video:veo-3.1-generate-preview
+  - id: vertex:video:veo-3.1-generate-001
     config:
       projectId: your-project-id
       region: us-central1
@@ -227,6 +225,25 @@ providers:
       resolution: '1080p'
       durationSeconds: 8
 ```
+
+#### Video Extension
+
+The current Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to a Cloud Storage URI, base64-encoded video, or a local `file://` path:
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-001
+    config:
+      projectId: your-project-id
+      region: us-central1
+      sourceVideo: gs://your-bucket/source-video.mp4
+      durationSeconds: 8
+
+prompts:
+  - 'Continue the camera movement toward the mountains'
+```
+
+Video extension requires `durationSeconds: 8`; promptfoo uses 8 by default when `sourceVideo` or the legacy `extendVideoId` is set and rejects other values. Veo adds 7 seconds to the source video. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Existing configs may also pass a Vertex operation name such as `projects/.../operations/...` through `sourceVideo`, which promptfoo sends as `video.operationName`.
 
 ## Model Capabilities
 

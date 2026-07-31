@@ -569,6 +569,11 @@ export interface ClaudeResponse {
 export type GoogleVideoModel =
   | 'veo-3.1-generate-preview'
   | 'veo-3.1-fast-preview'
+  | 'veo-3.1-fast-generate-preview'
+  | 'veo-3.1-lite-generate-preview'
+  | 'veo-3.1-generate-001'
+  | 'veo-3.1-fast-generate-001'
+  | 'veo-3.1-lite-generate-001'
   | 'veo-3-generate'
   | 'veo-3-fast'
   | 'veo-2-generate';
@@ -637,8 +642,9 @@ export interface GoogleVideoOptions {
   referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Base64/file:// video for AI Studio, or Veo operation ID in Vertex flows
+  /** @deprecated Use sourceVideo with a Vertex operation name, gs:// URI, base64 data, or file:// path. */
+  extendVideoId?: string;
+  sourceVideo?: string; // Base64/file:// video, or a gs:// URI/operation name for Vertex AI
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

@@ -17,7 +17,9 @@ providers:
   - openai:gpt-5
   - openai:gpt-5-mini
   - google:gemini-3.6-flash
-  - vertex:gemini-3.6-flash
+  - id: vertex:gemini-3.6-flash
+    config:
+      region: global
 ```
 
 ## Available Providers

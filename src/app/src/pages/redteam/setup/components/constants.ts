@@ -37,6 +37,11 @@ const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5', label: 'OpenAI GPT-5' },
   { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
+  {
+    value: 'vertex:gemini-3.1-pro-preview',
+    label: 'Google Vertex AI Gemini 3.1 Pro Preview',
+  },
+  { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
 
 export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };

@@ -35,13 +35,21 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Available Models
 
-| Model                      | Description                         | Duration |
-| -------------------------- | ----------------------------------- | -------- |
-| `veo-3.1-generate-preview` | Latest with video extension support | 4, 6, 8s |
-| `veo-3.1-fast-preview`     | Fast Veo 3.1                        | 4, 6, 8s |
-| `veo-3-generate`           | Veo 3.0 standard                    | 4, 6, 8s |
-| `veo-3-fast`               | Veo 3.0 fast                        | 4, 6, 8s |
-| `veo-2-generate`           | Veo 2.0                             | 5, 6, 8s |
+Google AI Studio / Gemini API:
+
+| Provider ID                                  | Description                          | Generation duration |
+| -------------------------------------------- | ------------------------------------ | ------------------- |
+| `google:video:veo-3.1-generate-preview`      | Veo 3.1 with video extension support | 4, 6, 8s            |
+| `google:video:veo-3.1-fast-generate-preview` | Faster Veo 3.1 generation            | 4, 6, 8s            |
+| `google:video:veo-3.1-lite-generate-preview` | Lower-cost Veo 3.1 generation        | 4, 6, 8s            |
+
+Vertex AI:
+
+| Provider ID                              | Description          | Generation duration |
+| ---------------------------------------- | -------------------- | ------------------- |
+| `vertex:video:veo-3.1-generate-001`      | Veo 3.1 GA           | 4, 6, 8s            |
+| `vertex:video:veo-3.1-fast-generate-001` | Faster Veo 3.1 GA    | 4, 6, 8s            |
+| `vertex:video:veo-3.1-lite-generate-001` | Lite Veo 3.1 Preview | 4, 6, 8s            |
 
 ## Running the Example
 
@@ -51,17 +59,17 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option             | Type   | Description                                                     |
-| ------------------ | ------ | --------------------------------------------------------------- |
-| `aspectRatio`      | string | `16:9` (default) or `9:16`                                      |
-| `resolution`       | string | `720p` (default) or `1080p`                                     |
-| `durationSeconds`  | number | Duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2                |
-| `personGeneration` | string | `allow_adult` or `dont_allow`                                   |
-| `negativePrompt`   | string | Concepts to avoid                                               |
-| `image`            | string | Source image for image-to-video                                 |
-| `lastImage`        | string | End frame for interpolation                                     |
-| `extendVideoId`    | string | Operation ID from previous Vertex Veo generation (Veo 3.1 only) |
-| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)          |
+| Option             | Type   | Description                                             |
+| ------------------ | ------ | ------------------------------------------------------- |
+| `aspectRatio`      | string | `16:9` (default) or `9:16`                              |
+| `resolution`       | string | `720p` (default) or `1080p`                             |
+| `durationSeconds`  | number | 4, 6, or 8 seconds for generation; extension requires 8 |
+| `personGeneration` | string | `allow_adult` or `dont_allow`                           |
+| `negativePrompt`   | string | Concepts to avoid                                       |
+| `image`            | string | Source image for image-to-video                         |
+| `lastImage`        | string | End frame for interpolation                             |
+| `sourceVideo`      | string | Base64/`file://`, plus `gs://` for Vertex AI            |
+| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)  |
 
 ## Features
 
@@ -75,7 +83,7 @@ Generate videos from a starting image (see `promptfooconfig-image.yaml`).
 
 ### Video Extension (Veo 3.1)
 
-Extend previously generated Veo videos using the explicit Vertex provider path and an operation ID (see `promptfooconfig-extension.yaml`).
+Extend a video with Google AI Studio by passing a base64 or `file://` source video and setting `durationSeconds: 8`; Veo adds 7 seconds to the source video (see `promptfooconfig-extension.yaml`).
 
 ## Notes
 
@@ -84,5 +92,7 @@ Extend previously generated Veo videos using the explicit Vertex provider path a
 - Use `--no-cache` flag to force regeneration
 - Videos are served via the local server for viewing in the UI
 - Veo models use long-running operations with polling for completion
-- `google:video:*` uses Google AI Studio by default and auto-detects Vertex AI when project-based auth is configured
-- Existing project-based `google:video:*` configs remain compatible, but `vertex:video:*` is the recommended explicit path for Vertex-only flows such as `extendVideoId`
+- `google:video:*` uses Google AI Studio by default
+- Use `vertex:video:*` with the current model IDs above for explicit Vertex AI routing
+- Google AI Studio does not accept Vertex operation IDs for extension
+- Current Vertex AI Veo 3.1 models support extension through `sourceVideo`; use a Vertex operation name, `gs://` URI, base64 data, or a `file://` path. The request requires `durationSeconds: 8`, and Veo adds 7 seconds to the source video.

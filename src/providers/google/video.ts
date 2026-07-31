@@ -41,6 +41,7 @@ const DEFAULT_LOCATION = 'us-central1';
  */
 const VEO_3_DURATIONS: GoogleVideoDuration[] = [4, 6, 8];
 const VEO_2_DURATIONS: GoogleVideoDuration[] = [5, 6, 8];
+const VEO_EXTENSION_DURATION: GoogleVideoDuration = 8;
 
 /**
  * Default configuration values
@@ -105,6 +106,16 @@ export function validateDuration(
     return {
       valid: false,
       message: `Invalid duration ${duration}s for ${model}. Valid: ${validDurations.join(', ')}s`,
+    };
+  }
+  return { valid: true };
+}
+
+function validateExtensionDuration(duration: number): { valid: boolean; message?: string } {
+  if (duration !== VEO_EXTENSION_DURATION) {
+    return {
+      valid: false,
+      message: `Video extension requires duration 8s. Received ${duration}s.`,
     };
   }
   return { valid: true };
@@ -268,6 +279,41 @@ export class GoogleVideoProvider implements ApiProvider {
     return this.createAiStudioVideoJob(prompt, config);
   }
 
+  private addVertexVideoInput(
+    instance: Record<string, unknown>,
+    config: GoogleVideoOptions,
+  ): string | undefined {
+    if (!config.sourceVideo) {
+      if (config.extendVideoId) {
+        instance.video = { operationName: config.extendVideoId };
+      }
+      return undefined;
+    }
+
+    if (config.sourceVideo.includes('/operations/')) {
+      instance.video = { operationName: config.sourceVideo };
+      return undefined;
+    }
+
+    if (config.sourceVideo.startsWith('gs://')) {
+      instance.video = {
+        gcsUri: config.sourceVideo,
+        mimeType: 'video/mp4',
+      };
+      return undefined;
+    }
+
+    const { data: videoData, error } = this.loadVideoData(config.sourceVideo);
+    if (error) {
+      return error;
+    }
+    instance.video = {
+      bytesBase64Encoded: videoData,
+      mimeType: 'video/mp4',
+    };
+    return undefined;
+  }
+
   private buildVertexRequestBody(
     prompt: string,
     config: GoogleVideoOptions,
@@ -334,9 +380,9 @@ export class GoogleVideoProvider implements ApiProvider {
       instance.referenceImages = refs;
     }
 
-    const extendVideoId = config.extendVideoId || config.sourceVideo;
-    if (extendVideoId) {
-      instance.video = { operationName: extendVideoId };
+    const videoError = this.addVertexVideoInput(instance, config);
+    if (videoError) {
+      return { error: videoError };
     }
 
     return {
@@ -426,7 +472,7 @@ export class GoogleVideoProvider implements ApiProvider {
       if (sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Use `vertex:video:*` with `extendVideoId`, or provide base64/file:// video data via `sourceVideo`.',
+            'Google AI Studio Veo does not accept operation IDs for video extension. Provide base64 or a file:// video via `sourceVideo`. For Vertex AI, use `sourceVideo` with a gs:// URI, base64 data, or a file:// path.',
         };
       }
       const { data: videoData, error } = this.loadVideoData(sourceVideo);
@@ -860,9 +906,12 @@ export class GoogleVideoProvider implements ApiProvider {
     const model = effectiveConfig.model || this.modelName;
     const aspectRatio = effectiveConfig.aspectRatio || DEFAULT_ASPECT_RATIO;
     const resolution = effectiveConfig.resolution || DEFAULT_RESOLUTION;
+    const isVideoExtension = Boolean(effectiveConfig.sourceVideo || effectiveConfig.extendVideoId);
     // Support both 'durationSeconds' and 'duration' (alias)
     const durationSeconds =
-      effectiveConfig.durationSeconds || effectiveConfig.duration || DEFAULT_DURATION;
+      effectiveConfig.durationSeconds ??
+      effectiveConfig.duration ??
+      (isVideoExtension ? VEO_EXTENSION_DURATION : DEFAULT_DURATION);
 
     // Validate aspect ratio
     const ratioValidation = validateAspectRatio(aspectRatio);
@@ -871,7 +920,9 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Validate duration
-    const durationValidation = validateDuration(model, durationSeconds);
+    const durationValidation = isVideoExtension
+      ? validateExtensionDuration(durationSeconds)
+      : validateDuration(model, durationSeconds);
     if (!durationValidation.valid) {
       return { error: durationValidation.message };
     }

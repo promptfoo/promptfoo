@@ -1387,7 +1387,7 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
-        'vertex:video:veo-3.1-generate-preview',
+        'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
     ] as const)('routes %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
@@ -1399,7 +1399,7 @@ describe('Provider Registry', () => {
     });
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
-      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
