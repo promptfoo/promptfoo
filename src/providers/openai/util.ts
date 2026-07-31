@@ -551,13 +551,26 @@ export function normalizeOpenAiBillingModelName(modelName: string): string {
   return modelName;
 }
 
-export function getOpenAiEffectiveServiceTier<
-  TServiceTier extends string | null | undefined,
->(config: { service_tier?: TServiceTier; passthrough?: object }): TServiceTier | undefined {
-  const passthroughServiceTier = (config.passthrough as { service_tier?: TServiceTier } | undefined)
-    ?.service_tier;
+export function getOpenAiEffectiveServiceTier<TServiceTier extends string | null | undefined>(
+  providerConfig: { service_tier?: TServiceTier; passthrough?: object },
+  promptConfig?: { service_tier?: TServiceTier; passthrough?: object },
+): TServiceTier | undefined {
+  const promptPassthroughServiceTier = (
+    promptConfig?.passthrough as { service_tier?: TServiceTier } | undefined
+  )?.service_tier;
+  const providerPassthroughServiceTier = (
+    providerConfig.passthrough as { service_tier?: TServiceTier } | undefined
+  )?.service_tier;
 
-  return passthroughServiceTier === undefined ? config.service_tier : passthroughServiceTier;
+  if (promptPassthroughServiceTier !== undefined) {
+    return promptPassthroughServiceTier;
+  }
+  if (promptConfig?.service_tier !== undefined) {
+    return promptConfig.service_tier;
+  }
+  return providerPassthroughServiceTier === undefined
+    ? providerConfig.service_tier
+    : providerPassthroughServiceTier;
 }
 
 export function normalizeOpenAiServiceTierForWire(

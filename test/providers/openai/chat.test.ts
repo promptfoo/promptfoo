@@ -581,6 +581,32 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
     });
 
+    it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Flex answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: {
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer flexibly', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('flex');
+      expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
+    });
+
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {

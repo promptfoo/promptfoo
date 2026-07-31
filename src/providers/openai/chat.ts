@@ -250,11 +250,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     // Merge configs from the provider and the prompt
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
-    const effectiveServiceTier = getOpenAiEffectiveServiceTier(config);
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 

@@ -68,7 +68,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
-    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config);
+    const promptConfig = context?.prompt?.config;
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
     const body = {
       model: this.modelName,
       prompt,

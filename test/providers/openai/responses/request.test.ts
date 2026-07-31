@@ -209,6 +209,7 @@ describe('OpenAiResponsesProvider request building', () => {
       config: {
         apiKey: 'test-key',
         service_tier: 'flex',
+        passthrough: { service_tier: 'priority' },
       },
     });
 
@@ -216,7 +217,7 @@ describe('OpenAiResponsesProvider request building', () => {
     const { body: promptBody, config: promptConfig } = await provider.getOpenAiBody(
       'Use the prompt tier',
       {
-        prompt: { config: { service_tier: 'fast' } },
+        prompt: { config: { service_tier: 'flex' } },
       } as any,
     );
     const { body: passthroughBody, config: passthroughConfig } = await provider.getOpenAiBody(
@@ -224,16 +225,16 @@ describe('OpenAiResponsesProvider request building', () => {
       {
         prompt: {
           config: {
-            service_tier: 'fast',
+            service_tier: 'flex',
             passthrough: { service_tier: 'fast' },
           },
         },
       } as any,
     );
 
-    expect(providerBody.service_tier).toBe('flex');
-    expect(promptBody.service_tier).toBe('priority');
-    expect(promptConfig.service_tier).toBe('fast');
+    expect(providerBody.service_tier).toBe('priority');
+    expect(promptBody.service_tier).toBe('flex');
+    expect(promptConfig.service_tier).toBe('flex');
     expect(passthroughBody.service_tier).toBe('priority');
     expect(passthroughConfig.service_tier).toBe('fast');
   });

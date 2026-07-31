@@ -920,11 +920,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ) {
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
-    const effectiveServiceTier = getOpenAiEffectiveServiceTier(config);
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     let input;
     try {

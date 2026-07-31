@@ -175,6 +175,31 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
     });
 
+    it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Flex output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer flexibly', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('flex');
+      expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
+    });
+
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
