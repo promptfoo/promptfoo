@@ -249,6 +249,108 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     ]);
   });
 
+  it.each([
+    {
+      description: 'duplicate provider ids',
+      firstId: 'duplicate-provider',
+      secondId: 'duplicate-provider',
+    },
+    {
+      description: 'shared provider labels',
+      firstId: 'provider-1',
+      secondId: 'provider-2',
+      label: 'shared-label',
+    },
+    {
+      description: 'duplicate provider ids with an explicit conversation id',
+      firstId: 'duplicate-provider',
+      secondId: 'duplicate-provider',
+      conversationId: 'shared-conversation',
+    },
+  ])('isolates conversation histories for $description', async ({
+    firstId,
+    secondId,
+    label,
+    conversationId,
+  }) => {
+    const firstProvider = duplicateProvider(firstId, 'First provider output', label);
+    const secondProvider = duplicateProvider(secondId, 'Second provider output', label);
+    const metadata = conversationId ? { conversationId } : undefined;
+
+    const testSuite: TestSuite = {
+      providers: [firstProvider, secondProvider],
+      prompts: [
+        toPrompt(
+          '{% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ input }}',
+        ),
+      ],
+      tests: [
+        { vars: { input: 'first' }, metadata },
+        { vars: { input: 'second' }, metadata },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(firstProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      'now=first',
+      expect.anything(),
+      undefined,
+    );
+    expect(secondProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      'now=first',
+      expect.anything(),
+      undefined,
+    );
+    expect(firstProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      'prior=First provider output now=second',
+      expect.anything(),
+      undefined,
+    );
+    expect(secondProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      'prior=Second provider output now=second',
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('isolates conversation histories for prompts that share a label', async () => {
+    const provider = createMockProvider({
+      id: 'test-provider',
+      callApi: async (prompt) => createProviderResponse({ output: prompt }),
+    });
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [
+        {
+          raw: 'first {% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ input }}',
+          label: 'shared-prompt-label',
+        },
+        {
+          raw: 'second {% if _conversation.length %}prior={{ _conversation[0].output }} {% endif %}now={{ input }}',
+          label: 'shared-prompt-label',
+        },
+      ],
+      tests: [{ vars: { input: 'one' } }, { vars: { input: 'two' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(provider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual([
+      'first now=one',
+      'second now=one',
+      'first prior=first now=one now=two',
+      'second prior=second now=one now=two',
+    ]);
+  });
+
   it('routes every prompt of every duplicate provider to its own column', async () => {
     const firstProvider = duplicateProvider('duplicate-provider', 'First provider output');
     const secondProvider = duplicateProvider('duplicate-provider', 'Second provider output');
