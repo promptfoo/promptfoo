@@ -487,6 +487,27 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['an empty array', []],
+    ['blank text', '   '],
+  ])('rejects %s from provider passthrough before dispatch', async (_description, input) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { input },
+      },
+    });
+
+    const result = await provider.callApi('Prompt-derived input.');
+
+    expect(result.error).toContain('at least one input item');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('lets prompt-embedded system roles override a provider passthrough default', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -600,7 +621,7 @@ describe('GoogleInteractionsProvider', () => {
       },
     });
 
-    await provider.callApi('Prompt-derived input.', {
+    await provider.callApi('[]', {
       prompt: {
         config: {
           store: true,
@@ -611,7 +632,7 @@ describe('GoogleInteractionsProvider', () => {
       },
     } as any);
 
-    await provider.callApi('Prompt-derived input.', {
+    await provider.callApi('[]', {
       prompt: {
         config: {
           passthrough: { input: 'Prompt passthrough input.' },

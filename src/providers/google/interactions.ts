@@ -519,10 +519,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
       systemInstruction: promptSystemInstruction,
       hasSystemInstruction: hasPromptSystemInstruction,
     } = parseInteractionInput(prompt, !isVideoModel);
-    const effectiveInput = promptPassthrough.input ?? interactionInput;
+    const requestInput =
+      promptPassthrough.input ??
+      providerPassthrough.input ??
+      (config.vertexai && typeof interactionInput === 'string'
+        ? [{ type: 'text', text: interactionInput }]
+        : interactionInput);
     if (
-      (typeof effectiveInput === 'string' && !effectiveInput.trim()) ||
-      (Array.isArray(effectiveInput) && effectiveInput.length === 0)
+      (typeof requestInput === 'string' && !requestInput.trim()) ||
+      (Array.isArray(requestInput) && requestInput.length === 0)
     ) {
       return { error: 'Gemini Interactions prompt must contain at least one input item.' };
     }
@@ -831,12 +836,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (promptConfig?.aspectRatio === undefined
         ? (providerPassthroughResponseFormat ?? generatedVideoResponseFormat)
         : generatedVideoResponseFormat);
-    const requestInput =
-      promptPassthrough.input ??
-      providerPassthrough.input ??
-      (config.vertexai && typeof interactionInput === 'string'
-        ? [{ type: 'text', text: interactionInput }]
-        : interactionInput);
     const store =
       promptPassthrough.store ??
       promptConfig?.store ??
