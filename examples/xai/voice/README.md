@@ -26,7 +26,7 @@ npx promptfoo@latest eval
 ### Models
 
 - `grok-voice-think-fast-2.0` - Current flagship voice model
-- `grok-voice-latest` - Recommended alias that follows xAI's current voice model
+- `grok-voice-latest` - Recommended alias; xAI says it moves from 1.0 to 2.0 on August 5, 2026
 - `grok-voice-think-fast-1.0` - Previous-generation voice model
 
 The model is selected through the `?model=` query parameter on the realtime WebSocket URL.

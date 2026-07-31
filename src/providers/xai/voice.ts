@@ -31,7 +31,8 @@ export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
 export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-2.0';
 export const XAI_VOICE_COST_PER_MINUTE = 0.08;
 export const XAI_VOICE_COST_PER_MINUTE_BY_MODEL: Record<string, number> = {
-  'grok-voice-latest': 0.08,
+  // xAI's July 29 release notes say this alias moves from 1.0 to 2.0 on August 5, 2026.
+  'grok-voice-latest': 0.05,
   'grok-voice-think-fast-2.0': 0.08,
   'grok-voice-think-fast-1.0': 0.05,
 };

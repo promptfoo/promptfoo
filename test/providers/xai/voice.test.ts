@@ -141,6 +141,10 @@ describe('XAI Voice Provider', () => {
       expect(calculateXAIVoiceCost(60000, 'grok-voice-think-fast-1.0')).toBe(0.05);
     });
 
+    it('uses the current pre-August-5 rate for grok-voice-latest', () => {
+      expect(calculateXAIVoiceCost(60000, 'grok-voice-latest')).toBe(0.05);
+    });
+
     it('uses the flagship rate for grok-voice-think-fast-2.0', () => {
       expect(calculateXAIVoiceCost(60000, 'grok-voice-think-fast-2.0')).toBe(0.08);
     });
