@@ -581,7 +581,7 @@ describe('GoogleInteractionsProvider', () => {
     expect(body.system_instruction).toBe('Prompt instruction.');
   });
 
-  it('prevents reserved provider passthrough fields from overriding prompt-derived input', async () => {
+  it('preserves layered passthrough input precedence', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
@@ -611,12 +611,23 @@ describe('GoogleInteractionsProvider', () => {
       },
     } as any);
 
-    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(request.body as string)).toMatchObject({
-      input: 'Prompt-derived input.',
+    await provider.callApi('Prompt-derived input.', {
+      prompt: {
+        config: {
+          passthrough: { input: 'Prompt passthrough input.' },
+        },
+      },
+    } as any);
+
+    const bodies = mockFetchWithCache.mock.calls.map(([, request]) =>
+      JSON.parse((request as RequestInit).body as string),
+    );
+    expect(bodies[0]).toMatchObject({
+      input: 'Provider passthrough input.',
       store: true,
       safety_settings: [{ type: 'hate_speech', threshold: 'block_low_and_above' }],
     });
+    expect(bodies[1].input).toBe('Prompt passthrough input.');
   });
 
   it('forwards supported Robotics generation controls and a rendered response schema', async () => {

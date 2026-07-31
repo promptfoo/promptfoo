@@ -833,6 +833,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         : generatedVideoResponseFormat);
     const requestInput =
       promptPassthrough.input ??
+      providerPassthrough.input ??
       (config.vertexai && typeof interactionInput === 'string'
         ? [{ type: 'text', text: interactionInput }]
         : interactionInput);
