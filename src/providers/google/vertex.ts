@@ -129,6 +129,14 @@ function getVertexLlamaSafetyRequestConfig(
   llamaConfig: GoogleProviderConfig['llamaConfig'],
 ): VertexLlamaSafetyRequestConfig {
   if (VERTEX_LLAMA_4_MODELS.has(modelName)) {
+    if (
+      llamaConfig?.safetySettings?.enabled === true ||
+      llamaConfig?.safetySettings?.llama_guard_settings !== undefined
+    ) {
+      return {
+        error: `Llama model ${modelName} does not support Llama Guard safety settings. Remove llamaConfig.safetySettings or set enabled: false without llama_guard_settings.`,
+      };
+    }
     return { bodyFields: {}, enabled: false, settingCount: 0 };
   }
 

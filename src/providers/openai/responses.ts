@@ -813,7 +813,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, this.getCapabilityModelName(), config);
+      : calculateObservableOpenAIToolCost(data, billingModelName, config);
 
     return {
       ...result,

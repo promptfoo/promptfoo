@@ -2089,6 +2089,32 @@ describe('VertexChatProvider.callLlamaApi', () => {
     expect(mockRequest).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: 'explicitly enabled safety',
+      safetySettings: { enabled: true },
+    },
+    {
+      name: 'custom guard settings',
+      safetySettings: { llama_guard_settings: { custom_setting: 'value' } },
+    },
+  ])('should reject $name for Llama 4 before network I/O', async ({ safetySettings }) => {
+    const mockRequest = mockVertexRequest({
+      choices: [{ message: { content: 'unexpected response' } }],
+    });
+    provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+      config: {
+        region: 'us-east5',
+        llamaConfig: { safetySettings },
+      },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response.error).toMatch(/does not support Llama Guard/i);
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+
   it('should validate llama_guard_settings is a valid object', async () => {
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
       config: {

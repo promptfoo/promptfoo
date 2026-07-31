@@ -608,9 +608,9 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
 
-  it('should exclude retired preview audio and realtime models from current routing registries', () => {
+  it('keeps deprecated audio and realtime models routable until their January 20, 2027 shutdown', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
     expect(
@@ -619,7 +619,7 @@ describe('calculateOpenAICost', () => {
       ),
     ).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
-      false,
+      true,
     );
   });
 

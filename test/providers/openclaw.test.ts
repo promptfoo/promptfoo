@@ -829,6 +829,31 @@ describe('OpenClaw Provider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('should price hosted search from an explicit OpenAI backend model override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      const result = await provider.callApi('search');
+
+      expect(result.cost).toBeCloseTo(0.01, 10);
+    });
+
     it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

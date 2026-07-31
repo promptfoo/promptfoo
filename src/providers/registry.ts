@@ -933,19 +933,23 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
       const requestedApiModel = modelName || configuredModel || modelType;
-      if (requestedApiModel === 'gpt-live-transcribe') {
-        throw new Error(
-          'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
-        );
-      }
-      if (
-        requestedApiModel === 'gpt-transcribe' &&
-        modelType !== 'gpt-transcribe' &&
-        modelType !== 'transcription'
-      ) {
-        throw new Error(
-          'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
-        );
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const effectiveApiModels = [requestedApiModel, configuredModel, passthrough?.model];
+      for (const candidate of effectiveApiModels) {
+        if (candidate === 'gpt-live-transcribe') {
+          throw new Error(
+            'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
+          );
+        }
+        if (
+          candidate === 'gpt-transcribe' &&
+          modelType !== 'gpt-transcribe' &&
+          modelType !== 'transcription'
+        ) {
+          throw new Error(
+            'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
+          );
+        }
       }
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
@@ -987,7 +991,6 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
         const configApiHost = providerOptions.config?.apiHost;
         const envApiHost = providerOptions.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
         const apiUrl = configApiHost
@@ -999,7 +1002,7 @@ export const providerMap: ProviderFactory[] = [
             getEnvString('OPENAI_API_BASE_URL') ||
             getEnvString('OPENAI_BASE_URL') ||
             'https://api.openai.com/v1';
-        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
+        for (const candidate of effectiveApiModels) {
           assertOpenAiApiModel(candidate, apiUrl);
         }
       }

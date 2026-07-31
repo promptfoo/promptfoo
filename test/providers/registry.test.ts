@@ -708,6 +708,25 @@ describe('Provider Registry', () => {
         ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
       }
 
+      for (const modelType of incompatibleModelTypes) {
+        for (const passthroughModel of ['gpt-transcribe', 'gpt-live-transcribe']) {
+          const expectedError =
+            passthroughModel === 'gpt-transcribe'
+              ? /transcription-only.*openai:transcription:gpt-transcribe/i
+              : /Realtime transcription sessions.*not yet supported/i;
+          await expect(
+            factory!.create(
+              `openai:${modelType}:gpt-4.1`,
+              {
+                ...mockProviderOptions,
+                config: { ...mockProviderOptions.config, passthrough: { model: passthroughModel } },
+              },
+              mockContext,
+            ),
+          ).rejects.toThrow(expectedError);
+        }
+      }
+
       const explicitTranscriptionProvider = await factory!.create(
         'openai:transcription:gpt-transcribe',
         mockProviderOptions,
