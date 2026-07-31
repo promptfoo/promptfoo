@@ -20,7 +20,6 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import { assertOpenAiApiModel } from './util';
 import type { Agent, AgentInputItem, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
@@ -50,7 +49,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   ) {
     super(modelName, options);
     this.agentConfig = options.config || {};
-    assertOpenAiApiModel(this.agentConfig.model, process.env.OPENAI_BASE_URL);
+    // The Agents SDK can replace its global OpenAI client or model provider independently of
+    // promptfoo (setDefaultOpenAIClient/setDefaultModelProvider), and exposes no public getter for
+    // that effective endpoint. Applying first-party catalog restrictions here would therefore
+    // reject valid custom-provider model IDs. Let the configured SDK provider resolve them.
   }
 
   id(): string {
@@ -111,8 +113,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     try {
       // Load agent definition (includes tools and handoffs if specified in agent file)
       const agent = await loadAgentDefinition(this.agentConfig.agent);
-      const effectiveModel = this.agentConfig.model || agent.model;
-      assertOpenAiApiModel(effectiveModel, process.env.OPENAI_BASE_URL);
       const [tools, handoffs, inputGuardrails, outputGuardrails] = await Promise.all([
         loadTools(this.agentConfig.tools),
         loadHandoffs(this.agentConfig.handoffs),

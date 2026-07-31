@@ -261,6 +261,18 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
+    it.each([
+      'gpt-transcribe',
+      'gpt-live-transcribe',
+    ])('allows custom Realtime gateways to define their own %s model', (modelName) => {
+      expect(
+        () =>
+          new OpenAiRealtimeProvider(modelName, {
+            config: { apiBaseUrl: 'https://gateway.example/v1' },
+          }),
+      ).not.toThrow();
+    });
+
     it('returns ProviderResponse.error instead of a placeholder when the API yields nothing', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5', {
         config: { modalities: ['text'], maintainContext: false },

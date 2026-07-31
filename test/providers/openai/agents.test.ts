@@ -1,3 +1,4 @@
+import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRun = vi.hoisted(() => vi.fn());
@@ -135,6 +136,7 @@ import {
   MemorySession,
   OpenAIConversationsSession,
   OpenAIResponsesCompactionSession,
+  setDefaultOpenAIClient,
   setTraceProcessors,
   tool,
 } from '@openai/agents';
@@ -189,6 +191,7 @@ describe('OpenAiAgentsProvider', () => {
 
   afterEach(() => {
     cliState.basePath = undefined;
+    setDefaultOpenAIClient(undefined as never);
     vi.unstubAllEnvs();
   });
 
@@ -614,30 +617,31 @@ describe('OpenAiAgentsProvider', () => {
   });
 
   it.each([
-    ['gpt-transcribe', /transcription-only.*openai:transcription:gpt-transcribe/i],
-    ['gpt-live-transcribe', /Realtime transcription sessions.*not yet supported/i],
-    ['gpt-5-chat-latest', /has been retired/i],
-    ['gpt-5.3-codex-spark', /only available through openai:codex-sdk/i],
-  ])('rejects unsupported first-party model override %s', (model, expectedError) => {
-    expect(
-      () =>
-        new OpenAiAgentsProvider('support-agent', {
-          config: {
-            agent: {
-              name: 'Inline Support Agent',
-              instructions: 'Help the user.',
-            },
-            model,
-          },
-        }),
-    ).toThrow(expectedError);
+    'gpt-transcribe',
+    'gpt-live-transcribe',
+    'gpt-5-chat-latest',
+    'gpt-5.3-codex-spark',
+  ])('defers explicit model override %s to the configured SDK provider', async (model) => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        model,
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
   });
 
   it.each([
-    ['inline', 'gpt-transcribe', /transcription-only.*openai:transcription:gpt-transcribe/i],
-    ['direct', 'gpt-5-chat-latest', /has been retired/i],
-    ['file', 'gpt-5.3-codex-spark', /only available through openai:codex-sdk/i],
-  ])('rejects unsupported %s agent definition model %s before running', async (source, model, expectedError) => {
+    ['inline', 'gpt-transcribe'],
+    ['direct', 'gpt-5-chat-latest'],
+    ['file', 'gpt-5.3-codex-spark'],
+  ])('defers %s agent definition model %s to the configured SDK provider', async (source, model) => {
     let agentConfig: OpenAiAgentsOptions['agent'];
     if (source === 'inline') {
       agentConfig = {
@@ -663,24 +667,9 @@ describe('OpenAiAgentsProvider', () => {
       config: { agent: agentConfig },
     });
 
-    await expect(provider.callApi('Where is my order?')).rejects.toThrow(expectedError);
-    expect(mockRun).not.toHaveBeenCalled();
-  });
+    await provider.callApi('Where is my order?');
 
-  it('does not treat ignored provider apiBaseUrl config as the Agents SDK endpoint', () => {
-    expect(
-      () =>
-        new OpenAiAgentsProvider('support-agent', {
-          config: {
-            agent: {
-              name: 'Inline Support Agent',
-              instructions: 'Help the user.',
-            },
-            apiBaseUrl: 'https://gateway.example/v1',
-            model: 'gpt-5-chat-latest',
-          },
-        }),
-    ).toThrow(/has been retired/i);
+    expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
   });
 
   it('allows agent models when the Agents SDK uses a custom endpoint', async () => {
@@ -693,6 +682,32 @@ describe('OpenAiAgentsProvider', () => {
           instructions: 'Help the user.',
           model: 'gpt-5-chat-latest',
         },
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).resolves.toMatchObject({
+      output: 'Agent answer',
+    });
+    expect(mockRun.mock.calls[0][0]).toMatchObject({
+      model: 'gpt-5-chat-latest',
+    });
+  });
+
+  it('allows agent models when the Agents SDK uses an explicitly configured client', async () => {
+    setDefaultOpenAIClient(
+      new OpenAI({
+        apiKey: 'test-key',
+        baseURL: 'https://gateway.example/v1',
+      }),
+    );
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        model: 'gpt-5-chat-latest',
       },
     });
 
