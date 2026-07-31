@@ -65,7 +65,6 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     super(modelName, options);
     this.config = options.config || {};
     assertOpenAiApiModel(modelName, this.getApiUrl(), {
-      allowRetired: true,
       allowTranscription: true,
     });
   }

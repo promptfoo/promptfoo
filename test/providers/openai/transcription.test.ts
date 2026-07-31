@@ -101,6 +101,15 @@ describe('OpenAiTranscriptionProvider', () => {
     ).toThrow();
   });
 
+  it('rejects a retired first-party model before a direct request', () => {
+    expect(
+      () =>
+        new OpenAiTranscriptionProvider('text-moderation-latest', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('has been retired');
+  });
+
   const mockTranscriptionResponse = {
     data: {
       task: 'transcribe',

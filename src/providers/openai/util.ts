@@ -543,7 +543,7 @@ export function assertOpenAiModelEndpointCompatibility(
 export function assertOpenAiApiModel(
   model: unknown,
   apiUrl?: string,
-  options: { allowRetired?: boolean; allowTranscription?: boolean } = {},
+  options: { allowTranscription?: boolean } = {},
 ): void {
   assertOpenAiModelEndpointCompatibility(model, options);
   if (typeof model !== 'string') {
@@ -561,7 +561,7 @@ export function assertOpenAiApiModel(
   }
 
   const normalizedModel = model.split('/').pop() ?? model;
-  if (!options.allowRetired && RETIRED_OPENAI_MODEL_IDS.has(normalizedModel)) {
+  if (RETIRED_OPENAI_MODEL_IDS.has(normalizedModel)) {
     throw new Error(
       `OpenAI model ${model} has been retired and is no longer available from OpenAI's first-party API. Use a current model or configure a custom OpenAI-compatible apiBaseUrl.`,
     );

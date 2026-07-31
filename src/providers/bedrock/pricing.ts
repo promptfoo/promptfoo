@@ -385,6 +385,11 @@ export function calculateBedrockCost(
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
   }
+  // Reserved throughput is billed as fixed monthly capacity per reserved TPM, not per token.
+  // The token-only response shape cannot represent that contract without inventing a rate.
+  if (serviceTier?.type === 'reserved') {
+    return undefined;
+  }
 
   const normalizedModelId = modelId.toLowerCase();
   const pricing = getBedrockPricing(normalizedModelId, region);

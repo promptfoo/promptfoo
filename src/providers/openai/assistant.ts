@@ -14,7 +14,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
-import { failApiCall, getTokenUsage } from './util';
+import { assertOpenAiApiModel, failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -61,6 +61,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     super(assistantId, options);
     this.assistantConfig = options.config || {};
     this.assistantId = assistantId;
+    assertOpenAiApiModel(this.assistantConfig.modelName, this.getApiUrl());
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {

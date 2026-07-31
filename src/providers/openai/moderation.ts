@@ -234,7 +234,7 @@ export class OpenAiModerationProvider
     options: { config?: OpenAIModerationConfig; id?: string; env?: any } = {},
   ) {
     super(modelName, options);
-    assertOpenAiApiModel(modelName, this.getApiUrl(), { allowRetired: true });
+    assertOpenAiApiModel(modelName, this.getApiUrl());
     if (!OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI moderation model: ${modelName}`);
     }

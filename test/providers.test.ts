@@ -652,14 +652,11 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
-    ['openai:completion:gpt-3.5-turbo-instruct', {}],
-    ['openai:embedding:text-embedding-3-large', {}],
     ['openai:moderation:omni-moderation-latest', {}],
     ['openai:realtime:gpt-realtime-2.1', {}],
     ['openai:transcription:gpt-transcribe', {}],
     ['openai:image:gpt-image-1.5', { model: 'gpt-image-1.5' }],
     ['openai:video:sora-2', { model: 'sora-2' }],
-    ['openai:tts:gpt-4o-mini-tts', { model: 'gpt-4o-mini-tts' }],
   ])('should ignore a passthrough model that route %s does not send', async (route, config) => {
     await expect(
       loadApiProvider(route, {
@@ -671,6 +668,21 @@ describe('loadApiProvider', () => {
         },
       }),
     ).resolves.toBeDefined();
+  });
+
+  it.each([
+    'openai:completion:gpt-3.5-turbo-instruct',
+    'openai:embedding:text-embedding-3-large',
+    'openai:tts:gpt-4o-mini-tts',
+    'openai:speech:gpt-4o-mini-tts',
+    'openai:gpt-3.5-turbo-instruct',
+    'openai:gpt-4o-mini-tts',
+  ])('should validate the passthrough model actually sent by %s', async (route) => {
+    await expect(
+      loadApiProvider(route, {
+        options: { config: { passthrough: { model: 'gpt-5.3-codex-spark' } } },
+      }),
+    ).rejects.toThrow('only available through openai:codex-sdk');
   });
 
   it.each([

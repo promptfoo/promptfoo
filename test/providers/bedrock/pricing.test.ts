@@ -72,6 +72,14 @@ describe('calculateBedrockCost', () => {
     ).toBeCloseTo(costAtRates(0.3, 1.2) * 1.75, 6);
   });
 
+  it('does not report on-demand token cost for reserved throughput', () => {
+    expect(
+      calculateBedrockCost('minimax.minimax-m2', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1', {
+        type: 'reserved',
+      }),
+    ).toBeUndefined();
+  });
+
   it('uses newly published London pricing for GLM 4.7', () => {
     expect(
       calculateBedrockCost('zai.glm-4.7', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'eu-west-2'),

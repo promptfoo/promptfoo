@@ -113,7 +113,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        cost: calculateOpenAIUsageCost(this.modelName, this.config, data.usage, {
+        cost: calculateOpenAIUsageCost(body.model, this.config, data.usage, {
           cachedResponse: cached,
           serviceTier: data.service_tier ?? this.config.service_tier,
         }),

@@ -101,6 +101,19 @@ describe('OpenAI Provider', () => {
       },
     });
 
+    it.each([
+      'gpt-transcribe',
+      'gpt-live-transcribe',
+      'gpt-5.3-codex-spark',
+    ])('should reject unsupported first-party model override %s in the direct constructor', (modelName) => {
+      expect(
+        () =>
+          new OpenAiAssistantProvider('test-assistant-id', {
+            config: { apiKey: 'test-key', modelName },
+          }),
+      ).toThrow();
+    });
+
     it('should handle successful assistant completion', async () => {
       const mockRun = {
         id: 'run_123',

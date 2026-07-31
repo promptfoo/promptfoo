@@ -52,6 +52,16 @@ describe('OpenAI Realtime Provider', () => {
         }),
     ).toThrow('only available through openai:codex-sdk');
   });
+
+  it('rejects a retired model before a direct Realtime request', () => {
+    expect(
+      () =>
+        new OpenAiRealtimeProvider('gpt-realtime-mini-2025-10-06', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('has been retired');
+  });
+
   const originalCustomRealtimeApiKey = process.env.CUSTOM_REALTIME_API_KEY;
   const originalOpenAiApiBaseUrl = process.env.OPENAI_API_BASE_URL;
   const originalOpenAiBaseUrl = process.env.OPENAI_BASE_URL;

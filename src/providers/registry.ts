@@ -139,16 +139,17 @@ const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
   'gpt-5.6-luna',
 ]);
 
-const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'speech', 'tts', 'video']);
-const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set(['chat', 'responses']);
-const OPENAI_FIXED_MODEL_ROUTES = new Set([
+const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
+const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
+  'chat',
   'completion',
   'embedding',
   'embeddings',
-  'moderation',
-  'realtime',
-  'transcription',
+  'responses',
+  'speech',
+  'tts',
 ]);
+const OPENAI_FIXED_MODEL_ROUTES = new Set(['moderation', 'realtime', 'transcription']);
 
 function getEffectiveOpenAiApiModel(
   modelType: string,
@@ -160,8 +161,13 @@ function getEffectiveOpenAiApiModel(
     return configuredModel || modelName || modelType;
   }
 
+  const selectedModel =
+    modelType === 'speech' || modelType === 'tts'
+      ? configuredModel || modelName || modelType
+      : modelName || configuredModel || modelType;
+
   if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
-    return modelName || configuredModel || modelType;
+    return selectedModel;
   }
 
   const retiredRoute = getRetiredOpenAiModelRoute(modelType);
@@ -181,7 +187,7 @@ function getEffectiveOpenAiApiModel(
     OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || bareModelUsesPassthrough;
   return routeUsesPassthrough && typeof passthroughModel === 'string'
     ? passthroughModel
-    : modelName || configuredModel || modelType;
+    : selectedModel;
 }
 
 export const providerMap: ProviderFactory[] = [

@@ -519,7 +519,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
-    assertOpenAiApiModel(modelName, this.getApiUrl(), { allowRetired: true });
+    assertOpenAiApiModel(modelName, this.getApiUrl());
 
     // Enable maintainContext by default
     if (this.config.maintainContext === undefined) {

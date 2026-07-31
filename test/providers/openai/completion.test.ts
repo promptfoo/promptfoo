@@ -78,6 +78,27 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
     });
 
+    it('should bill the effective passthrough completion model', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: {
+            total_tokens: 2_000_000,
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+          },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('davinci-002', {
+        config: { passthrough: { model: 'babbage-002' } },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(0.8, 10);
+    });
+
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

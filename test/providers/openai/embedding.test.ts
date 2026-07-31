@@ -119,6 +119,28 @@ describe('OpenAI Provider', () => {
       expect(mockEmbeddingResponse.usage.completion_tokens).toBe(0);
     });
 
+    it('should bill the effective passthrough embedding model', async () => {
+      const passthroughProvider = new OpenAiEmbeddingProvider('text-embedding-3-large', {
+        config: {
+          apiKey: 'test-key',
+          passthrough: { model: 'text-embedding-3-small' },
+        },
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 1_000_000, prompt_tokens: 1_000_000, completion_tokens: 0 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await passthroughProvider.callEmbeddingApi('test text');
+
+      expect(result.cost).toBeCloseTo(0.02, 10);
+    });
+
     it('should handle API errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 

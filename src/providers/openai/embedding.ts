@@ -23,8 +23,12 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     super(modelName, options);
   }
 
-  protected getBillingModelName(): string {
-    return this.modelName;
+  protected getBillingModelName(config: OpenAiSharedOptions): string {
+    const passthroughModel = (config as OpenAiSharedOptions & { passthrough?: { model?: unknown } })
+      .passthrough?.model;
+    return typeof passthroughModel === 'string'
+      ? passthroughModel
+      : super.getBillingModelName(config);
   }
 
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
@@ -100,9 +104,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         embedding,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
-        cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
-          cachedResponse: cached,
-        }),
+        cost: calculateOpenAIUsageCost(
+          this.getBillingModelName(this.config),
+          this.config,
+          data.usage,
+          {
+            cachedResponse: cached,
+          },
+        ),
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);
