@@ -307,8 +307,8 @@ receives a standard API cost estimate. Current Codex SDK releases report cache-w
 Promptfoo can estimate GPT-5.6 costs without omitting the 1.25x cache-write rate. When
 `codex_path_override` selects a custom binary, Promptfoo leaves GPT-5.6 cost undefined because the
 SDK cannot distinguish a real zero from an older binary that omitted cache-write usage. Batch and
-Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex
-runtime settings.
+Flex discounts, and Fast mode multipliers (including the legacy `priority` alias), are not
+automatically inferred from Codex runtime settings.
 
 :::warning Deprecated Codex models
 OpenAI deprecates `gpt-5.2` and `gpt-5.3-codex` when Codex uses ChatGPT sign-in. Existing API-key

@@ -507,6 +507,37 @@ describe('OpenAI billing helpers', () => {
   });
 
   it.each([
+    ['gpt-5.6-terra', 'batch', 2_000, 500, 250, 1, 0.1, 1.25, 6],
+    ['gpt-5.6-terra', 'flex', 2_000, 500, 250, 1, 0.1, 1.25, 6],
+    ['gpt-5.6-terra', 'batch', 300_000, 100_000, 50_000, 2, 0.2, 2.5, 9],
+    ['gpt-5.6-terra', 'flex', 300_000, 100_000, 50_000, 2, 0.2, 2.5, 9],
+    ['gpt-5.6-luna', 'batch', 2_000, 500, 250, 0.1, 0.01, 0.125, 0.6],
+    ['gpt-5.6-luna', 'flex', 2_000, 500, 250, 0.1, 0.01, 0.125, 0.6],
+    ['gpt-5.6-luna', 'batch', 300_000, 100_000, 50_000, 0.2, 0.02, 0.25, 0.9],
+    ['gpt-5.6-luna', 'flex', 300_000, 100_000, 50_000, 0.2, 0.02, 0.25, 0.9],
+  ])('uses GPT-5.6 Batch/Flex rates for %s on %s at %i input tokens', (model, serviceTier, inputTokens, cachedTokens, cacheWriteTokens, inputRate, cachedRate, cacheWriteRate, outputRate) => {
+    const outputTokens = 1_000;
+    const uncachedTokens = inputTokens - cachedTokens - cacheWriteTokens;
+    const usage = {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      input_tokens_details: {
+        cached_tokens: cachedTokens,
+        cache_write_tokens: cacheWriteTokens,
+      },
+    };
+
+    expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier })).toBeCloseTo(
+      (uncachedTokens * inputRate +
+        cachedTokens * cachedRate +
+        cacheWriteTokens * cacheWriteRate +
+        outputTokens * outputRate) /
+        1e6,
+      10,
+    );
+  });
+
+  it.each([
     ['gpt-5.6-terra', 4, 0.4, 5, 24],
     ['gpt-5.6-luna', 0.4, 0.04, 0.5, 2.4],
   ])('uses GPT-5.6 Fast rates for %s through the 272K input limit', (model, inputRate, cachedRate, cacheWriteRate, outputRate) => {
