@@ -1653,8 +1653,6 @@ URL resolution order for this provider is:
 4. `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL`
 5. the default OpenAI API host
 
-An explicit `apiBaseUrl` wins over ambient host/base-URL variables. Set `apiHost` intentionally only when you want Promptfoo to construct the standard `/v1` URL.
-
 Key resolution still falls through to `OPENAI_API_KEY` when `apiKey` / `apiKeyEnvar` is missing or empty. Set `apiKeyEnvar` (and that env var) when you need the gateway key kept separate from a real OpenAI key — otherwise a leftover `OPENAI_API_KEY` can be sent to the gateway host.
 
 For a local endpoint that does not require authentication, such as a default llamafile server, set `apiKeyRequired: false`. Without that option, the OpenAI provider stops before making the request if no API key resolves.

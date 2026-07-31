@@ -37,9 +37,5 @@ Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Complet
 ## Notes
 
 - Uses the OpenAI Chat Completions API shape only.
-- URL resolution order: `apiHost` → `apiBaseUrl` → `OPENAI_API_HOST` → `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL` → default OpenAI host. An explicit `apiBaseUrl` wins over ambient host/base-URL variables.
-- Key resolution still falls through to `OPENAI_API_KEY` if `apiKey` is not set and the env var named by `apiKeyEnvar` is missing or empty. Set `GATEWAY_API_KEY` before running the example so an ambient OpenAI key is not sent to the gateway.
-- For a local endpoint that does not require authentication, set `apiKeyRequired: false`; otherwise the OpenAI provider stops before making the request when no key resolves.
-- Instead of `apiBaseUrl` in the config, you can set `OPENAI_BASE_URL` / `OPENAI_API_BASE_URL` when no `OPENAI_API_HOST` is present.
 
 See also the [OpenAI provider documentation](https://www.promptfoo.dev/docs/providers/openai/) section on OpenAI-compatible multi-model gateways.
