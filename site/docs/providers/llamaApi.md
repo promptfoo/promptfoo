@@ -50,6 +50,8 @@ providers:
       presence_penalty: 0 # Encourage topic diversity (-2.0 to 2.0)
 ```
 
+### Streaming
+
 Promptfoo's Llama API provider currently sends non-streaming requests.
 
 ## Available Models
@@ -195,7 +197,7 @@ tests:
     assert:
       - type: is-json
       - type: javascript
-        value: 'output.rating >= 1 && output.rating <= 5'
+        value: 'JSON.parse(output).rating >= 1 && JSON.parse(output).rating <= 5'
 ```
 
 ### Tool Calling

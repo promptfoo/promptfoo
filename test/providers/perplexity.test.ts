@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
   calculatePerplexityCost,
@@ -239,25 +240,50 @@ describe('Perplexity Provider', () => {
       expect(cost).toBe(0.01418);
     });
 
-    it('should handle cached responses correctly', async () => {
-      // Mock the parent class callApi method with a cached response
-      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
-        output: 'Cached output',
-        tokenUsage: {
-          total: 20,
-          cached: 20,
-        },
-        cached: true,
-      });
+    it('should report zero cost for a response served through the parent cache path', async () => {
+      await clearCache();
+      enableCache();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-id',
+            model: 'sonar-pro',
+            choices: [
+              {
+                finish_reason: 'stop',
+                index: 0,
+                message: { role: 'assistant', content: 'Cached output' },
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 10,
+              total_tokens: 20,
+              cost: { total_cost: 0.01418 },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
 
-      const provider = new PerplexityProvider('sonar');
-      const result = await provider.callApi('Test prompt');
+      try {
+        const provider = new PerplexityProvider('sonar-pro', {
+          config: { apiKey: 'test-key' },
+        });
+        const first = await provider.callApi('Test prompt');
+        const second = await provider.callApi('Test prompt');
 
-      // Verify cached response is returned unchanged
-      expect(result.cached).toBe(true);
-      expect(result.tokenUsage?.cached).toBe(20);
-      // Cost should not be calculated for cached responses
-      expect(result.cost).toBeUndefined();
+        expect(first).toMatchObject({ cached: false, cost: 0.01418 });
+        expect(second).toMatchObject({
+          cached: true,
+          cost: 0,
+          tokenUsage: { cached: 20 },
+        });
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        disableCache();
+        await clearCache();
+      }
     });
 
     it('should still calculate cost for fresh responses with cached input tokens', async () => {

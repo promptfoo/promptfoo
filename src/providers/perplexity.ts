@@ -181,8 +181,12 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
       };
     },
     _config: OpenAiCompletionOptions,
-    _cached: boolean,
+    cached: boolean,
   ): number | undefined {
+    if (cached) {
+      return 0;
+    }
+
     const totalCost = data.usage?.cost?.total_cost;
     if (typeof totalCost === 'number' && Number.isFinite(totalCost) && totalCost >= 0) {
       return totalCost;
