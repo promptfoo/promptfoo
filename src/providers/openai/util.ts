@@ -519,7 +519,33 @@ const OPENAI_FIRST_PARTY_API_HOSTNAMES = new Set([
   'eu.api.openai.com',
 ]);
 
-export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
+export function assertOpenAiModelEndpointCompatibility(
+  model: unknown,
+  options: { allowTranscription?: boolean } = {},
+): void {
+  if (typeof model !== 'string') {
+    return;
+  }
+
+  const normalizedModel = model.split('/').pop() ?? model;
+  if (normalizedModel === 'gpt-live-transcribe') {
+    throw new Error(
+      'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
+    );
+  }
+  if (normalizedModel === 'gpt-transcribe' && !options.allowTranscription) {
+    throw new Error(
+      'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
+    );
+  }
+}
+
+export function assertOpenAiApiModel(
+  model: unknown,
+  apiUrl?: string,
+  options: { allowTranscription?: boolean } = {},
+): void {
+  assertOpenAiModelEndpointCompatibility(model, options);
   if (typeof model !== 'string') {
     return;
   }

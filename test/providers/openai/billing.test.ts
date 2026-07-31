@@ -677,6 +677,28 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
+  it('uses cached audio rates for the June 2025 realtime preview snapshot', () => {
+    const cost = calculateOpenAIUsageCost(
+      'gpt-4o-realtime-preview-2025-06-03',
+      {},
+      {
+        input_tokens: 100,
+        output_tokens: 0,
+        input_token_details: {
+          text_tokens: 0,
+          audio_tokens: 100,
+          cached_tokens: 100,
+          cached_tokens_details: {
+            text_tokens: 0,
+            audio_tokens: 100,
+          },
+        },
+      },
+    );
+
+    expect(cost).toBeCloseTo((100 * 2.5) / 1e6, 10);
+  });
+
   it('uses current gpt-realtime-2 multimodal and cached rates', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-realtime-2',

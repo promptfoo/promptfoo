@@ -84,6 +84,7 @@ import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
 import {
   assertOpenAiApiModel,
+  assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
   NON_CONVERSATIONAL_REALTIME_MODELS,
 } from './openai/util';
@@ -138,6 +139,23 @@ const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
   'gpt-5.6-terra',
   'gpt-5.6-luna',
 ]);
+
+const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'speech', 'tts', 'video']);
+
+function getEffectiveOpenAiApiModel(
+  modelType: string,
+  modelName: string,
+  configuredModel: string | undefined,
+  passthroughModel: unknown,
+): string {
+  const requestedModel = modelName || configuredModel || modelType;
+  const selectedModel =
+    OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES.has(modelType) && configuredModel
+      ? configuredModel
+      : requestedModel;
+
+  return typeof passthroughModel === 'string' ? passthroughModel : selectedModel;
+}
 
 export const providerMap: ProviderFactory[] = [
   {
@@ -932,25 +950,15 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
-      const requestedApiModel = modelName || configuredModel || modelType;
       const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
-      const effectiveApiModels = [requestedApiModel, configuredModel, passthrough?.model];
-      for (const candidate of effectiveApiModels) {
-        if (candidate === 'gpt-live-transcribe') {
-          throw new Error(
-            'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
-          );
-        }
-        if (
-          candidate === 'gpt-transcribe' &&
-          modelType !== 'gpt-transcribe' &&
-          modelType !== 'transcription'
-        ) {
-          throw new Error(
-            'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
-          );
-        }
-      }
+      const effectiveApiModel = getEffectiveOpenAiApiModel(
+        modelType,
+        modelName,
+        configuredModel,
+        passthrough?.model,
+      );
+      const allowTranscription = modelType === 'gpt-transcribe' || modelType === 'transcription';
+      assertOpenAiModelEndpointCompatibility(effectiveApiModel, { allowTranscription });
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
@@ -1002,9 +1010,7 @@ export const providerMap: ProviderFactory[] = [
             getEnvString('OPENAI_API_BASE_URL') ||
             getEnvString('OPENAI_BASE_URL') ||
             'https://api.openai.com/v1';
-        for (const candidate of effectiveApiModels) {
-          assertOpenAiApiModel(candidate, apiUrl);
-        }
+        assertOpenAiApiModel(effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(

@@ -727,6 +727,40 @@ describe('Provider Registry', () => {
         }
       }
 
+      const explicitChatProvider = (await factory!.create(
+        'openai:chat:gpt-4.1',
+        {
+          ...mockProviderOptions,
+          config: { ...mockProviderOptions.config, model: 'gpt-transcribe' },
+        },
+        mockContext,
+      )) as any;
+      expect(explicitChatProvider.modelName).toBe('gpt-4.1');
+
+      const activePassthroughProvider = (await factory!.create(
+        'openai:chat:gpt-5-chat-latest',
+        {
+          ...mockProviderOptions,
+          config: {
+            ...mockProviderOptions.config,
+            passthrough: { model: 'gpt-5.6' },
+          },
+        },
+        mockContext,
+      )) as any;
+      expect((await activePassthroughProvider.getOpenAiBody('hello')).body.model).toBe('gpt-5.6');
+
+      const promptOverrideProvider = (await factory!.create(
+        'openai:chat:gpt-4.1',
+        mockProviderOptions,
+        mockContext,
+      )) as any;
+      await expect(
+        promptOverrideProvider.getOpenAiBody('hello', {
+          prompt: { config: { passthrough: { model: 'openai/gpt-transcribe' } } },
+        }),
+      ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
+
       const explicitTranscriptionProvider = await factory!.create(
         'openai:transcription:gpt-transcribe',
         mockProviderOptions,

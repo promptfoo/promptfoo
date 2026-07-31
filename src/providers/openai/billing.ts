@@ -417,7 +417,11 @@ const REALTIME_MODAL_RATES = buildRateTable<OpenAIModelRates>([
     },
   },
   {
-    models: ['gpt-4o-realtime-preview', 'gpt-4o-realtime-preview-2024-12-17'],
+    models: [
+      'gpt-4o-realtime-preview',
+      'gpt-4o-realtime-preview-2024-12-17',
+      'gpt-4o-realtime-preview-2025-06-03',
+    ],
     rates: {
       text: { input: perMillion(5), cachedInput: perMillion(2.5), output: perMillion(20) },
       audio: {
