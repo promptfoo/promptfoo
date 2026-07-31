@@ -477,6 +477,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return 'anthropic';
   }
 
+  protected sanitizeRequestHeaders(headers: Record<string, string>): Record<string, string> {
+    return headers;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -892,9 +896,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       params: getMessagesRequestMetadata(params),
     });
 
-    const headers: Record<string, string> = {
-      ...(config.headers || {}),
-    };
+    const headers = this.sanitizeRequestHeaders({ ...(config.headers || {}) });
 
     // Add beta features header if specified
     let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];

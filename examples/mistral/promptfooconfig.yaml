@@ -5,10 +5,11 @@ prompts:
   - '{{message}}'
 
 providers:
-  # Reasoning models - specialized for complex problems
-  - id: mistral:magistral-medium-latest
-    label: magistral-medium
+  # Current model with adjustable reasoning for complex problems
+  - id: mistral:mistral-medium-3-5
+    label: mistral-medium-3-5
     config:
+      reasoning_effort: high
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960

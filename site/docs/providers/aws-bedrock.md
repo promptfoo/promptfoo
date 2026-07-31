@@ -819,9 +819,39 @@ For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`
 
 **Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
 
-**Note**: Claude Opus 5 (`anthropic.claude-opus-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-opus-5`); use the `global.` profile for dynamic routing. Unlike Opus 4.7/4.8 there is no `jp.` profile — the Japan regions surface Opus 5 through `global.` only. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $5/$25 rate and regional profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
+**Note**: [Claude Opus 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html)
+uses `us.anthropic.claude-opus-5`,
+`eu.anthropic.claude-opus-5`, `au.anthropic.claude-opus-5`, or
+`global.anthropic.claude-opus-5` with Bedrock Runtime. The bare
+`anthropic.claude-opus-5` ID is for Bedrock's Anthropic-compatible Messages endpoint, so
+`bedrock:anthropic.claude-opus-5` routes there and requires a Bedrock API key. Use a geo or
+global ID with `bedrock:converse:` or the InvokeModel path. There is no `jp.` profile. The
+global profile bills at $5/$25 per million input/output tokens; regional endpoints, including
+geo profiles, add the 10% regional premium.
 
-**Note**: Claude Sonnet 5 (`anthropic.claude-sonnet-5`) is available through the base foundation model ID and the `us.`/`eu.`/`global.` cross-region inference profiles (e.g. `bedrock:global.anthropic.claude-sonnet-5`); use the `global.` profile for dynamic routing. Cost is reported on both the default `bedrock:` (InvokeModel) and `bedrock:converse:` paths — the `global.` endpoint bills at the standard $3/$15 rate and regional/geo profiles (`us.`/`eu.`) add the 10% Claude 4.5+ regional premium.
+**Note**: [Claude Sonnet 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html)
+(`anthropic.claude-sonnet-5`) is available through the base
+foundation model ID and `us.`/`eu.`/`au.`/`global.` inference profiles. Through August 31,
+2026, the global profile costs $2/$10 per million input/output tokens. In-region and geo
+endpoints cost $2.20/$11 after the 10% regional premium. Standard $3/$15 global pricing begins
+September 1, 2026.
+
+:::warning Region-specific Claude end-of-life
+
+AWS reached end-of-life on July 30, 2026 for these IDs only in the listed regions. Do not treat
+the date as a global removal; Bedrock lifecycle varies by region.
+
+| Model ID                                    | Regions at EOL                                                                                           |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `anthropic.claude-3-sonnet-20240229-v1:0`   | `eu-west-1`, `eu-west-3`, `us-east-1`, `us-west-2`, `ap-northeast-1`, `ap-northeast-2`, `ap-southeast-2` |
+| `anthropic.claude-3-5-sonnet-20240620-v1:0` | `ap-northeast-1`, `ap-southeast-2`, `us-gov-east-1`, `us-gov-west-1`                                     |
+| `anthropic.claude-3-5-sonnet-20241022-v2:0` | `ap-northeast-1`, `ap-northeast-3`, `ap-south-2`, `ap-southeast-2`                                       |
+| `anthropic.claude-3-7-sonnet-20250219-v1:0` | `us-gov-east-1`, `us-gov-west-1`                                                                         |
+
+See [Amazon Bedrock model lifecycle](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
+before reusing one of these IDs in another region.
+
+:::
 
 #### Claude Fable and Mythos models
 

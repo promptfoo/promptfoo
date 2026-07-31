@@ -103,10 +103,11 @@ The `groq:` and `groq:responses:` prefixes route to Groq's Chat Completions and 
 | `openai/gpt-oss-20b`           | Reasoning / general-purpose, tool use        | Production |
 | `groq/compound`                | Agentic system (web search + code execution) | Production |
 | `groq/compound-mini`           | Agentic system (lower latency)               | Production |
+| `minimaxai/minimax-m2.7`       | Reasoning, tool use, structured outputs      | Preview¹   |
 | `qwen/qwen3.6-27b`             | Multimodal (reasoning + vision)              | Preview    |
 | `openai/gpt-oss-safeguard-20b` | Safety / content moderation (chat-based)     | Preview    |
 
-Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on.
+Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on. ¹ MiniMax M2.7 is available to Enterprise customers through Groq sales.
 
 ### Other Groq models
 

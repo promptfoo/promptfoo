@@ -1,23 +1,30 @@
+import { getAnthropicEnvHeaderSuppressions } from '../anthropic/generic';
 import { AnthropicMessagesProvider } from '../anthropic/messages';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { ProviderOptions } from '../../types/providers';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
+const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set(['authorization', 'x-api-key']);
 
-const BEDROCK_ANTHROPIC_MESSAGES_MODELS = ['anthropic.claude-fable-5', 'anthropic.claude-mythos-5'];
+const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
+  'anthropic.claude-fable-5',
+  'anthropic.claude-mythos-5',
+  'anthropic.claude-opus-5',
+];
 
 export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
   return BEDROCK_ANTHROPIC_MESSAGES_MODELS.includes(modelName);
 }
 
 export function requiresBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return modelName === 'anthropic.claude-mythos-5';
+  return modelName === 'anthropic.claude-mythos-5' || modelName === 'anthropic.claude-opus-5';
 }
 
 export function getBedrockAnthropicBaseUrl(region: string): string {
@@ -30,6 +37,28 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   // Code OAuth session — that would send an Anthropic OAuth token to the
   // Bedrock mantle host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
+
+  protected override buildAnthropicClientOptions(options: ClientOptions): ClientOptions {
+    return {
+      ...options,
+      defaultHeaders: {
+        ...options.defaultHeaders,
+        ...getAnthropicEnvHeaderSuppressions(),
+        'anthropic-version': '2023-06-01',
+        ...(this.apiKey ? { 'x-api-key': this.apiKey } : {}),
+      },
+    };
+  }
+
+  protected override sanitizeRequestHeaders(
+    headers: Record<string, string>,
+  ): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(headers).filter(
+        ([name]) => !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+      ),
+    );
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(
@@ -52,11 +81,7 @@ export function createBedrockAnthropicMessagesProvider(
     );
   }
 
-  if (
-    !config.apiBaseUrl &&
-    requiresBedrockAnthropicMessagesModel(modelName) &&
-    region !== 'us-east-1'
-  ) {
+  if (!config.apiBaseUrl && modelName === 'anthropic.claude-mythos-5' && region !== 'us-east-1') {
     throw new Error(
       `Amazon Bedrock model "${modelName}" is only available in us-east-1. ` +
         `Set config.region or AWS_BEDROCK_REGION to us-east-1.`,

@@ -77,7 +77,7 @@ describe('Mistral', () => {
       expect(customProvider.config).toEqual({ temperature: 0.7 });
     });
 
-    it('should support current Mistral model families', () => {
+    it('should accept current and historical Mistral model IDs', () => {
       const smallProvider = new MistralChatCompletionProvider('magistral-small-2509');
       expect(smallProvider.modelName).toBe('magistral-small-2509');
       expect(smallProvider.config).toEqual({});
@@ -90,9 +90,6 @@ describe('Mistral', () => {
 
       expect(new MistralChatCompletionProvider('mistral-large-2512').modelName).toBe(
         'mistral-large-2512',
-      );
-      expect(new MistralChatCompletionProvider('mistral-medium-3.5').modelName).toBe(
-        'mistral-medium-3.5',
       );
       expect(new MistralChatCompletionProvider('mistral-medium-3-5').modelName).toBe(
         'mistral-medium-3-5',
@@ -203,7 +200,7 @@ describe('Mistral', () => {
     });
 
     it('should pass through current chat completion options', async () => {
-      const advancedProvider = new MistralChatCompletionProvider('mistral-medium-3.5', {
+      const advancedProvider = new MistralChatCompletionProvider('mistral-medium-3-5', {
         config: {
           frequency_penalty: 0.25,
           presence_penalty: 0.5,
@@ -357,26 +354,26 @@ describe('Mistral', () => {
       expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 
-    // Regression coverage: Mistral silently repoints `*-latest`/bare aliases to newer
-    // models. These lock the hardcoded pricing to whatever the alias resolves to today.
+    // Regression coverage for active aliases and retained historical pricing.
     it.each([
       // [model, input price/M, output price/M, expected cost for 400 in / 600 out]
       // mistral-small-latest -> Mistral Small 4 (mistral-small-2603): $0.15/$0.60
       ['mistral-small-latest', 0.00042],
-      // magistral-small-latest folded into Mistral Small 4: $0.15/$0.60
-      ['magistral-small-latest', 0.00042],
-      // mistral-medium-latest + bare mistral-medium -> Mistral Medium 3.5: $1.50/$7.50
+      // magistral-small-latest -> deprecated Magistral Small 1.2 (2509): $0.50/$1.50
+      ['magistral-small-latest', 0.0011],
+      // mistral-medium-latest -> Mistral Medium 3.5: $1.50/$7.50
       ['mistral-medium-latest', 0.0051],
+      // bare mistral-medium was verified live as a Mistral Medium 3.5 alias: $1.50/$7.50
       ['mistral-medium', 0.0051],
-      // mistral-medium-2604 is the canonical dated ID for Mistral Medium 3.5
-      ['mistral-medium-2604', 0.0051],
       // version aliases that also resolve to Mistral Medium 3.5
       ['mistral-medium-3-5', 0.0051],
+      ['mistral-medium-3.5', 0.0051],
+      ['mistral-medium-2604', 0.0051],
       // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
       ['mistral-code-latest', 0.00066],
       // Devstral 2 agent alias: $0.40/$2.00
       ['mistral-code-agent-latest', 0.00136],
-    ])('tracks current pricing for %s', async (model, expectedCost) => {
+    ])('tracks catalog pricing for %s', async (model, expectedCost) => {
       const provider = new MistralChatCompletionProvider(model);
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
 

@@ -1,6 +1,7 @@
 import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
+  getClaudeSonnet5PricingPerMillion,
   isClaudeFableOrMythos5Model,
   isClaudeOpus5Model,
   isClaudeRegionalPremiumModel,
@@ -29,8 +30,9 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
-  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
+  // Claude Sonnet 5 introductory baseline; getBedrockPricing switches to $3/$15 at runtime
+  // on Sep 1, 2026.
+  'anthropic.claude-sonnet-5': { input: 2, output: 10 },
   // Claude Sonnet 4/4.5
   'anthropic.claude-sonnet-4': { input: 3, output: 15 },
   // Claude Haiku 4.5
@@ -346,6 +348,10 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
     }
   }
 
+  if (normalizedModelId.includes('anthropic.claude-sonnet-5')) {
+    return getClaudeSonnet5PricingPerMillion();
+  }
+
   for (const [modelPrefix, pricing] of Object.entries(BEDROCK_PRICING)) {
     if (normalizedModelId.includes(modelPrefix)) {
       return pricing;
@@ -413,9 +419,9 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, and Sonnet 5) have verified Runtime rates, so they
- * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
- * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
+ * Claude 5 models have verified Runtime rates, so supported Runtime inference profiles report
+ * cost on InvokeModel. Bare Opus 5 routes through the Anthropic-compatible Messages endpoint;
+ * legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
 export function calculateBedrockInvokeModelCost(
   modelId: string,

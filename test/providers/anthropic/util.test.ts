@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateAnthropicCost,
   claudeThinkingConsumesTokens,
@@ -40,6 +40,10 @@ type AnthropicTestMessage = Anthropic.Messages.Message & {
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should calculate cost for valid input and output tokens', () => {
       const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 }, 100, 200);
       expect(cost).toBe(4.5); // (0.003 * 100) + (0.015 * 200)
@@ -235,22 +239,45 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(2);
     });
 
-    it('should calculate default cost for Claude Sonnet 5 model', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 100, 200);
-      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    it('switches Claude Sonnet 5 pricing at the September 1 boundary and preserves overrides', () => {
+      const now = vi.spyOn(Date, 'now');
+
+      now.mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+      expect(calculateAnthropicCost('claude-sonnet-5', {}, 1_000_000, 1_000_000)).toBe(12);
+
+      now.mockReturnValue(Date.parse('2026-09-01T00:00:00.000Z'));
+      expect(calculateAnthropicCost('claude-sonnet-5', {}, 1_000_000, 1_000_000)).toBe(18);
+      expect(
+        calculateAnthropicCost(
+          'us.anthropic.claude-sonnet-5',
+          { inputCost: 1 / 1e6, outputCost: 4 / 1e6 },
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBe(5);
+      expect(
+        calculateAnthropicCost(
+          'us.anthropic.claude-sonnet-5',
+          { cost: 7 / 1e6 },
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBe(14);
     });
 
-    it('should calculate standard cost for Claude Sonnet 5 at or below 200k tokens', () => {
+    it('should calculate promotional cost for Claude Sonnet 5 at or below 200k tokens', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
-      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+      expect(cost).toBe(0.4); // (2/1e6 * 150,000) + (10/1e6 * 10,000) = 0.3 + 0.1 = 0.4
     });
 
-    it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-      // Per Anthropic pricing, Sonnet 5 bills its full 1M context at the standard rate —
+    it('bills Claude Sonnet 5 at the promotional rate above 200k tokens', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+      // Sonnet 5 bills its full 1M context at the same promotional rate —
       // there is no >200K surcharge.
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
-      // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2 (no >200K surcharge applies)
-      expect(cost).toBe(1.2);
+      // (2/1e6 * 300,000) + (10/1e6 * 20,000) = 0.6 + 0.2 = 0.8
+      expect(cost).toBe(0.8);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {

@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { getClaudeSonnet5PricingPerMillion } from '../anthropic/util';
 import { clampCachedTokens } from '../shared';
 import { AZURE_MODELS } from './defaults';
 
@@ -153,14 +154,19 @@ export function calculateAzureCost(
     model.cost.longContext && promptTokens > model.cost.longContext.threshold
       ? model.cost.longContext
       : undefined;
-  const inputCost = longContext?.input ?? model.cost.input;
-  const outputCost = longContext?.output ?? model.cost.output;
+  const sonnet5Pricing =
+    modelName === 'claude-sonnet-5' ? getClaudeSonnet5PricingPerMillion() : undefined;
+  const inputCost =
+    longContext?.input ?? (sonnet5Pricing ? sonnet5Pricing.input / 1e6 : model.cost.input);
+  const outputCost =
+    longContext?.output ?? (sonnet5Pricing ? sonnet5Pricing.output / 1e6 : model.cost.output);
+  const defaultCacheReadCost = sonnet5Pricing
+    ? sonnet5Pricing.input / 10 / 1e6
+    : (model.cost.cacheRead ?? AZURE_CACHE_READ_RATES.get(modelName) ?? inputCost);
   const cacheReadCost =
     longContext?.cacheRead ??
     (longContext ? AZURE_LONG_CONTEXT_CACHE_READ_RATES.get(modelName) : undefined) ??
-    model.cost.cacheRead ??
-    AZURE_CACHE_READ_RATES.get(modelName) ??
-    inputCost;
+    defaultCacheReadCost;
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(

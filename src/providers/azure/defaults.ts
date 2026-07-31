@@ -933,7 +933,9 @@ export const AZURE_MODELS: AzureModelCost[] = [
   },
   {
     id: 'claude-sonnet-5',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
+    // Introductory pricing through Aug 31, 2026. calculateAzureCost switches
+    // to the standard $3/$15 rates at runtime on Sep 1.
+    cost: { input: 2 / 1000000, output: 10 / 1000000 },
   },
   {
     id: 'claude-sonnet-4-6',

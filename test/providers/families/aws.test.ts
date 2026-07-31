@@ -149,6 +149,18 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:anthropic.claude-mythos-5');
   });
 
+  it('routes bare Opus 5 to the Bedrock Anthropic Messages endpoint', async () => {
+    const provider = await bedrockFactory.create(
+      'bedrock:anthropic.claude-opus-5',
+      { config: { region: 'us-east-1', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    expect((provider as any).getApiBaseUrl()).toBe(
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+    );
+  });
+
   it('supports the explicit messages form for Bedrock Fable', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:messages:anthropic.claude-fable-5',

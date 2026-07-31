@@ -173,44 +173,39 @@ source of truth for availability and pricing.
 
 #### Current Models
 
-| Model                     | Context | Input Price | Output Price | Capabilities             | Best For                                 |
-| ------------------------- | ------- | ----------- | ------------ | ------------------------ | ---------------------------------------- |
-| `mistral-medium-latest`   | 256k    | $1.50/1M    | $7.50/1M     | Text, vision, reasoning¹ | Agentic and coding-heavy workloads       |
-| `mistral-large-latest`    | 256k    | $0.50/1M    | $1.50/1M     | Text, vision             | General-purpose multimodal tasks         |
-| `mistral-small-latest`    | 256k    | $0.15/1M    | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding   |
-| `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning, vision | Step-by-step reasoning                   |
-| `codestral-latest`        | 256k    | $0.30/1M    | $0.90/1M     | Code, FIM                | Code generation and completion           |
-| `devstral-medium-latest`  | 256k    | $0.40/1M    | $2.00/1M     | Code agents              | Software-engineering agents (Devstral 2) |
-| `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Text, vision             | Compact multimodal deployments           |
-| `ministral-8b-latest`     | 256k    | $0.15/1M    | $0.15/1M     | Text, vision             | Efficient on-prem/edge deployments       |
-| `ministral-3b-latest`     | 128k    | $0.10/1M    | $0.10/1M     | Text, vision             | Smallest multimodal deployments          |
-| `open-mistral-nemo`       | 128k    | $0.15/1M    | $0.15/1M     | Text                     | Multilingual and research workloads      |
+| Model                   | Context | Input Price | Output Price | Capabilities             | Best For                               |
+| ----------------------- | ------- | ----------- | ------------ | ------------------------ | -------------------------------------- |
+| `mistral-medium-latest` | 256k    | $1.50/1M    | $7.50/1M     | Text, vision, reasoning¹ | Agentic and coding-heavy workloads     |
+| `mistral-large-latest`  | 256k    | $0.50/1M    | $1.50/1M     | Text, vision             | General-purpose multimodal tasks       |
+| `mistral-small-latest`  | 256k    | $0.15/1M    | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding |
+| `codestral-latest`      | 128k    | $0.30/1M    | $0.90/1M     | Code, FIM                | Code generation and completion         |
+| `ministral-14b-latest`  | 256k    | $0.20/1M    | $0.20/1M     | Text, vision             | Compact multimodal deployments         |
+| `ministral-8b-latest`   | 256k    | $0.15/1M    | $0.15/1M     | Text, vision             | Efficient on-prem/edge deployments     |
+| `ministral-3b-latest`   | 256k    | $0.10/1M    | $0.10/1M     | Text, vision             | Smallest multimodal deployments        |
 
 ¹ Enable adjustable reasoning with `reasoning_effort: high`.
 
 :::note Aliases move — pin a snapshot for stability
 
-`*-latest` and bare aliases follow whatever snapshot Mistral currently points them at, so their
-price and behavior track the resolved model. Pin a dated snapshot (e.g. `mistral-medium-2604`)
-when you need stable pricing and behavior.
+`*-latest` aliases follow whatever model Mistral currently points them at, so their price and
+behavior track the resolved model. Use a versioned ID such as `mistral-medium-3-5` when you need
+stable pricing and behavior.
 
 :::
 
 #### Model aliases and snapshots
 
-| Alias                                                                                                     | Resolves to                                |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `mistral-medium-latest`, `mistral-medium`, `mistral-medium-3`, `mistral-medium-3-5`, `mistral-medium-3.5` | `mistral-medium-2604` (Mistral Medium 3.5) |
-| `mistral-large-latest`                                                                                    | `mistral-large-2512` (Mistral Large 3)     |
-| `mistral-small-latest`, `magistral-small-latest`                                                          | `mistral-small-2603` (Mistral Small 4)     |
-| `magistral-medium-latest`                                                                                 | `magistral-medium-2509` (Magistral Medium) |
-| `codestral-latest`, `mistral-code-latest`, `mistral-code-fim-latest`                                      | `codestral-2508` (Codestral)               |
-| `devstral-latest`, `devstral-medium-latest`, `mistral-code-agent-latest`                                  | `devstral-2512` (Devstral 2)               |
-| `open-mistral-nemo`, `mistral-tiny-latest`, `mistral-tiny-2407`                                           | `open-mistral-nemo-2407` (Mistral NeMo)    |
+| Published alias                                                      | Resolves to                               |
+| -------------------------------------------------------------------- | ----------------------------------------- |
+| `mistral-medium-latest`, `mistral-medium-3`, `mistral-medium-3-5`    | `mistral-medium-3-5` (Mistral Medium 3.5) |
+| `mistral-large-latest`                                               | `mistral-large-2512` (Mistral Large 3)    |
+| `mistral-small-latest`                                               | `mistral-small-2603` (Mistral Small 4)    |
+| `codestral-latest`, `mistral-code-latest`, `mistral-code-fim-latest` | `codestral-2508` (Codestral)              |
 
-The `magistral-small-latest` alias now resolves to Mistral Small 4 (a hybrid model), not the
-standalone Magistral Small reasoning snapshot. Enable Small 4's reasoning with
-`reasoning_effort: high`.
+For compatibility, promptfoo also cost-scores `mistral-medium`, `mistral-medium-3.5`, and
+`mistral-medium-2604` as Mistral Medium 3.5. The current model card does not publish these IDs,
+but they are retained from live API and catalog verification for existing configs and cached
+results.
 
 #### Legacy Models (Deprecated or Retired)
 
@@ -218,16 +213,17 @@ promptfoo keeps these IDs so it can cost-score cached results. **Retired** IDs r
 
 1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312` (retired)
 2. `mistral-small-2402` (retired)
-3. `mistral-medium-2312` (retired; bare `mistral-medium` now resolves to Mistral Medium 3.5)
+3. `mistral-medium-2312` (retired)
 4. `mistral-medium-2505`, `mistral-medium-2508` (Mistral Medium 3 / 3.1, deprecated — succeeded by Mistral Medium 3.5)
-5. `mistral-small-2506` (Mistral Small 3.2, deprecated — succeeded by Mistral Small 4)
+5. `mistral-small-2506` (Mistral Small 3.2, deprecated April 30, 2026 — succeeded by Mistral Small 4)
 6. `mistral-large-2402`, `mistral-large-2407` (retired)
 7. `codestral-2405`, `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest` (retired)
 8. `open-mixtral-8x7b`, `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`, `mistral-small`, `mistral-small-2312` (retired)
 9. `pixtral-12b` (retired — use a current vision model such as `mistral-large-latest`)
-10. `magistral-small-2506`, `magistral-small-2507` (retired); `magistral-small-2509` — standalone reasoning snapshot, deprecated 2026-04-30, retiring 2026-07-31 (`magistral-small-latest` now resolves to Mistral Small 4)
-
-> `mistral-tiny-2407` / `mistral-tiny-latest` are **not** legacy — they are current aliases of `open-mistral-nemo` (see the aliases table above).
+10. `magistral-small-2506`, `magistral-small-2507` (retired); `magistral-small-2509` and `magistral-small-latest` (deprecated April 30, 2026 — use Mistral Small 4)
+11. `magistral-medium-2506`, `magistral-medium-2507` (retired); `magistral-medium-2509` and `magistral-medium-latest` (deprecated May 22, 2026 — use Mistral Medium 3.5)
+12. `devstral-2512`, `devstral-latest`, `devstral-medium-latest`, `mistral-code-agent-latest` (deprecated May 22, 2026 — use Mistral Medium 3.5)
+13. `open-mistral-nemo-2407`, `open-mistral-nemo`, `mistral-tiny-2407`, `mistral-tiny-latest` (deprecated May 22, 2026 — use Ministral 3 8B)
 
 ### Embedding Models
 
@@ -253,11 +249,10 @@ providers:
 
 ## Reasoning Models
 
-Mistral's **Magistral** models are specialized native reasoning models. `magistral-medium-latest`
-currently points to the 2509 generation, which uses tokenized thinking chunks and a 128k
-context window. Mistral's public model card deprecated the standalone `magistral-small-2509`
-snapshot on 2026-04-30 (retiring 2026-07-31); the `magistral-small-latest` alias now resolves to
-Mistral Small 4, whose reasoning mode you enable with `reasoning_effort: high`.
+Mistral's **Magistral** models are deprecated native-reasoning models.
+`magistral-small-latest` and `magistral-medium-latest` still point to their 2509 snapshots,
+which use tokenized thinking chunks and 128k context windows. For new evals, use Mistral Small 4
+or Mistral Medium 3.5 and enable reasoning with `reasoning_effort`.
 
 ### Key Features of Magistral Models
 
@@ -266,8 +261,9 @@ wire format in new evals; migrate to `reasoning_effort` and assert on the final 
 
 ### Magistral Model Variants
 
-- **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`) — native reasoning
-- **Mistral Small 4** (`mistral-small-latest` / `magistral-small-latest`) — hybrid model; enable reasoning with `reasoning_effort: high`
+- **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`) — deprecated native reasoning
+- **Magistral Small** (`magistral-small-latest` / `magistral-small-2509`) — deprecated native reasoning
+- **Mistral Small 4** (`mistral-small-latest` / `mistral-small-2603`) — current hybrid model; enable reasoning with `reasoning_effort: high`
 
 ### Usage Recommendations
 

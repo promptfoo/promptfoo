@@ -2348,7 +2348,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2401,6 +2400,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+
+  // AU geo inference profiles
+  'au.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // EU Models
   'eu.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -2541,10 +2544,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'jp.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
-  // Claude Opus 5 global cross-region inference profile. Verified via
-  // `aws bedrock list-inference-profiles`: Opus 5 exposes base + `us.`/`eu.`/`global.`
-  // only — unlike Opus 4.7/4.8 there is no `jp.` profile (the JP regions surface just
-  // `global.`), and no older `apac.` prefix.
+  // Claude Opus 5 global cross-region inference profile. Runtime exposes
+  // `us.`/`eu.`/`au.`/`global.` profiles; the bare ID is served through Bedrock Mantle.
   'global.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
   // Claude Fable 5 base, global, and geo inference profiles.
@@ -2554,18 +2555,29 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
+function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {
+  if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
+    return 'anthropic.claude-mythos-5';
+  }
+  if (modelName === 'anthropic.claude-opus-5') {
+    return modelName;
+  }
+  return undefined;
+}
+
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
 export function getHandlerForModel(
   modelName: string,
   config?: BedrockInvokeModelOptions,
 ): IBedrockModel {
-  if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
-    // Mythos has no geo/global inference profiles, so always point at the bare
-    // canonical ID — suggesting a prefixed `bedrock:${modelName}` would only
-    // bounce the user into the factory's prefixed-Mythos rejection.
+  const messagesOnlyModel = getCanonicalMessagesOnlyModel(modelName);
+  if (messagesOnlyModel) {
+    // Mythos has no geo/global inference profiles, while the bare Opus 5 ID is
+    // served through Bedrock Mantle. In both cases, point at the canonical
+    // Anthropic Messages provider rather than suggesting a direct InvokeModel ID.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
-        `InvokeModel. Load it as "bedrock:anthropic.claude-mythos-5" instead.`,
+        `InvokeModel. Load it as "bedrock:${messagesOnlyModel}" instead.`,
     );
   }
 

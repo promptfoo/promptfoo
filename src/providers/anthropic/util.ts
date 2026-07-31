@@ -11,6 +11,24 @@ import type {
   WebSearchToolConfig,
 } from './types';
 
+export const CLAUDE_SONNET_5_STANDARD_PRICING_START_MS = Date.UTC(2026, 8, 1);
+
+/**
+ * Return Claude Sonnet 5's active base rates in dollars per million tokens.
+ *
+ * Anthropic's introductory $2/$10 pricing runs through August 31, 2026; standard
+ * $3/$15 pricing starts at 00:00 UTC on September 1. Read the clock on every cost
+ * calculation so a long-running promptfoo process crosses the boundary correctly.
+ */
+export function getClaudeSonnet5PricingPerMillion(now = Date.now()): {
+  input: number;
+  output: number;
+} {
+  return now < CLAUDE_SONNET_5_STANDARD_PRICING_START_MS
+    ? { input: 2, output: 10 }
+    : { input: 3, output: 15 };
+}
+
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
@@ -33,18 +51,16 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
-  // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
-  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. The full 1M
-  // context bills at this flat rate — prompt size never changes the per-token price.
+  // Claude Sonnet 5 — the calculator replaces these introductory rates at runtime
+  // when standard $3/$15 pricing takes effect on Sep 1, 2026.
   ...['claude-sonnet-5'].map((model) => ({
     id: model,
     cost: {
-      input: 3 / 1e6, // $3 / MTok
-      output: 15 / 1e6, // $15 / MTok
+      input: 2 / 1e6, // $2 / MTok
+      output: 10 / 1e6, // $10 / MTok
     },
   })),
-  // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
+  // Claude Mythos Preview (deprecated; retained for historical cost scoring)
   ...['claude-mythos-preview'].map((model) => ({
     id: model,
     cost: {
@@ -601,7 +617,19 @@ export function calculateAnthropicCost(
   cacheCreationTokens?: number,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
-  const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  const registeredModel = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  const sonnet5Pricing =
+    pricingModelName === 'claude-sonnet-5' ? getClaudeSonnet5PricingPerMillion() : undefined;
+  const modelInfo =
+    registeredModel && sonnet5Pricing
+      ? {
+          ...registeredModel,
+          cost: {
+            input: sonnet5Pricing.input / 1e6,
+            output: sonnet5Pricing.output / 1e6,
+          },
+        }
+      : registeredModel;
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.
@@ -652,7 +680,7 @@ export function calculateAnthropicCost(
       effectiveConfig,
       promptTokens,
       completionTokens,
-      ANTHROPIC_MODELS,
+      modelInfo ? [modelInfo] : [],
     ),
   );
 }

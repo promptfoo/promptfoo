@@ -51,34 +51,49 @@ This also enables [model-graded assertions](#model-graded-tests) such as `llm-ru
 
 ## Models
 
-The `anthropic` provider supports the following models via the messages API:
+The `anthropic` provider passes model IDs to the Messages API. These are Anthropic's active
+models:
 
-| Model ID                                                                   | Description            |
-| -------------------------------------------------------------------------- | ---------------------- |
-| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
-| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
-| `anthropic:messages:claude-opus-5`                                         | Claude Opus 5          |
-| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
-| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
-| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
-| `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
-| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
-| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
-| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus        |
-| `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Claude 4 Opus          |
-| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet      |
-| `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Claude 4 Sonnet        |
-| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Claude 4.5 Haiku       |
-| `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Claude 3.7 Sonnet      |
-| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Claude 3.5 Sonnet (v2) |
-| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Claude 3.5 Sonnet (v1) |
-| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Claude 3.5 Haiku       |
-| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus          |
-| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku         |
+| Model ID                                                                   | Description               |
+| -------------------------------------------------------------------------- | ------------------------- |
+| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5            |
+| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5 (limited) |
+| `anthropic:messages:claude-opus-5`                                         | Claude Opus 5             |
+| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus           |
+| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus           |
+| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus           |
+| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus           |
+| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5           |
+| `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet         |
+| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet         |
+| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Claude 4.5 Haiku          |
+
+Anthropic-operated endpoints have a separate lifecycle from Amazon Bedrock and Google Cloud.
+Promptfoo still accepts historical IDs for compatible gateways and cached-result cost scoring,
+but Anthropic's API will reject retired models:
+
+| Model ID                                  | Anthropic API state | Migration                                     |
+| ----------------------------------------- | ------------------- | --------------------------------------------- |
+| `claude-mythos-preview`                   | Deprecated          | Use `claude-mythos-5`                         |
+| `claude-opus-4-1-20250805`                | Deprecated          | Retires August 5, 2026; use `claude-opus-4-8` |
+| `claude-opus-4-20250514`                  | Retired             | Use `claude-opus-4-8`                         |
+| `claude-sonnet-4-20250514`                | Retired             | Use `claude-sonnet-4-6`                       |
+| `claude-3-7-sonnet-20250219`              | Retired             | Use `claude-sonnet-4-6`                       |
+| `claude-3-5-sonnet-20241022` / `20240620` | Retired             | Use `claude-sonnet-4-6`                       |
+| `claude-3-5-haiku-20241022`               | Retired             | Use `claude-haiku-4-5-20251001`               |
+| `claude-3-opus-20240229`                  | Retired             | Use `claude-opus-4-8`                         |
+| `claude-3-haiku-20240307`                 | Retired             | Use `claude-haiku-4-5-20251001`               |
+
+Check [Anthropic's model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations)
+for current dates and replacements.
 
 ### Cross-Platform Model Availability
 
 Claude models are available across multiple platforms. Here's how the model names map across different providers:
+
+The rows below include historical partner-platform IDs. A model retired from the Anthropic API
+can remain available on Bedrock or Google Cloud because those platforms set independent
+lifecycle dates.
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
@@ -600,7 +615,10 @@ controls at the model level:
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
 
-Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set `inputCost: 2 / 1e6` and `outputCost: 10 / 1e6` to track the introductory rate (a single `cost` is applied as both the input and output rate, so it cannot express the two).
+Sonnet 5 uses a 1M-token context window with no long-context surcharge above 200K tokens.
+Promptfoo currently applies Anthropic's introductory **$2 per million input / $10 per million
+output** pricing, which runs through August 31, 2026. Anthropic's standard $3/$15 pricing begins
+September 1, 2026.
 
 ### Claude Opus 4.8 notes
 

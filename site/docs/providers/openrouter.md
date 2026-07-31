@@ -26,8 +26,8 @@ OpenRouter's catalog changes quickly. These are popular model IDs that work well
 | [google/gemini-2.5-flash](https://openrouter.ai/google/gemini-2.5-flash)                                   |        1,048,576 | Fast multimodal and general chat   |
 | [meta-llama/llama-4-maverick](https://openrouter.ai/meta-llama/llama-4-maverick)                           |        1,048,576 | Popular open-weight frontier model |
 | [deepseek/deepseek-v3.2](https://openrouter.ai/deepseek/deepseek-v3.2)                                     |          163,840 | Cost-efficient reasoning and tools |
-| [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) |          128,000 | Compact Mistral general use        |
-| [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     |           40,960 | Strong open multilingual model     |
+| [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) |          256,000 | Compact Mistral general use        |
+| [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     |          131,072 | Strong open multilingual model     |
 
 For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https://openrouter.ai/models).
 

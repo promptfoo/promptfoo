@@ -56,7 +56,8 @@ export const awsProviderFactories: ProviderFactory[] = [
       if (modelType === 'messages') {
         throw new Error(
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
-            `provider. Supported models: anthropic.claude-fable-5 and anthropic.claude-mythos-5.`,
+            `provider. Supported models: anthropic.claude-fable-5, ` +
+            `anthropic.claude-mythos-5, and anthropic.claude-opus-5.`,
         );
       }
 

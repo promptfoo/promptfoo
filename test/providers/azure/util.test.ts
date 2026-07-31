@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AZURE_MODELS } from '../../../src/providers/azure/defaults';
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
@@ -12,6 +12,10 @@ describe('throwConfigurationError', () => {
 });
 
 describe('calculateAzureCost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('calculates cost for valid model and tokens', () => {
     const cost = calculateAzureCost(
       'gpt-5.4',
@@ -550,6 +554,27 @@ describe('calculateAzureCost', () => {
 
   it('calculates cost for Claude Fable 5', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
+  });
+
+  it('uses Claude Sonnet 5 promotional and cache-read pricing through August 31', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+
+    const defaults = AZURE_MODELS.find(({ id }) => id === 'claude-sonnet-5');
+    expect(defaults?.cost.input).toBe(2 / 1e6);
+    expect(defaults?.cost.output).toBe(10 / 1e6);
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1_000_000, 1_000_000, 250_000)).toBeCloseTo(
+      11.55,
+      12,
+    );
+  });
+
+  it('switches Claude Sonnet 5 standard and cache-read pricing on September 1', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T00:00:00.000Z'));
+
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1_000_000, 1_000_000, 250_000)).toBeCloseTo(
+      17.325,
+      12,
+    );
   });
 
   it('returns undefined for unknown model', () => {
