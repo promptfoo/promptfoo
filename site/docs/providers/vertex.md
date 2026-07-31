@@ -124,7 +124,6 @@ Meta's Llama models are available through Vertex AI with the following versions:
 **Llama 3.3:**
 
 - `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
-- `vertex:llama-3.3-8b-instruct-maas` - Llama 3.3 8B for efficient text generation
 
 **Llama 3.2:**
 
