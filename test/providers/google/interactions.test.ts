@@ -455,7 +455,10 @@ describe('GoogleInteractionsProvider', () => {
       cached: false,
     } as any);
     const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
-      config: { apiKey: 'test-key' },
+      config: {
+        apiKey: 'test-key',
+        passthrough: { system_instruction: 'Provider default instruction.' },
+      },
     });
 
     await provider.callApi(
@@ -471,6 +474,17 @@ describe('GoogleInteractionsProvider', () => {
       },
     ]);
     expect(body).not.toHaveProperty('system_instruction');
+  });
+
+  it('rejects an interaction prompt with no semantic input', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('[]');
+
+    expect(result.error).toContain('at least one input item');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
   it('lets prompt-embedded system roles override a provider passthrough default', async () => {

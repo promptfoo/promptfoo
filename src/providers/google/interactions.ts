@@ -49,6 +49,7 @@ type InteractionResponse = {
 type ParsedInteractionInput = {
   input: string | unknown[] | Record<string, unknown>;
   systemInstruction?: string;
+  hasSystemInstruction?: boolean;
 };
 
 function normalizeAudioMimeType(format?: string): string {
@@ -205,12 +206,16 @@ function parseInteractionInput(
               content: systemInstructions.map((text) => ({ type: 'text', text })),
             },
           ],
+          hasSystemInstruction: true,
         };
       }
       return {
         input,
         ...(systemInstructions.length > 0
-          ? { systemInstruction: systemInstructions.join('\n') }
+          ? {
+              systemInstruction: systemInstructions.join('\n'),
+              hasSystemInstruction: true,
+            }
           : {}),
       };
     }
@@ -220,7 +225,10 @@ function parseInteractionInput(
           ? (parsed as unknown[] | Record<string, unknown>)
           : prompt,
       ...(envelopeSystemInstruction.length > 0
-        ? { systemInstruction: envelopeSystemInstruction.join('\n') }
+        ? {
+            systemInstruction: envelopeSystemInstruction.join('\n'),
+            hasSystemInstruction: true,
+          }
         : {}),
     };
   } catch {
@@ -506,8 +514,18 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const passthroughModel = promptPassthrough.model ?? providerPassthrough.model;
     const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
     const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
-    const { input: interactionInput, systemInstruction: promptSystemInstruction } =
-      parseInteractionInput(prompt, !isVideoModel);
+    const {
+      input: interactionInput,
+      systemInstruction: promptSystemInstruction,
+      hasSystemInstruction: hasPromptSystemInstruction,
+    } = parseInteractionInput(prompt, !isVideoModel);
+    const effectiveInput = promptPassthrough.input ?? interactionInput;
+    if (
+      (typeof effectiveInput === 'string' && !effectiveInput.trim()) ||
+      (Array.isArray(effectiveInput) && effectiveInput.length === 0)
+    ) {
+      return { error: 'Gemini Interactions prompt must contain at least one input item.' };
+    }
     const previousInteractionId =
       promptPassthrough.previous_interaction_id ??
       promptPassthrough.previousInteractionId ??
@@ -525,7 +543,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       promptPassthrough.system_instruction ?? promptPassthrough.systemInstruction;
     const passthroughSystemInstruction =
       promptPassthroughSystemInstruction ??
-      (promptConfig?.systemInstruction === undefined && promptSystemInstruction === undefined
+      (promptConfig?.systemInstruction === undefined && !hasPromptSystemInstruction
         ? providerPassthroughSystemInstruction
         : undefined);
     const hasConfigTools = Array.isArray(config.tools)

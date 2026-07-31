@@ -234,7 +234,10 @@ describe('TrueFoundry', () => {
         expect(result.latencyMs).toBeGreaterThanOrEqual(0);
       });
 
-      it('should not apply OpenAI pricing to another TrueFoundry model namespace', async () => {
+      it.each([
+        'vendor/gpt-4',
+        'vendor/openai/gpt-4',
+      ])('should not apply OpenAI pricing to another TrueFoundry model namespace: %s', async (model) => {
         const mockResponse = {
           choices: [{ message: { content: 'Vendor output' } }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -246,12 +249,12 @@ describe('TrueFoundry', () => {
             headers: new Headers({ 'Content-Type': 'application/json' }),
           }),
         );
-        const vendorProvider = new TrueFoundryProvider('vendor/gpt-4', {});
+        const vendorProvider = new TrueFoundryProvider(model, {});
 
         const result = await vendorProvider.callApi('Test prompt');
         const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
 
-        expect(JSON.parse(request.body ?? '{}').model).toBe('vendor/gpt-4');
+        expect(JSON.parse(request.body ?? '{}').model).toBe(model);
         expect(result.cost).toBeUndefined();
       });
 
