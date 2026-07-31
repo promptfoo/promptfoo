@@ -7,6 +7,7 @@ import {
   XAI_VOICE_DEFAULT_MODEL,
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
+  XAI_VOICES,
   type XAIFunctionCallOutput,
   XAIVoiceProvider,
 } from '../../../src/providers/xai/voice';
@@ -200,6 +201,13 @@ describe('XAI Voice Provider', () => {
         const provider = new XAIVoiceProvider('grok-3', { config: { voice } });
         expect(provider.config.voice).toBe(voice);
       }
+    });
+
+    it('normalizes legacy title-cased voice names', () => {
+      const provider = new XAIVoiceProvider('grok-3', { config: { voice: 'Ara' } });
+
+      expect(XAI_VOICES).toEqual(['Ara', 'Rex', 'Sal', 'Eve', 'Leo']);
+      expect(provider.config.voice).toBe('ara');
     });
 
     it('accepts turn detection configuration', () => {

@@ -91,7 +91,7 @@ describe('OpenAI Provider', () => {
         },
       });
       const provider = new OpenAiCompletionProvider('davinci-002', {
-        config: { passthrough: { model: 'babbage-002' } },
+        config: { passthrough: { model: 'openai/babbage-002' } },
       });
 
       const result = await provider.callApi('Test prompt');

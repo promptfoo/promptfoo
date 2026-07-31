@@ -43,8 +43,12 @@ export const XAI_VOICE_DEFAULTS = {
   websocketTimeout: 30000,
 };
 
-export const XAI_VOICES = ['ara', 'rex', 'sal', 'eve', 'leo'] as const;
-export type XAIVoice = (typeof XAI_VOICES)[number];
+// Preserve the original public tuple for existing TypeScript consumers. xAI's current
+// request examples use lowercase IDs, so normalize these legacy spellings before dispatch.
+export const XAI_VOICES = ['Ara', 'Rex', 'Sal', 'Eve', 'Leo'] as const;
+export const XAI_CURRENT_VOICES = ['ara', 'rex', 'sal', 'eve', 'leo'] as const;
+type XAICurrentVoice = (typeof XAI_CURRENT_VOICES)[number];
+export type XAIVoice = XAICurrentVoice | (typeof XAI_VOICES)[number];
 
 export const XAI_AUDIO_FORMATS = ['audio/pcm', 'audio/pcmu', 'audio/pcma'] as const;
 export type XAIAudioFormatType = (typeof XAI_AUDIO_FORMATS)[number];
@@ -243,6 +247,13 @@ function generateEventId(): string {
   return `evt_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 }
 
+function normalizeXAIVoice(voice: XAIVoice | undefined): XAICurrentVoice | undefined {
+  if (!voice) {
+    return undefined;
+  }
+  return voice.toLowerCase() as XAICurrentVoice;
+}
+
 // ============================================================================
 // Provider Implementation
 // ============================================================================
@@ -265,7 +276,12 @@ export class XAIVoiceProvider implements ApiProvider {
     options: { config?: XAIVoiceOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = options.config
+      ? {
+          ...options.config,
+          voice: normalizeXAIVoice(options.config.voice),
+        }
+      : {};
     this.env = options.env;
   }
 

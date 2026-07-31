@@ -100,12 +100,13 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           error: 'No embedding found in OpenAI embeddings API response',
         };
       }
+      const billingModelName = this.getBillingModelName(this.config);
       return {
         embedding,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
         cost: calculateOpenAIUsageCost(
-          this.getBillingModelName(this.config),
+          billingModelName.split('/').pop() ?? billingModelName,
           this.config,
           data.usage,
           {

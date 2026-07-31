@@ -76,6 +76,54 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]).not.toHaveProperty('cacheScope');
   });
 
+  it('should use the effective passthrough model for capabilities and billing', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_effective_model',
+        object: 'response',
+        status: 'completed',
+        model: 'gpt-5.6-luna',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Effective model response' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000_000,
+          input_tokens_details: { cache_write_tokens: 0 },
+          output_tokens: 1_000_000,
+          total_tokens: 2_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('computer-use-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+        passthrough: { model: 'gpt-5.6-luna' },
+        reasoning_effort: 'high',
+        temperature: 0,
+      },
+    });
+
+    const result = await provider.callApi('Use the effective model');
+    const requestBody = JSON.parse(
+      String(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]?.body),
+    );
+
+    expect(requestBody).toMatchObject({
+      model: 'gpt-5.6-luna',
+      reasoning: { effort: 'high' },
+    });
+    expect(requestBody).not.toHaveProperty('temperature');
+    expect(result.cost).toBeCloseTo(2.2, 10);
+  });
+
   it('should let lowercase Authorization replace the default Responses credential', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: { status: 'completed', output: [], usage: null },

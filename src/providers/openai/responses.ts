@@ -788,6 +788,16 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
   }
 
+  private getEffectiveModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
+  }
+
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    const effectiveModelName = this.getEffectiveModelName(config);
+    return effectiveModelName.split('/').pop() ?? effectiveModelName;
+  }
+
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
     return data.usage;
   }
@@ -836,6 +846,25 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+    const baseCapabilityModelName = this.getCapabilityModelName();
+    const effectiveModelName = this.getEffectiveModelName(config);
+    const capabilityModelName = effectiveModelName.replace(/(^|\/)ft:/, '$1');
+    const usesModelOverride = effectiveModelName !== baseCapabilityModelName;
+    const isEffectiveGpt5Model =
+      capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
+    const isEffectiveReasoningModel =
+      capabilityModelName === 'codex-mini-latest' ||
+      capabilityModelName.startsWith('o1') ||
+      capabilityModelName.startsWith('o3') ||
+      capabilityModelName.startsWith('o4') ||
+      capabilityModelName.includes('/o1') ||
+      capabilityModelName.includes('/o3') ||
+      capabilityModelName.includes('/o4') ||
+      isEffectiveGpt5Model ||
+      (!usesModelOverride && this.isReasoningModel());
+    const supportsTemperature = usesModelOverride
+      ? !isEffectiveReasoningModel
+      : this.supportsTemperature();
     const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
       (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
     );
@@ -848,13 +877,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
-    const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
+      isEffectiveReasoningModel || isAzureResponsesDeploymentWithReasoningConfig;
+    const isGPT5Model = isEffectiveGpt5Model || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       isGPT5Model,
+      supportsTemperature,
     };
   }
 
@@ -880,8 +910,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, isGPT5Model } =
-      this.getDeploymentCapabilities(config);
+    const {
+      isAzureResponsesDeploymentWithReasoningConfig,
+      isReasoningModel,
+      isGPT5Model,
+      supportsTemperature,
+    } = this.getDeploymentCapabilities(config);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -912,7 +946,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      this.supportsTemperature() && !hasAzureReasoningEffort
+      supportsTemperature && !hasAzureReasoningEffort
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
@@ -1082,7 +1116,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const spanContext = buildChatSpanContext({
       system: this.getGenAISystem(),
-      model: this.modelName,
+      model: String(effectiveBody.model),
       providerId: this.id(),
       prompt,
       context,
@@ -1113,11 +1147,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     prepared: { body: any; config: any; abortSignal?: AbortSignal },
   ): Promise<ProviderResponse> {
     const { body, config, abortSignal } = prepared;
+    const effectiveModelName = this.getEffectiveModelName(config);
 
     // Validate deep research models have required tools. Use the capability model name so
     // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
     // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
-    const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
+    const isDeepResearchModel = effectiveModelName.includes('deep-research');
     if (isDeepResearchModel) {
       const hasDataSource = config.tools?.some(
         (tool: any) =>
@@ -1130,7 +1165,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
       if (!hasDataSource) {
         return {
-          error: `Deep research model ${this.modelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
+          error: `Deep research model ${effectiveModelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
         };
       }
 
@@ -1139,7 +1174,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       for (const mcpTool of mcpTools) {
         if (mcpTool.require_approval !== 'never') {
           return {
-            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+            error: `Deep research model ${effectiveModelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
           };
         }
       }
@@ -1147,12 +1182,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Calculate timeout for long-running models and background responses.
     let timeout = getRequestTimeoutMs();
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(effectiveModelName);
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel || body.background === true;
     if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
-      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${effectiveModelName}`);
     }
 
     let data: OpenAIResponsesResponse;

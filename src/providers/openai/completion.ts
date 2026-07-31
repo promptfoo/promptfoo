@@ -27,6 +27,13 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   config: OpenAiCompletionOptions;
 
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string'
+      ? passthroughModel
+      : super.getBillingModelName(config);
+  }
+
   constructor(
     modelName: string,
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
@@ -108,15 +115,21 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
     try {
+      const billingModelName = this.getBillingModelName(this.config);
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        cost: calculateOpenAIUsageCost(body.model, this.config, data.usage, {
-          cachedResponse: cached,
-          serviceTier: data.service_tier ?? this.config.service_tier,
-        }),
+        cost: calculateOpenAIUsageCost(
+          billingModelName.split('/').pop() ?? billingModelName,
+          this.config,
+          data.usage,
+          {
+            cachedResponse: cached,
+            serviceTier: data.service_tier ?? this.config.service_tier,
+          },
+        ),
       };
     } catch (err) {
       return {

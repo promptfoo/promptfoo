@@ -123,7 +123,7 @@ describe('OpenAI Provider', () => {
       const passthroughProvider = new OpenAiEmbeddingProvider('text-embedding-3-large', {
         config: {
           apiKey: 'test-key',
-          passthrough: { model: 'text-embedding-3-small' },
+          passthrough: { model: 'openai/text-embedding-3-small' },
         },
       });
       vi.mocked(fetchWithCache).mockResolvedValue({
