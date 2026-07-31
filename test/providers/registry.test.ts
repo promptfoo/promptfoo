@@ -682,7 +682,27 @@ describe('Provider Registry', () => {
       expect(provider.constructor.name).toBe('OpenAiTranscriptionProvider');
       expect((provider as { modelName?: string }).modelName).toBe('gpt-transcribe');
 
-      for (const modelType of ['chat', 'responses', 'completion', 'embedding', 'embeddings']) {
+      const incompatibleModelTypes = [
+        'chat',
+        'responses',
+        'completion',
+        'embedding',
+        'embeddings',
+        'moderation',
+        'realtime',
+        'tts',
+        'speech',
+        'agents',
+        'chatkit',
+        'assistant',
+        'image',
+        'video',
+        'codex',
+        'codex-sdk',
+        'codex-desktop',
+        'codex-app-server',
+      ];
+      for (const modelType of incompatibleModelTypes) {
         await expect(
           factory!.create(`openai:${modelType}:gpt-transcribe`, mockProviderOptions, mockContext),
         ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
@@ -700,8 +720,8 @@ describe('Provider Registry', () => {
 
       for (const path of [
         'openai:gpt-live-transcribe',
-        'openai:chat:gpt-live-transcribe',
         'openai:transcription:gpt-live-transcribe',
+        ...incompatibleModelTypes.map((modelType) => `openai:${modelType}:gpt-live-transcribe`),
       ]) {
         await expect(factory!.create(path, mockProviderOptions, mockContext)).rejects.toThrow(
           /Realtime transcription sessions.*not yet supported/i,

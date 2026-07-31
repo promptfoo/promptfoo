@@ -932,6 +932,21 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+      const requestedApiModel = modelName || configuredModel || modelType;
+      if (requestedApiModel === 'gpt-live-transcribe') {
+        throw new Error(
+          'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
+        );
+      }
+      if (
+        requestedApiModel === 'gpt-transcribe' &&
+        modelType !== 'gpt-transcribe' &&
+        modelType !== 'transcription'
+      ) {
+        throw new Error(
+          'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
+        );
+      }
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
@@ -970,21 +985,6 @@ export const providerMap: ProviderFactory[] = [
             : providerOptions.config,
           env: context.env,
         });
-      }
-      const requestedApiModel = modelName || configuredModel || modelType;
-      if (requestedApiModel === 'gpt-live-transcribe') {
-        throw new Error(
-          'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
-        );
-      }
-      if (
-        requestedApiModel === 'gpt-transcribe' &&
-        modelType !== 'gpt-transcribe' &&
-        modelType !== 'transcription'
-      ) {
-        throw new Error(
-          'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
-        );
       }
       if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
