@@ -208,5 +208,14 @@ describe('redteamInit', () => {
     await expect(redteamInit(undefined)).resolves.toBeUndefined();
 
     expect(process.exitCode).toBe(1);
+    const providerPrompt = vi.mocked(select).mock.calls[2]?.[0];
+    expect(
+      (providerPrompt.choices as Array<{ name: string; value: unknown }>)
+        .filter((choice) => choice.name.startsWith('Google Vertex'))
+        .map((choice) => choice.value),
+    ).toEqual([
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+    ]);
   });
 });

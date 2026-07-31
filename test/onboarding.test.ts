@@ -255,6 +255,15 @@ describe('createDummyFiles', () => {
     expect(mockSelect).toHaveBeenCalledTimes(3);
     expect(mockCheckbox).toHaveBeenCalledTimes(0);
     expect(mockConfirm).toHaveBeenCalledTimes(0);
+
+    const providerPrompt = mockSelect.mock.calls[2]?.[0];
+    expect(
+      providerPrompt.choices.find((choice: { name: string }) => choice.name.startsWith('[Google]'))
+        .value,
+    ).toEqual([
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+    ]);
   });
 
   it('should prompt for confirmation when files exist', async () => {
