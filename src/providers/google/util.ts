@@ -190,11 +190,31 @@ function normalizeExplicitGoogleToolConfig(
   return config.tool_config ? normalizeSnakeCaseGoogleToolConfig(config.tool_config) : undefined;
 }
 
+function normalizePassthroughGoogleToolConfig(
+  config: CompletionOptions,
+): GoogleToolConfig | undefined {
+  const passthrough = config.passthrough as
+    | {
+        toolConfig?: GoogleToolConfig;
+        tool_config?: NonNullable<CompletionOptions['tool_config']>;
+      }
+    | undefined;
+
+  if (passthrough?.toolConfig) {
+    return normalizeCamelCaseGoogleToolConfig(passthrough.toolConfig);
+  }
+
+  return passthrough?.tool_config
+    ? normalizeSnakeCaseGoogleToolConfig(passthrough.tool_config)
+    : undefined;
+}
+
 export function resolveGoogleToolConfig(config: CompletionOptions): {
   toolConfig?: GoogleToolConfig;
   toolsDisabled: boolean;
 } {
   const explicitConfig = normalizeExplicitGoogleToolConfig(config);
+  const passthroughConfig = normalizePassthroughGoogleToolConfig(config);
   const transformedToolChoice = transformToolChoice(config.tool_choice, 'google');
   const toolChoiceConfig =
     transformedToolChoice && typeof transformedToolChoice === 'object'
@@ -205,11 +225,16 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
     config.toolConfig?.functionCallingConfig?.mode,
     config.tool_config?.function_calling_config?.mode,
     toolChoiceConfig?.functionCallingConfig?.mode,
+    passthroughConfig?.functionCallingConfig?.mode,
   ].some((mode) => normalizeGoogleToolMode(mode) === 'NONE');
 
   if (toolsDisabled) {
     return {
-      toolConfig: { ...explicitConfig, functionCallingConfig: { mode: 'NONE' } },
+      toolConfig: {
+        ...explicitConfig,
+        ...passthroughConfig,
+        functionCallingConfig: { mode: 'NONE' },
+      },
       toolsDisabled: true,
     };
   }

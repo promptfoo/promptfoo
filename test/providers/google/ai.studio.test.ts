@@ -1451,6 +1451,47 @@ describe('AIStudioChatProvider', () => {
       expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
     });
 
+    it('should not execute callbacks when passthrough disables function calling', async () => {
+      const callback = vi.fn().mockResolvedValue('should not run');
+      provider = new AIStudioChatProvider('gemini-3.6-flash', {
+        config: {
+          apiKey: 'test-key',
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: { mode: 'NONE' },
+            },
+          },
+          tools: 'file://tools.js:getTools' as any,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      const functionCall = {
+        functionCall: {
+          id: 'call-1',
+          name: 'get_weather',
+          args: { location: 'Boston' },
+        },
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          candidates: [{ content: { parts: [functionCall] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+      } as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockMaybeLoadToolsFromExternalFile).not.toHaveBeenCalled();
+      expect(response.output).toEqual([functionCall]);
+    });
+
     it('should honor per-prompt callback replacements with the same function name', async () => {
       const firstCallback = vi.fn().mockResolvedValue('First callback');
       const secondCallback = vi.fn().mockResolvedValue('Second callback');

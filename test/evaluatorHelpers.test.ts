@@ -1847,7 +1847,6 @@ describe('evaluatorHelpers', () => {
       'aac',
       'ogg',
       'flac',
-      'm4a',
     ])('should load %s audio files as raw base64', async (extension) => {
       vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
         return Buffer.from('test-audio-content');
@@ -1861,6 +1860,19 @@ describe('evaluatorHelpers', () => {
       // Should NOT have data: prefix for audio
       expect(renderedPrompt).not.toContain('data:audio');
       expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+    });
+
+    it('should preserve M4A audio MIME type in a data URL', async () => {
+      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        return Buffer.from('test-audio-content');
+      });
+
+      const prompt = toPrompt('Test prompt with audio: {{audio}}');
+      const renderedPrompt = await renderPrompt(prompt, {
+        audio: 'file://test-audio.m4a',
+      });
+
+      expect(renderedPrompt).toContain('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
     });
 
     it('should handle Azure Vision prompt structure correctly', async () => {

@@ -3695,6 +3695,18 @@ describe('util', () => {
       });
     });
 
+    it.each([
+      ['camel case', { toolConfig: { functionCallingConfig: { mode: 'NONE' } } }],
+      ['snake case', { tool_config: { function_calling_config: { mode: 'NONE' } } }],
+    ])('honors passthrough tool disabling in %s', (_label, passthrough) => {
+      const result = resolveGoogleToolConfig({
+        functionToolCallbacks: { get_weather: () => 'sunny' },
+        passthrough,
+      } as any);
+
+      expect(result.toolsDisabled).toBe(true);
+    });
+
     it('falls back to tool_choice when explicit toolConfig has invalid mode', () => {
       const result = resolveGoogleToolConfig({
         toolConfig: { functionCallingConfig: { mode: 'BOGUS' as any } },
