@@ -2985,6 +2985,189 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
   it.each([
     {
+      label: 'omits sampling params and converts manual thinking to adaptive',
+      config: {
+        max_tokens: 32,
+        temperature: 0.5,
+        top_p: 0.9,
+        top_k: 40,
+        thinking: { type: 'enabled' as const, budget_tokens: 1024 },
+      },
+      expectedThinking: { type: 'adaptive' },
+    },
+    {
+      label: 'keeps thinking disabled at effort "high" or below',
+      config: { max_tokens: 32, thinking: { type: 'disabled' as const }, effort: 'high' as const },
+      expectedThinking: { type: 'disabled' },
+      expectedEffort: 'high',
+    },
+    {
+      // Now that Vertex actually forwards effort, the disabled+xhigh 400 is reachable here
+      // too, so the rejected `disabled` must be dropped exactly as on the Anthropic path.
+      label: 'drops thinking:disabled at effort "xhigh" (the API rejects the pairing)',
+      config: { max_tokens: 32, thinking: { type: 'disabled' as const }, effort: 'xhigh' as const },
+      expectedThinking: undefined,
+      expectedEffort: 'xhigh',
+    },
+    {
+      label: 'forwards effort as output_config so sweeps are not silently ignored',
+      config: { max_tokens: 32, effort: 'low' as const },
+      expectedThinking: undefined,
+      expectedEffort: 'low',
+    },
+  ])('Claude Opus 5 on Vertex $label', async ({ config, expectedThinking, expectedEffort }) => {
+    provider = new VertexChatProvider('claude-opus-5', { config });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    // Opus 5 inherits the Opus 4.7+ sampling-param deprecation on every provider path.
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.top_p).toBeUndefined();
+    expect(sentBody.top_k).toBeUndefined();
+    expect(sentBody.thinking).toEqual(expectedThinking);
+    expect(sentBody.output_config).toEqual(expectedEffort ? { effort: expectedEffort } : undefined);
+    // Opus 5 thinks by default, so an omitted max_tokens would need thinking headroom —
+    // these cases all set it explicitly, so it passes through untouched.
+    expect(sentBody.max_tokens).toBe(32);
+  });
+
+  it('gives Claude Opus 5 thinking headroom when max_tokens is omitted on Vertex', async () => {
+    // Without this the default is 512 — but Opus 5 spends part of that budget on its
+    // default adaptive thinking, truncating ordinary answers.
+    provider = new VertexChatProvider('claude-opus-5', { config: {} });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    expect(sentBody.max_tokens).toBe(2048);
+  });
+
+  it.each([
+    {
+      label: 'drops the empty thinking block Opus 5 returns by default',
+      thinkingText: '',
+      expected: 'the answer',
+    },
+    {
+      label: 'renders summarized reasoning without an explicit showThinking',
+      thinkingText: 'considered the options',
+      expected: 'Thinking: considered the options\nSignature: sig\n\nthe answer',
+    },
+  ])('Claude Opus 5 on Vertex $label', async ({ thinkingText, expected }) => {
+    // Opus 5 thinks even with no `thinking` block, so showThinking must follow the effective
+    // thinking state — otherwise reasoning would be stripped here but shown on the Anthropic
+    // path for the same config.
+    provider = new VertexChatProvider('claude-opus-5', { config: {} });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [
+          { type: 'thinking', thinking: thinkingText, signature: 'sig' },
+          { type: 'text', text: 'the answer' },
+        ],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    expect(result.output).toBe(expected);
+  });
+
+  it('keeps the 512 default for a Claude model that does not think by default', async () => {
+    provider = new VertexChatProvider('claude-opus-4-8', { config: {} });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-4-8',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 5, output_tokens: 1 },
+      },
+    });
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    expect(sentBody.max_tokens).toBe(512);
+  });
+
+  it.each([
+    {
       name: 'at the 200K boundary',
       region: 'global',
       inputTokens: 200_000,
