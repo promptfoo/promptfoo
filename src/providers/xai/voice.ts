@@ -4,9 +4,9 @@
  * Provides real-time voice conversations with Grok models via WebSocket.
  * WebSocket Endpoint: wss://api.x.ai/v1/realtime
  *
- * Pricing: $0.05/minute of connection time
+ * Pricing: $0.08/minute for Grok Voice Think Fast 2.0
  *
- * @see https://docs.x.ai/docs/guides/voice
+ * @see https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech
  */
 
 import WebSocket from 'ws';
@@ -28,17 +28,22 @@ import type {
 
 export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
 export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
-export const XAI_VOICE_COST_PER_MINUTE = 0.05;
-export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-1.0';
+export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-2.0';
+export const XAI_VOICE_COST_PER_MINUTE = 0.08;
+export const XAI_VOICE_COST_PER_MINUTE_BY_MODEL: Record<string, number> = {
+  'grok-voice-latest': 0.08,
+  'grok-voice-think-fast-2.0': 0.08,
+  'grok-voice-think-fast-1.0': 0.05,
+};
 
 export const XAI_VOICE_DEFAULTS = {
-  voice: 'Ara' as const,
+  voice: 'eve' as const,
   sampleRate: 24000,
   audioFormat: 'audio/pcm' as const,
   websocketTimeout: 30000,
 };
 
-export const XAI_VOICES = ['Ara', 'Rex', 'Sal', 'Eve', 'Leo'] as const;
+export const XAI_VOICES = ['ara', 'rex', 'sal', 'eve', 'leo'] as const;
 export type XAIVoice = (typeof XAI_VOICES)[number];
 
 export const XAI_AUDIO_FORMATS = ['audio/pcm', 'audio/pcmu', 'audio/pcma'] as const;
@@ -216,9 +221,13 @@ function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
 /**
  * Calculate xAI Voice API cost based on connection duration
  */
-export function calculateXAIVoiceCost(durationMs: number): number {
+export function calculateXAIVoiceCost(
+  durationMs: number,
+  modelName = XAI_VOICE_DEFAULT_MODEL,
+): number {
   const durationMinutes = durationMs / 60000;
-  return XAI_VOICE_COST_PER_MINUTE * durationMinutes;
+  const costPerMinute = XAI_VOICE_COST_PER_MINUTE_BY_MODEL[modelName] ?? XAI_VOICE_COST_PER_MINUTE;
+  return costPerMinute * durationMinutes;
 }
 
 /**
@@ -238,7 +247,7 @@ function generateEventId(): string {
  * Provides real-time voice conversations with Grok models.
  *
  * Usage:
- *   xai:voice:grok-voice-think-fast-1.0
+ *   xai:voice:grok-voice-think-fast-2.0
  */
 export class XAIVoiceProvider implements ApiProvider {
   modelName: string;
@@ -614,7 +623,7 @@ export class XAIVoiceProvider implements ApiProvider {
               // Calculate cost and resolve
               clearTimeout(timeout);
               const durationMs = Date.now() - connectionStartTime;
-              const cost = calculateXAIVoiceCost(durationMs);
+              const cost = calculateXAIVoiceCost(durationMs, this.modelName);
 
               // Prepare audio data
               let finalAudioData: string | null = null;

@@ -29,7 +29,7 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3` so they work for both US and EU accounts; select `grok-4.5` explicitly where it is available. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3`; select `grok-4.5` explicitly for xAI's current flagship model. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
@@ -43,7 +43,7 @@ The xAI provider includes support for the following model formats. [xAI's public
 
 :::caution Grok 4.5 availability
 
-[xAI's Grok 4.5 model page](https://docs.x.ai/developers/grok-4-5) currently says the model is not available to EU API Console users. Until xAI removes that restriction, use `grok-4.3` for configs that must work in the EU.
+[xAI made Grok 4.5 available to EU API Console users on July 17, 2026](https://docs.x.ai/developers/release-notes).
 
 :::
 
@@ -140,7 +140,7 @@ Grok 4.5 is xAI's flagship model for coding, agentic tasks, and knowledge work:
 
 - **500K context window** with text and image input
 - **Configurable reasoning**: `reasoning_effort` accepts `low`, `medium`, or `high` (defaults to `high`); `none` is rejected
-- **Long-context pricing**: requests with at least 200K input tokens use the higher catalog rate ($4/M input, $1/M cached input, and $12/M output instead of $2/M, $0.50/M, and $6/M); Promptfoo uses the exact billed ticks when xAI returns them
+- **Long-context pricing**: requests with at least 200K input tokens use the higher catalog rate ($4/M input, $0.60/M cached input, and $12/M output instead of $2/M, $0.30/M, and $6/M); Promptfoo uses the exact billed ticks when xAI returns them
 - **Unsupported parameters**: `presence_penalty`, `frequency_penalty`, and `stop` are rejected, and Promptfoo strips them automatically
 - **Ignored parameters**: xAI silently ignores `logprobs` and `top_logprobs` on Grok 4.20 and newer models
 - **Server-side tools**: use `xai:responses:grok-4.5` for web search, X search, code execution, and MCP
@@ -685,16 +685,16 @@ The xAI Voice Agent API enables real-time voice conversations with Grok models v
 
 ```yaml
 providers:
-  - xai:voice:grok-voice-think-fast-1.0
+  - xai:voice:grok-voice-think-fast-2.0
 ```
 
 #### Configuration
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
-      voice: 'Ara' # Ara, Rex, Sal, Eve, or Leo
+      voice: 'eve' # ara, rex, sal, eve, or leo
       instructions: 'You are a helpful voice assistant.'
       modalities: ['text', 'audio']
       turn_detection:
@@ -712,11 +712,16 @@ providers:
 
 | Voice | Description  |
 | ----- | ------------ |
-| Ara   | Female voice |
-| Rex   | Male voice   |
-| Sal   | Male voice   |
-| Eve   | Female voice |
-| Leo   | Male voice   |
+| ara   | Female voice |
+| rex   | Male voice   |
+| sal   | Male voice   |
+| eve   | Female voice |
+| leo   | Male voice   |
+
+Use `grok-voice-think-fast-2.0` for the current flagship model, or
+`grok-voice-latest` to follow xAI's recommended alias. Version 2.0 costs $0.08
+per minute; the previous-generation `grok-voice-think-fast-1.0` costs $0.05 per
+minute.
 
 #### Turn Detection
 
@@ -758,7 +763,7 @@ You can define custom function tools inline or load them from external files:
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Inline tool definition
       tools:
@@ -834,7 +839,7 @@ You can configure a custom WebSocket endpoint for the Voice API, useful for prox
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Option 1: Full base URL (transforms https:// to wss://)
       apiBaseUrl: 'https://my-proxy.example.com/v1'
@@ -857,7 +862,7 @@ For advanced use cases like local testing, custom proxies, or endpoints requirin
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Use this URL exactly as-is (no transformation applied)
       websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz&session=abc'
@@ -898,9 +903,9 @@ prompts:
   - file://input.json
 
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
-      voice: 'Ara'
+      voice: 'eve'
       instructions: 'You are a helpful voice assistant.'
       modalities: ['text', 'audio']
       tools:
@@ -916,9 +921,11 @@ tests:
 
 #### Pricing
 
-The Voice Agent API is billed at **$0.05 per minute** of connection time.
+Grok Voice Think Fast 2.0 is billed at **$0.08 per minute** of connection time.
+The previous-generation 1.0 model costs **$0.05 per minute**.
 
-For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
+For more information on the available models and API usage, refer to the
+[xAI Speech to Speech documentation](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech).
 
 ## Examples
 

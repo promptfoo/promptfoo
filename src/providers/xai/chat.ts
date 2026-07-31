@@ -117,9 +117,15 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
-// Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
-// reports USD cents per 100M tokens (equivalent to $1e-10 per-token increments).
-// Response billing uses the same scale in `usage.cost_in_usd_ticks`.
+// Pricing is sourced from https://docs.x.ai/developers/pricing. Response billing
+// uses the same $1e-10 scale in `usage.cost_in_usd_ticks`.
+const GROK_43_AND_420_LONG_CONTEXT_COST = {
+  threshold: 200_000,
+  input: 2.5 / 1e6,
+  output: 5 / 1e6,
+  cache_read: 0.4 / 1e6,
+};
+
 export const XAI_CHAT_MODELS: XAIModel[] = [
   // Grok 4.5 Models (500K context; flagship model recommended by xAI's catalog)
   {
@@ -127,12 +133,12 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
     cost: {
       input: 2.0 / 1e6,
       output: 6.0 / 1e6,
-      cache_read: 0.5 / 1e6,
+      cache_read: 0.3 / 1e6,
       longContext: {
         threshold: 200_000,
         input: 4.0 / 1e6,
         output: 12.0 / 1e6,
-        cache_read: 1.0 / 1e6,
+        cache_read: 0.6 / 1e6,
       },
     },
     aliases: ['grok-4.5-latest', 'grok-build-latest'],
@@ -144,6 +150,7 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
+      longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
     aliases: [
       'grok-4.20',
@@ -169,6 +176,7 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
+      longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
     aliases: [
       'grok-4.20-non-reasoning',
@@ -187,6 +195,7 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
+      longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
     aliases: [
       'grok-4.20-multi-agent',
@@ -204,6 +213,7 @@ export const XAI_CHAT_MODELS: XAIModel[] = [
       input: 1.25 / 1e6,
       output: 2.5 / 1e6,
       cache_read: 0.2 / 1e6,
+      longContext: GROK_43_AND_420_LONG_CONTEXT_COST,
     },
     aliases: ['grok-4.3-latest', 'grok-latest'],
   },
@@ -676,14 +686,30 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       return result;
     }
 
-    const passthrough = result.config.passthrough as
+    type GrokTokenLimitConfig = {
+      max_tokens?: number;
+      max_completion_tokens?: number;
+      passthrough?: {
+        max_tokens?: number;
+        max_completion_tokens?: number;
+      };
+    };
+    const promptConfig = context?.prompt?.config as GrokTokenLimitConfig | undefined;
+    const providerConfig = this.config as GrokTokenLimitConfig;
+    const mergedPassthrough = result.config.passthrough as
       | { max_tokens?: number; max_completion_tokens?: number }
       | undefined;
     const maxTokens =
-      passthrough?.max_tokens ??
-      passthrough?.max_completion_tokens ??
-      result.config.max_tokens ??
-      result.config.max_completion_tokens ??
+      promptConfig?.passthrough?.max_tokens ??
+      promptConfig?.passthrough?.max_completion_tokens ??
+      promptConfig?.max_tokens ??
+      promptConfig?.max_completion_tokens ??
+      providerConfig.passthrough?.max_tokens ??
+      providerConfig.passthrough?.max_completion_tokens ??
+      providerConfig.max_tokens ??
+      providerConfig.max_completion_tokens ??
+      mergedPassthrough?.max_tokens ??
+      mergedPassthrough?.max_completion_tokens ??
       result.body.max_completion_tokens;
     const effectiveModel =
       typeof result.body.model === 'string' ? result.body.model : this.modelName;
