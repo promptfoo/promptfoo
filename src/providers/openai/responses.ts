@@ -788,6 +788,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
   }
 
+  protected isReasoningCapabilityModel(modelName: string): boolean {
+    const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    if (modelName === configuredModelName) {
+      return this.isReasoningModel();
+    }
+
+    const isGpt5Model = modelName.startsWith('gpt-5') || modelName.includes('/gpt-5');
+    return (
+      modelName === 'codex-mini-latest' ||
+      modelName.startsWith('o1') ||
+      modelName.startsWith('o3') ||
+      modelName.startsWith('o4') ||
+      modelName.includes('/o1') ||
+      modelName.includes('/o3') ||
+      modelName.includes('/o4') ||
+      isGpt5Model
+    );
+  }
+
+  protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
+    const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+    return modelName === configuredModelName
+      ? this.supportsTemperature()
+      : !this.isReasoningCapabilityModel(modelName);
+  }
+
   /**
    * Normalize a request model for capability checks while preserving the wire model id.
    * OpenAI-compatible subclasses can strip vendor-specific prefixes from both their configured
@@ -857,25 +883,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
-    const baseCapabilityModelName = this.getCapabilityModelName();
     const effectiveModelName = this.getEffectiveModelName(config);
     const capabilityModelName = effectiveModelName.replace(/(^|\/)ft:/, '$1');
-    const usesModelOverride = effectiveModelName !== baseCapabilityModelName;
     const isEffectiveGpt5Model =
       capabilityModelName.startsWith('gpt-5') || capabilityModelName.includes('/gpt-5');
-    const isEffectiveReasoningModel =
-      capabilityModelName === 'codex-mini-latest' ||
-      capabilityModelName.startsWith('o1') ||
-      capabilityModelName.startsWith('o3') ||
-      capabilityModelName.startsWith('o4') ||
-      capabilityModelName.includes('/o1') ||
-      capabilityModelName.includes('/o3') ||
-      capabilityModelName.includes('/o4') ||
-      isEffectiveGpt5Model ||
-      (!usesModelOverride && this.isReasoningModel());
-    const supportsTemperature = usesModelOverride
-      ? !isEffectiveReasoningModel
-      : this.supportsTemperature();
+    const isEffectiveReasoningModel = this.isReasoningCapabilityModel(capabilityModelName);
+    const supportsTemperature = this.supportsTemperatureForCapabilityModel(capabilityModelName);
     const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
       (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
     );

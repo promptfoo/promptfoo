@@ -809,6 +809,24 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.text?.verbosity).toBeUndefined();
     });
 
+    it('preserves Grok capabilities for a passthrough model override', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          passthrough: { model: 'xai.grok-4.20-0309' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect(body.model).toBe('xai.grok-4.20-0309');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0);
+      expect(body.max_output_tokens).toBeUndefined();
+    });
+
     it('preserves explicit top_p when Grok reasoning is active', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {

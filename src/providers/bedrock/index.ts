@@ -14,6 +14,7 @@ import {
   parseMessages,
 } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
+import { requiresBedrockAnthropicMessagesModel } from './anthropicMessages';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockInvokeModelCost } from './pricing';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -2561,7 +2562,7 @@ function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {
   if (mythosMatch) {
     return mythosMatch[1];
   }
-  if (modelName === 'anthropic.claude-opus-5') {
+  if (requiresBedrockAnthropicMessagesModel(modelName)) {
     return modelName;
   }
   return undefined;

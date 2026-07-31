@@ -241,6 +241,8 @@ describe('Perplexity Provider', () => {
     });
 
     it('should report zero cost for a response served through the parent cache path', async () => {
+      // Never let this regression test clear a developer's persistent evaluation cache.
+      expect(process.env.PROMPTFOO_CACHE_TYPE).toBe('memory');
       await clearCache();
       enableCache();
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(

@@ -685,6 +685,19 @@ describe('loadApiProvider', () => {
     ).rejects.toThrow('only available through openai:codex-sdk');
   });
 
+  it('should honor a passthrough override for a bare retired TTS route', async () => {
+    await expect(
+      loadApiProvider('openai:gpt-4o-mini-tts-2025-03-20', {
+        options: { config: { passthrough: { model: 'gpt-4o-mini-tts' } } },
+      }),
+    ).resolves.toBeDefined();
+
+    expect(OpenAiTtsProvider).toHaveBeenCalledWith(
+      'gpt-4o-mini-tts-2025-03-20',
+      expect.any(Object),
+    );
+  });
+
   it.each([
     ['openai:moderation:text-moderation-latest', 'omni-moderation-latest'],
     ['openai:realtime:gpt-realtime-mini-2025-10-06', 'gpt-realtime-2.1'],

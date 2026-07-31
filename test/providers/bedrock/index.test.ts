@@ -3878,7 +3878,7 @@ describe('AwsBedrockCompletionProvider', () => {
     mockInvokeModel.mockResolvedValueOnce({
       body,
     });
-    const provider = new AwsBedrockCompletionProvider('anthropic.claude-opus-4-8', {
+    const provider = new AwsBedrockCompletionProvider('global.anthropic.claude-opus-4-8', {
       config: { region: 'us-east-1' },
     });
 
@@ -4904,6 +4904,13 @@ const OPENAI_COMPAT_MODEL_IDS = [
 ] as const;
 
 describe('getHandlerForModel routing for OpenAI-compatible families', () => {
+  it.each([
+    'anthropic.claude-opus-4-7',
+    'anthropic.claude-opus-4-8',
+  ])('rejects Messages-only bare model %s on InvokeModel routes', (modelName) => {
+    expect(() => getHandlerForModel(modelName)).toThrow(/Anthropic Messages API/);
+  });
+
   it.each([
     'us.zai.glm-5',
     'global.zai.glm-5',

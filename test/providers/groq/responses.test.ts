@@ -112,6 +112,23 @@ describe('GroqResponsesProvider', () => {
   });
 
   describe('callApi', () => {
+    it('uses the passthrough model for Groq reasoning capabilities', async () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          passthrough: { model: 'openai/gpt-oss-20b' },
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.model).toBe('openai/gpt-oss-20b');
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.max_output_tokens).toBeUndefined();
+    });
+
     it('preserves temperature for Groq reasoning models', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
         config: {
