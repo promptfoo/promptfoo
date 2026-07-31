@@ -161,6 +161,22 @@ describe('aws bedrock provider factory routing', () => {
     );
   });
 
+  it.each([
+    'anthropic.claude-mythos-preview',
+    'anthropic.claude-opus-4-7',
+    'anthropic.claude-opus-4-8',
+  ])('routes bare %s to the Bedrock Anthropic Messages endpoint', async (model) => {
+    const provider = await bedrockFactory.create(
+      `bedrock:${model}`,
+      { config: { region: 'us-east-1', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    expect((provider as any).getApiBaseUrl()).toBe(
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+    );
+  });
+
   it('supports the explicit messages form for Bedrock Fable', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:messages:anthropic.claude-fable-5',
@@ -173,6 +189,19 @@ describe('aws bedrock provider factory routing', () => {
   it('supports the explicit messages form for Bedrock Mythos', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:messages:anthropic.claude-mythos-5',
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+  });
+
+  it.each([
+    'anthropic.claude-mythos-preview',
+    'anthropic.claude-opus-4-7',
+    'anthropic.claude-opus-4-8',
+  ])('supports the explicit messages form for Bedrock %s', async (model) => {
+    const provider = await bedrockFactory.create(
+      `bedrock:messages:${model}`,
       { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
       ctx,
     );
@@ -216,7 +245,7 @@ describe('aws bedrock provider factory routing', () => {
   it('rejects unknown Anthropic Messages models instead of falling through to InvokeModel', async () => {
     await expect(
       bedrockFactory.create(
-        'bedrock:messages:anthropic.claude-opus-4-8',
+        'bedrock:messages:anthropic.claude-sonnet-4-6',
         { config: { apiKey: 'bedrock-key' } },
         ctx,
       ),

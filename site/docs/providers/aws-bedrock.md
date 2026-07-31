@@ -817,7 +817,7 @@ config:
 
 For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) are available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and, in select regions, through the base foundation model ID. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) use the bare model ID with Bedrock's Anthropic-compatible Messages endpoint. Promptfoo routes `bedrock:anthropic.claude-opus-4-7` and `bedrock:anthropic.claude-opus-4-8` there and requires a Bedrock API key. For Bedrock Runtime, use a cross-region inference profile with the `us.`, `eu.`, `jp.`, `au.`, or `global.` prefix. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. Promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
 
 **Note**: [Claude Opus 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html)
 uses `us.anthropic.claude-opus-5`,
@@ -856,13 +856,18 @@ before reusing one of these IDs in another region.
 #### Claude Fable and Mythos models
 
 [Claude Fable 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5.html)
-supports Bedrock Runtime and Converse. Use the `global.anthropic.claude-fable-5`
-inference profile — on-demand invocation of the base `anthropic.claude-fable-5` ID
-returns a `ValidationException`, and the `us.`/`eu.` geo profiles listed on the
-model card may not be provisioned in every region. Fable 5 also supports
+supports Bedrock Runtime and Converse through its base `anthropic.claude-fable-5`
+model ID, the `us.anthropic.claude-fable-5` geo inference profile, and the
+`global.anthropic.claude-fable-5` inference profile. AWS does not publish an `eu.`
+profile for Fable 5. Fable 5 also supports
 Bedrock's Anthropic-compatible Messages endpoint through the explicit
 `bedrock:messages:anthropic.claude-fable-5` provider ID in `us-east-1` and
 `eu-north-1` (this route may additionally require account enablement from AWS).
+
+[Claude Mythos Preview](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-preview.html)
+is available only through the Anthropic-compatible Messages endpoint in `us-east-1`
+and `ap-southeast-4`. Promptfoo routes
+`bedrock:anthropic.claude-mythos-preview` to that endpoint.
 
 [Claude Mythos 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5.html)
 is available only through the Anthropic-compatible Messages endpoint in `us-east-1`.

@@ -3351,7 +3351,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-fable-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3653,14 +3653,15 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('should map Claude Opus 4.7 models correctly', async () => {
-    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    // The provider factory intercepts this bare ID and sends it to Bedrock Mantle.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
-    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
-    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    // Cross-region inference profiles (verified via the AWS model card).
+    // Opus 4.7 uses `jp.`/`au.`/`global.` instead of the older `apac.` prefix.
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3671,14 +3672,15 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('should map Claude Opus 4.8 models correctly', async () => {
-    // Base model ID (no -v1 suffix, mirroring Opus 4.7).
+    // The provider factory intercepts this bare ID and sends it to Bedrock Mantle.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
-    // Cross-region inference profiles mirror the Opus 4.7 set (`us.`/`eu.`/`jp.`/`global.`,
-    // no older `apac.` prefix).
+    // Cross-region inference profiles mirror the Opus 4.7 set
+    // (`us.`/`eu.`/`jp.`/`au.`/`global.`, with no older `apac.` prefix).
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-8']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );

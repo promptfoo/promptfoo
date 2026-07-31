@@ -118,6 +118,35 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
+    it('prices mixed 5-minute and 1-hour cache writes at their published multipliers', () => {
+      const cost = calculateAnthropicCost(
+        'claude-opus-4-8',
+        {},
+        1_000_000,
+        1_000_000,
+        1_000_000,
+        2_000_000,
+        1_000_000,
+      );
+
+      // $5 uncached + $0.50 cache read + $6.25 5m write + $10 1h write + $25 output
+      expect(cost).toBeCloseTo(46.75, 10);
+    });
+
+    it('applies US-only inference pricing to every Claude 4.6+ token category', () => {
+      const cost = calculateAnthropicCost(
+        'claude-opus-4-8',
+        { extra_body: { inference_geo: 'us' } },
+        1_000_000,
+        1_000_000,
+        1_000_000,
+        2_000_000,
+        1_000_000,
+      );
+
+      expect(cost).toBeCloseTo(46.75 * 1.1, 10);
+    });
+
     it('should return undefined for claude-opus-4-8-latest (alias does not exist)', () => {
       // Opus 4.8's documented Claude API alias is the canonical ID itself
       // (`claude-opus-4-8`); there is no separate `-latest` pointer. Guards

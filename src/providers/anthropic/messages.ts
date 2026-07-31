@@ -225,6 +225,17 @@ function mergeAnthropicUsage(
       output_tokens: acc.output_tokens + (usage.output_tokens ?? 0),
       cache_creation_input_tokens:
         (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
+      cache_creation:
+        acc.cache_creation || usage.cache_creation
+          ? {
+              ephemeral_5m_input_tokens:
+                (acc.cache_creation?.ephemeral_5m_input_tokens ?? 0) +
+                (usage.cache_creation?.ephemeral_5m_input_tokens ?? 0),
+              ephemeral_1h_input_tokens:
+                (acc.cache_creation?.ephemeral_1h_input_tokens ?? 0) +
+                (usage.cache_creation?.ephemeral_1h_input_tokens ?? 0),
+            }
+          : null,
       cache_read_input_tokens:
         (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
       output_tokens_details:
@@ -260,6 +271,7 @@ function getAnthropicCostFromMessage(
     message.usage?.output_tokens,
     message.usage?.cache_read_input_tokens ?? undefined,
     message.usage?.cache_creation_input_tokens ?? undefined,
+    message.usage?.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
   );
 }
 

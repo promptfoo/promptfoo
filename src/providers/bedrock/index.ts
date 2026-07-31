@@ -2402,6 +2402,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
 
   // AU geo inference profiles
+  'au.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'au.anthropic.claude-opus-4-8': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'au.anthropic.claude-opus-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'au.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
 
@@ -2414,7 +2416,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'eu.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2556,8 +2557,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 };
 
 function getCanonicalMessagesOnlyModel(modelName: string): string | undefined {
-  if (/^(?:[^.]+\.)?anthropic\.claude-mythos-5$/.test(modelName)) {
-    return 'anthropic.claude-mythos-5';
+  const mythosMatch = /^(?:[^.]+\.)?(anthropic\.claude-mythos-(?:5|preview))$/.exec(modelName);
+  if (mythosMatch) {
+    return mythosMatch[1];
   }
   if (modelName === 'anthropic.claude-opus-5') {
     return modelName;
@@ -2573,8 +2575,8 @@ export function getHandlerForModel(
   const messagesOnlyModel = getCanonicalMessagesOnlyModel(modelName);
   if (messagesOnlyModel) {
     // Mythos has no geo/global inference profiles, while the bare Opus 5 ID is
-    // served through Bedrock Mantle. In both cases, point at the canonical
-    // Anthropic Messages provider rather than suggesting a direct InvokeModel ID.
+    // served through Bedrock Mantle. Point at the canonical Anthropic Messages
+    // provider rather than suggesting a direct InvokeModel ID.
     throw new Error(
       `Amazon Bedrock model "${modelName}" uses Bedrock's Anthropic Messages API, not ` +
         `InvokeModel. Load it as "bedrock:${messagesOnlyModel}" instead.`,

@@ -28,9 +28,11 @@ describe('Bedrock Anthropic Messages provider', () => {
   it('recognizes only the Anthropic models served by the Bedrock Messages endpoint', () => {
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-fable-5')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-5')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-preview')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-7')).toBe(true);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-8')).toBe(true);
     expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-5')).toBe(true);
-    expect(isBedrockAnthropicMessagesModel('anthropic.claude-mythos-preview')).toBe(false);
-    expect(isBedrockAnthropicMessagesModel('anthropic.claude-opus-4-8')).toBe(false);
+    expect(isBedrockAnthropicMessagesModel('anthropic.claude-sonnet-4-6')).toBe(false);
   });
 
   it('builds and validates the regional Anthropic endpoint', () => {
@@ -55,6 +57,20 @@ describe('Bedrock Anthropic Messages provider', () => {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       }),
     ).toThrow(/only available in us-east-1/);
+  });
+
+  it('supports Mythos Preview only in its two published Bedrock Mantle regions', () => {
+    expect(() =>
+      createBedrockAnthropicMessagesProvider('anthropic.claude-mythos-preview', {
+        config: { region: 'us-west-2', apiKey: 'bedrock-key' },
+      }),
+    ).toThrow(/only available in us-east-1 and ap-southeast-4/);
+
+    expect(
+      createBedrockAnthropicMessagesProvider('anthropic.claude-mythos-preview', {
+        config: { region: 'ap-southeast-4', apiKey: 'bedrock-key' },
+      }),
+    ).toBeInstanceOf(BedrockAnthropicMessagesProvider);
   });
 
   it('restricts Fable Messages requests to its two in-region endpoints', () => {

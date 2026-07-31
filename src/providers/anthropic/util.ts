@@ -431,6 +431,9 @@ export function normalizeClaudeThinkingConfig<
 // Bedrock and Vertex bill Claude 4.5+ regional/geo endpoints at this premium over
 // the global endpoint (see isClaudeRegionalPremiumModel).
 export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
+const CLAUDE_US_INFERENCE_GEO_MULTIPLIER = 1.1;
+const CLAUDE_46_OR_LATER_MODEL_PATTERN =
+  /^claude-(?:(?:opus|sonnet)-4-(?:6|7|8)(?:-|$)|(?:fable|mythos|opus|sonnet)-5(?:-|$))/;
 
 /**
  * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
@@ -593,18 +596,23 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 10% of base rate (90% discount). Five-minute cache writes cost 125% of
+ * base rate and one-hour cache writes cost 200% of base rate.
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
   cacheCreation: number,
+  cacheCreation1h = 0,
 ): number {
+  const oneHourCacheCreation = Math.min(Math.max(cacheCreation1h, 0), cacheCreation);
+  const fiveMinuteCacheCreation = Math.max(cacheCreation - oneHourCacheCreation, 0);
   return (
     uncachedInputTokens * baseInputRate +
     cacheRead * baseInputRate * 0.1 +
-    cacheCreation * baseInputRate * 1.25
+    fiveMinuteCacheCreation * baseInputRate * 1.25 +
+    oneHourCacheCreation * baseInputRate * 2
   );
 }
 
@@ -615,6 +623,7 @@ export function calculateAnthropicCost(
   completionTokens?: number,
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
+  cacheCreation1hTokens?: number,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
   const registeredModel = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
@@ -641,8 +650,16 @@ export function calculateAnthropicCost(
   // Apply the regional endpoint premium (if any) as a flat multiplier on the final cost, so it
   // composes with long-context and cache pricing rather than overriding either.
   const regionalPremiumMultiplier: number = effectiveConfig.regionalPremiumMultiplier ?? 1;
-  const withRegionalPremium = (cost: number | undefined): number | undefined =>
-    cost == null ? cost : cost * regionalPremiumMultiplier;
+  const usesUsInferenceGeo =
+    pricingModelName === modelName &&
+    effectiveConfig?.extra_body?.inference_geo === 'us' &&
+    CLAUDE_46_OR_LATER_MODEL_PATTERN.test(pricingModelName) &&
+    effectiveConfig.cost == null &&
+    effectiveConfig.inputCost == null &&
+    effectiveConfig.outputCost == null;
+  const inferenceGeoMultiplier = usesUsInferenceGeo ? CLAUDE_US_INFERENCE_GEO_MULTIPLIER : 1;
+  const withPricingMultipliers = (cost: number | undefined): number | undefined =>
+    cost == null ? cost : cost * regionalPremiumMultiplier * inferenceGeoMultiplier;
 
   // An explicit flat `cost` (with no separate input/output rates) intentionally overrides
   // tier-specific and cache pricing, so it short-circuits straight to the base calculation.
@@ -652,6 +669,7 @@ export function calculateAnthropicCost(
     effectiveConfig.outputCost == null;
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
+  const cacheCreation1h = cacheCreation1hTokens ?? 0;
 
   // This shared helper does not infer size-based tiers. Provider-specific callers can supply
   // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.
@@ -668,13 +686,13 @@ export function calculateAnthropicCost(
   ) {
     const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
     const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
-    return withRegionalPremium(
-      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+    return withPricingMultipliers(
+      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation, cacheCreation1h) +
         completionTokens * outputCost,
     );
   }
 
-  return withRegionalPremium(
+  return withPricingMultipliers(
     calculateCostBase(
       pricingModelName,
       effectiveConfig,
