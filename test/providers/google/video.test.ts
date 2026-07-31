@@ -194,8 +194,8 @@ describe('GoogleVideoProvider', () => {
       ['loadImageData', 'image', 'file://assets/start-frame.png'],
       ['loadVideoData', 'video', 'file://assets/veo-input.mp4'],
     ])('resolves %s for a %s relative to the config directory', (method, _kind, fileRef) => {
-      const basePath = path.join('/tmp', 'google-video');
-      const expectedPath = path.join(basePath, fileRef.slice('file://'.length));
+      const basePath = path.resolve('/tmp', 'google-video');
+      const expectedPath = path.resolve(basePath, fileRef.slice('file://'.length));
       vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('media-data'));
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -205,6 +205,29 @@ describe('GoogleVideoProvider', () => {
       expect((provider as any)[method](fileRef)).toEqual({
         data: Buffer.from('media-data').toString('base64'),
       });
+      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    });
+
+    it.each([
+      ['buildVertexRequestBody', 'image', 'file://assets/start-frame.png'],
+      ['buildAiStudioRequestBody', 'sourceVideo', 'file://assets/veo-input.mp4'],
+    ])('uses the request basePath when %s loads %s media', (method, mediaField, fileRef) => {
+      const providerBasePath = path.resolve('/tmp', 'provider-config');
+      const requestBasePath = path.resolve('/tmp', 'prompt-config');
+      const expectedPath = path.resolve(requestBasePath, fileRef.slice('file://'.length));
+      vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
+      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('request-media'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: { basePath: providerBasePath },
+      });
+
+      const result = (provider as any)[method]('test prompt', {
+        ...provider.config,
+        basePath: requestBasePath,
+        [mediaField]: fileRef,
+      });
+
+      expect(result.error).toBeUndefined();
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
   });

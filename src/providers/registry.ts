@@ -84,6 +84,7 @@ import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
 import {
   assertOpenAiApiModel,
+  assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
   NON_CONVERSATIONAL_REALTIME_MODELS,
 } from './openai/util';
@@ -1007,8 +1008,9 @@ export const providerMap: ProviderFactory[] = [
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
-        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexModel = modelName || configuredModel;
+        assertOpenAiModelEndpointCompatibility(codexModel);
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexAppServerProvider({
           ...providerOptions,
@@ -1028,8 +1030,9 @@ export const providerMap: ProviderFactory[] = [
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
-        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexModel = modelName || configuredModel;
+        assertOpenAiModelEndpointCompatibility(codexModel);
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({
           ...providerOptions,

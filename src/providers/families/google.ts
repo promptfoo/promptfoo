@@ -27,9 +27,9 @@ export const googleProviderFactories: ProviderFactory[] = [
           ...providerOptions,
           id: providerPath,
           config: {
+            ...(context.basePath && { basePath: context.basePath }),
             ...providerOptions.config,
             vertexai: true,
-            ...(context.basePath && { basePath: context.basePath }),
           },
         });
       }
@@ -69,8 +69,8 @@ export const googleProviderFactories: ProviderFactory[] = [
             ...providerOptions,
             id: providerPath,
             config: {
-              ...providerOptions.config,
               ...(context.basePath && { basePath: context.basePath }),
+              ...providerOptions.config,
             },
           });
         } else if (serviceType === 'embedding' || serviceType === 'embeddings') {

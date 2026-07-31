@@ -20,6 +20,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
+import { assertOpenAiApiModel } from './util';
 import type { Agent, AgentInputItem, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
@@ -49,6 +50,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   ) {
     super(modelName, options);
     this.agentConfig = options.config || {};
+    assertOpenAiApiModel(this.agentConfig.model, process.env.OPENAI_BASE_URL);
   }
 
   id(): string {
@@ -109,6 +111,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     try {
       // Load agent definition (includes tools and handoffs if specified in agent file)
       const agent = await loadAgentDefinition(this.agentConfig.agent);
+      const effectiveModel = this.agentConfig.model || agent.model;
+      assertOpenAiApiModel(effectiveModel, process.env.OPENAI_BASE_URL);
       const [tools, handoffs, inputGuardrails, outputGuardrails] = await Promise.all([
         loadTools(this.agentConfig.tools),
         loadHandoffs(this.agentConfig.handoffs),
@@ -117,6 +121,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       ]);
 
       const configuredAgent = agent.clone({
+        ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
         tools: mergeArrays(agent.tools, tools),
         handoffs: mergeArrays(agent.handoffs, handoffs),
         inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
@@ -188,12 +193,6 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         maxTurns,
         signal: callApiOptions?.abortSignal,
       };
-
-      // Override the agent's model only when the provider config explicitly asks to.
-      // The provider suffix is an agent label, not a model identifier.
-      if (this.agentConfig.model) {
-        runOptions.model = this.agentConfig.model;
-      }
 
       // Override model settings if specified
       if (this.agentConfig.modelSettings) {

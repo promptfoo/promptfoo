@@ -722,6 +722,14 @@ describe('calculateOpenAICost', () => {
   });
 
   it.each([
+    'gpt-transcribe',
+    'vendor/gpt-transcribe',
+    'gpt-live-transcribe',
+  ])('allows custom OpenAI-compatible endpoints to use their own %s model', (model) => {
+    expect(() => assertOpenAiApiModel(model, 'https://gateway.example/v1')).not.toThrow();
+  });
+
+  it.each([
     'https://us.api.openai.com/v1',
     'https://eu.api.openai.com/v1',
   ])('rejects retired models on the regional first-party endpoint %s', (apiUrl) => {

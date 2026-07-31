@@ -567,7 +567,6 @@ export function assertOpenAiApiModel(
   apiUrl?: string,
   options: { allowTranscription?: boolean } = {},
 ): void {
-  assertOpenAiModelEndpointCompatibility(model, options);
   if (typeof model !== 'string') {
     return;
   }
@@ -576,6 +575,7 @@ export function assertOpenAiApiModel(
     return;
   }
 
+  assertOpenAiModelEndpointCompatibility(model, options);
   const normalizedModel = model.split('/').pop() ?? model;
   if (RETIRED_OPENAI_MODEL_IDS.has(normalizedModel)) {
     throw new Error(

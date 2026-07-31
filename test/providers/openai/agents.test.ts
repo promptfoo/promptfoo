@@ -148,6 +148,8 @@ import {
   loadSessionDefinition,
 } from '../../../src/providers/openai/agents-loader';
 
+import type { OpenAiAgentsOptions } from '../../../src/providers/openai/agents-types';
+
 function resetOpenAiAgentsMocks() {
   mockRun.mockReset().mockResolvedValue({
     finalOutput: 'Agent answer',
@@ -187,6 +189,7 @@ describe('OpenAiAgentsProvider', () => {
 
   afterEach(() => {
     cliState.basePath = undefined;
+    vi.unstubAllEnvs();
   });
 
   it('creates a real SDK agent from inline definitions', async () => {
@@ -378,7 +381,8 @@ describe('OpenAiAgentsProvider', () => {
       'base-output',
       'file-output',
     ]);
-    expect(runOptions.model).toBe('gpt-5-mini');
+    expect(agent.model).toBe('gpt-5-mini');
+    expect(runOptions.model).toBeUndefined();
     expect(runOptions.modelSettings.retry.maxRetries).toBe(2);
     expect(typeof runOptions.modelSettings.retry.policy).toBe('function');
     expect(mockRetryPolicies.providerSuggested).toHaveBeenCalledTimes(1);
@@ -607,6 +611,97 @@ describe('OpenAiAgentsProvider', () => {
     await provider.callApi('Where is my order?');
 
     expect(mockRun.mock.calls[0][2].model).toBeUndefined();
+  });
+
+  it.each([
+    ['gpt-transcribe', /transcription-only.*openai:transcription:gpt-transcribe/i],
+    ['gpt-live-transcribe', /Realtime transcription sessions.*not yet supported/i],
+    ['gpt-5-chat-latest', /has been retired/i],
+    ['gpt-5.3-codex-spark', /only available through openai:codex-sdk/i],
+  ])('rejects unsupported first-party model override %s', (model, expectedError) => {
+    expect(
+      () =>
+        new OpenAiAgentsProvider('support-agent', {
+          config: {
+            agent: {
+              name: 'Inline Support Agent',
+              instructions: 'Help the user.',
+            },
+            model,
+          },
+        }),
+    ).toThrow(expectedError);
+  });
+
+  it.each([
+    ['inline', 'gpt-transcribe', /transcription-only.*openai:transcription:gpt-transcribe/i],
+    ['direct', 'gpt-5-chat-latest', /has been retired/i],
+    ['file', 'gpt-5.3-codex-spark', /only available through openai:codex-sdk/i],
+  ])('rejects unsupported %s agent definition model %s before running', async (source, model, expectedError) => {
+    let agentConfig: OpenAiAgentsOptions['agent'];
+    if (source === 'inline') {
+      agentConfig = {
+        name: 'Inline Support Agent',
+        instructions: 'Help the user.',
+        model,
+      };
+    } else {
+      const agent = new Agent({
+        name: 'SDK Support Agent',
+        instructions: 'Help the user.',
+        model,
+      });
+      if (source === 'file') {
+        mockImportModule.mockResolvedValueOnce({ default: agent });
+        agentConfig = 'file:///tmp/agent.ts';
+      } else {
+        agentConfig = agent;
+      }
+    }
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: { agent: agentConfig },
+    });
+
+    await expect(provider.callApi('Where is my order?')).rejects.toThrow(expectedError);
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
+  it('does not treat ignored provider apiBaseUrl config as the Agents SDK endpoint', () => {
+    expect(
+      () =>
+        new OpenAiAgentsProvider('support-agent', {
+          config: {
+            agent: {
+              name: 'Inline Support Agent',
+              instructions: 'Help the user.',
+            },
+            apiBaseUrl: 'https://gateway.example/v1',
+            model: 'gpt-5-chat-latest',
+          },
+        }),
+    ).toThrow(/has been retired/i);
+  });
+
+  it('allows agent models when the Agents SDK uses a custom endpoint', async () => {
+    vi.stubEnv('OPENAI_BASE_URL', 'https://gateway.example/v1');
+
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: 'gpt-5-chat-latest',
+        },
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).resolves.toMatchObject({
+      output: 'Agent answer',
+    });
+    expect(mockRun.mock.calls[0][0]).toMatchObject({
+      model: 'gpt-5-chat-latest',
+    });
   });
 
   it('passes Promptfoo vars through the SDK local run context', async () => {

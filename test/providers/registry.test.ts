@@ -750,6 +750,44 @@ describe('Provider Registry', () => {
         ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
       }
 
+      for (const modelType of ['codex-app-server', 'codex-desktop', 'codex-sdk', 'codex']) {
+        for (const transcriptionModel of ['gpt-transcribe', 'gpt-live-transcribe']) {
+          const expectedError =
+            transcriptionModel === 'gpt-transcribe'
+              ? /transcription-only.*openai:transcription:gpt-transcribe/i
+              : /Realtime transcription sessions.*not yet supported/i;
+          await expect(
+            factory!.create(
+              `openai:${modelType}:${transcriptionModel}`,
+              mockProviderOptions,
+              mockContext,
+            ),
+          ).rejects.toThrow(expectedError);
+          await expect(
+            factory!.create(
+              `openai:${modelType}`,
+              {
+                ...mockProviderOptions,
+                config: { ...mockProviderOptions.config, model: transcriptionModel },
+              },
+              mockContext,
+            ),
+          ).rejects.toThrow(expectedError);
+        }
+      }
+
+      const codexProvider = await factory!.create(
+        'openai:codex-sdk:gpt-5.3-codex-spark',
+        {
+          ...mockProviderOptions,
+          config: { ...mockProviderOptions.config, model: 'gpt-transcribe' },
+        },
+        mockContext,
+      );
+      expect((codexProvider as { config?: { model?: string } }).config?.model).toBe(
+        'gpt-5.3-codex-spark',
+      );
+
       const passthroughModelTypes = [
         'chat',
         'responses',
@@ -831,6 +869,30 @@ describe('Provider Registry', () => {
           /Realtime transcription sessions.*not yet supported/i,
         );
       }
+    });
+
+    it.each([
+      'gpt-transcribe',
+      'vendor/gpt-transcribe',
+      'vendor/gpt-live-transcribe',
+    ])('allows custom OpenAI-compatible endpoints to route their own %s model', async (customModel) => {
+      const providerPath = `openai:chat:${customModel}`;
+      const factory = providerMap.find((candidate) => candidate.test(providerPath));
+      expect(factory).toBeDefined();
+
+      const customProvider = await factory!.create(
+        providerPath,
+        {
+          ...mockProviderOptions,
+          config: {
+            ...mockProviderOptions.config,
+            apiBaseUrl: 'https://gateway.example/v1',
+          },
+        },
+        mockContext,
+      );
+
+      expect((customProvider as { modelName?: string }).modelName).toBe(customModel);
     });
 
     it('should handle bedrock providers correctly', async () => {
@@ -1553,6 +1615,14 @@ describe('Provider Registry', () => {
       expect((provider as any).config?.vertexai).toBe(true);
       expect((provider as any).config?.basePath).toBe(bareContext.basePath);
       expect(provider.id()).toBe(providerPath);
+
+      const explicitBasePath = '/explicit-media';
+      const explicitlyConfiguredProvider = await factory!.create(
+        providerPath,
+        { config: { basePath: explicitBasePath } },
+        bareContext,
+      );
+      expect((explicitlyConfiguredProvider as any).config?.basePath).toBe(explicitBasePath);
     });
 
     it.each([
@@ -1575,6 +1645,14 @@ describe('Provider Registry', () => {
       expect((provider as any).config?.vertexai).toBeUndefined();
       expect((provider as any).config?.basePath).toBe(bareContext.basePath);
       expect(provider.id()).toBe(providerPath);
+
+      const explicitBasePath = '/explicit-media';
+      const explicitlyConfiguredProvider = await factory!.create(
+        providerPath,
+        { config: { basePath: explicitBasePath } },
+        bareContext,
+      );
+      expect((explicitlyConfiguredProvider as any).config?.basePath).toBe(explicitBasePath);
     });
 
     it.each([

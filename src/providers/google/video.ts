@@ -284,10 +284,13 @@ export class GoogleVideoProvider implements ApiProvider {
   /**
    * Load image data from file:// path or return as-is if base64
    */
-  private loadImageData(imagePath: string): { data?: string; error?: string } {
+  private loadImageData(
+    imagePath: string,
+    config: Pick<GoogleVideoOptions, 'basePath'> = this.config,
+  ): { data?: string; error?: string } {
     if (imagePath.startsWith('file://')) {
       const filePath = path.resolve(
-        this.config.basePath || process.cwd(),
+        config.basePath || process.cwd(),
         imagePath.slice('file://'.length),
       );
       if (!fs.existsSync(filePath)) {
@@ -301,10 +304,13 @@ export class GoogleVideoProvider implements ApiProvider {
   /**
    * Load video data from file:// path or return as-is if base64
    */
-  private loadVideoData(videoPath: string): { data?: string; error?: string } {
+  private loadVideoData(
+    videoPath: string,
+    config: Pick<GoogleVideoOptions, 'basePath'> = this.config,
+  ): { data?: string; error?: string } {
     if (videoPath.startsWith('file://')) {
       const filePath = path.resolve(
-        this.config.basePath || process.cwd(),
+        config.basePath || process.cwd(),
         videoPath.slice('file://'.length),
       );
       if (!fs.existsSync(filePath)) {
@@ -355,7 +361,7 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     if (config.image) {
-      const { data: imageData, error } = this.loadImageData(config.image);
+      const { data: imageData, error } = this.loadImageData(config.image, config);
       if (error) {
         return { error };
       }
@@ -367,7 +373,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     const lastFrame = config.lastFrame || config.lastImage;
     if (lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(lastFrame);
+      const { data: lastFrameData, error } = this.loadImageData(lastFrame, config);
       if (error) {
         return { error };
       }
@@ -383,7 +389,7 @@ export class GoogleVideoProvider implements ApiProvider {
         const imagePath = typeof ref === 'string' ? ref : ref.image;
         const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
 
-        const { data: imageData, error } = this.loadImageData(imagePath);
+        const { data: imageData, error } = this.loadImageData(imagePath, config);
         if (error) {
           return { error };
         }
@@ -434,7 +440,7 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     if (config.image) {
-      const { data: imageData, error } = this.loadImageData(config.image);
+      const { data: imageData, error } = this.loadImageData(config.image, config);
       if (error) {
         return { error };
       }
@@ -448,7 +454,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     const lastFrame = config.lastFrame || config.lastImage;
     if (lastFrame) {
-      const { data: lastFrameData, error } = this.loadImageData(lastFrame);
+      const { data: lastFrameData, error } = this.loadImageData(lastFrame, config);
       if (error) {
         return { error };
       }
@@ -465,7 +471,7 @@ export class GoogleVideoProvider implements ApiProvider {
       for (const ref of config.referenceImages.slice(0, 3)) {
         const imagePath = typeof ref === 'string' ? ref : ref.image;
         const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
-        const { data: imageData, error } = this.loadImageData(imagePath);
+        const { data: imageData, error } = this.loadImageData(imagePath, config);
         if (error) {
           return { error };
         }
@@ -490,7 +496,7 @@ export class GoogleVideoProvider implements ApiProvider {
             'Google AI Studio Veo does not accept operation IDs for video extension. Provide base64/file:// video data via `sourceVideo`.',
         };
       }
-      const { data: videoData, error } = this.loadVideoData(sourceVideo);
+      const { data: videoData, error } = this.loadVideoData(sourceVideo, config);
       if (error) {
         return { error };
       }
