@@ -817,15 +817,16 @@ config:
 
 For Claude models (e.g., `anthropic.claude-fable-5`, `anthropic.claude-sonnet-5`, `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) use the bare model ID with Bedrock's Anthropic-compatible Messages endpoint. Promptfoo routes `bedrock:anthropic.claude-opus-4-7` and `bedrock:anthropic.claude-opus-4-8` there and requires a Bedrock API key. For Bedrock Runtime, use a cross-region inference profile with the `us.`, `eu.`, `jp.`, `au.`, or `global.` prefix. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. Promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
+**Note**: Claude Opus 4.8 (`anthropic.claude-opus-4-8`) and Claude Opus 4.7 (`anthropic.claude-opus-4-7`) support bare model IDs on IAM-authenticated Bedrock Runtime. Use `bedrock:<model-id>` or `bedrock:completion:<model-id>` for InvokeModel, and `bedrock:converse:<model-id>` for Converse. Only the explicit `bedrock:messages:<model-id>` form uses Bedrock's Anthropic-compatible Messages endpoint and requires a Bedrock API key. Cross-region inference profiles are also available with the `us.`, `eu.`, `jp.`, `au.`, or `global.` prefix. Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup. Promptfoo automatically omits unsupported sampling parameters (`temperature`, `topP`, and `topK` — including raw `top_k` in `additionalModelRequestFields`) and converts configured manual thinking to adaptive thinking for Opus 4.7, Opus 4.8, Opus 5, and Sonnet 5.
 
 **Note**: [Claude Opus 5](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-opus-5.html)
 uses `us.anthropic.claude-opus-5`,
 `eu.anthropic.claude-opus-5`, `au.anthropic.claude-opus-5`, or
 `global.anthropic.claude-opus-5` with Bedrock Runtime. The bare
-`anthropic.claude-opus-5` ID is for Bedrock's Anthropic-compatible Messages endpoint, so
-`bedrock:anthropic.claude-opus-5` routes there and requires a Bedrock API key. Use a geo or
-global ID with `bedrock:converse:` or the InvokeModel path. There is no `jp.` profile. The
+`anthropic.claude-opus-5` ID is also IAM-native: `bedrock:anthropic.claude-opus-5` uses
+InvokeModel, while `bedrock:converse:anthropic.claude-opus-5` uses Converse. Select
+`bedrock:messages:anthropic.claude-opus-5` explicitly only for the bearer-authenticated
+Anthropic-compatible Messages endpoint. There is no `jp.` profile. The
 global profile bills at $5/$25 per million input/output tokens; regional endpoints, including
 geo profiles, add the 10% regional premium.
 

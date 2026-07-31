@@ -687,13 +687,15 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost =
-      reportedCost ??
-      calculateVideoCost(actualDuration, false, {
-        modelName: this.modelName,
-        resolution,
-        imageInputCount: config.reference_images?.length || (config.image?.url ? 1 : 0),
-      });
+    const outputResolution = isEdit ? undefined : resolution;
+    const estimatedCost = outputResolution
+      ? calculateVideoCost(actualDuration, false, {
+          modelName: this.modelName,
+          resolution: outputResolution,
+          imageInputCount: config.reference_images?.length || (config.image?.url ? 1 : 0),
+        })
+      : undefined;
+    const cost = reportedCost ?? estimatedCost;
 
     // Store cache mapping (skip for edits)
     if (!isEdit) {
@@ -717,14 +719,14 @@ export class XAIVideoProvider implements ApiProvider {
         duration: actualDuration,
         model: this.modelName,
         aspectRatio,
-        resolution,
+        ...(outputResolution ? { resolution: outputResolution } : {}),
       },
       metadata: {
         requestId,
         cacheKey,
         model: this.modelName,
         aspectRatio,
-        resolution,
+        ...(outputResolution ? { resolution: outputResolution } : {}),
         duration: actualDuration,
         storageKey,
         isEdit,

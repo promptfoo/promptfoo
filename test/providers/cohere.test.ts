@@ -129,6 +129,43 @@ describe('CohereChatCompletionProvider', () => {
     expect(body.messages).toEqual(messages);
   });
 
+  it('prepends preferred configured preamble and history to a JSON message-array prompt', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 8, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        preamble: 'Configured system context.',
+        preamble_override: 'Legacy system context.',
+        chat_history: [
+          { role: 'USER', message: 'Earlier question' },
+          { role: 'CHATBOT', message: 'Earlier answer' },
+        ],
+        chatHistory: [{ role: 'USER', message: 'Legacy history should not be duplicated' }],
+      },
+    });
+    const promptMessages = [
+      { role: 'system', content: 'Prompt-defined system context.' },
+      { role: 'user', content: 'Current question' },
+    ];
+    await provider.callApi(JSON.stringify(promptMessages));
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body.messages).toEqual([
+      { role: 'system', content: 'Configured system context.' },
+      { role: 'user', content: 'Earlier question' },
+      { role: 'assistant', content: 'Earlier answer' },
+      ...promptMessages,
+    ]);
+  });
+
   it('returns v2 tool calls when the response has no text content', async () => {
     const toolCalls = [
       {

@@ -12,10 +12,9 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
-      // Bare model IDs that do not have an in-region Bedrock Runtime endpoint route
-      // through Bedrock's Anthropic-compatible Messages endpoint. Fable also
-      // supports that endpoint when explicitly selected, while its bare form
-      // continues through Bedrock Runtime below.
+      // Mythos is available only through Bedrock's Anthropic-compatible Messages endpoint.
+      // Fable and Opus also support that endpoint when explicitly selected, while their bare
+      // forms continue through Bedrock Runtime below.
       const isLegacyType = modelType === 'converse' || modelType === 'completion';
       const anthropicModel =
         modelType === 'messages'

@@ -7,7 +7,12 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
+import {
+  calculateGoogleCost,
+  mergeGoogleCompletionOptions,
+  parseConfigResponseSchema,
+  parseConfigSystemInstruction,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -41,6 +46,11 @@ type InteractionResponse = {
   };
 };
 
+type ParsedInteractionInput = {
+  input: string | unknown[] | Record<string, unknown>;
+  systemInstruction?: string;
+};
+
 function normalizeAudioMimeType(format?: string): string {
   if (format?.startsWith('audio/')) {
     return format;
@@ -54,9 +64,33 @@ function normalizeAudioMimeType(format?: string): string {
   return `audio/${format || 'mpeg'}`;
 }
 
-function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
+function getInteractionText(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(getInteractionText);
+  }
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.text === 'string') {
+    return [record.text];
+  }
+  return getInteractionText(record.content ?? record.parts);
+}
+
+function parseInteractionInput(
+  prompt: string,
+  extractSystemInstructions: boolean,
+): ParsedInteractionInput {
   try {
     const parsedPrompt = JSON.parse(prompt) as unknown;
+    const envelopeSystemInstruction =
+      parsedPrompt && typeof parsedPrompt === 'object' && !Array.isArray(parsedPrompt)
+        ? getInteractionText((parsedPrompt as { system_instruction?: unknown }).system_instruction)
+        : [];
     const parsed =
       parsedPrompt &&
       typeof parsedPrompt === 'object' &&
@@ -65,9 +99,10 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
         ? (parsedPrompt as { contents: unknown[] }).contents
         : parsedPrompt;
     if (Array.isArray(parsed)) {
-      return parsed.map((content) => {
+      const systemInstructions = [...envelopeSystemInstruction];
+      const input = parsed.flatMap((content): unknown[] => {
         if (!content || typeof content !== 'object') {
-          return content;
+          return [content];
         }
 
         const normalizePart = (part: unknown) => {
@@ -133,7 +168,7 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
         };
 
         if (!('role' in content)) {
-          return normalizePart(content);
+          return [normalizePart(content)];
         }
 
         const {
@@ -143,6 +178,10 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
           ...message
         } = content as Record<string, unknown>;
         const interactionContent = messageContent ?? parts;
+        if (role === 'system' && extractSystemInstructions) {
+          systemInstructions.push(...getInteractionText(interactionContent));
+          return [];
+        }
         const normalizedContent = Array.isArray(interactionContent)
           ? interactionContent.map((part) => normalizePart(part))
           : typeof interactionContent === 'string'
@@ -150,18 +189,47 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             : interactionContent && typeof interactionContent === 'object'
               ? [normalizePart(interactionContent)]
               : [];
-        return {
-          ...message,
-          type: role === 'assistant' || role === 'model' ? 'model_output' : 'user_input',
-          content: normalizedContent,
-        };
+        return [
+          {
+            ...message,
+            type: role === 'assistant' || role === 'model' ? 'model_output' : 'user_input',
+            content: normalizedContent,
+          },
+        ];
       });
+      return {
+        input,
+        ...(systemInstructions.length > 0
+          ? { systemInstruction: systemInstructions.join('\n') }
+          : {}),
+      };
     }
-    return parsed && typeof parsed === 'object'
-      ? (parsed as unknown[] | Record<string, unknown>)
-      : prompt;
+    return {
+      input:
+        parsed && typeof parsed === 'object'
+          ? (parsed as unknown[] | Record<string, unknown>)
+          : prompt,
+      ...(envelopeSystemInstruction.length > 0
+        ? { systemInstruction: envelopeSystemInstruction.join('\n') }
+        : {}),
+    };
   } catch {
-    return prompt;
+    return { input: prompt };
+  }
+}
+
+function normalizeInteractionGenerationField(field: string): string {
+  switch (field) {
+    case 'maxOutputTokens':
+      return 'max_output_tokens';
+    case 'stopSequences':
+      return 'stop_sequences';
+    case 'topK':
+      return 'top_k';
+    case 'topP':
+      return 'top_p';
+    default:
+      return field;
   }
 }
 
@@ -385,6 +453,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
       isVideoModel
         ? [
             ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
+            'top_k',
+            'topK',
             'stop_sequences',
             'stopSequences',
             'negative_prompt',
@@ -407,6 +477,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...((config.vertexai || !isVideoModel) && config.topP !== undefined
         ? { top_p: config.topP }
         : {}),
+      ...(!isVideoModel && config.topK !== undefined ? { top_k: config.topK } : {}),
+      ...(!isVideoModel && config.stopSequences !== undefined
+        ? { stop_sequences: config.stopSequences }
+        : {}),
       ...Object.fromEntries(
         Object.entries({
           ...(config.generationConfig || {}),
@@ -417,10 +491,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             : {}),
         })
           .filter(([field]) => !unsupportedGenerationFields.has(field))
-          .map(([field, value]) => [
-            field === 'topP' ? 'top_p' : field === 'maxOutputTokens' ? 'max_output_tokens' : field,
-            value,
-          ]),
+          .map(([field, value]) => [normalizeInteractionGenerationField(field), value]),
       ),
     };
     const passthrough = Object.fromEntries(
@@ -432,7 +503,34 @@ export class GoogleInteractionsProvider implements ApiProvider {
           !unsupportedGenerationFields.has(field),
       ),
     );
-    const interactionInput = parseInteractionInput(prompt);
+    const { input: interactionInput, systemInstruction: promptSystemInstruction } =
+      parseInteractionInput(prompt, !isVideoModel);
+    const systemInstructionContent =
+      !isVideoModel && config.passthrough?.system_instruction === undefined
+        ? parseConfigSystemInstruction(config.systemInstruction, context?.vars)
+        : undefined;
+    const systemInstruction =
+      !isVideoModel && config.passthrough?.system_instruction === undefined
+        ? [
+            ...(systemInstructionContent?.parts
+              .map((part) => part.text)
+              .filter((text): text is string => typeof text === 'string') ?? []),
+            ...(promptSystemInstruction ? [promptSystemInstruction] : []),
+          ].join('\n')
+        : undefined;
+    let responseSchema: unknown;
+    if (
+      !isVideoModel &&
+      config.responseSchema &&
+      config.passthrough?.response_format === undefined
+    ) {
+      if ((generationConfig as Record<string, unknown>).response_schema !== undefined) {
+        throw new Error(
+          '`responseSchema` provided but `generationConfig.response_schema` already set.',
+        );
+      }
+      responseSchema = parseConfigResponseSchema(config.responseSchema, context?.vars);
+    }
     const body = {
       model: effectiveModel,
       input:
@@ -453,7 +551,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
                   ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
                 },
           }
-        : {}),
+        : responseSchema
+          ? {
+              response_format: [
+                { type: 'text', mime_type: 'application/json', schema: responseSchema },
+              ],
+            }
+          : {}),
       ...(config.previousInteractionId
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
@@ -461,6 +565,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(config.safetySettings
         ? { safety_settings: normalizeInteractionSafetySettings(config.safetySettings) }
         : {}),
+      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...passthrough,
       background: false,

@@ -293,6 +293,18 @@ export class GoogleLiveProvider implements ApiProvider {
             'Gemini 3.5 Live Translate requires generationConfig.translationConfig (targetLanguageCode defaults to en).',
         };
       }
+      if (config.generationConfig.thinkingConfig) {
+        return {
+          error:
+            'Gemini 3.5 Live Translate does not support generationConfig.thinkingConfig; remove it.',
+        };
+      }
+      if (config.apiVersion && config.apiVersion !== 'v1beta') {
+        return {
+          error:
+            'Gemini 3.5 Live Translate requires apiVersion v1beta; remove the override or set apiVersion to v1beta.',
+        };
+      }
       const hasTools = Array.isArray(config.tools)
         ? config.tools.length > 0
         : Boolean(config.tools);

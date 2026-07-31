@@ -695,6 +695,41 @@ describe('XAI Video Provider', () => {
       expect(result.metadata?.isEdit).toBe(true);
     });
 
+    it('does not estimate edit cost from the ignored resolution config', async () => {
+      const createResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+      };
+      const completedResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          video: { url: mockVideoUrl, duration: 3 },
+          model: 'grok-imagine-video',
+        }),
+      };
+      const downloadResponse = {
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+      };
+
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce(createResponse as any)
+        .mockResolvedValueOnce(completedResponse as any)
+        .mockResolvedValueOnce(downloadResponse as any);
+
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: {
+          video: { url: 'https://example.com/source.mp4' },
+          resolution: '480p',
+        },
+      });
+      const result = await provider.callApi('Make the ball larger');
+
+      expect(result.cost).toBeUndefined();
+      expect(result.video?.resolution).toBeUndefined();
+      expect(result.metadata?.resolution).toBeUndefined();
+    });
+
     it('does not validate duration/aspect_ratio for edits', async () => {
       const sourceVideoUrl = 'https://example.com/source.mp4';
 

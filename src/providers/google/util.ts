@@ -1330,6 +1330,30 @@ export function parseConfigSystemInstruction(
   return configInstruction;
 }
 
+/**
+ * Loads, parses, and renders a config-level response schema.
+ *
+ * @param configResponseSchema - Inline JSON or a reference to an external schema file
+ * @param contextVars - Variables for template rendering
+ * @returns The parsed and rendered response schema
+ */
+export function parseConfigResponseSchema(
+  configResponseSchema: string,
+  contextVars?: Record<string, VarValue>,
+): unknown {
+  let responseSchema = maybeLoadFromExternalFile(
+    renderVarsInObject(configResponseSchema, contextVars),
+  );
+  if (typeof responseSchema === 'string') {
+    try {
+      responseSchema = JSON.parse(responseSchema);
+    } catch (error) {
+      throw new Error(`Invalid JSON in responseSchema: ${error}`);
+    }
+  }
+  return renderVarsInObject(responseSchema, contextVars);
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, VarValue>,

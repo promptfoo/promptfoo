@@ -508,6 +508,58 @@ describe('GoogleLiveProvider', () => {
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      'thinking configuration',
+      {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+          thinkingConfig: { thinkingBudget: 128 },
+        },
+      },
+      'does not support generationConfig.thinkingConfig; remove it',
+    ],
+    [
+      'a v1alpha API version override',
+      {
+        apiVersion: 'v1alpha',
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'requires apiVersion v1beta; remove the override or set apiVersion to v1beta',
+    ],
+  ])('should reject Live Translate with unsupported %s', async (_case, config, error) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        ...config,
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain(error);
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
   it('should honor an explicit v1beta Live protocol override for older models', async () => {
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {

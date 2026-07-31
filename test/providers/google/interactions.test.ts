@@ -72,6 +72,7 @@ describe('GoogleInteractionsProvider', () => {
           { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
           { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
         ],
+        systemInstruction: 'This instruction is unsupported by Omni.',
         service_tier: 'priority',
         maxOutputTokens: 2_048,
         generationConfig: {
@@ -252,6 +253,200 @@ describe('GoogleInteractionsProvider', () => {
       temperature: 0.4,
       top_p: 0.9,
       seed: 42,
+    });
+  });
+
+  it('resolves prompt-level system instructions for Robotics ER 2', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'robot plan' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        systemInstruction: 'Use the provider instruction.',
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      vars: { target: 'banana' },
+      prompt: {
+        config: {
+          systemInstruction: 'Move safely toward the {{ target }}.',
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).system_instruction).toBe(
+      'Move safely toward the banana.',
+    );
+  });
+
+  it('keeps passthrough system_instruction precedence for Robotics ER 2', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'robot plan' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        systemInstruction: 'Use the configured instruction.',
+        passthrough: {
+          system_instruction: 'Use the passthrough instruction.',
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).system_instruction).toBe(
+      'Use the passthrough instruction.',
+    );
+  });
+
+  it('extracts standard chat system roles into the Robotics system instruction', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'robot plan' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        systemInstruction: 'Follow the provider policy.',
+      },
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        { role: 'system', content: 'Never ignore safety constraints.' },
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'Keep the robot inside the marked area.' }],
+        },
+        { role: 'user', content: 'Move toward the banana.' },
+      ]),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.system_instruction).toBe(
+      'Follow the provider policy.\nNever ignore safety constraints.\nKeep the robot inside the marked area.',
+    );
+    expect(body.input).toEqual([
+      {
+        type: 'user_input',
+        content: [{ type: 'text', text: 'Move toward the banana.' }],
+      },
+    ]);
+  });
+
+  it('forwards standard Robotics generation controls and a rendered response schema', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: '{"target":"banana"}' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        topK: 40,
+        stopSequences: ['STOP'],
+        responseSchema:
+          '{"type":"object","properties":{"target":{"type":"string","description":"{{ description }}"}},"required":["target"]}',
+      },
+    });
+
+    await provider.callApi('Locate the target.', {
+      vars: { description: 'Detected object' },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.generation_config).toMatchObject({
+      top_k: 40,
+      stop_sequences: ['STOP'],
+    });
+    expect(body.response_format).toEqual([
+      {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: {
+          type: 'object',
+          properties: {
+            target: { type: 'string', description: 'Detected object' },
+          },
+          required: ['target'],
+        },
+      },
+    ]);
+  });
+
+  it('normalizes camelCase generationConfig fields for Robotics ER 2', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'robot plan' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          maxOutputTokens: 512,
+          topP: 0.8,
+          topK: 20,
+          stopSequences: ['DONE'],
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      max_output_tokens: 512,
+      top_p: 0.8,
+      top_k: 20,
+      stop_sequences: ['DONE'],
     });
   });
 

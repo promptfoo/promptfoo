@@ -3364,8 +3364,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('maps Claude Opus 5 across its Runtime inference profiles', () => {
-    // The bare ID is served by Bedrock Mantle; Runtime uses us./eu./au./global profiles.
-    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -3373,7 +3372,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-5']).toBeUndefined();
-    expect(() => getHandlerForModel('anthropic.claude-opus-5')).toThrow(/Anthropic Messages API/);
+    expect(getHandlerForModel('anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
@@ -3653,7 +3652,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('should map Claude Opus 4.7 models correctly', async () => {
-    // The provider factory intercepts this bare ID and sends it to Bedrock Mantle.
+    // Base model ID (no -v1 suffix for 4.7+).
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
     // Cross-region inference profiles (verified via the AWS model card).
@@ -3672,7 +3671,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('should map Claude Opus 4.8 models correctly', async () => {
-    // The provider factory intercepts this bare ID and sends it to Bedrock Mantle.
+    // Base model ID (no -v1 suffix, mirroring Opus 4.7).
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
     // Cross-region inference profiles mirror the Opus 4.7 set
@@ -3906,7 +3905,7 @@ describe('AwsBedrockCompletionProvider', () => {
     mockInvokeModel.mockResolvedValueOnce({
       body,
     });
-    const provider = new AwsBedrockCompletionProvider('global.anthropic.claude-opus-4-8', {
+    const provider = new AwsBedrockCompletionProvider('anthropic.claude-opus-4-8', {
       config: { region: 'us-east-1' },
     });
 
@@ -4935,8 +4934,9 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
   it.each([
     'anthropic.claude-opus-4-7',
     'anthropic.claude-opus-4-8',
-  ])('rejects Messages-only bare model %s on InvokeModel routes', (modelName) => {
-    expect(() => getHandlerForModel(modelName)).toThrow(/Anthropic Messages API/);
+    'anthropic.claude-opus-5',
+  ])('keeps IAM-native bare model %s on InvokeModel routes', (modelName) => {
+    expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
   it.each([

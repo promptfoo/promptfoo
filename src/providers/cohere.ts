@@ -23,12 +23,19 @@ interface CohereChatOptions {
     user_name?: string;
     conversation_id?: string;
   }>;
+  chat_history?: Array<{
+    role: string;
+    message: string;
+    user_name?: string;
+    conversation_id?: string;
+  }>;
   connectors?: Array<{
     id: string;
     user_access_token?: string;
     continue_on_failure?: boolean;
     options?: object;
   }>;
+  preamble?: string;
   preamble_override?: string;
   prompt_truncation?: 'AUTO' | 'OFF';
   search_queries_only?: boolean;
@@ -97,10 +104,6 @@ function buildV2Messages(
   parsedPrompt: boolean,
   params: Record<string, any>,
 ): CohereV2Message[] {
-  if (Array.isArray(params.messages)) {
-    return params.messages;
-  }
-
   const messages: CohereV2Message[] = [];
   const systemMessage = params.preamble ?? params.preamble_override;
   if (systemMessage) {
@@ -113,6 +116,11 @@ function buildV2Messages(
       role: toV2Role(historyMessage.role),
       content: historyMessage.message,
     });
+  }
+
+  if (Array.isArray(params.messages)) {
+    messages.push(...params.messages);
+    return messages;
   }
 
   const userMessage = params.message ?? (parsedPrompt ? undefined : prompt);

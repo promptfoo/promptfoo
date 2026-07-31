@@ -678,7 +678,7 @@ limited to 10 seconds. Grok Imagine Video 1.5 does not support this mode.
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. For generation requests where the output resolution is known, Promptfoo falls back to the video provider's local duration-based estimate when the API omits usage.
 
 | Model                    | Media input                        | 480p output | 720p output | 1080p output  |
 | ------------------------ | ---------------------------------- | ----------- | ----------- | ------------- |
@@ -686,8 +686,8 @@ Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when av
 | `grok-imagine-video`     | $0.002/image or $0.01/video second | $0.05/sec   | $0.07/sec   | Not supported |
 
 The local fallback includes image-input and output-video charges. For a video edit without API
-usage data, it cannot infer the source video's duration, so it does not estimate the input-video
-charge.
+usage data, Promptfoo leaves cost undefined because the edit endpoint ignores the configured
+resolution and the completed response does not report the actual output resolution.
 
 ### Voice Agent API
 
