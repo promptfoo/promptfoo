@@ -560,6 +560,7 @@ describe('XAI Video Provider', () => {
       const body = JSON.parse(createCall[1]?.body as string);
       expect(body.reference_images).toEqual(referenceImages);
       expect(result.metadata?.hasReferenceImages).toBe(true);
+      expect(result.cost).toBeCloseTo(0.214, 3);
     });
 
     it('rejects reference images combined with image-to-video', async () => {

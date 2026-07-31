@@ -845,26 +845,18 @@ export class GoogleLiveProvider implements ApiProvider {
                 ? { enable_affective_dialog: enableAffectiveDialog }
                 : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
-              ...(this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
-              inputAudioTranscription !== undefined
-                ? { inputAudioTranscription }
-                : {}),
-              ...(this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
-              configuredOutputAudioTranscription !== undefined
-                ? { outputAudioTranscription: configuredOutputAudioTranscription }
-                : {}),
             },
             ...(toolConfig ? { toolConfig } : {}),
             ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
-            ...(this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL && outputAudioTranscription
+            ...(outputAudioTranscription
               ? {
                   [usesRealtimeTextInput
                     ? 'outputAudioTranscription'
                     : 'output_audio_transcription']: outputAudioTranscription,
                 }
               : {}),
-            ...(this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL && inputAudioTranscription
+            ...(inputAudioTranscription
               ? {
                   [usesRealtimeTextInput ? 'inputAudioTranscription' : 'input_audio_transcription']:
                     inputAudioTranscription,

@@ -270,7 +270,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     ) as GoogleProviderConfig;
-    const isVideoModel = this.modelName === 'gemini-omni-flash-preview';
+    const passthroughModel = config.passthrough?.model;
+    const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
+    const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
     const passthroughPreviousInteractionId =
       config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
     const hasConfigTools = Array.isArray(config.tools)
@@ -379,26 +381,32 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const unsupportedGenerationFields = new Set([
-      ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
-      'stop_sequences',
-      'stopSequences',
-      'negative_prompt',
-      'negativePrompt',
-      'system_instruction',
-      'systemInstruction',
-      'service_tier',
-      'serviceTier',
-    ]);
+    const unsupportedGenerationFields = new Set(
+      isVideoModel
+        ? [
+            ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
+            'stop_sequences',
+            'stopSequences',
+            'negative_prompt',
+            'negativePrompt',
+            'system_instruction',
+            'systemInstruction',
+            'service_tier',
+            'serviceTier',
+          ]
+        : [],
+    );
     const passthroughGenerationConfig = config.passthrough?.generation_config;
     const generationConfig = {
       ...(config.maxOutputTokens === undefined
         ? {}
         : { max_output_tokens: config.maxOutputTokens }),
-      ...(config.vertexai && config.temperature !== undefined
+      ...((config.vertexai || !isVideoModel) && config.temperature !== undefined
         ? { temperature: config.temperature }
         : {}),
-      ...(config.vertexai && config.topP !== undefined ? { top_p: config.topP } : {}),
+      ...((config.vertexai || !isVideoModel) && config.topP !== undefined
+        ? { top_p: config.topP }
+        : {}),
       ...Object.fromEntries(
         Object.entries({
           ...(config.generationConfig || {}),
@@ -420,12 +428,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ([field]) =>
           field !== 'generation_config' &&
           field !== 'generationConfig' &&
+          field !== 'model' &&
           !unsupportedGenerationFields.has(field),
       ),
     );
     const interactionInput = parseInteractionInput(prompt);
     const body = {
-      model: this.modelName,
+      model: effectiveModel,
       input:
         config.vertexai && typeof interactionInput === 'string'
           ? [{ type: 'text', text: interactionInput }]
@@ -606,7 +615,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const cost = cached
       ? undefined
       : calculateGoogleCost(
-          this.modelName,
+          effectiveModel,
           config,
           promptTokens,
           outputTokens + thoughtTokens,
@@ -754,7 +763,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         blobRef,
         url: videoUrl,
         format: video.mime_type?.split('/')[1] || 'mp4',
-        model: this.modelName,
+        model: effectiveModel,
         aspectRatio: config.aspectRatio,
       },
       metadata: { interactionId: data.id, status: data.status },

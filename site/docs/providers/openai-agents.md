@@ -67,6 +67,10 @@ implicit default as a stable eval input.
 | `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
 | `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
 
+`config.model` and `config.modelSettings` are execution overrides. When present, each option
+replaces the corresponding field on the initial agent and every handoff agent, including agents
+loaded from a file. Omit either option to preserve that field from each agent definition.
+
 ## File-Based Configuration
 
 Load agent and tools from external files:

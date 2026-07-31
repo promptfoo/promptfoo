@@ -70,6 +70,24 @@ vi.mock('@openai/agents', async (importOriginal) => {
     }
   }
 
+  const createMockHandoff = (agent: MockAgent, config?: Record<string, any>) => {
+    const mockHandoff: Record<string, any> = {
+      agent,
+      agentName: agent.name,
+      getHandoffAsFunctionTool: vi.fn(),
+      onInvokeHandoff: vi.fn(async () => agent),
+      toolDescription: config?.toolDescriptionOverride,
+      isEnabled: vi.fn(async () => true),
+    };
+    mockHandoff.clone = vi.fn((overrides: Record<string, any> = {}) => ({
+      ...mockHandoff,
+      ...overrides,
+      agent: overrides.agent ?? mockHandoff.agent,
+      agentName: overrides.agentName ?? overrides.agent?.name ?? mockHandoff.agentName,
+    }));
+    return mockHandoff;
+  };
+
   return {
     ...actual,
     Agent: MockAgent,
@@ -84,14 +102,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     },
     addTraceProcessor: vi.fn(),
     getOrCreateTrace: mockGetOrCreateTrace,
-    handoff: vi.fn((agent: MockAgent, config?: Record<string, any>) => ({
-      agent,
-      agentName: agent.name,
-      getHandoffAsFunctionTool: vi.fn(),
-      onInvokeHandoff: vi.fn(),
-      toolDescription: config?.toolDescriptionOverride,
-      isEnabled: vi.fn(async () => true),
-    })),
+    handoff: vi.fn(createMockHandoff),
     retryPolicies: mockRetryPolicies,
     Runner: class MockRunner {
       constructor(config: Record<string, unknown>) {

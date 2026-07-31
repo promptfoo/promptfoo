@@ -54,7 +54,11 @@ providers:
 
 ## Control over prompting
 
-By default, a regular string prompt will be automatically wrapped in the appropriate chat format and sent to the Cohere API via the `message` field:
+By default, a regular string prompt is wrapped in the appropriate chat format. Command A+ uses Cohere's
+v2 Chat API, so Promptfoo sends it in a `messages` array; existing models continue to use the v1 `message`
+field. For Command A+, Promptfoo also converts `chatHistory` and `preamble_override` to v2 messages.
+The v1-only `connectors`, `search_queries_only`, and `prompt_truncation` features are not available with
+Command A+; use v2 tools instead of connectors.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

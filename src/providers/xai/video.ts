@@ -51,6 +51,7 @@ export interface XaiVideoCostOptions {
   modelName?: string;
   resolution?: XaiVideoResolution;
   hasImageInput?: boolean;
+  imageInputCount?: number;
 }
 
 export interface XaiVideoJobResponse {
@@ -224,11 +225,9 @@ export function calculateVideoCost(
   const outputRate = isVideo15
     ? VIDEO_15_COST_PER_SECOND[resolution]
     : LEGACY_VIDEO_COST_PER_SECOND[resolution === '480p' ? '480p' : '720p'];
-  const imageInputCost = options.hasImageInput
-    ? isVideo15
-      ? VIDEO_15_IMAGE_INPUT_COST
-      : LEGACY_IMAGE_INPUT_COST
-    : 0;
+  const imageInputCount = options.imageInputCount ?? (options.hasImageInput ? 1 : 0);
+  const imageInputCost =
+    imageInputCount * (isVideo15 ? VIDEO_15_IMAGE_INPUT_COST : LEGACY_IMAGE_INPUT_COST);
   return outputRate * seconds + imageInputCost;
 }
 
@@ -693,7 +692,7 @@ export class XAIVideoProvider implements ApiProvider {
       calculateVideoCost(actualDuration, false, {
         modelName: this.modelName,
         resolution,
-        hasImageInput: Boolean(config.image?.url),
+        imageInputCount: config.reference_images?.length ?? (config.image?.url ? 1 : 0),
       });
 
     // Store cache mapping (skip for edits)

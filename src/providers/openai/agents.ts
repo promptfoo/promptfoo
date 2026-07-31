@@ -20,7 +20,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem, Session } from '@openai/agents';
+import type { Agent, AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -39,6 +39,7 @@ import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-t
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
+  private executionModelSettings?: ModelSettings;
   private session?: Session;
   private sessionInitialization?: Promise<Session>;
   private sessionQueues = new WeakMap<Session, Promise<void>>();
@@ -121,14 +122,18 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       ]);
 
       const configuredAgent = agent.clone({
-        ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
         tools: mergeArrays(agent.tools, tools),
         handoffs: mergeArrays(agent.handoffs, handoffs),
         inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
         outputGuardrails: mergeArrays(agent.outputGuardrails, outputGuardrails),
       });
 
-      const mockAwareAgent = this.wrapToolsIfNeeded(configuredAgent);
+      this.executionModelSettings = resolveModelSettings(this.agentConfig.modelSettings);
+      const overriddenAgent = applyExecutionOverrides(configuredAgent, {
+        model: this.agentConfig.model || undefined,
+        modelSettings: this.executionModelSettings,
+      });
+      const mockAwareAgent = this.wrapToolsIfNeeded(overriddenAgent);
 
       logger.debug('[AgentsProvider] Agent initialized successfully', {
         name: mockAwareAgent.name,
@@ -194,13 +199,11 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
-      // Runner-level settings apply across the whole workflow, including handoffs. Individual run
-      // options intentionally do not include model/modelSettings in current Agents SDK versions.
+      // Keep Runner defaults for SDK-created agents while the cloned graph above enforces the
+      // provider overrides on explicit initial and handoff agents.
       const runner = new Runner({
         ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
-        ...(this.agentConfig.modelSettings
-          ? { modelSettings: resolveModelSettings(this.agentConfig.modelSettings) }
-          : {}),
+        ...(this.executionModelSettings ? { modelSettings: this.executionModelSettings } : {}),
       });
 
       const traceContext = parseTraceparent(context?.traceparent);
@@ -448,6 +451,53 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   }
 
   return [...(existing ?? []), ...(additions ?? [])];
+}
+
+/**
+ * Clone the executable agent graph so provider-level model overrides win on every turn.
+ *
+ * The Agents SDK treats Runner model configuration as a fallback: explicit settings on an agent
+ * take precedence. Handoff agents therefore need the same overrides applied before execution.
+ */
+function applyExecutionOverrides(
+  agent: Agent<any, any>,
+  overrides: { model?: string; modelSettings?: ModelSettings },
+): Agent<any, any> {
+  if (overrides.model === undefined && overrides.modelSettings === undefined) {
+    return agent;
+  }
+
+  const clonedAgents = new WeakMap<Agent<any, any>, Agent<any, any>>();
+
+  const cloneAgent = (source: Agent<any, any>): Agent<any, any> => {
+    const existing = clonedAgents.get(source);
+    if (existing) {
+      return existing;
+    }
+
+    const cloned = source.clone({
+      ...(overrides.model === undefined ? {} : { model: overrides.model }),
+      ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
+      handoffs: [],
+    });
+    clonedAgents.set(source, cloned);
+    cloned.handoffs = source.handoffs.map((candidate) => {
+      if ('clone' in candidate && 'agent' in candidate) {
+        const handoff = candidate as Handoff<any, any>;
+        return handoff.clone({
+          agent: cloneAgent(handoff.agent),
+          onInvokeHandoff: async (context, args) =>
+            cloneAgent(await handoff.onInvokeHandoff(context, args)),
+        });
+      }
+
+      return cloneAgent(candidate as Agent<any, any>);
+    });
+
+    return cloned;
+  };
+
+  return cloneAgent(agent);
 }
 
 let tracingProcessorRegistration: Promise<void> | undefined;

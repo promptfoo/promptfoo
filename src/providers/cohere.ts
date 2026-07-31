@@ -44,8 +44,100 @@ interface CohereChatOptions {
   presence_penalty?: number;
 
   // promptfoo-provided options
+  basePath?: string;
+  linkedTargetId?: string;
   showDocuments?: boolean;
   showSearchQueries?: boolean;
+}
+
+interface CohereV2Message {
+  role: string;
+  content: unknown;
+}
+
+const COHERE_V2_CHAT_MODELS = new Set(['command-a-plus-05-2026']);
+
+function toV2Role(role: string): string {
+  return role.toLowerCase() === 'chatbot' ? 'assistant' : role.toLowerCase();
+}
+
+function parseV2Prompt(prompt: string): {
+  parsedPrompt: boolean;
+  promptParams: Record<string, any>;
+} {
+  try {
+    const promptObj = JSON.parse(prompt);
+    if (typeof promptObj === 'object' && promptObj !== null && !Array.isArray(promptObj)) {
+      return { parsedPrompt: true, promptParams: promptObj };
+    }
+  } catch {
+    // Plain text prompts are converted to a v2 user message by buildV2Messages.
+  }
+  return { parsedPrompt: false, promptParams: {} };
+}
+
+function getV2ConfigError(params: Record<string, any>): string | undefined {
+  if (params.connectors?.length) {
+    return 'Cohere v2 Chat API does not support connectors. Use a v2 tool definition instead.';
+  }
+  if (params.search_queries_only) {
+    return 'Cohere v2 Chat API does not support search_queries_only. Use a v2 tool definition instead.';
+  }
+  if (params.prompt_truncation && params.prompt_truncation !== 'OFF') {
+    return 'Cohere v2 Chat API does not support prompt_truncation.';
+  }
+  return undefined;
+}
+
+function buildV2Messages(
+  prompt: string,
+  parsedPrompt: boolean,
+  params: Record<string, any>,
+): CohereV2Message[] {
+  if (Array.isArray(params.messages)) {
+    return params.messages;
+  }
+
+  const messages: CohereV2Message[] = [];
+  const systemMessage = params.preamble ?? params.preamble_override;
+  if (systemMessage) {
+    messages.push({ role: 'system', content: systemMessage });
+  }
+
+  const history = params.chat_history ?? params.chatHistory ?? [];
+  for (const historyMessage of history) {
+    messages.push({
+      role: toV2Role(historyMessage.role),
+      content: historyMessage.message,
+    });
+  }
+
+  const userMessage = params.message ?? (parsedPrompt ? undefined : prompt);
+  if (userMessage !== undefined) {
+    messages.push({ role: 'user', content: userMessage });
+  }
+  return messages;
+}
+
+function getV2TextContent(data: any): string | undefined {
+  const content = data?.message?.content;
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+  return content
+    .map((part: unknown) => {
+      if (typeof part === 'string') {
+        return part;
+      }
+      if (typeof part === 'object' && part !== null && 'text' in part) {
+        return typeof part.text === 'string' ? part.text : '';
+      }
+      return '';
+    })
+    .join('');
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
@@ -148,6 +240,10 @@ export class CohereChatCompletionProvider implements ApiProvider {
       return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
     }
 
+    if (COHERE_V2_CHAT_MODELS.has(this.modelName)) {
+      return this.callV2ChatApi(prompt, config);
+    }
+
     const defaultParams = {
       chatHistory: [],
       connectors: [],
@@ -227,6 +323,110 @@ export class CohereChatCompletionProvider implements ApiProvider {
             .map((doc: { id: string; additionalProp: string }) => JSON.stringify(doc))
             .join('\n');
       }
+      return {
+        cached,
+        output,
+        tokenUsage,
+      };
+    } catch (error) {
+      logger.error(`API call error: ${error}`);
+      return { error: `API call error: ${error}` };
+    }
+  }
+
+  private async callV2ChatApi(
+    prompt: string,
+    config: CohereChatOptions,
+  ): Promise<ProviderResponse> {
+    const defaultParams = {
+      temperature: 0.3,
+      k: 0,
+      p: 0.75,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    };
+
+    const { parsedPrompt, promptParams } = parseV2Prompt(prompt);
+
+    const params: Record<string, any> = { ...defaultParams, ...config, ...promptParams };
+    const configError = getV2ConfigError(params);
+    if (configError) {
+      return { error: configError };
+    }
+
+    const {
+      apiKey: _apiKey,
+      basePath: _basePath,
+      linkedTargetId: _linkedTargetId,
+      modelName: _modelName,
+      chatHistory: _chatHistory,
+      chat_history: _chatHistoryFromPrompt,
+      message: _message,
+      messages: _messages,
+      preamble: _preamble,
+      preamble_override: _preambleOverride,
+      connectors: _connectors,
+      prompt_truncation: _promptTruncation,
+      search_queries_only: _searchQueriesOnly,
+      showDocuments: _showDocuments,
+      showSearchQueries: _showSearchQueries,
+      ...v2Params
+    } = params;
+
+    const messages = buildV2Messages(prompt, parsedPrompt, params);
+
+    if (messages.length === 0) {
+      return { error: 'Cohere v2 Chat API requires at least one message.' };
+    }
+
+    let data,
+      cached = false;
+    try {
+      ({ data, cached } = (await fetchWithCache(
+        'https://api.cohere.ai/v2/chat',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.apiKey}`,
+            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+          },
+          body: JSON.stringify({
+            ...v2Params,
+            model: this.modelName,
+            messages,
+          }),
+        },
+        getRequestTimeoutMs(),
+      )) as unknown as { data: any; cached: boolean });
+
+      const errorMessage =
+        typeof data?.message === 'string'
+          ? data.message
+          : typeof data?.error === 'string'
+            ? data.error
+            : data?.error?.message;
+      if (errorMessage) {
+        return { error: errorMessage };
+      }
+
+      const output = getV2TextContent(data);
+      if (output === undefined) {
+        return { error: 'Cohere v2 Chat API response did not contain text content.' };
+      }
+
+      const usage = data?.usage?.tokens ?? data?.usage?.billed_units ?? {};
+      const promptTokens = usage.input_tokens || 0;
+      const completionTokens = usage.output_tokens || 0;
+      const totalTokens = promptTokens + completionTokens;
+      const tokenUsage: TokenUsage = {
+        cached: cached ? totalTokens : 0,
+        total: totalTokens,
+        prompt: promptTokens,
+        completion: completionTokens,
+        numRequests: 1,
+      };
+
       return {
         cached,
         output,

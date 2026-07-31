@@ -377,10 +377,10 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessages[0]).toMatchObject({
       setup: {
         model: 'models/gemini-3.5-live-translate-preview',
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
         generationConfig: {
           responseModalities: ['AUDIO'],
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
           translationConfig: {
             targetLanguageCode: 'pl',
             echoTargetLanguage: true,
@@ -388,8 +388,8 @@ describe('GoogleLiveProvider', () => {
         },
       },
     });
-    expect(sentMessages[0].setup).not.toHaveProperty('inputAudioTranscription');
-    expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+    expect(sentMessages[0].setup.generationConfig).not.toHaveProperty('inputAudioTranscription');
+    expect(sentMessages[0].setup.generationConfig).not.toHaveProperty('outputAudioTranscription');
     expect(sentMessages.slice(1)).toEqual([
       {
         realtimeInput: {

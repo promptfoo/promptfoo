@@ -218,6 +218,134 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.video).toBeUndefined();
   });
 
+  it('preserves explicit sampling controls for Robotics ER 2', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'robot plan' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        temperature: 0.2,
+        topP: 0.9,
+        passthrough: {
+          generation_config: {
+            temperature: 0.4,
+            seed: 42,
+          },
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      temperature: 0.4,
+      top_p: 0.9,
+      seed: 42,
+    });
+  });
+
+  it('uses an Omni passthrough model for request formatting, output parsing, and billing', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-omni-override',
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+        usage: {
+          total_input_tokens: 100,
+          total_output_tokens: 600,
+          total_tokens: 700,
+          output_tokens_by_modality: [
+            { modality: 'text', tokens: 100 },
+            { modality: 'video', tokens: 500 },
+          ],
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        aspectRatio: '16:9',
+        passthrough: { model: 'gemini-omni-flash-preview' },
+      },
+    });
+
+    const result = await provider.callApi('Create a short robot demonstration.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      model: 'gemini-omni-flash-preview',
+      response_format: { type: 'video', aspect_ratio: '16:9' },
+    });
+    expect(result.video).toMatchObject({
+      id: 'interaction-omni-override',
+      model: 'gemini-omni-flash-preview',
+    });
+    expect(result.cost).toBeCloseTo((100 * 1.5 + 100 * 9 + 500 * 17.5) / 1e6, 12);
+  });
+
+  it('uses a Robotics passthrough model for tools, text output, and billing', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-robotics-override',
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'robot plan' }],
+          },
+        ],
+        usage: {
+          total_input_tokens: 1_000,
+          total_output_tokens: 500,
+          total_tokens: 1_500,
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          model: 'gemini-robotics-er-2-preview',
+          tools: [{ type: 'google_search' }],
+        },
+      },
+    });
+
+    const result = await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body).toMatchObject({
+      model: 'gemini-robotics-er-2-preview',
+      tools: [{ type: 'google_search' }],
+    });
+    expect(body).not.toHaveProperty('response_format');
+    expect(result).toMatchObject({
+      output: 'robot plan',
+      cost: 0.007,
+      metadata: { interactionId: 'interaction-robotics-override', status: 'completed' },
+    });
+    expect(result.video).toBeUndefined();
+  });
+
   it('rejects generateContent-style Robotics tools instead of silently dropping them', async () => {
     const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
       config: { apiKey: 'test-key', tools: [{ googleSearch: {} }] },
