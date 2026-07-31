@@ -118,8 +118,8 @@ Meta's Llama models are available through Vertex AI with the following versions:
 
 **Llama 4:**
 
-- `vertex:llama4-scout-instruct-maas` - Llama 4 Scout (17B active, 109B total with 16 experts) for retrieval and reasoning with 10M context
-- `vertex:llama4-maverick-instruct-maas` - Llama 4 Maverick (17B active, 400B total with 128 experts) with 1M context, natively multimodal
+- `vertex:llama-4-scout-17b-16e-instruct-maas` - Llama 4 Scout with a 1,310,720-token context window
+- `vertex:llama-4-maverick-17b-128e-instruct-maas` - Llama 4 Maverick with a 524,288-token context window
 
 **Llama 3.3:**
 
@@ -136,7 +136,9 @@ Meta's Llama models are available through Vertex AI with the following versions:
 - `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B
 - `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B
 
-Note: All Llama models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal with support for both text and image inputs.
+Llama 3 models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal but do not support Llama Guard.
+
+See [Google's Llama model documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama) for current model IDs, regions, and quotas.
 
 #### Llama Configuration Example
 
@@ -144,7 +146,7 @@ Note: All Llama models support built-in safety features through Llama Guard. Lla
 providers:
   - id: vertex:llama-3.3-70b-instruct-maas
     config:
-      region: us-central1 # Llama models are only available in this region
+      region: us-central1 # Llama 3 models use this region
       temperature: 0.7
       maxOutputTokens: 1024
       llamaConfig:
@@ -152,17 +154,14 @@ providers:
           enabled: true # Llama Guard is enabled by default
           llama_guard_settings: {} # Optional custom settings
 
-  - id: vertex:llama4-scout-instruct-maas
+  - id: vertex:llama-4-scout-17b-16e-instruct-maas
     config:
-      region: us-central1
+      region: us-east5 # Llama 4 models use this region
       temperature: 0.7
       maxOutputTokens: 2048
-      llamaConfig:
-        safetySettings:
-          enabled: true
 ```
 
-By default, Llama models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
+By default, supported Llama 3 models use Llama Guard for content safety. You can disable it by setting `enabled: false`, but this is not recommended for production use.
 
 ### Gemma Models (Open Models)
 
@@ -628,16 +627,16 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 ### Llama Model Features
 
 - Support for text and vision tasks (Llama 3.2 and all Llama 4 models)
-- Built-in safety with Llama Guard (enabled by default)
-- Available in `us-central1` region
+- Built-in safety with Llama Guard for supported Llama 3 models (enabled by default)
+- Llama 4 models are available in `us-east5`; Llama 3 models are available in `us-central1`
 - Quota limits vary by model version
 - Requires specific endpoint format for API calls
 - Only supports unary (non-streaming) responses in promptfoo
 
 #### Llama Model Considerations
 
-- **Regional Availability**: Llama models are available only in `us-central1` region
-- **Guard Integration**: All Llama models use Llama Guard for content safety by default
+- **Regional Availability**: Llama 4 models use `us-east5`; Llama 3 models use `us-central1`
+- **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
 - **Specific Endpoint**: Uses a different API endpoint than other Vertex models
 - **Model Status**: Most models are in Preview state, with Llama 3.1 405B being Generally Available (GA)
 - **Vision Support**: Llama 3.2 90B and all Llama 4 models support image input
