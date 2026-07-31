@@ -638,7 +638,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - **Regional Availability**: Llama 4 models use `us-east5`; Llama 3 models use `us-central1`
 - **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
 - **Specific Endpoint**: Uses a different API endpoint than other Vertex models
-- **Model Status**: Most models are in Preview state, with Llama 3.1 405B being Generally Available (GA)
+- **Model Status**: Llama 4 Scout and Maverick are Generally Available (GA). Google [deprecated `llama-3.3-70b-instruct-maas`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on July 21, 2026 and schedules its retirement for October 21, 2026
 - **Vision Support**: Llama 3.2 90B and all Llama 4 models support image input
 
 ### Claude Model Features
