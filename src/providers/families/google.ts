@@ -7,7 +7,7 @@ import type { ProviderFactory } from '../registryTypes';
 export const googleProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
-    create: async (providerPath, providerOptions) => {
+    create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
       const modelName =
@@ -26,7 +26,11 @@ export const googleProviderFactories: ProviderFactory[] = [
         return new GoogleVideoProvider(modelName, {
           ...providerOptions,
           id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
+          config: {
+            ...providerOptions.config,
+            vertexai: true,
+            ...(context.basePath && { basePath: context.basePath }),
+          },
         });
       }
       const { VertexChatProvider, VertexEmbeddingProvider } = await import('../google/vertex');
@@ -43,7 +47,7 @@ export const googleProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) =>
       providerPath.startsWith('google:') || providerPath.startsWith('palm:'),
-    create: async (providerPath, providerOptions) => {
+    create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
 
       if (splits.length >= 3) {
@@ -64,6 +68,10 @@ export const googleProviderFactories: ProviderFactory[] = [
           return new GoogleVideoProvider(modelName, {
             ...providerOptions,
             id: providerPath,
+            config: {
+              ...providerOptions.config,
+              ...(context.basePath && { basePath: context.basePath }),
+            },
           });
         } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
           if (!modelName) {

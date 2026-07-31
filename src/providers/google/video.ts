@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 
 import { storeBlob } from '../../blobs';
-import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
@@ -287,7 +286,10 @@ export class GoogleVideoProvider implements ApiProvider {
    */
   private loadImageData(imagePath: string): { data?: string; error?: string } {
     if (imagePath.startsWith('file://')) {
-      const filePath = path.resolve(cliState.basePath || process.cwd(), imagePath.slice(7));
+      const filePath = path.resolve(
+        this.config.basePath || process.cwd(),
+        imagePath.slice('file://'.length),
+      );
       if (!fs.existsSync(filePath)) {
         return { error: `Image file not found: ${filePath}` };
       }
@@ -301,7 +303,10 @@ export class GoogleVideoProvider implements ApiProvider {
    */
   private loadVideoData(videoPath: string): { data?: string; error?: string } {
     if (videoPath.startsWith('file://')) {
-      const filePath = path.resolve(cliState.basePath || process.cwd(), videoPath.slice(7));
+      const filePath = path.resolve(
+        this.config.basePath || process.cwd(),
+        videoPath.slice('file://'.length),
+      );
       if (!fs.existsSync(filePath)) {
         return { error: `Video file not found: ${filePath}` };
       }

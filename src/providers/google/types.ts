@@ -570,6 +570,9 @@ export interface GoogleVideoReferenceImage {
  * Configuration options for Google video generation (Veo)
  */
 export interface GoogleVideoOptions {
+  /** Base directory for resolving relative file:// media paths */
+  basePath?: string;
+
   // Model selection
   model?: GoogleVideoModel;
 

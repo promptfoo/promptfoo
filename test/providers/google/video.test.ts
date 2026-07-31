@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import cliState from '../../../src/cliState';
 import {
   GoogleVideoProvider,
   generateVideoCacheKey,
@@ -126,7 +125,6 @@ describe('GoogleVideoProvider', () => {
     // Reset fs mocks to prevent leakage between tests
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
-    cliState.basePath = undefined;
   });
 
   describe('constructor and id', () => {
@@ -196,11 +194,13 @@ describe('GoogleVideoProvider', () => {
       ['loadImageData', 'image', 'file://assets/start-frame.png'],
       ['loadVideoData', 'video', 'file://assets/veo-input.mp4'],
     ])('resolves %s for a %s relative to the config directory', (method, _kind, fileRef) => {
-      cliState.basePath = path.join('/tmp', 'google-video');
-      const expectedPath = path.join(cliState.basePath, fileRef.slice('file://'.length));
+      const basePath = path.join('/tmp', 'google-video');
+      const expectedPath = path.join(basePath, fileRef.slice('file://'.length));
       vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('media-data'));
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: { basePath },
+      });
 
       expect((provider as any)[method](fileRef)).toEqual({
         data: Buffer.from('media-data').toString('base64'),

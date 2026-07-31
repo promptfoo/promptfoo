@@ -1551,6 +1551,7 @@ describe('Provider Registry', () => {
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       expect((provider as any).config?.vertexai).toBe(true);
+      expect((provider as any).config?.basePath).toBe(bareContext.basePath);
       expect(provider.id()).toBe(providerPath);
     });
 
@@ -1572,6 +1573,7 @@ describe('Provider Registry', () => {
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       // Unlike the vertex:video branch, the google:video branch must not inject vertexai.
       expect((provider as any).config?.vertexai).toBeUndefined();
+      expect((provider as any).config?.basePath).toBe(bareContext.basePath);
       expect(provider.id()).toBe(providerPath);
     });
 
