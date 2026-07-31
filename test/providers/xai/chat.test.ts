@@ -585,6 +585,67 @@ describe('xAI Chat Provider', () => {
       expect(regularResult.body.max_completion_tokens).toBe(444);
     });
 
+    it('uses the effective passthrough model for sampling and reasoning filters', async () => {
+      const regularProvider = createXAIProvider('xai:grok-2') as any;
+      const restrictedResult = await regularProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-4.5',
+              reasoning_effort: 'medium',
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+            },
+          },
+        },
+      });
+
+      expect(restrictedResult.body.model).toBe('grok-4.5');
+      expect(restrictedResult.body.reasoning_effort).toBe('medium');
+      expect(restrictedResult.body.presence_penalty).toBeUndefined();
+      expect(restrictedResult.body.frequency_penalty).toBeUndefined();
+      expect(restrictedResult.body.stop).toBeUndefined();
+
+      const restrictedProvider = createXAIProvider('xai:grok-4.5') as any;
+      const regularResult = await restrictedProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-2',
+              reasoning_effort: 'medium',
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+            },
+          },
+        },
+      });
+
+      expect(regularResult.body.model).toBe('grok-2');
+      expect(regularResult.body.reasoning_effort).toBeUndefined();
+      expect(regularResult.body.presence_penalty).toBe(0.5);
+      expect(regularResult.body.frequency_penalty).toBe(0.7);
+      expect(regularResult.body.stop).toEqual(['\\n']);
+    });
+
+    it('validates Grok 4.5 reasoning effort against the effective passthrough model', async () => {
+      const provider = createXAIProvider('xai:grok-2') as any;
+
+      await expect(
+        provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              passthrough: {
+                model: 'grok-4.5',
+                reasoning_effort: 'none',
+              },
+            },
+          },
+        }),
+      ).rejects.toThrow(/xAI model grok-4\.5 does not support reasoning_effort "none"/);
+    });
+
     it('filters unsupported parameters for Grok 4 Fast models', async () => {
       const provider = createXAIProvider('xai:grok-4-fast-reasoning') as any;
       const mockContext = {

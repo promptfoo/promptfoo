@@ -977,7 +977,11 @@ export const providerMap: ProviderFactory[] = [
           'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
         );
       }
-      if (modelType === 'chat' && requestedApiModel === 'gpt-transcribe') {
+      if (
+        requestedApiModel === 'gpt-transcribe' &&
+        modelType !== 'gpt-transcribe' &&
+        modelType !== 'transcription'
+      ) {
         throw new Error(
           'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
         );

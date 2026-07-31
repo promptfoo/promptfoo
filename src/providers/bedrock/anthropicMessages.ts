@@ -63,6 +63,13 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
       ),
     );
   }
+
+  protected override supportsResponseCache(): boolean {
+    // Bedrock bearer tokens do not expose a stable non-secret tenant/account
+    // identifier. Disable this inherited response cache rather than persisting
+    // either the token or a token-derived fingerprint in the disk cache key.
+    return false;
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(

@@ -2,7 +2,6 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
-import { OpenAiTranscriptionProvider } from '../../src/providers/openai/transcription';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -680,11 +679,24 @@ describe('Provider Registry', () => {
         mockProviderOptions,
         mockContext,
       );
-      expect(provider).toBeInstanceOf(OpenAiTranscriptionProvider);
+      expect(provider.constructor.name).toBe('OpenAiTranscriptionProvider');
+      expect((provider as { modelName?: string }).modelName).toBe('gpt-transcribe');
 
-      await expect(
-        factory!.create('openai:chat:gpt-transcribe', mockProviderOptions, mockContext),
-      ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
+      for (const modelType of ['chat', 'responses', 'completion', 'embedding', 'embeddings']) {
+        await expect(
+          factory!.create(`openai:${modelType}:gpt-transcribe`, mockProviderOptions, mockContext),
+        ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
+      }
+
+      const explicitTranscriptionProvider = await factory!.create(
+        'openai:transcription:gpt-transcribe',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(explicitTranscriptionProvider.constructor.name).toBe('OpenAiTranscriptionProvider');
+      expect((explicitTranscriptionProvider as { modelName?: string }).modelName).toBe(
+        'gpt-transcribe',
+      );
 
       for (const path of [
         'openai:gpt-live-transcribe',

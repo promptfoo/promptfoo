@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache } from '../../../src/cache';
 import { setEnvOverridesProvider } from '../../../src/envOverrides';
@@ -125,6 +129,64 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(req.headers.get('authorization')).toBeNull();
     expect(req.headers.get('x-proxy-secret')).toBeNull();
     expect(req.headers.get('anthropic-version')).toBe('2023-06-01');
+  });
+
+  it('does not persist bearer-token-derived identifiers in the disk cache', async () => {
+    const cachePath = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-bedrock-cache-'));
+    const apiKey = 'bedrock-bearer-token-for-cache-regression';
+    const restoreDiskCacheEnv = mockProcessEnv({
+      PROMPTFOO_CACHE_ENABLED: 'true',
+      PROMPTFOO_CACHE_PATH: cachePath,
+      PROMPTFOO_CACHE_TYPE: 'disk',
+    });
+
+    try {
+      vi.resetModules();
+      const [
+        { enableCache, clearCache: clearDiskCache },
+        { getAnthropicAuthCacheNamespace },
+        { createBedrockAnthropicMessagesProvider: createDiskCacheProvider },
+      ] = await Promise.all([
+        import('../../../src/cache'),
+        import('../../../src/providers/anthropic/generic'),
+        import('../../../src/providers/bedrock/anthropicMessages'),
+      ]);
+      enableCache();
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            content: [{ type: 'text', text: 'uncached' }],
+            model: 'anthropic.claude-opus-5',
+            id: 'msg-disk-cache',
+            role: 'assistant',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            type: 'message',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      const provider = createDiskCacheProvider('anthropic.claude-opus-5', {
+        config: { region: 'us-east-1', apiKey },
+      });
+
+      await provider.callApi('hello');
+      await provider.callApi('hello');
+
+      const cacheFile = path.join(cachePath, 'cache.json');
+      const persistedCache = fs.existsSync(cacheFile) ? fs.readFileSync(cacheFile, 'utf8') : '';
+      expect(persistedCache).not.toContain(apiKey);
+      expect(persistedCache).not.toContain(getAnthropicAuthCacheNamespace(apiKey));
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      await clearDiskCache();
+    } finally {
+      restoreDiskCacheEnv();
+      fs.rmSync(cachePath, { force: true, recursive: true });
+      vi.resetModules();
+    }
   });
 
   it('suppresses both configured and process-level Anthropic custom headers', async () => {

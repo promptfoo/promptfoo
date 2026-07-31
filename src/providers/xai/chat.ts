@@ -693,7 +693,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     }
 
     // Filter out unsupported sampling controls for Grok-4-family models.
-    if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
+    if (GROK_4_MODELS.includes(effectiveModel)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
@@ -701,18 +701,21 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
     const reasoningEffort = result.body.reasoning_effort;
     if (
-      GROK_45_MODELS.has(this.modelName) &&
+      GROK_45_MODELS.has(effectiveModel) &&
       reasoningEffort !== undefined &&
       !['low', 'medium', 'high'].includes(reasoningEffort)
     ) {
       throw new Error(
-        `xAI model ${this.modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
+        `xAI model ${effectiveModel} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}. ` +
           'Use "low", "medium", or "high", or omit reasoning_effort to use the default "high".',
       );
     }
 
     // Filter reasoning_effort for models that don't support it
-    if (!this.supportsReasoningEffort() && result.body.reasoning_effort) {
+    if (
+      !GROK_REASONING_EFFORT_MODELS.includes(effectiveModel) &&
+      result.body.reasoning_effort !== undefined
+    ) {
       delete result.body.reasoning_effort;
     }
 

@@ -481,6 +481,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return headers;
   }
 
+  protected supportsResponseCache(): boolean {
+    return true;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -945,18 +949,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       headers['x-app'] = CLAUDE_CODE_X_APP;
     }
 
-    const cache = await getCache();
+    const shouldUseResponseCache =
+      this.supportsResponseCache() && isCacheEnabled() && config.mcp?.enabled !== true;
+    const cache = shouldUseResponseCache ? await getCache() : undefined;
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
-    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
-      {
-        ...cacheKeyParams,
-        ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
-      },
-    )}`;
-    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
+    const cacheKey = shouldUseResponseCache
+      ? `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+          {
+            ...cacheKeyParams,
+            ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
+          },
+        )}`
+      : undefined;
 
-    if (shouldUseResponseCache) {
+    if (cache && cacheKey) {
       // Try to get the cached response
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
@@ -1020,7 +1027,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       }
 
-      if (shouldUseResponseCache) {
+      if (cache && cacheKey) {
         try {
           await cache.set(cacheKey, JSON.stringify(resolvedMessage));
         } catch (err) {
