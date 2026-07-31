@@ -100,7 +100,7 @@ export function validateDuration(
   duration: number,
   config: Pick<
     GoogleVideoOptions,
-    'referenceImages' | 'extendVideoId' | 'sourceVideo' | 'resolution'
+    'referenceImages' | 'extendVideoId' | 'sourceVideo' | 'resolution' | 'vertexai'
   > = {},
 ): { valid: boolean; message?: string } {
   const isVeo2 = model.includes('veo-2');
@@ -117,14 +117,21 @@ export function validateDuration(
   const usesReferenceImages = Boolean(config.referenceImages?.length);
   const usesHighResolution = config.resolution === '1080p' || config.resolution === '4k';
 
-  if (model.includes('veo-3.1-lite') && (usesVideoExtension || usesReferenceImages)) {
+  const supportsVertexLiteExtension =
+    config.vertexai === true && model === 'veo-3.1-lite-generate-001';
+  if (
+    model.includes('veo-3.1-lite') &&
+    (usesReferenceImages || (usesVideoExtension && !supportsVertexLiteExtension))
+  ) {
     return {
       valid: false,
       message: 'Veo 3.1 Lite does not support video extension or reference images.',
     };
   }
 
-  if (duration !== 8 && (usesVideoExtension || usesReferenceImages || usesHighResolution)) {
+  const requiresEightSeconds =
+    usesVideoExtension || usesReferenceImages || (config.vertexai !== true && usesHighResolution);
+  if (duration !== 8 && requiresEightSeconds) {
     return {
       valid: false,
       message:
@@ -140,7 +147,7 @@ export function validateResolution(
   model: string,
   aspectRatio: string,
   resolution: string,
-  config: Pick<GoogleVideoOptions, 'extendVideoId' | 'sourceVideo'> = {},
+  config: Pick<GoogleVideoOptions, 'extendVideoId' | 'sourceVideo' | 'vertexai'> = {},
 ): { valid: boolean; message?: string } {
   if (!['720p', '1080p', '4k'].includes(resolution)) {
     return {
@@ -149,7 +156,11 @@ export function validateResolution(
     };
   }
 
-  if ((config.extendVideoId || config.sourceVideo) && resolution !== '720p') {
+  if (
+    config.vertexai !== true &&
+    (config.extendVideoId || config.sourceVideo) &&
+    resolution !== '720p'
+  ) {
     return {
       valid: false,
       message: `Video extension requires 720p resolution (received ${resolution}).`,

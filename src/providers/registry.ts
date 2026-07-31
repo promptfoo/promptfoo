@@ -86,7 +86,6 @@ import {
   assertOpenAiApiModel,
   assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
-  NON_CONVERSATIONAL_REALTIME_MODELS,
 } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
@@ -456,7 +455,12 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
-        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
+        // Azure path segments are user-chosen deployment names, not model IDs. Keep only the
+        // two legacy fail-fast cases here instead of applying OpenAI's model-ID routing set.
+        if (
+          deploymentName === 'gpt-realtime-whisper' ||
+          deploymentName === 'gpt-realtime-translate'
+        ) {
           throw new Error(
             deploymentName === 'gpt-realtime-whisper'
               ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'

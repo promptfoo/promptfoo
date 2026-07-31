@@ -569,6 +569,14 @@ describe('Provider Registry', () => {
       await expect(
         factory!.create('azure:realtime:gpt-realtime-translate', mockProviderOptions, mockContext),
       ).rejects.toThrow(/translation-only/);
+      for (const deploymentName of ['gpt-transcribe', 'gpt-live-transcribe']) {
+        const provider = await factory!.create(
+          `azure:realtime:${deploymentName}`,
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(provider).toBeDefined();
+      }
 
       const imageProvider = await factory!.create(
         'azure:image:mai-image-2-5',

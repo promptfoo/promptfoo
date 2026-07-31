@@ -298,6 +298,26 @@ describe('GoogleVideoProvider', () => {
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Veo 3.1 Lite');
     });
+
+    it('should allow shorter high-resolution videos on Vertex Veo 3.1', () => {
+      for (const duration of [4, 6] as const) {
+        expect(
+          validateDuration('veo-3.1-generate-001', duration, {
+            resolution: '1080p',
+            vertexai: true,
+          }),
+        ).toEqual({ valid: true });
+      }
+    });
+
+    it('should allow video extension on stable Vertex Veo 3.1 Lite', () => {
+      expect(
+        validateDuration('veo-3.1-lite-generate-001', 8, {
+          sourceVideo: 'projects/test/operations/123',
+          vertexai: true,
+        }),
+      ).toEqual({ valid: true });
+    });
   });
 
   describe('validateResolution', () => {
@@ -341,6 +361,18 @@ describe('GoogleVideoProvider', () => {
       const result = validateResolution('veo-3.1-generate-preview', '16:9', '1080p', config);
       expect(result.valid).toBe(false);
       expect(result.message).toContain('Video extension requires 720p');
+    });
+
+    it.each([
+      '1080p',
+      '4k',
+    ] as const)('should allow %s video extension on supported Vertex Veo 3.1 models', (resolution) => {
+      expect(
+        validateResolution('veo-3.1-generate-001', '16:9', resolution, {
+          extendVideoId: 'projects/test/operations/123',
+          vertexai: true,
+        }),
+      ).toEqual({ valid: true });
     });
   });
 
@@ -502,7 +534,9 @@ describe('GoogleVideoProvider', () => {
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
           ...config,
+          apiKey: 'test-api-key',
           durationSeconds: 6,
+          vertexai: false,
         },
       });
 
@@ -516,9 +550,11 @@ describe('GoogleVideoProvider', () => {
     it('should reject non-720p video extension before network I/O', async () => {
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
+          apiKey: 'test-api-key',
           durationSeconds: 8,
           extendVideoId: 'projects/test/operations/123',
           resolution: '1080p',
+          vertexai: false,
         },
       });
 
