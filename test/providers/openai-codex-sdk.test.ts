@@ -2921,6 +2921,29 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
       });
 
+      it('should calculate Bedrock cost for an amazon-bedrock model id', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'openai.gpt-5.6-sol',
+            model_provider: 'amazon-bedrock',
+          },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.04186875, 8);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
       it('should calculate gpt-5.6 cost when a custom Codex binary reports positive cache-write tokens', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {

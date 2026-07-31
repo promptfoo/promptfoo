@@ -2352,7 +2352,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       tokenUsage,
       cost: this.calculateCodexResponseCost(
         tokenUsage,
-        resolvedConfig.model,
+        this.getCodexBillingModelName(resolvedConfig),
         Boolean(resolvedConfig.codex_path_override),
       ),
       metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
@@ -2410,7 +2410,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // SDK 0.146 fills an omitted cache-write field with zero. That is reliable for its bundled
     // Codex binary, but a custom/older binary may omit the field (or have it normalized to zero)
     // despite performing cache writes. A positive value reported by the binary is still usable.
-    if (usesCustomCodexBinary && model?.startsWith('gpt-5.6')) {
+    const normalizedModel = model?.replace(/^bedrock:/, '');
+    if (usesCustomCodexBinary && normalizedModel?.startsWith('gpt-5.6')) {
       const cacheWriteTokens = tokenUsage?.completionDetails?.cacheCreationInputTokens;
       if (
         typeof cacheWriteTokens !== 'number' ||
@@ -2421,6 +2422,22 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
     return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
+  }
+
+  private getCodexBillingModelName(config: OpenAICodexSDKConfig): string | undefined {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const modelProvider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+
+    if (
+      modelProvider?.trim().toLowerCase() === 'amazon-bedrock' &&
+      config.model?.startsWith('openai.')
+    ) {
+      return `bedrock:${config.model.slice('openai.'.length)}`;
+    }
+
+    return config.model;
   }
 
   private async cleanupCodexTurn(

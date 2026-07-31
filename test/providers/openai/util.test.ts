@@ -5,6 +5,7 @@ import {
   calculateOpenAICost,
   failApiCall,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
@@ -18,6 +19,29 @@ import {
 } from '../../../src/providers/openai/util';
 
 vi.mock('../../../src/cache');
+
+describe('getOpenAiEffectiveServiceTier', () => {
+  it('preserves layer precedence when prompt passthrough replaces provider passthrough', () => {
+    const providerConfig = {
+      service_tier: 'default',
+      passthrough: { service_tier: 'priority' },
+    } as const;
+
+    expect(getOpenAiEffectiveServiceTier(providerConfig)).toBe('priority');
+    expect(getOpenAiEffectiveServiceTier(providerConfig, { service_tier: 'flex' })).toBe('flex');
+    expect(
+      getOpenAiEffectiveServiceTier(providerConfig, {
+        service_tier: 'flex',
+        passthrough: { service_tier: 'fast' },
+      }),
+    ).toBe('fast');
+    expect(
+      getOpenAiEffectiveServiceTier(providerConfig, {
+        passthrough: { model: 'gpt-5.6-luna' },
+      }),
+    ).toBe('default');
+  });
+});
 
 const retiredChatModelIds = [
   'chatgpt-4o-latest',

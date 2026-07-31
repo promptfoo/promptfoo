@@ -568,6 +568,9 @@ export function getOpenAiEffectiveServiceTier<TServiceTier extends string | null
   if (promptConfig?.service_tier !== undefined) {
     return promptConfig.service_tier;
   }
+  if (promptConfig && Object.prototype.hasOwnProperty.call(promptConfig, 'passthrough')) {
+    return providerConfig.service_tier;
+  }
   return providerPassthroughServiceTier === undefined
     ? providerConfig.service_tier
     : providerPassthroughServiceTier;
