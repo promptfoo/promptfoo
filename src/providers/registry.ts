@@ -84,7 +84,6 @@ import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
 import {
   assertOpenAiApiModel,
-  assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
   NON_CONVERSATIONAL_REALTIME_MODELS,
 } from './openai/util';
@@ -141,6 +140,15 @@ const OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS = new Set([
 ]);
 
 const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'speech', 'tts', 'video']);
+const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set(['chat', 'responses']);
+const OPENAI_FIXED_MODEL_ROUTES = new Set([
+  'completion',
+  'embedding',
+  'embeddings',
+  'moderation',
+  'realtime',
+  'transcription',
+]);
 
 function getEffectiveOpenAiApiModel(
   modelType: string,
@@ -148,13 +156,32 @@ function getEffectiveOpenAiApiModel(
   configuredModel: string | undefined,
   passthroughModel: unknown,
 ): string {
-  const requestedModel = modelName || configuredModel || modelType;
-  const selectedModel =
-    OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES.has(modelType) && configuredModel
-      ? configuredModel
-      : requestedModel;
+  if (OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES.has(modelType)) {
+    return configuredModel || modelName || modelType;
+  }
 
-  return typeof passthroughModel === 'string' ? passthroughModel : selectedModel;
+  if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
+    return modelName || configuredModel || modelType;
+  }
+
+  const retiredRoute = getRetiredOpenAiModelRoute(modelType);
+  const bareModelUsesPassthrough =
+    !modelName &&
+    (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType) ||
+      OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
+      OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
+      retiredRoute === 'chat' ||
+      retiredRoute === 'responses' ||
+      (!retiredRoute &&
+        !OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) &&
+        !OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) &&
+        !OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)));
+
+  const routeUsesPassthrough =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || bareModelUsesPassthrough;
+  return routeUsesPassthrough && typeof passthroughModel === 'string'
+    ? passthroughModel
+    : modelName || configuredModel || modelType;
 }
 
 export const providerMap: ProviderFactory[] = [
@@ -950,6 +977,10 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+      const assistantModel =
+        modelType === 'assistant' && typeof providerOptions.config?.modelName === 'string'
+          ? providerOptions.config.modelName.trim() || undefined
+          : undefined;
       const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
       const effectiveApiModel = getEffectiveOpenAiApiModel(
         modelType,
@@ -958,7 +989,6 @@ export const providerMap: ProviderFactory[] = [
         passthrough?.model,
       );
       const allowTranscription = modelType === 'gpt-transcribe' || modelType === 'transcription';
-      assertOpenAiModelEndpointCompatibility(effectiveApiModel, { allowTranscription });
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
@@ -998,7 +1028,10 @@ export const providerMap: ProviderFactory[] = [
           env: context.env,
         });
       }
-      if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
+      if (
+        !['agents', 'chatkit'].includes(modelType) &&
+        (modelType !== 'assistant' || assistantModel)
+      ) {
         const configApiHost = providerOptions.config?.apiHost;
         const envApiHost = providerOptions.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
         const apiUrl = configApiHost
@@ -1010,7 +1043,7 @@ export const providerMap: ProviderFactory[] = [
             getEnvString('OPENAI_API_BASE_URL') ||
             getEnvString('OPENAI_BASE_URL') ||
             'https://api.openai.com/v1';
-        assertOpenAiApiModel(effectiveApiModel, apiUrl, { allowTranscription });
+        assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(

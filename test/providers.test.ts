@@ -652,6 +652,51 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
+    ['openai:completion:gpt-3.5-turbo-instruct', {}],
+    ['openai:embedding:text-embedding-3-large', {}],
+    ['openai:moderation:omni-moderation-latest', {}],
+    ['openai:realtime:gpt-realtime-2.1', {}],
+    ['openai:transcription:gpt-transcribe', {}],
+    ['openai:image:gpt-image-1.5', { model: 'gpt-image-1.5' }],
+    ['openai:video:sora-2', { model: 'sora-2' }],
+    ['openai:tts:gpt-4o-mini-tts', { model: 'gpt-4o-mini-tts' }],
+  ])('should ignore a passthrough model that route %s does not send', async (route, config) => {
+    await expect(
+      loadApiProvider(route, {
+        options: {
+          config: {
+            ...config,
+            passthrough: { model: 'gpt-5.3-codex-spark' },
+          },
+        },
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it.each([
+    ['openai:moderation:text-moderation-latest', 'omni-moderation-latest'],
+    ['openai:realtime:gpt-realtime-mini-2025-10-06', 'gpt-realtime-2.1'],
+  ])('should validate the retired model actually sent by %s instead of its unused passthrough model', async (route, passthroughModel) => {
+    await expect(
+      loadApiProvider(route, {
+        options: { config: { passthrough: { model: passthroughModel } } },
+      }),
+    ).rejects.toThrow('has been retired');
+  });
+
+  it.each([
+    'gpt-transcribe',
+    'gpt-live-transcribe',
+    'gpt-5.3-codex-spark',
+  ])('should validate an OpenAI Assistant modelName override before sending %s', async (modelName) => {
+    await expect(
+      loadApiProvider('openai:assistant:asst_123', {
+        options: { config: { modelName } },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it.each([
     ['openai:chat:gpt-5.3-codex-spark', {}, OpenAiChatCompletionProvider, 'gpt-5.3-codex-spark'],
     [
       'openai:responses:gpt-4.1',

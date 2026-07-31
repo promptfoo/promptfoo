@@ -2013,11 +2013,14 @@ Third line`;
       );
     });
 
-    it('should include service tier when specified', async () => {
+    it.each([
+      'priority',
+      'reserved',
+    ] as const)('should include %s service tier when specified', async (serviceTier) => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
-          serviceTier: { type: 'priority' },
+          serviceTier: { type: serviceTier },
         },
       });
 
@@ -2030,7 +2033,7 @@ Third line`;
       )) as unknown as MockBedrockModule;
       expect(ConverseCommand).toHaveBeenCalledWith(
         expect.objectContaining({
-          serviceTier: { type: 'priority' },
+          serviceTier: { type: serviceTier },
         }),
       );
     });

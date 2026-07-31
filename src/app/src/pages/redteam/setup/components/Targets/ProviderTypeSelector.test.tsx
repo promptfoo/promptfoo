@@ -1142,7 +1142,7 @@ describe('ProviderTypeSelector', () => {
       ['OpenRouter', 'openrouter', 'openrouter:openai/gpt-5.6-sol', {}],
       ['Fireworks AI', 'fireworks', 'fireworks:accounts/fireworks/models/gpt-oss-120b', {}],
       ['Cerebras', 'cerebras', 'cerebras:gpt-oss-120b', {}],
-      ['Ollama', 'ollama', 'ollama:llama4:latest', {}],
+      ['Ollama', 'ollama', 'ollama:llama4:scout', {}],
     ])('should use the current %s default model', async (label, providerType, expectedId, expectedConfig) => {
       const user = userEvent.setup();
       const mockSetProvider = vi.fn();

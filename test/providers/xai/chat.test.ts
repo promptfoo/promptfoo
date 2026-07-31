@@ -1325,6 +1325,36 @@ describe('xAI Chat Provider', () => {
       expect(typeof result.cost).toBe('number');
     });
 
+    it('uses the effective passthrough model for fallback pricing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Build response' } }],
+          usage: {
+            prompt_tokens: 100_000,
+            completion_tokens: 100_000,
+            total_tokens: 200_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.3', {
+        config: { apiKey: 'test-key' } as any,
+      });
+      const result = await provider.callApi('test prompt', {
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: { passthrough: { model: 'grok-build-0.1' } },
+        },
+        vars: {},
+      });
+
+      expect(result.cost).toBeCloseTo(0.3, 10);
+    });
+
     it('should apply cache-read pricing from normalized token usage', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {

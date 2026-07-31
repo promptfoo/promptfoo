@@ -1,6 +1,8 @@
 import * as fs from 'fs';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   GoogleVideoProvider,
   generateVideoCacheKey,
@@ -124,6 +126,7 @@ describe('GoogleVideoProvider', () => {
     // Reset fs mocks to prevent leakage between tests
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
+    cliState.basePath = undefined;
   });
 
   describe('constructor and id', () => {
@@ -138,6 +141,71 @@ describe('GoogleVideoProvider', () => {
         id: 'my-custom-id',
       });
       expect(provider.id()).toBe('my-custom-id');
+    });
+  });
+
+  describe('request model selection', () => {
+    it('uses config.model in the Vertex create endpoint', async () => {
+      mockRequest.mockResolvedValueOnce({ data: { name: 'test-op', done: false } });
+      const provider = new GoogleVideoProvider('veo-3.1-lite-generate-preview', {
+        config: {
+          model: 'veo-3.1-generate-preview',
+          projectId: 'test-project',
+        },
+      });
+
+      await (provider as any).createVertexVideoJob('test prompt', provider.config);
+
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('/models/veo-3.1-generate-preview:predictLongRunning'),
+        }),
+      );
+    });
+
+    it('uses config.model in the Google AI Studio create endpoint', async () => {
+      mockFetchWithTimeout.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ name: 'models/veo-3.1-generate-preview/operations/test-op' }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      );
+      const provider = new GoogleVideoProvider('veo-3.1-lite-generate-preview', {
+        config: {
+          apiKey: 'test-api-key',
+          model: 'veo-3.1-generate-preview',
+          vertexai: false,
+        },
+      });
+
+      await (provider as any).createAiStudioVideoJob('test prompt', provider.config);
+
+      expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+        expect.stringContaining('/models/veo-3.1-generate-preview:predictLongRunning'),
+        expect.any(Object),
+        expect.any(Number),
+      );
+    });
+  });
+
+  describe('config-relative media paths', () => {
+    it.each([
+      ['loadImageData', 'image', 'file://assets/start-frame.png'],
+      ['loadVideoData', 'video', 'file://assets/veo-input.mp4'],
+    ])('resolves %s for a %s relative to the config directory', (method, _kind, fileRef) => {
+      cliState.basePath = path.join('/tmp', 'google-video');
+      const expectedPath = path.join(cliState.basePath, fileRef.slice('file://'.length));
+      vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
+      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('media-data'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
+
+      expect((provider as any)[method](fileRef)).toEqual({
+        data: Buffer.from('media-data').toString('base64'),
+      });
+      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
   });
 

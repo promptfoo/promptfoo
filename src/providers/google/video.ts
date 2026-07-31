@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 import { storeBlob } from '../../blobs';
+import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
@@ -253,10 +255,13 @@ export class GoogleVideoProvider implements ApiProvider {
     return client;
   }
 
-  private async getVertexEndpoint(action: string = 'predictLongRunning'): Promise<string> {
+  private async getVertexEndpoint(
+    action: string = 'predictLongRunning',
+    model: string = this.modelName,
+  ): Promise<string> {
     const location = this.getLocation();
     const projectId = await this.getProjectId();
-    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
+    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${action}`;
   }
 
   private getAiStudioEndpoint(pathSuffix: string): string {
@@ -282,7 +287,7 @@ export class GoogleVideoProvider implements ApiProvider {
    */
   private loadImageData(imagePath: string): { data?: string; error?: string } {
     if (imagePath.startsWith('file://')) {
-      const filePath = imagePath.slice(7);
+      const filePath = path.resolve(cliState.basePath || process.cwd(), imagePath.slice(7));
       if (!fs.existsSync(filePath)) {
         return { error: `Image file not found: ${filePath}` };
       }
@@ -296,7 +301,7 @@ export class GoogleVideoProvider implements ApiProvider {
    */
   private loadVideoData(videoPath: string): { data?: string; error?: string } {
     if (videoPath.startsWith('file://')) {
-      const filePath = videoPath.slice(7);
+      const filePath = path.resolve(cliState.basePath || process.cwd(), videoPath.slice(7));
       if (!fs.existsSync(filePath)) {
         return { error: `Video file not found: ${filePath}` };
       }
@@ -506,7 +511,8 @@ export class GoogleVideoProvider implements ApiProvider {
     prompt: string,
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
-    const url = await this.getVertexEndpoint('predictLongRunning');
+    const model = config.model || this.modelName;
+    const url = await this.getVertexEndpoint('predictLongRunning', model);
     const { body, error: bodyError } = this.buildVertexRequestBody(prompt, config);
     if (bodyError || !body) {
       return { error: bodyError || 'Failed to build Vertex Veo request' };
@@ -514,7 +520,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     try {
       const client = await this.getClientWithCredentials();
-      logger.debug('[Google Video] Creating video job', { url, model: this.modelName });
+      logger.debug('[Google Video] Creating video job', { url, model });
 
       const response = await client.request({
         url,
@@ -549,11 +555,12 @@ export class GoogleVideoProvider implements ApiProvider {
 
     try {
       const headers = await this.getAiStudioHeaders(config);
-      const url = this.getAiStudioEndpoint(`models/${this.modelName}:predictLongRunning`);
+      const model = config.model || this.modelName;
+      const url = this.getAiStudioEndpoint(`models/${model}:predictLongRunning`);
 
       logger.debug('[Google Video] Creating video job', {
         url,
-        model: this.modelName,
+        model,
         transport: 'google-ai-studio',
       });
 
@@ -596,7 +603,7 @@ export class GoogleVideoProvider implements ApiProvider {
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     if (this.isVertexMode(config)) {
-      return this.pollVertexOperationStatus(operationName, pollIntervalMs, maxPollTimeMs);
+      return this.pollVertexOperationStatus(operationName, pollIntervalMs, maxPollTimeMs, config);
     }
 
     return this.pollAiStudioOperationStatus(operationName, pollIntervalMs, maxPollTimeMs, config);
@@ -606,6 +613,7 @@ export class GoogleVideoProvider implements ApiProvider {
     operationName: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const startTime = Date.now();
     const location = this.getLocation();
@@ -613,7 +621,8 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Veo uses fetchPredictOperation endpoint for polling (POST request)
     // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
-    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:fetchPredictOperation`;
+    const model = config.model || this.modelName;
+    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:fetchPredictOperation`;
 
     logger.debug(`[Google Video] Polling operation via fetchPredictOperation: ${url}`);
 

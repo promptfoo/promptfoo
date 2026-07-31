@@ -4,7 +4,7 @@ import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { appendOpenAiApiPath, RETIRED_OPENAI_MODEL_IDS } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel, RETIRED_OPENAI_MODEL_IDS } from './util';
 
 import type {
   ApiModerationProvider,
@@ -234,6 +234,7 @@ export class OpenAiModerationProvider
     options: { config?: OpenAIModerationConfig; id?: string; env?: any } = {},
   ) {
     super(modelName, options);
+    assertOpenAiApiModel(modelName, this.getApiUrl(), { allowRetired: true });
     if (!OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI moderation model: ${modelName}`);
     }

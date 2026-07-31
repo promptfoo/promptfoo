@@ -7,6 +7,7 @@ import {
 } from './mantle';
 
 import type { ProviderOptions } from '../../types/providers';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 type BedrockOpenAiResponsesBodyContext = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[1];
 type BedrockOpenAiResponsesCallApiOptions = Parameters<OpenAiResponsesProvider['getOpenAiBody']>[2];
@@ -84,8 +85,12 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
    * Keep Bedrock GPT-5.6 billing distinct even when `apiBaseUrl` points to a customer proxy.
    * Older Bedrock-hosted OpenAI models still use the first-party OpenAI rate table.
    */
-  protected getBillingModelName(): string {
-    const modelName = this.getCapabilityModelName();
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const modelName =
+      typeof passthroughModel === 'string'
+        ? passthroughModel.replace(/^openai\./, '')
+        : this.getCapabilityModelName();
     return /^gpt-5\.6(?:-|$)/.test(modelName) ? `bedrock:${modelName}` : modelName;
   }
 

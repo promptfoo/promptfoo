@@ -89,6 +89,18 @@ afterAll(() => {
 });
 
 describe('OpenAiTranscriptionProvider', () => {
+  it.each([
+    'gpt-live-transcribe',
+    'gpt-5.3-codex-spark',
+  ])('rejects unsupported first-party model %s before a direct request', (modelName) => {
+    expect(
+      () =>
+        new OpenAiTranscriptionProvider(modelName, {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow();
+  });
+
   const mockTranscriptionResponse = {
     data: {
       task: 'transcribe',

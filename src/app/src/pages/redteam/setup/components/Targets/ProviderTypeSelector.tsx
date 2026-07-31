@@ -696,7 +696,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'ollama') {
       setProvider(
         {
-          id: 'ollama:llama4:latest',
+          id: 'ollama:llama4:scout',
           config: {},
           label: currentLabel,
         },

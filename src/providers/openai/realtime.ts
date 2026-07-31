@@ -6,6 +6,7 @@ import { hasHeaderOverride, OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
+  assertOpenAiApiModel,
   NON_CONVERSATIONAL_REALTIME_MODELS,
   OPENAI_REALTIME_MODELS,
 } from './util';
@@ -518,6 +519,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+    assertOpenAiApiModel(modelName, this.getApiUrl(), { allowRetired: true });
 
     // Enable maintainContext by default
     if (this.config.maintainContext === undefined) {

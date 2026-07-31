@@ -43,6 +43,15 @@ describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
   const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+  it('rejects a Codex-only model before a direct Realtime request', () => {
+    expect(
+      () =>
+        new OpenAiRealtimeProvider('gpt-5.3-codex-spark', {
+          config: { apiKey: 'test-key' },
+        }),
+    ).toThrow('only available through openai:codex-sdk');
+  });
   const originalCustomRealtimeApiKey = process.env.CUSTOM_REALTIME_API_KEY;
   const originalOpenAiApiBaseUrl = process.env.OPENAI_API_BASE_URL;
   const originalOpenAiBaseUrl = process.env.OPENAI_BASE_URL;

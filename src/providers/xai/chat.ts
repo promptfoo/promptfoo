@@ -785,11 +785,13 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       | (NonNullable<OpenAiChatCompletionCostData['usage']> & { cost_in_usd_ticks?: number })
       | undefined;
     const reportedCost = hasXAICostOverrides(xaiConfig) ? undefined : getXAICostInUsd(usage);
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
 
     return (
       reportedCost ??
       calculateXAICost(
-        this.modelName,
+        effectiveModel,
         xaiConfig,
         usage?.prompt_tokens,
         usage?.completion_tokens,

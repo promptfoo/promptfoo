@@ -6,7 +6,12 @@ import logger from '../../logger';
 import { isAbortError } from '../../util/fetch/errors';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { appendOpenAiApiPath, getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  getTokenUsage,
+  OPENAI_TRANSCRIPTION_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -59,6 +64,10 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+    assertOpenAiApiModel(modelName, this.getApiUrl(), {
+      allowRetired: true,
+      allowTranscription: true,
+    });
   }
 
   id(): string {

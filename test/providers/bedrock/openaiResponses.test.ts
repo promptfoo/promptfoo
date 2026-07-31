@@ -329,6 +329,31 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.cost).toBeCloseTo(0.032, 10);
     });
 
+    it('uses the effective passthrough model for Bedrock token billing', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          passthrough: { model: 'openai.gpt-5.6-luna' },
+        },
+      });
+      const request = await provider.getOpenAiBody('hello');
+      const result = (provider as any).applyBilling(
+        {},
+        {
+          usage: {
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        },
+        request.config,
+        false,
+      );
+
+      expect(request.body.model).toBe('openai.gpt-5.6-luna');
+      expect(result.cost).toBeCloseTo(7.7, 10);
+    });
+
     it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
