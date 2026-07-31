@@ -346,10 +346,23 @@ export class CohereChatCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
-    const config = {
+    const promptConfig = context?.prompt?.config as CohereChatOptions | undefined;
+    const config: CohereChatOptions = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    if (COHERE_V2_CHAT_MODELS.has(this.modelName)) {
+      config.preamble =
+        promptConfig?.preamble ??
+        promptConfig?.preamble_override ??
+        this.config.preamble ??
+        this.config.preamble_override;
+      config.chat_history =
+        promptConfig?.chat_history ??
+        promptConfig?.chatHistory ??
+        this.config.chat_history ??
+        this.config.chatHistory;
+    }
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
@@ -498,7 +511,21 @@ export class CohereChatCompletionProvider implements ApiProvider {
 
     const { parsedPrompt, promptParams } = parseV2Prompt(prompt);
 
-    const params: Record<string, any> = { ...defaultParams, ...config, ...promptParams };
+    const params: Record<string, any> = {
+      ...defaultParams,
+      ...config,
+      ...promptParams,
+      preamble:
+        promptParams.preamble ??
+        promptParams.preamble_override ??
+        config.preamble ??
+        config.preamble_override,
+      chat_history:
+        promptParams.chat_history ??
+        promptParams.chatHistory ??
+        config.chat_history ??
+        config.chatHistory,
+    };
     const configError = getV2ConfigError(params);
     if (configError) {
       return { error: configError };

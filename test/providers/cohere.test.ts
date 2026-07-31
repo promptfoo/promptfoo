@@ -106,6 +106,73 @@ describe('CohereChatCompletionProvider', () => {
     expect(body).not.toHaveProperty('preamble_override');
   });
 
+  it('prefers prompt-config aliases over provider canonical v2 message fields', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        preamble: 'Provider system context.',
+        chat_history: [{ role: 'USER', message: 'Provider history' }],
+      },
+    });
+    await provider.callApi('Continue', {
+      prompt: {
+        config: {
+          preamble_override: 'Prompt system context.',
+          chatHistory: [{ role: 'USER', message: 'Prompt history' }],
+        },
+      },
+    } as any);
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body.messages).toEqual([
+      { role: 'system', content: 'Prompt system context.' },
+      { role: 'user', content: 'Prompt history' },
+      { role: 'user', content: 'Continue' },
+    ]);
+  });
+
+  it('prefers JSON prompt aliases over provider canonical v2 message fields', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        preamble: 'Provider system context.',
+        chat_history: [{ role: 'USER', message: 'Provider history' }],
+      },
+    });
+    await provider.callApi(
+      JSON.stringify({
+        message: 'Continue',
+        preamble_override: 'Prompt system context.',
+        chatHistory: [{ role: 'USER', message: 'Prompt history' }],
+      }),
+    );
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body.messages).toEqual([
+      { role: 'system', content: 'Prompt system context.' },
+      { role: 'user', content: 'Prompt history' },
+      { role: 'user', content: 'Continue' },
+    ]);
+  });
+
   it('uses a standard JSON message-array prompt as v2 messages', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
