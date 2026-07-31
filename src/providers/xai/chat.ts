@@ -1,4 +1,3 @@
-import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -713,15 +712,15 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       inheritedPassthrough?.max_completion_tokens ??
       resolvedConfig.max_tokens ??
       resolvedConfig.max_completion_tokens ??
-      result.body.max_completion_tokens ??
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
+      result.body.max_tokens ??
+      result.body.max_completion_tokens;
     const maxCompletionTokens =
       promptPassthrough?.max_completion_tokens ??
       promptConfig?.max_completion_tokens ??
       inheritedPassthrough?.max_completion_tokens ??
       resolvedConfig.max_completion_tokens ??
       result.body.max_completion_tokens ??
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
+      result.body.max_tokens;
     const effectiveModel =
       typeof result.body.model === 'string' ? result.body.model : this.modelName;
     if (GROK_BUILD_CHAT_MODELS.has(effectiveModel) && maxTokens !== undefined) {
