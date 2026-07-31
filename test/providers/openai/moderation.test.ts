@@ -41,6 +41,13 @@ describe('OpenAiModerationProvider', () => {
     });
   };
 
+  it('excludes shut-down text moderation models from the current registry', () => {
+    expect(OpenAiModerationProvider.MODERATION_MODEL_IDS).toEqual([
+      'omni-moderation-latest',
+      'omni-moderation-2024-09-26',
+    ]);
+  });
+
   describe('Basic functionality', () => {
     it('should moderate content and detect harmful content', async () => {
       const provider = createProvider();

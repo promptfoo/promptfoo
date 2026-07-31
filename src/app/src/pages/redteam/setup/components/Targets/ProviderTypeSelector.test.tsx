@@ -369,7 +369,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models')).toBeVisible();
+    expect(screen.getByText('GPT-5.6, GPT-5.5, GPT-5.4 and older models')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
@@ -1132,6 +1132,41 @@ describe('ProviderTypeSelector', () => {
       expect(callArgs.label).toBe('Python Integration');
       expect(callArgs.config.enabled).toBe(true);
       expect(callArgs.config.verbose).toBe(false);
+    });
+
+    it.each([
+      ['Anthropic', 'anthropic', 'anthropic:messages:claude-sonnet-5', {}],
+      ['Mistral AI', 'mistral', 'mistral:mistral-medium-3-5', {}],
+      ['Groq', 'groq', 'groq:openai/gpt-oss-120b', {}],
+      ['DeepSeek', 'deepseek', 'deepseek:deepseek-v4-flash', {}],
+      ['OpenRouter', 'openrouter', 'openrouter:openai/gpt-5.6-sol', {}],
+      ['Fireworks AI', 'fireworks', 'fireworks:accounts/fireworks/models/gpt-oss-120b', {}],
+      ['Cerebras', 'cerebras', 'cerebras:gpt-oss-120b', {}],
+      ['Ollama', 'ollama', 'ollama:llama4:latest', {}],
+    ])('should use the current %s default model', async (label, providerType, expectedId, expectedConfig) => {
+      const user = userEvent.setup();
+      const mockSetProvider = vi.fn();
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={{ id: 'http', label: 'Current Model', config: {} }}
+          setProvider={mockSetProvider}
+          providerType="http"
+        />,
+      );
+
+      const providerCard = screen.getByText(label).closest('[role="button"]');
+      expect(providerCard).not.toBeNull();
+      await user.click(providerCard!);
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        {
+          id: expectedId,
+          label: 'Current Model',
+          config: expectedConfig,
+        },
+        providerType,
+      );
     });
 
     it('should use minimal defaults when switching to A2A provider', async () => {

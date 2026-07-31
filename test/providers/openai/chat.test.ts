@@ -1947,9 +1947,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o1Provider = new OpenAiChatCompletionProvider('o1');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
-      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1');
       const o3StandardProvider = new OpenAiChatCompletionProvider('o3');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
 
@@ -2000,7 +2000,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should identify reasoning models with prefixed names (GitHub Models)', async () => {
       // Prefixed reasoning models
-      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1-mini');
+      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1');
       const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
       const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
@@ -2025,9 +2025,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o1Provider = new OpenAiChatCompletionProvider('o1');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
-      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
       const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
       const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
@@ -2075,7 +2075,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model (should omit temperature)
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { temperature: 0.7 },
       });
       await o1Provider.callApi('Test prompt');
@@ -2159,7 +2159,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model with max_completion_tokens
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { max_completion_tokens: 200 },
       });
       await o1Provider.callApi('Test prompt');
@@ -2320,7 +2320,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test O1 model with reasoning_effort
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { reasoning_effort: 'high' } as any,
       });
       await o1Provider.callApi('Test prompt');
@@ -2424,7 +2424,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: {
           reasoning: {
             effort: 'high',

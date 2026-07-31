@@ -258,11 +258,11 @@ describe('bedrock openaiResponses helper', () => {
       ...GPT_5_6_MODELS,
       'openai.gpt-5.5',
       'openai.gpt-5.4',
-    ])('computes a finite, non-zero cost end-to-end for %s via the OpenAI billing tables', (modelId) => {
+    ])('computes a finite, non-zero cost end-to-end for %s', (modelId) => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider(modelId, {});
       const billingModelName = (provider as any).getBillingModelName({});
-      // The stripped id must actually resolve in the OpenAI cost map, not just be a string.
+      // The normalized id must resolve in the applicable billing table, not just be a string.
       const cost = calculateOpenAIUsageCost(
         billingModelName,
         {},
@@ -277,12 +277,15 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2, 12],
-      ['openai.gpt-5.6-luna', 0.2, 1.2],
-    ])('applies first-party-equivalent cache read/write and output rates to %s', (modelId, input, output) => {
+      ['openai.gpt-5.6-sol', 5.5, 0.55, 6.875, 33],
+      ['openai.gpt-5.6-terra', 2.75, 0.275, 3.4375, 16.5],
+      ['openai.gpt-5.6-luna', 1.1, 0.11, 1.375, 6.6],
+    ])('applies Bedrock cache read/write and output rates to %s', (modelId, input, cacheRead, cacheWrite, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { apiKey: 'bedrock-key' },
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+        },
       });
       const cost = calculateOpenAIUsageCost(
         (provider as any).getBillingModelName({}),
@@ -296,9 +299,34 @@ describe('bedrock openaiResponses helper', () => {
       );
 
       expect(cost).toBeCloseTo(
-        (500 * input + 200 * input * 0.1 + 300 * input * 1.25 + 500 * output) / 1e6,
+        (500 * input + 200 * cacheRead + 300 * cacheWrite + 500 * output) / 1e6,
         12,
       );
+    });
+
+    it('uses the capability model for the Bedrock web-search tool fee', () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      const result = (provider as any).applyBilling(
+        {},
+        {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        },
+        provider.config,
+        false,
+      );
+
+      expect(result.cost).toBeCloseTo(0.032, 10);
     });
 
     it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
@@ -316,10 +344,10 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2, 12],
-      ['openai.gpt-5.6-luna', 0.2, 1.2],
-    ])('applies the long-context rates without a first-party regional uplift to %s', (modelId, input, output) => {
+      ['openai.gpt-5.6-sol', 5.5, 0.55, 6.875, 33],
+      ['openai.gpt-5.6-terra', 2.75, 0.275, 3.4375, 16.5],
+      ['openai.gpt-5.6-luna', 1.1, 0.11, 1.375, 6.6],
+    ])('does not apply first-party long-context or regional rates to %s', (modelId, input, cacheRead, cacheWrite, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key', region: 'us-east-1' },
       });
@@ -335,8 +363,7 @@ describe('bedrock openaiResponses helper', () => {
       );
 
       expect(cost).toBeCloseTo(
-        (150_000 * input * 2 + 100_000 * input * 0.2 + 50_000 * input * 2.5 + 1000 * output * 1.5) /
-          1e6,
+        (150_000 * input + 100_000 * cacheRead + 50_000 * cacheWrite + 1000 * output) / 1e6,
         10,
       );
     });

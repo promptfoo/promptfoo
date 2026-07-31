@@ -41,6 +41,8 @@ export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
       };
   known_speaker_names?: string[];
   known_speaker_references?: string[];
+  keywords?: string[];
+  languages?: string[];
 }
 
 export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
@@ -125,10 +127,37 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    const promptConfig = context?.prompt?.config as Partial<OpenAiTranscriptionOptions> | undefined;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     } as OpenAiTranscriptionOptions;
+    if (this.modelName === 'gpt-transcribe') {
+      const hasOption = (
+        options: Partial<OpenAiTranscriptionOptions> | undefined,
+        key: 'language' | 'languages',
+      ) => options != null && Object.hasOwn(options, key) && options[key] !== undefined;
+      const providerHasLanguage = hasOption(this.config, 'language');
+      const providerHasLanguages = hasOption(this.config, 'languages');
+      const promptHasLanguage = hasOption(promptConfig, 'language');
+      const promptHasLanguages = hasOption(promptConfig, 'languages');
+
+      if (
+        (providerHasLanguage && providerHasLanguages) ||
+        (promptHasLanguage && promptHasLanguages)
+      ) {
+        return {
+          error:
+            'gpt-transcribe accepts either config.language or config.languages, not both. Use config.languages for multilingual audio.',
+        };
+      }
+
+      if (promptHasLanguage) {
+        config.languages = undefined;
+      } else if (promptHasLanguages) {
+        config.language = undefined;
+      }
+    }
 
     // The prompt should be a file path to an audio file
     const audioFilePath = prompt.trim();
@@ -154,7 +183,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       formData.append('model', this.modelName);
 
       // Add optional parameters
-      if (config.language) {
+      if (config.language && this.modelName !== 'gpt-transcribe') {
         formData.append('language', config.language);
       }
       if (config.prompt && !this.modelName.includes('diarize')) {
@@ -166,6 +195,19 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       if (this.modelName === 'whisper-1' && config.timestamp_granularities) {
         for (const granularity of config.timestamp_granularities) {
           formData.append('timestamp_granularities[]', granularity);
+        }
+      }
+      if (this.modelName === 'gpt-transcribe') {
+        for (const keyword of config.keywords || []) {
+          formData.append('keywords[]', keyword);
+        }
+        const languages = config.languages?.length
+          ? config.languages
+          : config.language
+            ? [config.language]
+            : [];
+        for (const language of languages) {
+          formData.append('languages[]', language);
         }
       }
 
@@ -192,8 +234,12 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           formData.append('known_speaker_references[]', reference);
         }
       } else {
-        // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
-        const responseFormat = this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json';
+        // OpenAI's GPT transcription models use JSON. Preserve verbose_json for Whisper and
+        // unknown OpenAI-compatible models, matching the provider's historical behavior.
+        const responseFormat =
+          this.modelName.startsWith('gpt-4o-') || this.modelName === 'gpt-transcribe'
+            ? 'json'
+            : 'verbose_json';
         formData.append('response_format', responseFormat);
       }
 
@@ -346,6 +392,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           task: data.task,
           ...(durationSeconds === undefined ? {} : { duration: durationSeconds }),
           language: data.language,
+          ...(Array.isArray(data.languages) ? { languages: data.languages } : {}),
           segments: data.segments?.length || 0,
           ...(avgLogprob === undefined ? {} : { avgLogprob }),
           ...(avgCompressionRatio === undefined ? {} : { avgCompressionRatio }),

@@ -143,9 +143,8 @@ const FoundationModelConfiguration = ({
       },
       anthropic: {
         name: 'Anthropic',
-        defaultModel: 'anthropic:messages:claude-sonnet-4-5-20250929',
-        placeholder:
-          'anthropic:messages:claude-sonnet-4-5-20250929, anthropic:messages:claude-haiku-4-5-20251001',
+        defaultModel: 'anthropic:messages:claude-sonnet-5',
+        placeholder: 'anthropic:messages:claude-sonnet-5, anthropic:messages:claude-opus-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },
@@ -165,8 +164,8 @@ const FoundationModelConfiguration = ({
       },
       mistral: {
         name: 'Mistral AI',
-        defaultModel: 'mistral:mistral-large-latest',
-        placeholder: 'mistral:mistral-large-latest, mistral:mistral-small-latest',
+        defaultModel: 'mistral:mistral-medium-3-5',
+        placeholder: 'mistral:mistral-medium-3-5, mistral:mistral-large-latest',
         docUrl: 'https://www.promptfoo.dev/docs/providers/mistral',
         envVar: 'MISTRAL_API_KEY',
       },
@@ -179,15 +178,15 @@ const FoundationModelConfiguration = ({
       },
       groq: {
         name: 'Groq',
-        defaultModel: 'groq:llama-3.1-70b-versatile',
-        placeholder: 'groq:llama-3.1-70b-versatile, groq:mixtral-8x7b-32768',
+        defaultModel: 'groq:openai/gpt-oss-120b',
+        placeholder: 'groq:openai/gpt-oss-120b, groq:openai/gpt-oss-20b',
         docUrl: 'https://www.promptfoo.dev/docs/providers/groq',
         envVar: 'GROQ_API_KEY',
       },
       deepseek: {
         name: 'DeepSeek',
-        defaultModel: 'deepseek:deepseek-chat',
-        placeholder: 'deepseek:deepseek-chat, deepseek:deepseek-coder',
+        defaultModel: 'deepseek:deepseek-v4-flash',
+        placeholder: 'deepseek:deepseek-v4-flash, deepseek:deepseek-v4-pro',
         docUrl: 'https://www.promptfoo.dev/docs/providers/deepseek',
         envVar: 'DEEPSEEK_API_KEY',
       },
@@ -207,8 +206,8 @@ const FoundationModelConfiguration = ({
       },
       openrouter: {
         name: 'OpenRouter',
-        defaultModel: 'openrouter:openai/gpt-5.4',
-        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
+        defaultModel: 'openrouter:openai/gpt-5.6-sol',
+        placeholder: 'openrouter:openai/gpt-5.6-sol, openrouter:anthropic/claude-opus-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },

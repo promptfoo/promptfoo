@@ -202,8 +202,8 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-5-mini');
-    expect(config.providers).toContain('openai:gpt-5');
+    expect(config.providers).toContain('openai:gpt-5.4-mini');
+    expect(config.providers).toContain('openai:gpt-5.6');
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {

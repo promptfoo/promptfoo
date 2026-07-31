@@ -233,6 +233,15 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
+    it.each([
+      'gpt-transcribe',
+      'gpt-live-transcribe',
+    ])('rejects %s through the conversational realtime provider', (modelName) => {
+      expect(() => new OpenAiRealtimeProvider(modelName)).toThrow(
+        /separate Realtime session endpoint/,
+      );
+    });
+
     it('returns ProviderResponse.error instead of a placeholder when the API yields nothing', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { modalities: ['text'], maintainContext: false },

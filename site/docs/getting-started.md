@@ -142,9 +142,9 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
    ```yaml
    providers:
-     - openai:chat:gpt-5.4
+     - openai:chat:gpt-5.6
      - openai:chat:gpt-5.4-mini
-     - anthropic:messages:claude-opus-4-6
+     - anthropic:messages:claude-sonnet-5
      - google:gemini-3.1-pro-preview
      # Or use your own custom provider
      - file://path/to/custom/provider.py

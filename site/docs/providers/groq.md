@@ -118,7 +118,7 @@ Groq hosts additional models that use audio or classification endpoints, so they
 
 See the [Groq Models page](https://console.groq.com/docs/models) for these models' specifications.
 
-**Being retired:** Groq has deprecated its Llama chat models (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) along with `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct`. See the [deprecations page](https://console.groq.com/docs/deprecations) for shutdown dates, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
+**Lifecycle notice:** Groq deprecated `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` on June 17, 2026, with shutdown scheduled for August 16, 2026 on the Free and Developer tiers; committed-spend Enterprise customers are unaffected. The older `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct` models shut down on July 17, 2026. See the [deprecations page](https://console.groq.com/docs/deprecations) for current status, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
 
 ### Using Groq Models
 

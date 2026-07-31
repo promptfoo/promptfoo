@@ -183,7 +183,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models',
+    description: 'GPT-5.6, GPT-5.5, GPT-5.4 and older models',
     tag: 'providers',
     recommended: true,
   },
@@ -210,7 +210,7 @@ const allProviderOptions = [
   {
     value: 'deepseek',
     label: 'DeepSeek',
-    description: 'DeepSeek-V3 and R1 models',
+    description: 'DeepSeek V4 models',
     tag: 'providers',
   },
   {
@@ -579,7 +579,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
+          id: 'anthropic:messages:claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
@@ -615,7 +615,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'mistral') {
       setProvider(
         {
-          id: 'mistral:mistral-large-latest',
+          id: 'mistral:mistral-medium-3-5',
           config: {},
           label: currentLabel,
         },
@@ -633,7 +633,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'groq') {
       setProvider(
         {
-          id: 'groq:llama-3.1-70b-versatile',
+          id: 'groq:openai/gpt-oss-120b',
           config: {},
           label: currentLabel,
         },
@@ -642,7 +642,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'deepseek') {
       setProvider(
         {
-          id: 'deepseek:deepseek-chat',
+          id: 'deepseek:deepseek-v4-flash',
           config: {},
           label: currentLabel,
         },
@@ -651,7 +651,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openrouter') {
       setProvider(
         {
-          id: 'openrouter:openai/gpt-5.4',
+          id: 'openrouter:openai/gpt-5.6-sol',
           config: {},
           label: currentLabel,
         },
@@ -696,7 +696,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'ollama') {
       setProvider(
         {
-          id: 'ollama:llama3',
+          id: 'ollama:llama4:latest',
           config: {},
           label: currentLabel,
         },
@@ -978,7 +978,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'fireworks') {
       setProvider(
         {
-          id: 'fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct',
+          id: 'fireworks:accounts/fireworks/models/gpt-oss-120b',
           config: {},
           label: currentLabel,
         },
@@ -996,7 +996,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'cerebras') {
       setProvider(
         {
-          id: 'cerebras:llama3.1-70b',
+          id: 'cerebras:gpt-oss-120b',
           config: {},
           label: currentLabel,
         },

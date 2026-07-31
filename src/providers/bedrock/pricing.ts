@@ -8,7 +8,7 @@ import {
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
-  type: 'priority' | 'default' | 'flex';
+  type: 'priority' | 'default' | 'flex' | 'reserved';
 };
 
 type BedrockPricing = { input: number; output: number };

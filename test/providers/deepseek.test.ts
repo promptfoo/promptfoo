@@ -121,7 +121,7 @@ describe('DEEPSEEK_CHAT_MODELS', () => {
 });
 
 describe('createDeepSeekProvider', () => {
-  it('should preserve the historical non-thinking default', () => {
-    expect(createDeepSeekProvider('deepseek').id()).toBe('deepseek:deepseek-chat');
+  it('should use the current V4 Flash model by default', () => {
+    expect(createDeepSeekProvider('deepseek').id()).toBe('deepseek:deepseek-v4-flash');
   });
 });

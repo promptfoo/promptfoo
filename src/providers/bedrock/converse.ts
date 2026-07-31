@@ -99,7 +99,7 @@ export interface BedrockConverseOptions extends BedrockOptions {
     latency: 'standard' | 'optimized';
   };
   serviceTier?: {
-    type: 'priority' | 'default' | 'flex';
+    type: 'priority' | 'default' | 'flex' | 'reserved';
   };
 
   // Tool configuration

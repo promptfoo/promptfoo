@@ -177,8 +177,6 @@ export function createDeepSeekProvider(
   options: DeepSeekProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  // Preserve the historical non-thinking default for `deepseek` while the
-  // compatibility alias remains available upstream.
-  const modelName = splits.slice(1).join(':') || 'deepseek-chat';
+  const modelName = splits.slice(1).join(':') || 'deepseek-v4-flash';
   return new DeepSeekProvider(modelName, options);
 }

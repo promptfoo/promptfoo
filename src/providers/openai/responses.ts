@@ -39,6 +39,7 @@ import {
   getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
+  RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -763,7 +764,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-deep-research-2025-06-26',
     'o4-mini-deep-research',
     'o4-mini-deep-research-2025-06-26',
-  ];
+  ].filter((model) => !RETIRED_OPENAI_MODEL_IDS.has(model));
 
   config: OpenAiCompletionOptions;
 
@@ -812,7 +813,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+      : calculateObservableOpenAIToolCost(data, this.getCapabilityModelName(), config);
 
     return {
       ...result,

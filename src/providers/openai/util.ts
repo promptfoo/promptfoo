@@ -73,8 +73,63 @@ type OpenAIModelInfo = {
   cost?: OpenAIModelCost;
 };
 
+/**
+ * Model IDs whose published OpenAI shutdown dates have passed.
+ *
+ * Keep these IDs in the billing tables for historical eval results, but exclude them from
+ * current first-party routing registries. Do not add models before their shutdown date.
+ */
+export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
+  // Retired before 2026.
+  'gpt-3.5-turbo-0301',
+  'gpt-3.5-turbo-0613',
+  'gpt-3.5-turbo-16k',
+  'gpt-3.5-turbo-16k-0613',
+  'gpt-4-32k',
+  'gpt-4-32k-0314',
+  'gpt-4-32k-0613',
+  'gpt-4-1106-vision-preview',
+  'gpt-4-vision-preview',
+  'o1-preview',
+  'o1-preview-2024-09-12',
+  'o1-mini',
+  'o1-mini-2024-09-12',
+  'text-moderation-007',
+  'text-moderation-latest',
+  'text-moderation-stable',
+  // Retired in 2026 before the July 23 shutdown.
+  'chatgpt-4o-latest',
+  'codex-mini-latest',
+  'gpt-4-0314',
+  'gpt-4-0125-preview',
+  'gpt-4-turbo-preview',
+  // July 23, 2026 shutdowns.
+  'computer-use-preview',
+  'computer-use-preview-2025-03-11',
+  'gpt-4o-search-preview-2025-03-11',
+  'gpt-4o-mini-search-preview-2025-03-11',
+  'gpt-4o-mini-tts-2025-03-20',
+  'gpt-5-chat-latest',
+  'gpt-5-codex',
+  'gpt-5.1-chat-latest',
+  'gpt-5.1-codex',
+  'gpt-5.1-codex-max',
+  'gpt-5.1-codex-mini',
+  'gpt-5.2-codex',
+  'gpt-audio-mini-2025-10-06',
+  'gpt-realtime-mini-2025-10-06',
+  'o3-deep-research',
+  'o3-deep-research-2025-06-26',
+  'o4-mini-deep-research',
+  'o4-mini-deep-research-2025-06-26',
+]);
+
+function excludeRetiredModels(models: OpenAIModelInfo[]): OpenAIModelInfo[] {
+  return models.filter(({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id));
+}
+
 // Models served by /v1/audio/speech, not Chat Completions.
-export const OPENAI_TTS_MODELS: OpenAIModelInfo[] = [
+const OPENAI_TTS_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15', 'gpt-4o-mini-tts-2025-03-20'].map(
     (model) => ({
       id: model,
@@ -89,9 +144,10 @@ export const OPENAI_TTS_MODELS: OpenAIModelInfo[] = [
     id: model,
   })),
 ];
+export const OPENAI_TTS_MODELS = excludeRetiredModels(OPENAI_TTS_AND_RETIRED_MODELS);
 
 // see https://platform.openai.com/docs/models
-export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
+const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   // Search preview models
   ...['gpt-4o-search-preview', 'gpt-4o-search-preview-2025-03-11'].map((model) => ({
     id: model,
@@ -422,8 +478,15 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
     },
   })),
 ];
+export const OPENAI_CHAT_MODELS = excludeRetiredModels(OPENAI_CHAT_AND_RETIRED_MODELS);
 
 export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex-spark' }];
+
+const OPENAI_FIRST_PARTY_API_HOSTNAMES = new Set([
+  'api.openai.com',
+  'us.api.openai.com',
+  'eu.api.openai.com',
+]);
 
 export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
   if (typeof model !== 'string') {
@@ -432,7 +495,7 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
 
   if (apiUrl) {
     try {
-      if (new URL(apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
+      if (!OPENAI_FIRST_PARTY_API_HOSTNAMES.has(new URL(apiUrl).hostname.toLowerCase())) {
         return;
       }
     } catch {
@@ -441,6 +504,11 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
   }
 
   const normalizedModel = model.split('/').pop() ?? model;
+  if (RETIRED_OPENAI_MODEL_IDS.has(normalizedModel)) {
+    throw new Error(
+      `OpenAI model ${model} has been retired and is no longer available from OpenAI's first-party API. Use a current model or configure a custom OpenAI-compatible apiBaseUrl.`,
+    );
+  }
   if (OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === normalizedModel)) {
     throw new Error(
       `OpenAI model ${model} is only available through openai:codex-sdk with eligible Codex authentication.`,
@@ -448,7 +516,7 @@ export function assertOpenAiApiModel(model: unknown, apiUrl?: string): void {
   }
 }
 
-export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
+const OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   ...['computer-use-preview', 'computer-use-preview-2025-03-11'].map((model) => ({
     id: model,
     cost: {
@@ -545,6 +613,9 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
     },
   })),
 ];
+export const OPENAI_RESPONSES_ONLY_MODELS = excludeRetiredModels(
+  OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS,
+);
 
 const RETIRED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
   ...[
@@ -573,7 +644,7 @@ const RETIRED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
 ];
 
 // Deep research models for Responses API
-export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
+const OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
     id: model,
     cost: {
@@ -589,6 +660,9 @@ export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
     },
   })),
 ];
+export const OPENAI_DEEP_RESEARCH_MODELS = excludeRetiredModels(
+  OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS,
+);
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
 export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
@@ -630,6 +704,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
  * - `gpt-realtime-whisper` is a transcription-only model intended to be passed as
  *   `input_audio_transcription.model` inside a conversational session, not used as a
  *   standalone provider.
+ * - `gpt-transcribe` and `gpt-live-transcribe` use Realtime transcription sessions,
+ *   whose event flow differs from conversational Realtime sessions.
  *
  * Used by the provider routing layer to fail-fast with a clear error rather than
  * silently exchanging an empty response over the wrong wire shape.
@@ -637,10 +713,12 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
 export const NON_CONVERSATIONAL_REALTIME_MODELS: ReadonlySet<string> = new Set([
   'gpt-realtime-translate',
   'gpt-realtime-whisper',
+  'gpt-transcribe',
+  'gpt-live-transcribe',
 ]);
 
 // Realtime models for WebSocket API
-export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
+const OPENAI_REALTIME_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   // GA gpt-realtime models
   ...['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'].map((model) => ({
     id: model,
@@ -682,7 +760,7 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       audioOutput: 20 / 1e6,
     },
   },
-  // Deprecated preview snapshot that remains available until July 23, 2026.
+  // Deprecated preview snapshot; OpenAI has not published a shutdown date.
   {
     id: 'gpt-4o-mini-realtime-preview-2024-12-17',
     type: 'chat',
@@ -707,6 +785,7 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
     }),
   ),
 ];
+export const OPENAI_REALTIME_MODELS = excludeRetiredModels(OPENAI_REALTIME_AND_RETIRED_MODELS);
 
 const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   {
@@ -751,16 +830,49 @@ const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   },
 ];
 
+export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts' | 'realtime';
+
+/**
+ * Returns the endpoint family historically used by a retired bare model ID.
+ *
+ * First-party calls are rejected by {@link assertOpenAiApiModel}; this route is used only after
+ * that guard allows a custom OpenAI-compatible endpoint.
+ */
+export function getRetiredOpenAiModelRoute(modelId: string): RetiredOpenAiModelRoute | undefined {
+  if (!RETIRED_OPENAI_MODEL_IDS.has(modelId)) {
+    return undefined;
+  }
+  if (OPENAI_CHAT_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+    return 'chat';
+  }
+  if (OPENAI_TTS_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+    return 'tts';
+  }
+  if (OPENAI_REALTIME_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+    return 'realtime';
+  }
+  if (modelId.startsWith('text-moderation-')) {
+    return 'moderation';
+  }
+  if (
+    OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS.some(({ id }) => id === modelId) ||
+    OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS.some(({ id }) => id === modelId)
+  ) {
+    return 'responses';
+  }
+  return undefined;
+}
+
 export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
-  ...OPENAI_CHAT_MODELS,
-  ...OPENAI_TTS_MODELS,
+  ...OPENAI_CHAT_AND_RETIRED_MODELS,
+  ...OPENAI_TTS_AND_RETIRED_MODELS,
   ...RETIRED_OPENAI_AUDIO_MODELS,
   ...OPENAI_COMPLETION_MODELS,
-  ...OPENAI_REALTIME_MODELS,
+  ...OPENAI_REALTIME_AND_RETIRED_MODELS,
   ...RETIRED_OPENAI_REALTIME_MODELS,
-  ...OPENAI_RESPONSES_ONLY_MODELS,
+  ...OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS,
   ...OPENAI_CODEX_ONLY_MODELS,
-  ...OPENAI_DEEP_RESEARCH_MODELS,
+  ...OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
@@ -768,6 +880,12 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
+  {
+    id: 'gpt-transcribe',
+    cost: {
+      perMinute: 0.0045,
+    },
+  },
   {
     id: 'gpt-4o-transcribe',
     cost: {

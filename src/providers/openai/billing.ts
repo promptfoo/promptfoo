@@ -499,6 +499,35 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
 const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id, model]));
 
 const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+const BEDROCK_MANTLE_GPT_5_6_TEXT_RATES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['gpt-5.6', 'gpt-5.6-sol'],
+    rates: {
+      input: perMillion(5.5),
+      cachedInput: perMillion(0.55),
+      cacheWriteInput: perMillion(6.875),
+      output: perMillion(33),
+    },
+  },
+  {
+    models: ['gpt-5.6-terra'],
+    rates: {
+      input: perMillion(2.75),
+      cachedInput: perMillion(0.275),
+      cacheWriteInput: perMillion(3.4375),
+      output: perMillion(16.5),
+    },
+  },
+  {
+    models: ['gpt-5.6-luna'],
+    rates: {
+      input: perMillion(1.1),
+      cachedInput: perMillion(0.11),
+      cacheWriteInput: perMillion(1.375),
+      output: perMillion(6.6),
+    },
+  },
+]);
 const OPENAI_REGIONAL_PROCESSING_MODEL = /^gpt-5\.[456](?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
@@ -524,6 +553,32 @@ function usesOpenAIRegionalProcessing(
   } catch {
     return false;
   }
+}
+
+function getBedrockMantleTextRates(
+  modelName: string,
+  resolvedApiUrl: string | undefined,
+): OpenAITextRates | undefined {
+  const hasBedrockBillingMarker = modelName.startsWith('bedrock:');
+  const billingModelName = modelName.replace(/^bedrock:/, '');
+  if (hasBedrockBillingMarker) {
+    return BEDROCK_MANTLE_GPT_5_6_TEXT_RATES[billingModelName];
+  }
+
+  if (!resolvedApiUrl) {
+    return undefined;
+  }
+
+  try {
+    const hostname = new URL(resolvedApiUrl).hostname.toLowerCase();
+    if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
+      return BEDROCK_MANTLE_GPT_5_6_TEXT_RATES[billingModelName];
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function applyRateMultiplier(rates: OpenAITextRates, multiplier: number): OpenAITextRates {
@@ -921,7 +976,10 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
+  const bedrockMantleTextRates = getBedrockMantleTextRates(modelName, options.apiUrl);
+  const modelRates = bedrockMantleTextRates
+    ? { text: bedrockMantleTextRates }
+    : getModelRates(modelName, tier, usage.totalInputTokens);
   if (!modelRates) {
     return undefined;
   }

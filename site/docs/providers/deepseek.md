@@ -49,7 +49,7 @@ providers:
 
 :::note
 
-The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepSeek scheduled the legacy `deepseek-chat` and `deepseek-reasoner` aliases for discontinuation on July 24, 2026, and no longer lists them in the current catalog. Promptfoo still recognizes both aliases for backward-compatible configuration, and `deepseek:` currently defaults to `deepseek-chat`; DeepSeek controls whether alias requests remain available upstream, so use explicit V4 IDs for new configs.
+The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepSeek retired the legacy `deepseek-chat` and `deepseek-reasoner` aliases on July 24, 2026. Promptfoo still recognizes both IDs for backward-compatible configuration, but upstream requests using them are rejected. The bare `deepseek:` provider defaults to `deepseek-v4-flash`.
 
 :::
 
@@ -71,13 +71,13 @@ The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepS
 
 ### deepseek-chat
 
-- Retained by Promptfoo for backward-compatible configuration
-- No longer listed in DeepSeek's current catalog; use `deepseek-v4-flash` for new configs
+- Retained by Promptfoo for backward-compatible configuration, but retired upstream
+- Use `deepseek-v4-flash` for active configs
 
 ### deepseek-reasoner
 
-- Retained by Promptfoo for backward-compatible configuration
-- No longer listed in DeepSeek's current catalog; use an explicit V4 model with thinking enabled
+- Retained by Promptfoo for backward-compatible configuration, but retired upstream
+- Use an explicit V4 model with thinking enabled
 
 :::warning
 

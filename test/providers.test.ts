@@ -10,6 +10,7 @@ import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiCompletionProvider } from '../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiModerationProvider } from '../src/providers/openai/moderation';
 import { OpenAiRealtimeProvider } from '../src/providers/openai/realtime';
 import { OpenAiResponsesProvider } from '../src/providers/openai/responses';
 import { OpenAiTtsProvider } from '../src/providers/openai/tts';
@@ -30,6 +31,7 @@ vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
 vi.mock('../src/providers/openai/completion');
 vi.mock('../src/providers/openai/embedding');
+vi.mock('../src/providers/openai/moderation');
 vi.mock('../src/providers/openai/realtime');
 vi.mock('../src/providers/openai/responses');
 vi.mock('../src/providers/openai/tts');
@@ -455,11 +457,32 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should load OpenAI GPT-5 chat latest provider', async () => {
-    const provider = await loadApiProvider('openai:chat:gpt-5-chat-latest');
+  it('should load retired GPT-5 chat latest on a custom compatible gateway', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5-chat-latest', {
+      options: { config: { apiBaseUrl: 'https://gateway.example/v1' } },
+    });
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
       'gpt-5-chat-latest',
-      expect.any(Object),
+      expect.objectContaining({
+        config: expect.objectContaining({ apiBaseUrl: 'https://gateway.example/v1' }),
+      }),
+    );
+    expect(provider).toBeDefined();
+  });
+
+  it('should prefer an explicit apiBaseUrl over an OPENAI_API_HOST environment override', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5-chat-latest', {
+      options: {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+        env: { OPENAI_API_HOST: 'api.openai.com' },
+      },
+    });
+
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-5-chat-latest',
+      expect.objectContaining({
+        config: expect.objectContaining({ apiBaseUrl: 'https://gateway.example/v1' }),
+      }),
     );
     expect(provider).toBeDefined();
   });
@@ -514,14 +537,9 @@ describe('loadApiProvider', () => {
   });
 
   it.each([
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
@@ -529,8 +547,6 @@ describe('loadApiProvider', () => {
     'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
   ])('should auto-route bare Responses-only model %s to Responses', async (model) => {
     const actualChatProvider = await vi.importActual<typeof import('../src/providers/openai/chat')>(
       '../src/providers/openai/chat',
@@ -559,6 +575,47 @@ describe('loadApiProvider', () => {
       (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
       (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
     }
+  });
+
+  it.each([
+    'chatgpt-4o-latest',
+    'o1-preview',
+    'o1-mini',
+    'gpt-4-0314',
+    'gpt-4-32k',
+    'gpt-4-turbo-preview',
+    'gpt-3.5-turbo-0301',
+    'codex-mini-latest',
+    'gpt-4o-mini-tts-2025-03-20',
+    'gpt-realtime-mini-2025-10-06',
+    'computer-use-preview',
+    'gpt-5-codex',
+    'gpt-5.1-codex',
+    'gpt-5.2-codex',
+    'o3-deep-research',
+    'text-moderation-latest',
+  ])('should reject retired first-party OpenAI model %s before routing', async (model) => {
+    await expect(loadApiProvider(`openai:${model}`)).rejects.toThrow(`${model} has been retired`);
+  });
+
+  it.each([
+    ['chatgpt-4o-latest', OpenAiChatCompletionProvider],
+    ['gpt-4o-mini-tts-2025-03-20', OpenAiTtsProvider],
+    ['gpt-realtime-mini-2025-10-06', OpenAiRealtimeProvider],
+    ['gpt-5-codex', OpenAiResponsesProvider],
+    ['text-moderation-latest', OpenAiModerationProvider],
+  ])('should preserve bare retired model routing for custom gateway model %s', async (model, expectedProvider) => {
+    const provider = await loadApiProvider(`openai:${model}`, {
+      options: { config: { apiBaseUrl: 'https://gateway.example/v1' } },
+    });
+
+    expect(expectedProvider).toHaveBeenCalledWith(
+      model,
+      expect.objectContaining({
+        config: expect.objectContaining({ apiBaseUrl: 'https://gateway.example/v1' }),
+      }),
+    );
+    expect(provider).toBeDefined();
   });
 
   it.each([
@@ -698,7 +755,6 @@ describe('loadApiProvider', () => {
   it.each([
     'gpt-4o-mini-tts',
     'gpt-4o-mini-tts-2025-12-15',
-    'gpt-4o-mini-tts-2025-03-20',
     'tts-1',
     'tts-1-1106',
     'tts-1-hd',
@@ -930,7 +986,7 @@ describe('loadApiProvider', () => {
 
   it('should default OpenAI realtime to a current model', async () => {
     const provider = await loadApiProvider('openai:realtime');
-    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-1.5', expect.any(Object));
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-2.1', expect.any(Object));
     expect(provider).toBeDefined();
   });
 

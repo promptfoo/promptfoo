@@ -82,7 +82,11 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
-import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
+import {
+  assertOpenAiApiModel,
+  getRetiredOpenAiModelRoute,
+  NON_CONVERSATIONAL_REALTIME_MODELS,
+} from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -970,13 +974,12 @@ export const providerMap: ProviderFactory[] = [
       const requestedApiModel = modelName || configuredModel || modelType;
       if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
-        const apiHost =
-          providerOptions.config?.apiHost ||
-          providerOptions.env?.OPENAI_API_HOST ||
-          getEnvString('OPENAI_API_HOST');
-        const apiUrl = apiHost
-          ? `https://${apiHost}/v1`
+        const configApiHost = providerOptions.config?.apiHost;
+        const envApiHost = providerOptions.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+        const apiUrl = configApiHost
+          ? `https://${configApiHost}/v1`
           : providerOptions.config?.apiBaseUrl ||
+            (envApiHost ? `https://${envApiHost}/v1` : undefined) ||
             providerOptions.env?.OPENAI_API_BASE_URL ||
             providerOptions.env?.OPENAI_BASE_URL ||
             getEnvString('OPENAI_API_BASE_URL') ||
@@ -1012,7 +1015,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-realtime-1.5',
+          modelName || configuredModel || 'gpt-realtime-2.1',
           providerOptions,
         );
       }
@@ -1052,6 +1055,20 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
+      // assertOpenAiApiModel above rejects retired IDs for api.openai.com. Preserve the
+      // historical endpoint family for custom OpenAI-compatible gateways that still serve them.
+      switch (getRetiredOpenAiModelRoute(modelType)) {
+        case 'chat':
+          return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        case 'tts':
+          return new OpenAiTtsProvider(modelType, providerOptions);
+        case 'realtime':
+          return new OpenAiRealtimeProvider(modelType, providerOptions);
+        case 'responses':
+          return new OpenAiResponsesProvider(modelType, providerOptions);
+        case 'moderation':
+          return new OpenAiModerationProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
         try {

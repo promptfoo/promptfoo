@@ -194,19 +194,19 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 
 ### Configuration Options
 
-| Option                | Description                                               |
-| --------------------- | --------------------------------------------------------- |
-| `maxTokens`           | Maximum output tokens                                     |
-| `temperature`         | Sampling temperature (0-1)                                |
-| `topP`                | Nucleus sampling parameter                                |
-| `stopSequences`       | Array of stop sequences                                   |
-| `thinking`            | Extended thinking configuration (Claude models)           |
-| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)            |
-| `showThinking`        | Include thinking in output (default: true)                |
-| `performanceConfig`   | Performance settings (`latency: optimized`)               |
-| `serviceTier`         | Service tier object (`type: priority \| default \| flex`) |
-| `guardrailIdentifier` | Guardrail ID for content filtering                        |
-| `guardrailVersion`    | Guardrail version (default: DRAFT)                        |
+| Option                | Description                                                           |
+| --------------------- | --------------------------------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                                                 |
+| `temperature`         | Sampling temperature (0-1)                                            |
+| `topP`                | Nucleus sampling parameter                                            |
+| `stopSequences`       | Array of stop sequences                                               |
+| `thinking`            | Extended thinking configuration (Claude models)                       |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)                        |
+| `showThinking`        | Include thinking in output (default: true)                            |
+| `performanceConfig`   | Performance settings (`latency: optimized`)                           |
+| `serviceTier`         | Service tier object (`type: priority \| default \| flex \| reserved`) |
+| `guardrailIdentifier` | Guardrail ID for content filtering                                    |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)                                    |
 
 ### Performance Configuration
 
@@ -219,7 +219,7 @@ providers:
       performanceConfig:
         latency: optimized # or 'standard'
       serviceTier:
-        type: priority # or 'default', 'flex'
+        type: priority # or 'default', 'flex', 'reserved'
 ```
 
 ### Supported Models
@@ -1096,16 +1096,16 @@ The Responses API stores conversation state by default. Set `store: false` on ev
 when inputs or outputs must not be retained; Bedrock otherwise keeps stored responses for 30
 days in the source Region and allows follow-up requests with `previous_response_id`.
 
-GPT-5.6 pricing on Bedrock matches first-party OpenAI rates: Sol is $5 input / $30 output,
-Terra $2.50 / $15, and Luna $1 / $6 per million tokens. Cache reads receive a 90% discount,
-cache writes cost 1.25x the uncached input rate, and cached prefixes remain available for at
+GPT-5.6 uses Bedrock-specific standard-tier pricing. Per million tokens, Sol is $5.50 input,
+$6.875 cache write, $0.55 cache read, and $33 output; Terra is $2.75, $3.4375, $0.275, and
+$16.50; Luna is $1.10, $1.375, $0.11, and $6.60. Cached prefixes remain available for at
 least 30 minutes. Place `prompt_cache_breakpoint: { mode: explicit }` on a stable
 `input_text`, `input_image`, or `input_file` content block and set a stable
 `prompt_cache_key` when using explicit caching. Promptfoo records returned cache-read and
 cache-write usage and leaves GPT-5.6 `cost` unset when cache-write usage is missing instead
-of underestimating cost. Requests above 272,000 input tokens use 2x input and 1.5x output
-pricing for the full request. Do not assume first-party Flex, Priority, or regional-processing
-options are available on Bedrock; use the service behavior documented for the selected model.
+of underestimating cost. These Bedrock models have a 272,000-token input limit and do not use
+OpenAI's first-party long-context or regional-processing premiums. AWS currently lists only
+the standard service tier for these models.
 
 #### Open-weight models (GPT OSS)
 

@@ -66,8 +66,8 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * provider's GPT-5 detection (`gpt-5*` / `/gpt-5`) and billing lookups don't recognize.
  * Without this, GPT-5 controls (reasoning effort, verbosity) would be dropped and a
  * `temperature` default wrongly applied. We strip the prefix for those capability/billing
- * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model` — Bedrock
- * mirrors OpenAI first-party rates, so the OpenAI billing tables apply.
+ * checks while still sending the real `openai.gpt-5.6-sol` id as the request `model`. The billing
+ * lookup keeps a Bedrock-only marker for GPT-5.6 so AWS's rates survive customer proxies.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   /**
@@ -78,6 +78,15 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
    */
   protected getCapabilityModelName(): string {
     return this.modelName.replace(/^openai\./, '');
+  }
+
+  /**
+   * Keep Bedrock GPT-5.6 billing distinct even when `apiBaseUrl` points to a customer proxy.
+   * Older Bedrock-hosted OpenAI models still use the first-party OpenAI rate table.
+   */
+  protected getBillingModelName(): string {
+    const modelName = this.getCapabilityModelName();
+    return /^gpt-5\.6(?:-|$)/.test(modelName) ? `bedrock:${modelName}` : modelName;
   }
 
   /**
