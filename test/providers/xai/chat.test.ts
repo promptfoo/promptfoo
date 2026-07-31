@@ -727,6 +727,26 @@ describe('xAI Chat Provider', () => {
       expect(result.body.max_completion_tokens).toBe(777);
     });
 
+    it('keeps prompt token-limit precedence across aliases for effective reasoning models', async () => {
+      const provider = createXAIProvider('xai:grok-build-0.1', {
+        config: { config: { max_completion_tokens: 111 } },
+      }) as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            max_tokens: 222,
+            passthrough: {
+              model: 'grok-4.3',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-4.3');
+      expect(result.body.max_tokens).toBeUndefined();
+      expect(result.body.max_completion_tokens).toBe(222);
+    });
+
     it('validates Grok 4.5 reasoning effort against the effective passthrough model', async () => {
       const provider = createXAIProvider('xai:grok-2') as any;
 

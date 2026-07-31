@@ -716,9 +716,13 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       result.body.max_completion_tokens;
     const maxCompletionTokens =
       promptPassthrough?.max_completion_tokens ??
+      promptPassthrough?.max_tokens ??
       promptConfig?.max_completion_tokens ??
+      promptConfig?.max_tokens ??
       inheritedPassthrough?.max_completion_tokens ??
+      inheritedPassthrough?.max_tokens ??
       resolvedConfig.max_completion_tokens ??
+      resolvedConfig.max_tokens ??
       result.body.max_completion_tokens ??
       result.body.max_tokens;
     const effectiveModel =
