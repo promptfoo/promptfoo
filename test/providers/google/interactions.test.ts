@@ -126,8 +126,10 @@ describe('GoogleInteractionsProvider', () => {
             max_output_tokens: 2_048,
             thinking_level: 'low',
             video_config: { task: 'text_to_video' },
+            stop_sequences: ['stop'],
             seed: 42,
           },
+          service_tier: 'priority',
           background: false,
           stream: false,
         }),
@@ -219,7 +221,7 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.video).toBeUndefined();
   });
 
-  it('preserves explicit sampling controls for Robotics ER 2', async () => {
+  it('omits sampling controls that the Interactions generation_config schema rejects', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
@@ -237,11 +239,22 @@ describe('GoogleInteractionsProvider', () => {
         apiKey: 'test-key',
         temperature: 0.2,
         topP: 0.9,
+        topK: 40,
+        generationConfig: {
+          temperature: 0.3,
+          topP: 0.8,
+          topK: 20,
+        },
         passthrough: {
           generation_config: {
             temperature: 0.4,
+            top_p: 0.7,
+            top_k: 10,
             seed: 42,
           },
+          temperature: 0.5,
+          top_p: 0.6,
+          top_k: 5,
         },
       },
     });
@@ -250,9 +263,12 @@ describe('GoogleInteractionsProvider', () => {
 
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(request.body as string).generation_config).toEqual({
-      temperature: 0.4,
-      top_p: 0.9,
       seed: 42,
+    });
+    expect(JSON.parse(request.body as string)).not.toMatchObject({
+      temperature: expect.anything(),
+      top_p: expect.anything(),
+      top_k: expect.anything(),
     });
   });
 
@@ -366,7 +382,7 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
-  it('forwards standard Robotics generation controls and a rendered response schema', async () => {
+  it('forwards supported Robotics generation controls and a rendered response schema', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
@@ -395,8 +411,7 @@ describe('GoogleInteractionsProvider', () => {
 
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(request.body as string);
-    expect(body.generation_config).toMatchObject({
-      top_k: 40,
+    expect(body.generation_config).toEqual({
       stop_sequences: ['STOP'],
     });
     expect(body.response_format).toEqual([
@@ -414,7 +429,7 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
-  it('normalizes camelCase generationConfig fields for Robotics ER 2', async () => {
+  it('normalizes only supported camelCase generationConfig fields for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
@@ -435,7 +450,13 @@ describe('GoogleInteractionsProvider', () => {
           topP: 0.8,
           topK: 20,
           stopSequences: ['DONE'],
-        },
+          seed: 7,
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+          thinkingSummaries: 'auto',
+          toolChoice: { mode: 'auto' },
+          transcriptionConfig: { language_code: 'en-US' },
+          videoConfig: { task: 'text_to_video' },
+        } as any,
       },
     });
 
@@ -444,10 +465,159 @@ describe('GoogleInteractionsProvider', () => {
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(request.body as string).generation_config).toEqual({
       max_output_tokens: 512,
-      top_p: 0.8,
-      top_k: 20,
       stop_sequences: ['DONE'],
+      seed: 7,
+      thinking_level: 'high',
+      thinking_summaries: 'auto',
+      tool_choice: { mode: 'auto' },
+      transcription_config: { language_code: 'en-US' },
+      video_config: { task: 'text_to_video' },
     });
+  });
+
+  it('rejects numeric thinkingBudget instead of sending an invalid thinkingConfig object', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          thinkingConfig: { thinkingBudget: 1_024 },
+        },
+      },
+    });
+
+    await expect(provider.callApi('Plan the next movement.')).resolves.toMatchObject({
+      error: expect.stringContaining('thinkingBudget'),
+    });
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('preserves prompt and passthrough precedence for supported generation fields', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          maxOutputTokens: 1_024,
+          stopSequences: ['PROVIDER'],
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          generationConfig: {
+            maxOutputTokens: 512,
+            stopSequences: ['PROMPT'],
+            seed: 2,
+            thinkingConfig: { thinkingLevel: 'MEDIUM' },
+          },
+          passthrough: {
+            generation_config: {
+              seed: 3,
+              stop_sequences: ['PASSTHROUGH'],
+              thinking_level: 'high',
+            },
+          },
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      max_output_tokens: 512,
+      stop_sequences: ['PASSTHROUGH'],
+      seed: 3,
+      thinking_level: 'high',
+    });
+  });
+
+  it('gives prompt top-level controls precedence over provider generationConfig aliases', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          maxOutputTokens: 1_024,
+          stopSequences: ['PROVIDER'],
+          seed: 1,
+        } as any,
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          maxOutputTokens: 512,
+          stopSequences: ['PROMPT'],
+          seed: 2,
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      max_output_tokens: 512,
+      stop_sequences: ['PROMPT'],
+      seed: 2,
+    });
+  });
+
+  it.each([
+    'flex',
+    'standard',
+    'priority',
+  ] as const)('forwards config service tier %s at the Interactions top level', async (serviceTier) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key', service_tier: serviceTier },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).service_tier).toBe(serviceTier);
+  });
+
+  it.each([
+    ['service_tier', 'flex'],
+    ['serviceTier', 'priority'],
+  ] as const)('gives passthrough %s precedence for service_tier', async (field, serviceTier) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        service_tier: 'standard',
+        passthrough: {
+          [field]: serviceTier,
+          generation_config: { service_tier: 'flex', serviceTier: 'priority' },
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.service_tier).toBe(serviceTier);
+    expect(body.serviceTier).toBeUndefined();
+    expect(body.generation_config).toBeUndefined();
   });
 
   it('uses an Omni passthrough model for request formatting, output parsing, and billing', async () => {
@@ -1175,7 +1345,6 @@ describe('GoogleInteractionsProvider', () => {
           model: 'gemini-omni-flash-preview',
           input: [{ type: 'text', text: 'A city at dusk' }],
           response_format: [{ type: 'video', aspect_ratio: '16:9' }],
-          generation_config: { temperature: 0.2, top_p: 0.9 },
           background: false,
           stream: false,
         }),

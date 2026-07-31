@@ -14,6 +14,24 @@ import type {
   TokenUsage,
 } from '../types/index';
 
+type CohereCitationMode = 'accurate' | 'fast';
+
+interface CohereV2Document {
+  data: string | Record<string, unknown>;
+  id?: string;
+}
+
+interface CohereLegacyDocument {
+  citation_quality?: CohereCitationMode;
+  id?: string;
+  [key: string]: unknown;
+}
+
+interface CohereCitationOptions {
+  mode?: CohereCitationMode;
+  [key: string]: unknown;
+}
+
 interface CohereChatOptions {
   apiKey?: string;
   modelName?: string;
@@ -39,10 +57,8 @@ interface CohereChatOptions {
   preamble_override?: string;
   prompt_truncation?: 'AUTO' | 'OFF';
   search_queries_only?: boolean;
-  documents?: Array<{
-    id: string;
-    citation_quality?: 'accurate' | 'fast';
-  }>;
+  documents?: Array<string | CohereV2Document | CohereLegacyDocument>;
+  citation_options?: CohereCitationOptions;
   temperature?: number;
   max_tokens?: number;
   k?: number;
@@ -93,10 +109,61 @@ function getV2ConfigError(params: Record<string, any>): string | undefined {
   if (params.search_queries_only) {
     return 'Cohere v2 Chat API does not support search_queries_only. Use a v2 tool definition instead.';
   }
+  if (params.showSearchQueries) {
+    return 'Cohere v2 Chat API does not return generated search queries.';
+  }
   if (params.prompt_truncation && params.prompt_truncation !== 'OFF') {
     return 'Cohere v2 Chat API does not support prompt_truncation.';
   }
   return undefined;
+}
+
+function normalizeV2Documents(params: Record<string, any>): {
+  citationOptions: unknown;
+  documents: unknown;
+} {
+  const documents = params.documents;
+  let legacyCitationMode: CohereCitationMode | undefined;
+
+  const normalizedDocuments = Array.isArray(documents)
+    ? documents.map((document: unknown) => {
+        if (typeof document === 'string' || typeof document !== 'object' || document === null) {
+          return document;
+        }
+
+        const {
+          citation_quality: citationQuality,
+          data,
+          id,
+          ...legacyData
+        } = document as Record<string, unknown>;
+        if (
+          legacyCitationMode === undefined &&
+          (citationQuality === 'accurate' || citationQuality === 'fast')
+        ) {
+          legacyCitationMode = citationQuality;
+        }
+
+        if ('data' in document) {
+          return {
+            ...(id === undefined ? {} : { id }),
+            data,
+          };
+        }
+
+        return {
+          ...(id === undefined ? {} : { id }),
+          data: legacyData,
+        };
+      })
+    : documents;
+
+  return {
+    documents: normalizedDocuments,
+    citationOptions:
+      params.citation_options ??
+      (legacyCitationMode === undefined ? undefined : { mode: legacyCitationMode }),
+  };
 }
 
 function buildV2Messages(
@@ -166,6 +233,61 @@ function getV2Output(data: any): unknown | undefined {
     return toolCalls;
   }
   return content;
+}
+
+function getUniqueV2CitedDocuments(data: any): string[] {
+  const serializedDocuments: string[] = [];
+  const seenDocuments = new Set<string>();
+  const citations = data?.message?.citations;
+
+  if (!Array.isArray(citations)) {
+    return serializedDocuments;
+  }
+
+  for (const citation of citations) {
+    if (!Array.isArray(citation?.sources)) {
+      continue;
+    }
+    for (const source of citation.sources) {
+      if (source?.type !== 'document' || source.document === undefined) {
+        continue;
+      }
+      const serializedDocument = JSON.stringify(source.document);
+      if (serializedDocument === undefined || seenDocuments.has(serializedDocument)) {
+        continue;
+      }
+      seenDocuments.add(serializedDocument);
+      serializedDocuments.push(serializedDocument);
+    }
+  }
+
+  return serializedDocuments;
+}
+
+function appendV2Documents(output: unknown, data: any, showDocuments: boolean): unknown {
+  if (!showDocuments) {
+    return output;
+  }
+
+  const documents = getUniqueV2CitedDocuments(data);
+  if (documents.length === 0) {
+    return output;
+  }
+
+  const documentsSuffix = `\n\nDocuments:\n${documents.join('\n')}`;
+  if (typeof output === 'string') {
+    return output + documentsSuffix;
+  }
+  if (
+    typeof output === 'object' &&
+    output !== null &&
+    !Array.isArray(output) &&
+    'content' in output &&
+    typeof output.content === 'string'
+  ) {
+    return { ...output, content: output.content + documentsSuffix };
+  }
+  return output;
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
@@ -396,10 +518,14 @@ export class CohereChatCompletionProvider implements ApiProvider {
       connectors: _connectors,
       prompt_truncation: _promptTruncation,
       search_queries_only: _searchQueriesOnly,
+      documents: _documents,
+      citation_options: _citationOptions,
       showDocuments: _showDocuments,
       showSearchQueries: _showSearchQueries,
       ...v2Params
     } = params;
+
+    const { documents, citationOptions } = normalizeV2Documents(params);
 
     const messages = buildV2Messages(prompt, parsedPrompt, params);
 
@@ -421,6 +547,8 @@ export class CohereChatCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify({
             ...v2Params,
+            ...(documents === undefined ? {} : { documents }),
+            ...(citationOptions === undefined ? {} : { citation_options: citationOptions }),
             model: this.modelName,
             messages,
           }),
@@ -442,10 +570,11 @@ export class CohereChatCompletionProvider implements ApiProvider {
         return { error: errorMessage };
       }
 
-      const output = getV2Output(data);
+      let output = getV2Output(data);
       if (output === undefined) {
         return { error: 'Cohere v2 Chat API response did not contain text content.' };
       }
+      output = appendV2Documents(output, data, Boolean(params.showDocuments));
 
       const usage = data?.usage?.tokens ?? data?.usage?.billed_units ?? {};
       const promptTokens = usage.input_tokens || 0;

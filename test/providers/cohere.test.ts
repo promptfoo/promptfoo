@@ -166,6 +166,175 @@ describe('CohereChatCompletionProvider', () => {
     ]);
   });
 
+  it('normalizes legacy documents and citation quality for the v2 Chat API', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 8, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        documents: [
+          'A plain text document.',
+          { data: 'A v2 document with string data.' },
+          {
+            id: 'legacy-doc',
+            title: 'Legacy document',
+            snippet: 'Legacy v1 document payload.',
+            citation_quality: 'accurate',
+          },
+          {
+            id: 'v2-doc',
+            data: { title: 'Already v2', snippet: 'Keep this payload.' },
+          },
+        ],
+      } as any,
+    });
+    await provider.callApi('Use the documents');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body.documents).toEqual([
+      'A plain text document.',
+      { data: 'A v2 document with string data.' },
+      {
+        id: 'legacy-doc',
+        data: {
+          title: 'Legacy document',
+          snippet: 'Legacy v1 document payload.',
+        },
+      },
+      {
+        id: 'v2-doc',
+        data: { title: 'Already v2', snippet: 'Keep this payload.' },
+      },
+    ]);
+    expect(body.citation_options).toEqual({ mode: 'accurate' });
+    expect(JSON.stringify(body.documents)).not.toContain('citation_quality');
+  });
+
+  it('preserves explicit v2 citation options over legacy document citation quality', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 4, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        citation_options: { mode: 'accurate' },
+        documents: [
+          {
+            id: 'configured-doc',
+            text: 'Configured payload',
+            citation_quality: 'accurate',
+          },
+        ],
+      } as any,
+    });
+    await provider.callApi(
+      JSON.stringify({
+        message: 'Use the document',
+        citation_options: { mode: 'fast' },
+        documents: [
+          {
+            id: 'prompt-doc',
+            text: 'Prompt payload',
+            citation_quality: 'accurate',
+          },
+        ],
+      }),
+    );
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body.citation_options).toEqual({ mode: 'fast' });
+    expect(body.documents).toEqual([{ id: 'prompt-doc', data: { text: 'Prompt payload' } }]);
+  });
+
+  it('appends unique v2 document sources when prompt config enables showDocuments', async () => {
+    const firstDocument = { id: 'doc-1', title: 'First document' };
+    const secondDocument = { id: 'doc-2', title: 'Second document' };
+    const firstDocumentSource = {
+      type: 'document',
+      id: 'doc-1',
+      document: firstDocument,
+    };
+    const secondDocumentSource = {
+      type: 'document',
+      id: 'doc-2',
+      document: secondDocument,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Grounded answer' }],
+          citations: [
+            {
+              sources: [
+                firstDocumentSource,
+                { type: 'web', id: 'web-1', url: 'https://example.com' },
+              ],
+            },
+            {
+              sources: [
+                { ...firstDocumentSource, id: 'duplicate-reference' },
+                secondDocumentSource,
+              ],
+            },
+          ],
+        },
+        usage: { tokens: { input_tokens: 9, output_tokens: 3 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key', showDocuments: false },
+    });
+    const result = await provider.callApi(
+      JSON.stringify({ message: 'Use the cited documents', showDocuments: true }),
+    );
+
+    expect(result.output).toBe(
+      `Grounded answer\n\nDocuments:\n${JSON.stringify(firstDocument)}\n${JSON.stringify(
+        secondDocument,
+      )}`,
+    );
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body).not.toHaveProperty('showDocuments');
+  });
+
+  it('rejects prompt-level showSearchQueries for the v2 Chat API', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key', showSearchQueries: false },
+    });
+
+    await expect(
+      provider.callApi(JSON.stringify({ message: 'Search', showSearchQueries: true })),
+    ).resolves.toEqual({
+      error: 'Cohere v2 Chat API does not return generated search queries.',
+    });
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('returns v2 tool calls when the response has no text content', async () => {
     const toolCalls = [
       {
@@ -200,6 +369,15 @@ describe('CohereChatCompletionProvider', () => {
         function: { name: 'search', arguments: '{"query":"test"}' },
       },
     ];
+    const document = { id: 'doc-1', title: 'One document' };
+    const citations = [
+      {
+        sources: [
+          { type: 'document', id: 'doc-1', document },
+          { type: 'document', id: 'duplicate', document },
+        ],
+      },
+    ];
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       data: {
@@ -207,22 +385,26 @@ describe('CohereChatCompletionProvider', () => {
           role: 'assistant',
           content: [{ type: 'text', text: 'I will search for that.' }],
           tool_calls: toolCalls,
+          citations,
         },
         usage: { tokens: { input_tokens: 5, output_tokens: 4 } },
       },
     } as any);
 
     const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
-      config: { apiKey: 'test-key' },
+      config: { apiKey: 'test-key', showDocuments: true },
     });
 
-    await expect(provider.callApi('Search for test')).resolves.toMatchObject({
+    const result = await provider.callApi('Search for test');
+    expect(result).toMatchObject({
       output: {
         role: 'assistant',
-        content: 'I will search for that.',
+        content: `I will search for that.\n\nDocuments:\n${JSON.stringify(document)}`,
         tool_calls: toolCalls,
+        citations,
       },
     });
+    expect((result.output as { content: string }).content.match(/Documents:/g)).toHaveLength(1);
   });
 
   it('bypasses the persistent fetch cache for authenticated v2 requests', async () => {

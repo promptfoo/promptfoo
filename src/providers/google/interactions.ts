@@ -218,19 +218,107 @@ function parseInteractionInput(
   }
 }
 
-function normalizeInteractionGenerationField(field: string): string {
-  switch (field) {
-    case 'maxOutputTokens':
-      return 'max_output_tokens';
-    case 'stopSequences':
-      return 'stop_sequences';
-    case 'topK':
-      return 'top_k';
-    case 'topP':
-      return 'top_p';
-    default:
-      return field;
+const INTERACTION_GENERATION_FIELDS = new Set([
+  'max_output_tokens',
+  'seed',
+  'stop_sequences',
+  'thinking_level',
+  'thinking_summaries',
+  'tool_choice',
+  'transcription_config',
+  'video_config',
+]);
+
+const INTERACTION_GENERATION_ALIASES: Record<string, string> = {
+  maxOutputTokens: 'max_output_tokens',
+  stopSequences: 'stop_sequences',
+  thinkingLevel: 'thinking_level',
+  thinkingSummaries: 'thinking_summaries',
+  toolChoice: 'tool_choice',
+  transcriptionConfig: 'transcription_config',
+  videoConfig: 'video_config',
+};
+
+const INTERACTION_TOP_LEVEL_GENERATION_FIELDS = new Set([
+  ...INTERACTION_GENERATION_FIELDS,
+  ...Object.keys(INTERACTION_GENERATION_ALIASES),
+  'temperature',
+  'top_p',
+  'topP',
+  'top_k',
+  'topK',
+  'thinkingConfig',
+  'thinking_config',
+  'thinkingBudget',
+  'thinking_budget',
+  'negative_prompt',
+  'negativePrompt',
+]);
+
+type NormalizedInteractionGenerationConfig = {
+  config: Record<string, unknown>;
+  error?: string;
+};
+
+function normalizeInteractionThinkingLevel(value: unknown): unknown {
+  return typeof value === 'string' ? value.toLowerCase() : value;
+}
+
+function normalizeInteractionGenerationConfig(
+  value: unknown,
+): NormalizedInteractionGenerationConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { config: {} };
   }
+
+  const config: Record<string, unknown> = {};
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (field === 'thinkingConfig' || field === 'thinking_config') {
+      if (!fieldValue || typeof fieldValue !== 'object' || Array.isArray(fieldValue)) {
+        continue;
+      }
+      const thinkingConfig = fieldValue as Record<string, unknown>;
+      const thinkingBudget = thinkingConfig.thinkingBudget ?? thinkingConfig.thinking_budget;
+      if (typeof thinkingBudget === 'number') {
+        return {
+          config: {},
+          error:
+            'Gemini Interactions generation_config does not support numeric thinkingBudget; use thinkingConfig.thinkingLevel instead.',
+        };
+      }
+      const thinkingLevel = thinkingConfig.thinkingLevel ?? thinkingConfig.thinking_level;
+      if (thinkingLevel !== undefined) {
+        config.thinking_level = normalizeInteractionThinkingLevel(thinkingLevel);
+      }
+      continue;
+    }
+    if (field === 'thinkingBudget' || field === 'thinking_budget') {
+      if (typeof fieldValue === 'number') {
+        return {
+          config: {},
+          error:
+            'Gemini Interactions generation_config does not support numeric thinkingBudget; use thinking_level instead.',
+        };
+      }
+      continue;
+    }
+
+    const normalizedField = INTERACTION_GENERATION_ALIASES[field] || field;
+    if (!INTERACTION_GENERATION_FIELDS.has(normalizedField) || fieldValue === undefined) {
+      continue;
+    }
+    config[normalizedField] =
+      normalizedField === 'thinking_level'
+        ? normalizeInteractionThinkingLevel(fieldValue)
+        : fieldValue;
+  }
+  return { config };
+}
+
+function normalizeInteractionServiceTier(
+  value: unknown,
+): 'flex' | 'standard' | 'priority' | undefined {
+  return value === 'flex' || value === 'standard' || value === 'priority' ? value : undefined;
 }
 
 function normalizeInteractionSafetySettings(
@@ -334,10 +422,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
       return { error: 'Prompt is required for Gemini Interactions API' };
     }
 
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    ) as GoogleProviderConfig;
+    const promptConfig = context?.prompt?.config as Partial<CompletionOptions> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig) as GoogleProviderConfig;
     const passthroughModel = config.passthrough?.model;
     const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
     const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
@@ -449,58 +535,68 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const unsupportedGenerationFields = new Set(
-      isVideoModel
-        ? [
-            ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
-            'top_k',
-            'topK',
-            'stop_sequences',
-            'stopSequences',
-            'negative_prompt',
-            'negativePrompt',
-            'system_instruction',
-            'systemInstruction',
-            'service_tier',
-            'serviceTier',
-          ]
-        : [],
-    );
-    const passthroughGenerationConfig = config.passthrough?.generation_config;
-    const generationConfig = {
-      ...(config.maxOutputTokens === undefined
+    const providerGenerationConfig = normalizeInteractionGenerationConfig({
+      ...(this.config.maxOutputTokens === undefined
         ? {}
-        : { max_output_tokens: config.maxOutputTokens }),
-      ...((config.vertexai || !isVideoModel) && config.temperature !== undefined
-        ? { temperature: config.temperature }
-        : {}),
-      ...((config.vertexai || !isVideoModel) && config.topP !== undefined
-        ? { top_p: config.topP }
-        : {}),
-      ...(!isVideoModel && config.topK !== undefined ? { top_k: config.topK } : {}),
-      ...(!isVideoModel && config.stopSequences !== undefined
-        ? { stop_sequences: config.stopSequences }
-        : {}),
-      ...Object.fromEntries(
-        Object.entries({
-          ...(config.generationConfig || {}),
-          ...(passthroughGenerationConfig &&
-          typeof passthroughGenerationConfig === 'object' &&
-          !Array.isArray(passthroughGenerationConfig)
-            ? passthroughGenerationConfig
-            : {}),
-        })
-          .filter(([field]) => !unsupportedGenerationFields.has(field))
-          .map(([field, value]) => [normalizeInteractionGenerationField(field), value]),
-      ),
+        : { max_output_tokens: this.config.maxOutputTokens }),
+      ...(this.config.stopSequences === undefined
+        ? {}
+        : { stop_sequences: this.config.stopSequences }),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
+      ...(this.config.generationConfig || {}),
+    });
+    if (providerGenerationConfig.error) {
+      return { error: providerGenerationConfig.error };
+    }
+    const promptGenerationConfig = normalizeInteractionGenerationConfig({
+      ...(promptConfig?.maxOutputTokens === undefined
+        ? {}
+        : { max_output_tokens: promptConfig.maxOutputTokens }),
+      ...(promptConfig?.stopSequences === undefined
+        ? {}
+        : { stop_sequences: promptConfig.stopSequences }),
+      ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
+      ...(promptConfig?.generationConfig || {}),
+    });
+    if (promptGenerationConfig.error) {
+      return { error: promptGenerationConfig.error };
+    }
+    const passthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
+      config.passthrough?.generationConfig,
+    );
+    if (passthroughCamelGenerationConfig.error) {
+      return { error: passthroughCamelGenerationConfig.error };
+    }
+    const passthroughGenerationConfig = normalizeInteractionGenerationConfig(
+      config.passthrough?.generation_config,
+    );
+    if (passthroughGenerationConfig.error) {
+      return { error: passthroughGenerationConfig.error };
+    }
+    const generationConfig = {
+      ...providerGenerationConfig.config,
+      ...promptGenerationConfig.config,
+      ...passthroughCamelGenerationConfig.config,
+      ...passthroughGenerationConfig.config,
     };
+    const passthroughServiceTier =
+      config.passthrough?.service_tier ?? config.passthrough?.serviceTier ?? config.service_tier;
+    const serviceTier = normalizeInteractionServiceTier(passthroughServiceTier);
+    if (passthroughServiceTier !== undefined && serviceTier === undefined) {
+      return {
+        error: 'Gemini Interactions service_tier must be one of flex, standard, or priority.',
+      };
+    }
     const passthrough = Object.fromEntries(
       Object.entries(config.passthrough || {}).filter(
         ([field]) =>
           field !== 'generation_config' &&
           field !== 'generationConfig' &&
           field !== 'model' &&
-          !unsupportedGenerationFields.has(field),
+          field !== 'service_tier' &&
+          field !== 'serviceTier' &&
+          !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field) &&
+          (!isVideoModel || (field !== 'system_instruction' && field !== 'systemInstruction')),
       ),
     );
     const { input: interactionInput, systemInstruction: promptSystemInstruction } =
@@ -567,6 +663,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
       ...passthrough,
       background: false,
       stream: false,
