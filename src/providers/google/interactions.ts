@@ -253,6 +253,10 @@ const INTERACTION_TOP_LEVEL_GENERATION_FIELDS = new Set([
   'thinking_budget',
   'negative_prompt',
   'negativePrompt',
+  'responseMimeType',
+  'response_mime_type',
+  'responseSchema',
+  'response_schema',
 ]);
 
 type NormalizedInteractionGenerationConfig = {
@@ -319,6 +323,51 @@ function normalizeInteractionServiceTier(
   value: unknown,
 ): 'flex' | 'standard' | 'priority' | undefined {
   return value === 'flex' || value === 'standard' || value === 'priority' ? value : undefined;
+}
+
+function parseInteractionStructuredOutput(
+  generationConfigs: unknown[],
+  responseSchema: string | undefined,
+  contextVars?: CallApiContextParams['vars'],
+): { mimeType?: string; schema?: unknown } {
+  let legacyMimeType: unknown;
+  let legacyResponseSchema: unknown;
+  for (const generationConfig of generationConfigs) {
+    if (
+      !generationConfig ||
+      typeof generationConfig !== 'object' ||
+      Array.isArray(generationConfig)
+    ) {
+      continue;
+    }
+    const config = generationConfig as Record<string, unknown>;
+    const responseMimeType = config.response_mime_type ?? config.responseMimeType;
+    const responseSchemaValue = config.response_schema ?? config.responseSchema;
+    if (responseMimeType !== undefined) {
+      legacyMimeType = responseMimeType;
+    }
+    if (responseSchemaValue !== undefined) {
+      legacyResponseSchema = responseSchemaValue;
+    }
+  }
+  if (responseSchema !== undefined && legacyResponseSchema !== undefined) {
+    throw new Error(
+      '`responseSchema` provided but `generationConfig.response_schema` already set.',
+    );
+  }
+
+  const schemaSource = responseSchema ?? legacyResponseSchema;
+  const schema =
+    schemaSource === undefined
+      ? undefined
+      : parseConfigResponseSchema(schemaSource as string, contextVars);
+  const mimeType =
+    typeof legacyMimeType === 'string'
+      ? legacyMimeType
+      : schema === undefined
+        ? undefined
+        : 'application/json';
+  return { mimeType, schema };
 }
 
 function normalizeInteractionSafetySettings(
@@ -429,6 +478,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
     const passthroughPreviousInteractionId =
       config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
+    const passthroughResponseFormat =
+      config.passthrough?.response_format ?? config.passthrough?.responseFormat;
+    const passthroughSystemInstruction =
+      config.passthrough?.system_instruction ?? config.passthrough?.systemInstruction;
     const hasConfigTools = Array.isArray(config.tools)
       ? config.tools.length > 0
       : Boolean(config.tools);
@@ -587,26 +640,42 @@ export class GoogleInteractionsProvider implements ApiProvider {
         error: 'Gemini Interactions service_tier must be one of flex, standard, or priority.',
       };
     }
-    const passthrough = Object.fromEntries(
-      Object.entries(config.passthrough || {}).filter(
-        ([field]) =>
-          field !== 'generation_config' &&
-          field !== 'generationConfig' &&
-          field !== 'model' &&
-          field !== 'service_tier' &&
-          field !== 'serviceTier' &&
-          !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field) &&
-          (!isVideoModel || (field !== 'system_instruction' && field !== 'systemInstruction')),
+    const passthrough = {
+      ...Object.fromEntries(
+        Object.entries(config.passthrough || {}).filter(
+          ([field]) =>
+            field !== 'generation_config' &&
+            field !== 'generationConfig' &&
+            field !== 'model' &&
+            field !== 'service_tier' &&
+            field !== 'serviceTier' &&
+            field !== 'previous_interaction_id' &&
+            field !== 'previousInteractionId' &&
+            field !== 'response_format' &&
+            field !== 'responseFormat' &&
+            field !== 'system_instruction' &&
+            field !== 'systemInstruction' &&
+            !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field),
+        ),
       ),
-    );
+      ...(passthroughPreviousInteractionId === undefined
+        ? {}
+        : { previous_interaction_id: passthroughPreviousInteractionId }),
+      ...(passthroughResponseFormat === undefined
+        ? {}
+        : { response_format: passthroughResponseFormat }),
+      ...(!isVideoModel && passthroughSystemInstruction !== undefined
+        ? { system_instruction: passthroughSystemInstruction }
+        : {}),
+    };
     const { input: interactionInput, systemInstruction: promptSystemInstruction } =
       parseInteractionInput(prompt, !isVideoModel);
     const systemInstructionContent =
-      !isVideoModel && config.passthrough?.system_instruction === undefined
+      !isVideoModel && passthroughSystemInstruction === undefined
         ? parseConfigSystemInstruction(config.systemInstruction, context?.vars)
         : undefined;
     const systemInstruction =
-      !isVideoModel && config.passthrough?.system_instruction === undefined
+      !isVideoModel && passthroughSystemInstruction === undefined
         ? [
             ...(systemInstructionContent?.parts
               .map((part) => part.text)
@@ -614,19 +683,18 @@ export class GoogleInteractionsProvider implements ApiProvider {
             ...(promptSystemInstruction ? [promptSystemInstruction] : []),
           ].join('\n')
         : undefined;
-    let responseSchema: unknown;
-    if (
-      !isVideoModel &&
-      config.responseSchema &&
-      config.passthrough?.response_format === undefined
-    ) {
-      if ((generationConfig as Record<string, unknown>).response_schema !== undefined) {
-        throw new Error(
-          '`responseSchema` provided but `generationConfig.response_schema` already set.',
-        );
-      }
-      responseSchema = parseConfigResponseSchema(config.responseSchema, context?.vars);
-    }
+    const structuredOutput =
+      !isVideoModel && passthroughResponseFormat === undefined
+        ? parseInteractionStructuredOutput(
+            [
+              config.generationConfig,
+              config.passthrough?.generationConfig,
+              config.passthrough?.generation_config,
+            ],
+            config.responseSchema,
+            context?.vars,
+          )
+        : undefined;
     const body = {
       model: effectiveModel,
       input:
@@ -647,10 +715,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
                   ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
                 },
           }
-        : responseSchema
+        : structuredOutput?.mimeType || structuredOutput?.schema !== undefined
           ? {
               response_format: [
-                { type: 'text', mime_type: 'application/json', schema: responseSchema },
+                {
+                  type: 'text',
+                  ...(structuredOutput.mimeType ? { mime_type: structuredOutput.mimeType } : {}),
+                  ...(structuredOutput.schema === undefined
+                    ? {}
+                    : { schema: structuredOutput.schema }),
+                },
               ],
             }
           : {}),

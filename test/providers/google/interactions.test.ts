@@ -382,6 +382,39 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
+  it('normalizes camelCase passthrough interaction controls with passthrough precedence', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        previousInteractionId: 'configured-previous',
+        systemInstruction: 'Configured instruction.',
+        passthrough: {
+          previousInteractionId: 'passthrough-previous',
+          responseFormat: [{ type: 'text', mime_type: 'text/plain' }],
+          systemInstruction: 'Passthrough instruction.',
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.previous_interaction_id).toBe('passthrough-previous');
+    expect(body.response_format).toEqual([{ type: 'text', mime_type: 'text/plain' }]);
+    expect(body.system_instruction).toBe('Passthrough instruction.');
+    expect(body).not.toHaveProperty('previousInteractionId');
+    expect(body).not.toHaveProperty('responseFormat');
+    expect(body).not.toHaveProperty('systemInstruction');
+  });
+
   it('forwards supported Robotics generation controls and a rendered response schema', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -427,6 +460,76 @@ describe('GoogleInteractionsProvider', () => {
         },
       },
     ]);
+  });
+
+  it('translates generationConfig structured-output fields for Robotics ER 2', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: '{"target":"banana"}' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          response_mime_type: 'application/json',
+          response_schema:
+            '{"type":"object","properties":{"target":{"type":"string"}},"required":["target"]}',
+        },
+        passthrough: {
+          generation_config: {
+            response_mime_type: 'application/json',
+            response_schema:
+              '{"type":"object","properties":{"result":{"type":"string","description":"{{ description }}"}},"required":["result"]}',
+          },
+        },
+      },
+    });
+
+    await provider.callApi('Locate the target.', {
+      vars: { description: 'Detected object' },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.generation_config).toBeUndefined();
+    expect(body.response_format).toEqual([
+      {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: {
+          type: 'object',
+          properties: {
+            result: { type: 'string', description: 'Detected object' },
+          },
+          required: ['result'],
+        },
+      },
+    ]);
+  });
+
+  it('rejects competing top-level and generationConfig schemas for Robotics ER 2', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        responseSchema: '{"type":"object"}',
+        generationConfig: {
+          response_schema: '{"type":"string"}',
+        },
+      },
+    });
+
+    await expect(provider.callApi('Locate the target.')).rejects.toThrow(
+      '`responseSchema` provided but `generationConfig.response_schema` already set.',
+    );
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
   it('normalizes only supported camelCase generationConfig fields for Robotics ER 2', async () => {
