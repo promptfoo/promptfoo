@@ -1588,6 +1588,11 @@ describe('Provider Registry', () => {
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
+      [
+        'vertex:chat:gemini-robotics-er-2-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
       // Bare vertex:<model> default route exercises the splits.slice(1) chat fallback
       // (distinct from the vertex:chat: branch, which slices from index 2).
       [
@@ -1596,6 +1601,11 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:gemini-omni-flash-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
+        'vertex:gemini-robotics-er-2-preview',
         async () =>
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
@@ -1641,12 +1651,62 @@ describe('Provider Registry', () => {
     it.each([
       'vertex:gemini-omni-flash-preview',
       'vertex:chat:gemini-omni-flash-preview',
+      'vertex:gemini-robotics-er-2-preview',
+      'vertex:chat:gemini-robotics-er-2-preview',
     ])('applies vertexai config and provider id for %s', async (providerPath) => {
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       expect((provider as any).config?.vertexai).toBe(true);
       expect(provider.id()).toBe(providerPath);
+    });
+
+    it.each([
+      'vertex:gemini-robotics-er-2-preview',
+      'vertex:chat:gemini-robotics-er-2-preview',
+    ])('preserves Interactions option and context precedence for %s', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const providerOptions: ProviderOptions = {
+        id: 'configured-id',
+        env: { GOOGLE_CLOUD_PROJECT: 'configured-project' },
+        config: {
+          basePath: '/configured-base',
+          region: 'us-west1',
+          vertexai: false,
+        },
+      };
+      const provider = await factory!.create(providerPath, providerOptions, {
+        basePath: '/context-base',
+        env: { GOOGLE_CLOUD_PROJECT: 'context-project' },
+        options: providerOptions,
+      });
+
+      expect((provider as any).config).toMatchObject({
+        basePath: '/configured-base',
+        region: 'us-west1',
+        vertexai: true,
+      });
+      expect((provider as any).env).toEqual(providerOptions.env);
+      expect(provider.id()).toBe(providerPath);
+
+      const contextOnlyProvider = await factory!.create(
+        providerPath,
+        { config: { region: 'us-central1' } },
+        {
+          basePath: '/context-base',
+          env: { GOOGLE_CLOUD_PROJECT: 'context-project' },
+        },
+      );
+      expect((contextOnlyProvider as any).config).toMatchObject({
+        basePath: '/context-base',
+        region: 'us-central1',
+        vertexai: true,
+      });
+      expect((contextOnlyProvider as any).env).toEqual({
+        GOOGLE_CLOUD_PROJECT: 'context-project',
+      });
+      expect(contextOnlyProvider.id()).toBe(providerPath);
     });
 
     it('applies provider id but omits vertexai config for google:video routes', async () => {

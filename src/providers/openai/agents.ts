@@ -121,7 +121,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         loadOutputGuardrails(this.agentConfig.outputGuardrails),
       ]);
 
-      const configuredAgent = agent.clone({
+      const configuredAgent = cloneAgentPreservingHooks(agent, {
         tools: mergeArrays(agent.tools, tools),
         handoffs: mergeArrays(agent.handoffs, handoffs),
         inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
@@ -314,7 +314,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       };
     });
 
-    return agent.clone({ tools });
+    return cloneAgentPreservingHooks(agent, { tools });
   }
 
   private parsePromptInput(prompt: string): string | AgentInputItem[] {
@@ -453,6 +453,19 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   return [...(existing ?? []), ...(additions ?? [])];
 }
 
+function cloneAgentPreservingHooks(
+  source: Agent<any, any>,
+  config: Parameters<Agent<any, any>['clone']>[0],
+): Agent<any, any> {
+  const cloned = source.clone(config);
+  const sourceHooks = source as unknown as { eventEmitter: unknown };
+  const clonedHooks = cloned as unknown as { eventEmitter: unknown };
+  // Agent.clone() creates a fresh lifecycle emitter. The provider replaces the cloned graph at
+  // execution time, so share the source emitter to preserve all registered hook semantics.
+  clonedHooks.eventEmitter = sourceHooks.eventEmitter;
+  return cloned;
+}
+
 /**
  * Clone the executable agent graph so provider-level model overrides win on every turn.
  *
@@ -475,7 +488,7 @@ function applyExecutionOverrides(
       return existing;
     }
 
-    const cloned = source.clone({
+    const cloned = cloneAgentPreservingHooks(source, {
       ...(overrides.model === undefined ? {} : { model: overrides.model }),
       ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
       handoffs: [],

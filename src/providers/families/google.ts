@@ -12,12 +12,20 @@ export const googleProviderFactories: ProviderFactory[] = [
       const firstPart = splits[1];
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (
+        modelName === 'gemini-omni-flash-preview' ||
+        modelName === 'gemini-robotics-er-2-preview'
+      ) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, {
           ...providerOptions,
           id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
+          env: providerOptions.env ?? context.env,
+          config: {
+            ...(context.basePath && { basePath: context.basePath }),
+            ...providerOptions.config,
+            vertexai: true,
+          },
         });
       }
       if (firstPart === 'video') {

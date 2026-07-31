@@ -1,4 +1,11 @@
-import { Agent, handoff, OpenAIProvider, setDefaultModelProvider, Usage } from '@openai/agents';
+import {
+  Agent,
+  Handoff,
+  handoff,
+  OpenAIProvider,
+  setDefaultModelProvider,
+  Usage,
+} from '@openai/agents';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import type {
@@ -138,5 +145,73 @@ describe('OpenAiAgentsProvider execution overrides', () => {
     expect(modelProvider.model.requests.map((request) => request.modelSettings)).toEqual(
       expectedSettings,
     );
+  });
+
+  it.each([
+    ['model', { model: 'override-model' }],
+    ['model settings', { modelSettings: { temperature: 0.2 } }],
+  ])('preserves lifecycle listeners across recursive %s override cloning', async (_name, overrides) => {
+    const modelProvider = new RecordingModelProvider();
+    setDefaultModelProvider(modelProvider);
+
+    const escalationStart = vi.fn();
+    const resolutionStart = vi.fn();
+    const resolutionEnd = vi.fn();
+    const supportStart = vi.fn();
+    const supportStartOnce = vi.fn();
+    const supportHandoff = vi.fn();
+    const resolutionAgent = new Agent({
+      name: 'Resolution Agent',
+      instructions: 'Resolve escalations.',
+      model: 'resolution-model',
+    });
+    resolutionAgent.on('agent_start', resolutionStart);
+    resolutionAgent.on('agent_end', resolutionEnd);
+
+    const escalationAgent = new Agent({
+      name: 'Escalation Agent',
+      instructions: 'Handle escalations.',
+      model: 'handoff-model',
+      handoffs: [resolutionAgent],
+    });
+    escalationAgent.on('agent_start', escalationStart);
+
+    const declaredHandoffAgent = new Agent({
+      name: 'Declared Handoff Agent',
+      instructions: 'Declare the model-facing handoff.',
+    });
+    const invokeDynamicHandoff = vi.fn(async () => escalationAgent);
+    const supportAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Hand off every request.',
+      model: 'initial-model',
+      handoffs: [new Handoff(declaredHandoffAgent, invokeDynamicHandoff)],
+    });
+    supportAgent.on('agent_start', supportStart);
+    supportAgent.once('agent_start', supportStartOnce);
+    supportAgent.on('agent_handoff', supportHandoff);
+    // Exercise cycle-safe cloning without changing the first handoff selected by the test model.
+    escalationAgent.handoffs.push(supportAgent);
+
+    const provider = new OpenAiAgentsProvider('support-workflow', {
+      config: {
+        agent: supportAgent,
+        ...overrides,
+      },
+    });
+
+    await expect(provider.callApi('Please escalate this request.')).resolves.toMatchObject({
+      output: 'Escalated successfully.',
+    });
+    await expect(provider.callApi('Please escalate this request again.')).resolves.toMatchObject({
+      output: 'Escalated successfully.',
+    });
+    expect(supportStart).toHaveBeenCalledTimes(2);
+    expect(supportStartOnce).toHaveBeenCalledTimes(1);
+    expect(supportHandoff).toHaveBeenCalledTimes(2);
+    expect(invokeDynamicHandoff).toHaveBeenCalledTimes(2);
+    expect(escalationStart).toHaveBeenCalledTimes(2);
+    expect(resolutionStart).toHaveBeenCalledTimes(2);
+    expect(resolutionEnd).toHaveBeenCalledTimes(2);
   });
 });
