@@ -1,7 +1,7 @@
 ---
 title: OpenAI
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.6, GPT-5.5, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.6, GPT-5.5, GPT-4.1, o-series reasoning, embeddings, and assistants for AI evals'
 ---
 
 # OpenAI
@@ -581,7 +581,7 @@ GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, an
 
 Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Fast mode does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.6
     config:
@@ -1145,7 +1145,7 @@ To preserve an existing Chat Completions search integration, use a built-in sear
 models retrieve information before each response and return URL citations in
 `response.metadata.annotations`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5-search-api
     config:
@@ -1868,7 +1868,7 @@ the current `language` and `format` fields. `format` is an alias for `response_f
 API ignores a top-level `format` field, so promptfoo sends the value as `response_format`. If both
 are set, the explicit `response_format` takes precedence.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:tts:gpt-4o-mini-tts
     config:
@@ -2697,7 +2697,7 @@ GPT-5.6 also supports `prompt_cache_options`. The `implicit` mode below keeps au
 breakpoint placement for ordinary prompts. When the API reports `cache_write_tokens`, Promptfoo
 prices those writes at 1.25 times the active input rate.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.6
     config:

@@ -591,7 +591,7 @@ is a separate research-preview rate that promptfoo does not encode. To track it,
 `inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
 rates, because it is applied as both the input and the output per-token price.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-opus-5
     config:

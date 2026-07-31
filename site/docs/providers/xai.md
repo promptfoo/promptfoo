@@ -140,7 +140,6 @@ Grok 4.5 is xAI's flagship model for coding, agentic tasks, and knowledge work:
 - **Server-side tools**: use `xai:responses:grok-4.5` for web search, X search, code execution, and MCP
 
 ```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:grok-4.5
     config:
@@ -158,7 +157,6 @@ Grok 4.3 is a general-purpose alternative for text workflows:
 - **Unsupported parameters**: Same restrictions as other Grok 4-family reasoning models (`presence_penalty`, `frequency_penalty`, and `stop`)
 
 ```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:grok-4.3
     config:
@@ -172,8 +170,7 @@ providers:
 
 These retired IDs redirect to Grok 4.3 but retain their legacy request contract. Promptfoo strips `reasoning_effort`, `presence_penalty`, `frequency_penalty`, and `stop` from these requests. Target Grok 4.3 directly when you need to control reasoning effort.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -186,8 +183,7 @@ providers:
 
 These retired reasoning and non-reasoning IDs redirect to Grok 4.3 but retain their legacy request contract. Use Grok 4.3 directly for new configurations.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -200,8 +196,7 @@ providers:
 
 The retired Grok 4 IDs redirect to Grok 4.3 with low reasoning effort while retaining their legacy request contract. Promptfoo strips unsupported sampling and reasoning-effort parameters; use Grok 4.3 directly for new configurations.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -215,8 +210,7 @@ providers:
 Grok Code Fast is retired. For `grok-code-fast-1`, xAI recommends `grok-build-0.1` for code
 workloads; use `xai:grok-build-0.1` in Promptfoo configs instead of relying on the retired slug.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-build-0.1
     config:
