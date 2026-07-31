@@ -103,6 +103,16 @@ export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
   'gpt-4-0314',
   'gpt-4-0125-preview',
   'gpt-4-turbo-preview',
+  'gpt-4o-audio-preview',
+  'gpt-4o-audio-preview-2024-10-01',
+  'gpt-4o-audio-preview-2024-12-17',
+  'gpt-4o-audio-preview-2025-06-03',
+  'gpt-4o-mini-audio-preview',
+  'gpt-4o-realtime-preview',
+  'gpt-4o-realtime-preview-2024-10-01',
+  'gpt-4o-realtime-preview-2024-12-17',
+  'gpt-4o-realtime-preview-2025-06-03',
+  'gpt-4o-mini-realtime-preview',
   // July 23, 2026 shutdowns.
   'computer-use-preview',
   'computer-use-preview-2025-03-11',
@@ -479,8 +489,9 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   })),
 ];
 
-// Deprecated July 20, 2026, but available until the published January 20, 2027 shutdown.
-const DEPRECATED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
+// Retired previews remain for historical billing; the dated mini preview remains routable until
+// OpenAI publishes its shutdown date.
+const LEGACY_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
   ...[
     'gpt-4o-audio-preview',
     'gpt-4o-audio-preview-2024-12-17',
@@ -508,7 +519,7 @@ const DEPRECATED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
 
 export const OPENAI_CHAT_MODELS = excludeRetiredModels([
   ...OPENAI_CHAT_AND_RETIRED_MODELS,
-  ...DEPRECATED_OPENAI_AUDIO_MODELS,
+  ...LEGACY_OPENAI_AUDIO_MODELS,
 ]);
 
 export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex-spark' }];
@@ -822,8 +833,8 @@ const OPENAI_REALTIME_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   ),
 ];
 
-// Deprecated July 20, 2026, but available until the published January 20, 2027 shutdown.
-const DEPRECATED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
+// Retired previews preserved only for historical billing.
+const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-4o-realtime-preview',
     type: 'chat',
@@ -878,7 +889,7 @@ const DEPRECATED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
 
 export const OPENAI_REALTIME_MODELS = excludeRetiredModels([
   ...OPENAI_REALTIME_AND_RETIRED_MODELS,
-  ...DEPRECATED_OPENAI_REALTIME_MODELS,
+  ...RETIRED_OPENAI_REALTIME_MODELS,
 ]);
 
 export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts' | 'realtime';
@@ -893,13 +904,19 @@ export function getRetiredOpenAiModelRoute(modelId: string): RetiredOpenAiModelR
   if (!RETIRED_OPENAI_MODEL_IDS.has(modelId)) {
     return undefined;
   }
-  if (OPENAI_CHAT_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+  if (
+    OPENAI_CHAT_AND_RETIRED_MODELS.some(({ id }) => id === modelId) ||
+    LEGACY_OPENAI_AUDIO_MODELS.some(({ id }) => id === modelId)
+  ) {
     return 'chat';
   }
   if (OPENAI_TTS_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
     return 'tts';
   }
-  if (OPENAI_REALTIME_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+  if (
+    OPENAI_REALTIME_AND_RETIRED_MODELS.some(({ id }) => id === modelId) ||
+    RETIRED_OPENAI_REALTIME_MODELS.some(({ id }) => id === modelId)
+  ) {
     return 'realtime';
   }
   if (modelId.startsWith('text-moderation-')) {
@@ -917,10 +934,10 @@ export function getRetiredOpenAiModelRoute(modelId: string): RetiredOpenAiModelR
 export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...OPENAI_CHAT_AND_RETIRED_MODELS,
   ...OPENAI_TTS_AND_RETIRED_MODELS,
-  ...DEPRECATED_OPENAI_AUDIO_MODELS,
+  ...LEGACY_OPENAI_AUDIO_MODELS,
   ...OPENAI_COMPLETION_MODELS,
   ...OPENAI_REALTIME_AND_RETIRED_MODELS,
-  ...DEPRECATED_OPENAI_REALTIME_MODELS,
+  ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS,
   ...OPENAI_CODEX_ONLY_MODELS,
   ...OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS,

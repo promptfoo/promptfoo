@@ -381,6 +381,7 @@ export function calculateBedrockCost(
   cacheWriteTokens = 0,
   region?: string,
   serviceTier?: BedrockServiceTier,
+  cacheWrite1hTokens = 0,
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
     return undefined;
@@ -410,7 +411,13 @@ export function calculateBedrockCost(
   const pricingMultiplier = endpointMultiplier * serviceTierMultiplier;
   const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
-    ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
+    ? calculateCacheInputCost(
+        inputRate,
+        promptTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        cacheWrite1hTokens,
+      )
     : promptTokens * inputRate;
   const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
   return inputCost + outputCost;
@@ -435,6 +442,7 @@ export function calculateBedrockInvokeModelCost(
   cacheReadTokens = 0,
   cacheWriteTokens = 0,
   region?: string,
+  cacheWrite1hTokens = 0,
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
   if (
@@ -453,5 +461,7 @@ export function calculateBedrockInvokeModelCost(
     cacheReadTokens,
     cacheWriteTokens,
     region,
+    undefined,
+    cacheWrite1hTokens,
   );
 }

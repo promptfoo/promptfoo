@@ -1,4 +1,4 @@
-# openai-deep-research (OpenAI Deep Research Models)
+# openai-deep-research (OpenAI Research with Web Search)
 
 You can run this example with:
 
@@ -7,15 +7,14 @@ npx promptfoo@latest init --example openai-deep-research
 cd openai-deep-research
 ```
 
-This example demonstrates OpenAI's deep research models with web search capabilities via the Responses API.
+This example demonstrates current OpenAI Responses models with web search.
 
 ## Important Notes
 
-⚠️ **Response Times**: Deep research models can take **2-10 minutes** to complete research tasks as they perform extensive web searches and reasoning.
+⚠️ **Response Times**: Research prompts can take longer than ordinary completions because the model may perform multiple searches.
 
-⚠️ **Token Usage**: These models use significant tokens for internal reasoning. Always set high `max_output_tokens` (50,000+) to avoid incomplete responses.
-
-⚠️ **Access**: Deep research models may require special access from OpenAI. Check your API access if you encounter persistent 429 errors.
+⚠️ **Token Usage**: Search and reasoning can use significant tokens. Set a suitable
+`max_output_tokens` limit for the report length you need.
 
 ## Setup
 
@@ -28,7 +27,7 @@ export OPENAI_API_KEY=your-key-here
 2. Run the evaluation with appropriate timeout:
 
 ```bash
-# Set a 10-minute timeout for deep research tasks
+# Allow enough time for multi-step research tasks
 export PROMPTFOO_EVAL_TIMEOUT_MS=600000
 promptfoo eval
 ```
@@ -43,7 +42,7 @@ PROMPTFOO_EVAL_TIMEOUT_MS=600000 npm run local -- eval -c examples/openai-deep-r
 
 This example:
 
-- Tests OpenAI's `o4-mini-deep-research` model with web search tools
+- Tests OpenAI's current `gpt-5.6-sol` model with the Responses web-search tool
 - Evaluates research capabilities on machine learning and space exploration topics
 - Uses the model's ability to automatically search the web for current information
 - Checks that responses contain relevant technical terminology
@@ -55,33 +54,34 @@ The model automatically decides when to use web search to provide comprehensive,
 
 ```yaml
 providers:
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-5.6-sol
     config:
-      max_output_tokens: 50000 # Required for complete research responses
+      max_output_tokens: 10000
       tools:
-        - type: web_search_preview # Required for deep research models
+        - type: web_search
       # Optional parameters:
       # max_tool_calls: 50 # Control number of searches (default: unlimited)
       # background: true # Use background mode for long-running tasks
       # store: true # Store the conversation for 30 days
 ```
 
-## Available Models
+## Current Models
 
-- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
-- `o3-deep-research-2025-06-26` - Snapshot version
-- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
-- `o4-mini-deep-research-2025-06-26` - Snapshot version
+- `gpt-5.6-sol` - Flagship GPT-5.6 tier
+- `gpt-5.6-terra` - Balanced GPT-5.6 tier
+- `gpt-5.6-luna` - Efficient GPT-5.6 tier
+
+OpenAI retired the `o3-deep-research` and `o4-mini-deep-research` families on July 23, 2026.
 
 ## Advanced Features
 
 ### Background Mode (Recommended)
 
-For production use, run deep research tasks in background mode to avoid timeouts:
+For long-running production research, use background mode:
 
 ```yaml
 providers:
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-5.6-sol
     config:
       background: true
       webhook_url: https://your-api.com/webhook # Optional: Get notified when complete
@@ -89,14 +89,14 @@ providers:
 
 ### Using Code Interpreter
 
-Deep research models can analyze data using code:
+Responses models can analyze data using Code Interpreter:
 
 ```yaml
 providers:
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-5.6-sol
     config:
       tools:
-        - type: web_search_preview
+        - type: web_search
         - type: code_interpreter
           container:
             type: auto
@@ -108,14 +108,14 @@ Connect to private data sources using MCP servers:
 
 ```yaml
 providers:
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-5.6-sol
     config:
       tools:
-        - type: web_search_preview
+        - type: web_search
         - type: mcp
           server_label: mycompany_mcp
           server_url: https://mycompany.com/mcp
-          require_approval: never # Required for deep research
+          require_approval: never # Allow the model to call this server without an approval round trip
 ```
 
 ### Prompt Enhancement
@@ -124,13 +124,14 @@ For better results, consider preprocessing user queries:
 
 1. **Clarification**: Use a faster model to gather context
 2. **Prompt rewriting**: Expand the query with specific requirements
-3. **Deep research**: Pass the enhanced prompt to the research model
+3. **Research**: Pass the enhanced prompt to the Responses model with web search
 
-See the [OpenAI Deep Research Guide](https://platform.openai.com/docs/guides/deep-research) for detailed examples.
+See the [OpenAI Web Search Guide](https://platform.openai.com/docs/guides/tools-web-search) for
+detailed examples.
 
 ## Response Format
 
-Deep research responses include:
+Responses with web search can include:
 
 - **output_text**: The final research report with inline citations
 - **annotations**: Citation details with URLs and titles
@@ -140,13 +141,13 @@ Deep research responses include:
 ## Troubleshooting
 
 - **Timeouts**: Increase `PROMPTFOO_EVAL_TIMEOUT_MS` if evaluations time out
-- **Incomplete responses**: Increase `max_output_tokens` to 50,000 or higher
+- **Incomplete responses**: Increase `max_output_tokens`
 - **429 errors**: May indicate rate limits or access restrictions
-- **Tool validation errors**: Ensure `web_search_preview` is configured
+- **Tool validation errors**: Ensure `web_search` is configured
 
 ## Best Practices
 
-1. **Always use high token limits**: Set `max_output_tokens: 50000` or higher
+1. **Set an intentional output limit**: Size `max_output_tokens` for the report you need
 2. **Handle long response times**: Use background mode or set high timeouts
 3. **Monitor costs**: These models use significant tokens for reasoning
 4. **Validate citations**: Check that returned URLs are accessible
@@ -154,7 +155,7 @@ Deep research responses include:
 
 ## Learn More
 
-- [OpenAI Deep Research Guide](https://platform.openai.com/docs/guides/deep-research)
+- [OpenAI Web Search Guide](https://platform.openai.com/docs/guides/tools-web-search)
 - [Promptfoo Documentation](https://promptfoo.dev/docs)
 - [MCP Integration Guide](https://platform.openai.com/docs/mcp)
-- [Building a Deep Research Compatible MCP Server](mcp-server-example.md)
+- [Building a Research MCP Server](mcp-server-example.md)

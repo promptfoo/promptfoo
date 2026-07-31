@@ -124,6 +124,40 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.cost).toBeCloseTo(2.2, 10);
   });
 
+  it('should preserve namespaced model ids when billing a custom gateway', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_custom_gateway',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Gateway response' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 500,
+          total_tokens: 1_500,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('vendor/gpt-4.1', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKey: 'test-key',
+      },
+    });
+
+    const result = await provider.callApi('Use the custom gateway');
+
+    expect(result.cost).toBeUndefined();
+  });
+
   it('should serialize the effective service tier with prompt and passthrough precedence', async () => {
     const provider = new OpenAiResponsesProvider('gpt-5.6', {
       config: {

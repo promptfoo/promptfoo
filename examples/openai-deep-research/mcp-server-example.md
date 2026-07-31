@@ -1,10 +1,11 @@
-# Building a Deep Research Compatible MCP Server
+# Building a Research MCP Server
 
-Deep research models require MCP servers that implement a specific search and fetch interface. This guide shows you how to build a compatible server.
+This guide shows how to expose a simple search-and-fetch interface that a Responses model can use
+for research over private data.
 
-## Required Interface
+## Search and Fetch Interface
 
-Your MCP server must provide exactly two tools:
+This example provides two tools:
 
 1. **search** - Searches your data and returns results
 2. **fetch** - Retrieves full content for a specific document
@@ -255,21 +256,21 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
 ```
 
-## Integration with Deep Research
+## Integration with Responses Research
 
-Configure your deep research model to use your MCP server:
+Configure the current Responses model to use your MCP server:
 
 ```yaml
 providers:
-  - id: openai:responses:o3-deep-research
+  - id: openai:responses:gpt-5.6-sol
     config:
-      max_output_tokens: 100000
+      max_output_tokens: 10000
       tools:
-        - type: web_search_preview # Required
+        - type: web_search
         - type: mcp
           server_label: internal_docs
           server_url: http://localhost:3000/mcp
-          require_approval: never # Required for deep research
+          require_approval: never # Allow automated calls during the research task
           headers:
             Authorization: Bearer your-api-key
 ```

@@ -77,7 +77,7 @@ and the model ID because Google does not publish one in its public model catalog
 
 **Claude Sonnet 5:**
 
-- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and effort levels. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Like Opus 4.7/4.8, promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model).
+- `vertex:claude-sonnet-5` - Claude Sonnet 5, the most agentic Sonnet, with a 1M-token context window and effort levels. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. Adaptive thinking is on by default, and promptfoo automatically omits `temperature`, `top_p`, and `top_k` (deprecated for this model). Through August 31, 2026, global input/output pricing is $2/$10 per million tokens and prompt-cache read/5-minute write/1-hour write pricing is $0.20/$2.50/$4.00. Standard pricing becomes $3/$15 and $0.30/$3.75/$6.00 on September 1. Regional and multi-region endpoints add 10%.
 
 **Claude 4.7:**
 

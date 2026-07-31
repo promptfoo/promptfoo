@@ -584,6 +584,8 @@ describe('loadApiProvider', () => {
     'gpt-4-0314',
     'gpt-4-32k',
     'gpt-4-turbo-preview',
+    'gpt-4o-audio-preview',
+    'gpt-4o-realtime-preview',
     'gpt-3.5-turbo-0301',
     'codex-mini-latest',
     'gpt-4o-mini-tts-2025-03-20',
@@ -600,7 +602,9 @@ describe('loadApiProvider', () => {
 
   it.each([
     ['chatgpt-4o-latest', OpenAiChatCompletionProvider],
+    ['gpt-4o-audio-preview', OpenAiChatCompletionProvider],
     ['gpt-4o-mini-tts-2025-03-20', OpenAiTtsProvider],
+    ['gpt-4o-realtime-preview', OpenAiRealtimeProvider],
     ['gpt-realtime-mini-2025-10-06', OpenAiRealtimeProvider],
     ['gpt-5-codex', OpenAiResponsesProvider],
     ['text-moderation-latest', OpenAiModerationProvider],

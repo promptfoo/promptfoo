@@ -1188,6 +1188,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('prices the actual response inference geography from workspace defaults', async () => {
+      const provider = createProvider('claude-opus-4-8');
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          inference_geo: 'us',
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(33, 10);
+    });
+
     it('should forward cache tokens from cached responses', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
 

@@ -3778,6 +3778,34 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.00385, 6);
   });
 
+  it('bills one-hour cache writes from Claude Runtime responses at 2x input', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 500,
+        cache_creation_input_tokens: 100,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 60,
+          ephemeral_1h_input_tokens: 40,
+        },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('global.anthropic.claude-fable-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00555, 8);
+  });
+
   it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
     const responseJson = JSON.stringify({
       choices: [{ message: { content: 'ok' } }],

@@ -272,6 +272,7 @@ function getAnthropicCostFromMessage(
     message.usage?.cache_read_input_tokens ?? undefined,
     message.usage?.cache_creation_input_tokens ?? undefined,
     message.usage?.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
+    message.usage?.inference_geo,
   );
 }
 
@@ -593,9 +594,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    *   converted to `type: 'adaptive'`.
    * - `type: 'disabled'` is rejected outright on always-on models (Fable 5 / Mythos 5), and on
    *   Opus 5 when `effort` is `xhigh`/`max`. In both cases it is dropped rather than sent.
-   * - On Opus 5 an *omitted* thinking config still runs adaptive thinking, so it counts as
-   *   enabled — callers size the default `max_tokens` off this, and treating it as disabled
-   *   truncates responses mid-answer.
+   * - On Opus 5 and Sonnet 5 an *omitted* thinking config still runs adaptive thinking, so it
+   *   consumes output tokens — callers size the default `max_tokens` off this, and treating it
+   *   as disabled truncates responses mid-answer.
    *
    * Warnings are emitted at most once per provider instance.
    */
@@ -616,7 +617,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
      */
     thinkingEnabled: boolean;
     /**
-     * Thinking will consume output tokens, including the Opus 5 case where an omitted
+     * Thinking will consume output tokens, including the Opus 5 / Sonnet 5 case where an omitted
      * `thinking` field still runs adaptive. Only used to size the default `max_tokens`:
      * a request that thinks by default needs headroom or it truncates mid-answer.
      */

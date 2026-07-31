@@ -248,7 +248,10 @@ providers:
 
 This is equivalent to setting `base_url="https://eu-west-1.api.x.ai/v1"` in the Python client. The same `region` option is also accepted by the xAI image, video, Responses, and realtime voice providers.
 
-xAI's global endpoint automatically routes requests to models available to your team. Regional endpoints are useful for data-residency requirements, but model availability varies by region and account. In particular, xAI currently excludes Grok 4.5 from the EU API Console. Check the xAI Console or the model's xAI documentation before selecting a regional endpoint.
+xAI's global endpoint automatically routes requests to models available to your team. Regional
+endpoints are useful for data-residency requirements, but model availability varies by region and
+account. Grok 4.5 has been available to EU API Console users since July 17, 2026; check the xAI
+Console for your team's access before selecting a regional endpoint.
 
 ### Live Search (Beta)
 

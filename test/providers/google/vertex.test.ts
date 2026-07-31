@@ -2984,6 +2984,42 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.cost).toBeCloseTo(expectedCost, 6);
   });
 
+  it('bills Vertex Sonnet 5 one-hour cache writes at the one-hour rate', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-31T23:59:59.999Z'));
+      const model = 'claude-sonnet-5';
+      provider = new VertexChatProvider(model, {
+        config: { region: 'global', max_tokens: 32 },
+      });
+      mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 1_000_000,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 0,
+            ephemeral_1h_input_tokens: 1_000_000,
+          },
+        },
+      });
+
+      const result = await provider.callClaudeApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(4, 10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
     const model = 'claude-fable-5';
     provider = new VertexChatProvider(model, {

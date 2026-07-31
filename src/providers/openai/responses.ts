@@ -39,6 +39,7 @@ import {
   getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
+  isOpenAiFirstPartyApiUrl,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -832,7 +833,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
     const effectiveModelName = this.getEffectiveModelName(config);
-    return effectiveModelName.split('/').pop() ?? effectiveModelName;
+    return isOpenAiFirstPartyApiUrl(this.getApiUrl())
+      ? (effectiveModelName.split('/').pop() ?? effectiveModelName)
+      : effectiveModelName;
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {

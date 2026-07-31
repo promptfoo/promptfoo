@@ -26,6 +26,10 @@ interface MockConverseCommandOutput {
     totalTokens?: number;
     cacheReadInputTokens?: number;
     cacheWriteInputTokens?: number;
+    cacheDetails?: Array<{
+      ttl: '5m' | '1h';
+      inputTokens: number;
+    }>;
   };
   stopReason?: StopReason;
   metrics?: {
@@ -182,6 +186,10 @@ function createMockConverseResponse(
       totalTokens: number;
       cacheReadInputTokens?: number;
       cacheWriteInputTokens?: number;
+      cacheDetails?: Array<{
+        ttl: '5m' | '1h';
+        inputTokens: number;
+      }>;
     };
     stopReason?: StopReason;
     latencyMs?: number;
@@ -1252,6 +1260,33 @@ describe('AwsBedrockConverseProvider', () => {
       // Regional rates: uncached input $11, cache read $1.10,
       // cache write $13.75, and output $55 per million tokens.
       expect(result.cost).toBeCloseTo(0.005775, 8);
+    });
+
+    it('should bill one-hour prompt cache writes separately in Claude cost', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 750,
+            cacheReadInputTokens: 500,
+            cacheWriteInputTokens: 100,
+            cacheDetails: [
+              { ttl: '1h', inputTokens: 40 },
+              { ttl: '5m', inputTokens: 60 },
+            ],
+          },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // Base rates: uncached input $10, cache read $1, five-minute write $12.50,
+      // one-hour write $20, and output $50 per million tokens.
+      expect(result.cost).toBeCloseTo(0.00555, 8);
     });
 
     it('should not apply the regional premium for a global inference-profile ARN', async () => {
@@ -3360,6 +3395,36 @@ Third line`;
       const result = await provider.callApiStreaming('Test');
 
       expect(result.cost).toBeCloseTo(0.0005445, 8);
+    });
+
+    it('should bill one-hour prompt cache writes separately in streaming cost', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        {
+          metadata: {
+            usage: {
+              inputTokens: 100,
+              outputTokens: 50,
+              totalTokens: 750,
+              cacheReadInputTokens: 500,
+              cacheWriteInputTokens: 100,
+              cacheDetails: [
+                { ttl: '1h', inputTokens: 40 },
+                { ttl: '5m', inputTokens: 60 },
+              ],
+            },
+          },
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
+
+      const result = await provider.callApiStreaming('Test');
+
+      expect(result.cost).toBeCloseTo(0.00555, 8);
     });
 
     it('should handle streaming tool use response', async () => {

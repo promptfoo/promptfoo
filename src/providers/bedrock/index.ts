@@ -2920,6 +2920,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.completionDetails?.cacheCreationInputTokens ??
           coerceStrToNum(output.usage?.cache_creation_input_tokens),
         region,
+        coerceStrToNum(output.usage?.cache_creation?.ephemeral_1h_input_tokens),
       );
 
       return {

@@ -225,8 +225,8 @@ interface ClaudeModelFamily {
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
   /**
-   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
-   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   * Omitting `thinking` runs adaptive thinking rather than no thinking, so requests that never
+   * set `thinking` still spend thinking tokens against `max_tokens`.
    */
   thinkingOnByDefault?: boolean;
   /**
@@ -268,6 +268,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -335,7 +336,7 @@ export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean 
 }
 
 /**
- * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5). Callers use this
+ * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5 / Sonnet 5). Callers use this
  * so that thinking-token headroom (e.g. the default `max_tokens`) reflects what the API will
  * actually do rather than assuming an absent `thinking` field means thinking is off.
  */
@@ -624,6 +625,7 @@ export function calculateAnthropicCost(
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
   cacheCreation1hTokens?: number,
+  reportedInferenceGeo?: string | null,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
   const registeredModel = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
@@ -650,9 +652,10 @@ export function calculateAnthropicCost(
   // Apply the regional endpoint premium (if any) as a flat multiplier on the final cost, so it
   // composes with long-context and cache pricing rather than overriding either.
   const regionalPremiumMultiplier: number = effectiveConfig.regionalPremiumMultiplier ?? 1;
+  const inferenceGeo = reportedInferenceGeo ?? effectiveConfig?.extra_body?.inference_geo;
   const usesUsInferenceGeo =
     pricingModelName === modelName &&
-    effectiveConfig?.extra_body?.inference_geo === 'us' &&
+    inferenceGeo === 'us' &&
     CLAUDE_46_OR_LATER_MODEL_PATTERN.test(pricingModelName) &&
     effectiveConfig.cost == null &&
     effectiveConfig.inputCost == null &&

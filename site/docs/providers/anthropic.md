@@ -614,11 +614,16 @@ controls at the model level:
 - **Manual thinking budgets convert to adaptive.** A legacy
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
+- **Adaptive thinking is on by default.** Requests without a `thinking` field still use
+  adaptive thinking. Pass `thinking: { type: 'disabled' }` to turn it off, and leave enough
+  `max_tokens` headroom for thinking plus the visible response.
 
 Sonnet 5 uses a 1M-token context window with no long-context surcharge above 200K tokens.
 Promptfoo currently applies Anthropic's introductory **$2 per million input / $10 per million
 output** pricing, which runs through August 31, 2026. Anthropic's standard $3/$15 pricing begins
-September 1, 2026.
+September 1, 2026. Prompt-cache reads cost 10% of input, 5-minute writes cost 1.25× input,
+and 1-hour writes cost 2× input: $0.20/$2.50/$4.00 during the promotion and
+$0.30/$3.75/$6.00 afterward, per million cached tokens.
 
 ### Claude Opus 4.8 notes
 

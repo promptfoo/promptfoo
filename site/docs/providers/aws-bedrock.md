@@ -834,7 +834,10 @@ geo profiles, add the 10% regional premium.
 foundation model ID and `us.`/`eu.`/`au.`/`global.` inference profiles. Through August 31,
 2026, the global profile costs $2/$10 per million input/output tokens. In-region and geo
 endpoints cost $2.20/$11 after the 10% regional premium. Standard $3/$15 global pricing begins
-September 1, 2026.
+September 1, 2026. Global prompt-cache reads, 5-minute writes, and 1-hour writes cost
+$0.20/$2.50/$4.00 per million cached tokens during the promotion and
+$0.30/$3.75/$6.00 afterward. In-region and geo endpoints apply the same 10% premium to
+each cache tier.
 
 :::warning Region-specific Claude end-of-life
 

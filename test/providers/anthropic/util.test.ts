@@ -147,6 +147,21 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(46.75 * 1.1, 10);
     });
 
+    it('uses the actual response inference geography for workspace defaults', () => {
+      const cost = calculateAnthropicCost(
+        'claude-opus-4-8',
+        {},
+        1_000_000,
+        1_000_000,
+        1_000_000,
+        2_000_000,
+        1_000_000,
+        'us',
+      );
+
+      expect(cost).toBeCloseTo(46.75 * 1.1, 10);
+    });
+
     it('should return undefined for claude-opus-4-8-latest (alias does not exist)', () => {
       // Opus 4.8's documented Claude API alias is the canonical ID itself
       // (`claude-opus-4-8`); there is no separate `-latest` pointer. Guards
@@ -2085,6 +2100,8 @@ describe('Anthropic utilities', () => {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
         // ...but is NOT always-on adaptive thinking (thinking can still be disabled).
         expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        // Omitting the field still runs adaptive thinking on Sonnet 5.
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
       }
     });
 
@@ -2124,7 +2141,7 @@ describe('Anthropic utilities', () => {
       }
       // Opus 4.7/4.8 keep their own warning name and are not thinking-on-by-default.
       expect(isThinkingOnByDefaultClaudeModel('claude-opus-4-8')).toBe(false);
-      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(false);
+      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(true);
     });
 
     it('rejects disabled thinking on Opus 5 only above effort "high"', () => {
@@ -2203,7 +2220,7 @@ describe('Anthropic utilities', () => {
       expect(claudeThinkingConsumesTokens('claude-opus-5', undefined)).toBe(true);
       expect(claudeThinkingConsumesTokens('claude-opus-5', null)).toBe(true);
       expect(claudeThinkingConsumesTokens('claude-opus-4-8', undefined)).toBe(false);
-      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(true);
       // Explicitly disabled never consumes tokens (except on always-on models, where the
       // API rejects `disabled` and normalization strips it before this is called).
       expect(claudeThinkingConsumesTokens('claude-opus-5', { type: 'disabled' })).toBe(false);

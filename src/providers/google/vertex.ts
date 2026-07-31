@@ -578,6 +578,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           data.usage?.output_tokens,
           data.usage?.cache_read_input_tokens,
           data.usage?.cache_creation_input_tokens,
+          data.usage?.cache_creation?.ephemeral_1h_input_tokens,
         ),
       };
 

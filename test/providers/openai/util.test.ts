@@ -39,6 +39,11 @@ const retiredChatModelIds = [
   'gpt-3.5-turbo-16k-0613',
   'gpt-4o-search-preview-2025-03-11',
   'gpt-4o-mini-search-preview-2025-03-11',
+  'gpt-4o-audio-preview',
+  'gpt-4o-audio-preview-2024-10-01',
+  'gpt-4o-audio-preview-2024-12-17',
+  'gpt-4o-audio-preview-2025-06-03',
+  'gpt-4o-mini-audio-preview',
   'gpt-5-chat-latest',
   'codex-mini-latest',
   'gpt-5.1-chat-latest',
@@ -61,6 +66,11 @@ const retiredResponsesModelIds = [
 
 const otherRetiredModelIds = [
   'gpt-4o-mini-tts-2025-03-20',
+  'gpt-4o-realtime-preview',
+  'gpt-4o-realtime-preview-2024-10-01',
+  'gpt-4o-realtime-preview-2024-12-17',
+  'gpt-4o-realtime-preview-2025-06-03',
+  'gpt-4o-mini-realtime-preview',
   'gpt-realtime-mini-2025-10-06',
   'text-moderation-007',
   'text-moderation-latest',
@@ -608,9 +618,11 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
   });
 
-  it('keeps deprecated audio and realtime models routable until their January 20, 2027 shutdown', () => {
+  it('keeps current audio and realtime models routable until their January 20, 2027 shutdown', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
-    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(true);
+    expect(
+      OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-mini-audio-preview-2024-12-17'),
+    ).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
     expect(
@@ -618,12 +630,19 @@ describe('calculateOpenAICost', () => {
         (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
       ),
     ).toBe(true);
-    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
-      true,
-    );
-    expect(
-      OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview-2025-06-03'),
-    ).toBe(true);
+  });
+
+  it('excludes retired audio and realtime previews while retaining historical billing', () => {
+    for (const model of retiredChatModelIds.filter((model) => model.includes('audio-preview'))) {
+      expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
+    for (const model of otherRetiredModelIds.filter((model) =>
+      model.includes('realtime-preview'),
+    )) {
+      expect(OPENAI_REALTIME_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+      expect(calculateOpenAICost(model, {}, 1_000, 500)).toBeTypeOf('number');
+    }
   });
 
   it('excludes July 23 shutdowns from current model registries while retaining billing', () => {

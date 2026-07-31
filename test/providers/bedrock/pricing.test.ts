@@ -147,6 +147,37 @@ describe('calculateBedrockCost', () => {
     ).toBe(18);
   });
 
+  it('bills one-hour Claude cache writes at 2x the input rate', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+
+    const expectedCost =
+      (100 / 1e6) * 2 + (500 / 1e6) * 0.2 + (60 / 1e6) * 2.5 + (40 / 1e6) * 4 + (50 / 1e6) * 10;
+
+    expect(
+      calculateBedrockCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        undefined,
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+  });
+
   it('bills Claude Sonnet 5 at its promotional rate above 200k tokens', () => {
     vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
     // Sonnet 5 bills its full 1M context at the same rate. Use the global endpoint to
