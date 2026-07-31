@@ -551,6 +551,40 @@ describe('xAI Chat Provider', () => {
       expect(result.body.max_completion_tokens).toBeUndefined();
     });
 
+    it('uses the effective passthrough model when normalizing Grok Build token limits', async () => {
+      const regularProvider = createXAIProvider('xai:grok-4.3') as any;
+      const buildResult = await regularProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-build-0.1',
+              max_completion_tokens: 333,
+            },
+          },
+        },
+      });
+
+      expect(buildResult.body.model).toBe('grok-build-0.1');
+      expect(buildResult.body.max_tokens).toBe(333);
+      expect(buildResult.body.max_completion_tokens).toBeUndefined();
+
+      const buildProvider = createXAIProvider('xai:grok-build-0.1') as any;
+      const regularResult = await buildProvider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-4.3',
+              max_completion_tokens: 444,
+            },
+          },
+        },
+      });
+
+      expect(regularResult.body.model).toBe('grok-4.3');
+      expect(regularResult.body.max_tokens).toBeUndefined();
+      expect(regularResult.body.max_completion_tokens).toBe(444);
+    });
+
     it('filters unsupported parameters for Grok 4 Fast models', async () => {
       const provider = createXAIProvider('xai:grok-4-fast-reasoning') as any;
       const mockContext = {

@@ -685,7 +685,9 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       result.config.max_tokens ??
       result.config.max_completion_tokens ??
       result.body.max_completion_tokens;
-    if (GROK_BUILD_CHAT_MODELS.has(this.modelName) && maxTokens !== undefined) {
+    const effectiveModel =
+      typeof result.body.model === 'string' ? result.body.model : this.modelName;
+    if (GROK_BUILD_CHAT_MODELS.has(effectiveModel) && maxTokens !== undefined) {
       result.body.max_tokens = maxTokens;
       delete result.body.max_completion_tokens;
     }

@@ -11,7 +11,11 @@ import type { ProviderOptions } from '../../types/providers';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
-const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set(['authorization', 'x-api-key']);
+const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set([
+  'authorization',
+  'x-api-key',
+  'anthropic-version',
+]);
 
 const BEDROCK_ANTHROPIC_MESSAGES_MODELS = [
   'anthropic.claude-fable-5',

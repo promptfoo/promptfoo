@@ -972,6 +972,16 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
+      if (requestedApiModel === 'gpt-live-transcribe') {
+        throw new Error(
+          'OpenAI model "gpt-live-transcribe" requires Realtime transcription sessions, which are not yet supported by promptfoo.',
+        );
+      }
+      if (modelType === 'chat' && requestedApiModel === 'gpt-transcribe') {
+        throw new Error(
+          'OpenAI model "gpt-transcribe" is transcription-only. Use openai:transcription:gpt-transcribe (or bare openai:gpt-transcribe).',
+        );
+      }
       if (!['agents', 'chatkit', 'assistant'].includes(modelType)) {
         const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
         const configApiHost = providerOptions.config?.apiHost;
@@ -1049,6 +1059,10 @@ export const providerMap: ProviderFactory[] = [
       }
       if (OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType)) {
         return new OpenAiTtsProvider(modelType, providerOptions);
+      }
+      if (modelType === 'gpt-transcribe') {
+        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+        return new OpenAiTranscriptionProvider(modelType, providerOptions);
       }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);

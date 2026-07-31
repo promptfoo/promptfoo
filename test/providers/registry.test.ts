@@ -2,6 +2,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { OpenAiTranscriptionProvider } from '../../src/providers/openai/transcription';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -668,6 +669,32 @@ describe('Provider Registry', () => {
       await expect(
         factory!.create('azure:moderation:typo-model', mockProviderOptions, mockContext),
       ).rejects.toThrow('Unknown Azure moderation model: typo-model');
+    });
+
+    it('routes transcription-only OpenAI models without falling back to chat', async () => {
+      const factory = providerMap.find((f) => f.test('openai:gpt-transcribe'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'openai:gpt-transcribe',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(provider).toBeInstanceOf(OpenAiTranscriptionProvider);
+
+      await expect(
+        factory!.create('openai:chat:gpt-transcribe', mockProviderOptions, mockContext),
+      ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
+
+      for (const path of [
+        'openai:gpt-live-transcribe',
+        'openai:chat:gpt-live-transcribe',
+        'openai:transcription:gpt-live-transcribe',
+      ]) {
+        await expect(factory!.create(path, mockProviderOptions, mockContext)).rejects.toThrow(
+          /Realtime transcription sessions.*not yet supported/i,
+        );
+      }
     });
 
     it('should handle bedrock providers correctly', async () => {

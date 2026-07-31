@@ -187,6 +187,10 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
       return 0;
     }
 
+    if (data.usage == null) {
+      return undefined;
+    }
+
     const totalCost = data.usage?.cost?.total_cost;
     if (typeof totalCost === 'number' && Number.isFinite(totalCost) && totalCost >= 0) {
       return totalCost;
@@ -218,6 +222,10 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
 
     // Replace the cost calculation with our own
     if (response.tokenUsage) {
+      if (Object.keys(response.tokenUsage).length === 0) {
+        return response;
+      }
+
       if (response.cached) {
         // For cached responses, don't recalculate cost
         return response;

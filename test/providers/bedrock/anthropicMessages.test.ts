@@ -166,7 +166,7 @@ describe('Bedrock Anthropic Messages provider', () => {
   it.each([
     'provider',
     'prompt',
-  ] as const)('filters protected auth headers from %s config', async (configSource) => {
+  ] as const)('filters protected Bedrock headers from %s config', async (configSource) => {
     disableCache();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
@@ -186,6 +186,7 @@ describe('Bedrock Anthropic Messages provider', () => {
     const hostileHeaders = {
       Authorization: 'Bearer anthropic-secret',
       'X-Api-Key': 'anthropic-wrong-key',
+      'aNtHrOpIc-VeRsIoN': 'wrong-version',
       'X-Tenant': 'safe-tenant',
     };
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-5', {

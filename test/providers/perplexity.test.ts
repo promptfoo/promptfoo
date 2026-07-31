@@ -286,6 +286,34 @@ describe('Perplexity Provider', () => {
       }
     });
 
+    it('should omit cost for a fresh response without usage metadata', async () => {
+      disableCache();
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-without-usage',
+            model: 'sonar-pro',
+            choices: [
+              {
+                finish_reason: 'stop',
+                index: 0,
+                message: { role: 'assistant', content: 'Fresh output' },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: { apiKey: 'test-key' },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toMatchObject({ output: 'Fresh output', cached: false });
+      expect(result.cost).toBeUndefined();
+    });
+
     it('should still calculate cost for fresh responses with cached input tokens', async () => {
       vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
         output: 'Fresh output',
