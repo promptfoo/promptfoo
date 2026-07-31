@@ -197,6 +197,16 @@ function parseInteractionInput(
           },
         ];
       });
+      if (input.length === 0 && systemInstructions.length > 0) {
+        return {
+          input: [
+            {
+              type: 'user_input',
+              content: systemInstructions.map((text) => ({ type: 'text', text })),
+            },
+          ],
+        };
+      }
       return {
         input,
         ...(systemInstructions.length > 0

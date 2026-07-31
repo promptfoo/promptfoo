@@ -446,6 +446,33 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
+  it('converts a system-only Robotics prompt into user input', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi(
+      JSON.stringify([{ role: 'system', content: 'Move only inside the marked area.' }]),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.input).toEqual([
+      {
+        type: 'user_input',
+        content: [{ type: 'text', text: 'Move only inside the marked area.' }],
+      },
+    ]);
+    expect(body).not.toHaveProperty('system_instruction');
+  });
+
   it('lets prompt-embedded system roles override a provider passthrough default', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
