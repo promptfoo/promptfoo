@@ -1710,7 +1710,7 @@ export const providerMap: ProviderFactory[] = [
       } catch (error: any) {
         if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@slack/web-api')) {
           throw new Error(
-            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api',
+            'The Slack provider requires the @slack/web-api package. Please install it with: npm install @slack/web-api@^8',
           );
         }
         throw error;

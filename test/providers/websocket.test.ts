@@ -869,17 +869,28 @@ describe('WebSocketProvider', () => {
 
   describe('timeouts', () => {
     it('should timeout with streamResponse', async () => {
-      provider = new WebSocketProvider('ws://test.com', {
-        config: {
-          messageTemplate: '{{ prompt }}',
-          timeoutMs: 100,
-          // never signal completion; ensures timeout path is exercised
-          streamResponse: (acc: any, _data: any) => [acc, ''],
-        },
-      });
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            // never signal completion; ensures timeout path is exercised
+            streamResponse: (acc: any, _data: any) => [acc, ''],
+          },
+        });
 
-      await expect(provider.callApi('timeout test')).rejects.toThrow('WebSocket request timed out');
-      expect(mockWs.close).toHaveBeenCalled();
+        const timeoutPromise = expect(provider.callApi('timeout test')).rejects.toThrow(
+          'WebSocket request timed out',
+        );
+
+        await vi.runAllTimersAsync();
+        await timeoutPromise;
+
+        expect(mockWs.close).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });
