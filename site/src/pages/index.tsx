@@ -130,27 +130,37 @@ function CopyCodeBox({ command }: { command: string }) {
   );
 }
 
+/** Red Teaming: what the page shows with no hash, on the server and after a hash is cleared. */
+const DEFAULT_STEP = 1;
+
+const HASH_TO_STEP: Record<string, number> = {
+  '#redteam': 1,
+  '#guardrails': 2,
+  '#modelsecurity': 3,
+  '#mcp': 4,
+  '#evals': 5,
+  '#codescanning': 6,
+};
+
 function HomepageWalkthrough() {
   const isDarkTheme = useColorMode().colorMode === 'dark';
-  const [selectedStep, setSelectedStep] = React.useState(() => {
-    if (typeof window !== 'undefined') {
-      if (window.location.hash === '#evals') {
-        return 5;
-      } else if (window.location.hash === '#redteam') {
-        return 1;
-      } else if (window.location.hash === '#guardrails') {
-        return 2;
-      } else if (window.location.hash === '#modelsecurity') {
-        return 3;
-      } else if (window.location.hash === '#mcp') {
-        return 4;
-      } else if (window.location.hash === '#codescanning') {
-        return 6;
-      }
-    }
-    return 1; // Default to Red Teaming
-  });
+  // Default to Red Teaming. The hash is applied after mount instead of in the initializer:
+  // reading `window.location.hash` during render would make the first client render disagree
+  // with the server-rendered HTML (which never has a hash) and blow up hydration.
+  const [selectedStep, setSelectedStep] = React.useState(DEFAULT_STEP);
   const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    // Falls back to the default rather than returning early: navigating back from
+    // `/#evals` to `/` fires hashchange with an empty hash, and leaving the previously
+    // selected tab active would stop the UI reflecting the URL. Same for an unknown hash.
+    const applyHash = () => {
+      setSelectedStep(HASH_TO_STEP[window.location.hash] ?? DEFAULT_STEP);
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, []);
 
   React.useEffect(() => {
     const checkMobile = () => {

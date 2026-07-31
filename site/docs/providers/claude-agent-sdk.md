@@ -146,7 +146,7 @@ prompts:
 | `max_thinking_tokens`                | number           | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
 | `max_budget_usd`                     | number           | Maximum cost budget in USD for the agent execution                                                           | None                     |
 | `task_budget`                        | object           | Token budget for pacing tool use: `{total: N}`                                                               | None                     |
-| `permission_mode`                    | string           | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`                    | `default`                |
+| `permission_mode`                    | string           | Permission modes: `default`/`manual`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`          | `default`                |
 | `allow_dangerously_skip_permissions` | boolean          | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `thinking`                           | object           | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
 | `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `xhigh` (Opus 4.7+), `max`                                   | `high`                   |
