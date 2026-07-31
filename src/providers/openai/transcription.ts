@@ -136,7 +136,10 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       const hasOption = (
         options: Partial<OpenAiTranscriptionOptions> | undefined,
         key: 'language' | 'languages',
-      ) => options != null && Object.hasOwn(options, key) && options[key] !== undefined;
+      ) =>
+        options != null &&
+        Object.prototype.hasOwnProperty.call(options, key) &&
+        options[key] !== undefined;
       const providerHasLanguage = hasOption(this.config, 'language');
       const providerHasLanguages = hasOption(this.config, 'languages');
       const promptHasLanguage = hasOption(promptConfig, 'language');
