@@ -145,7 +145,7 @@ Now that you've created an initial configuration, you can update `promptfooconfi
      - openai:chat:gpt-5.4
      - openai:chat:gpt-5.4-mini
      - anthropic:messages:claude-opus-4-6
-     - google:gemini-3.1-pro-preview
+     - google:gemini-3.6-flash
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
@@ -440,24 +440,24 @@ For example, if you run this command:
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest eval -r google:gemini-3.1-pro-preview google:gemini-2.5-pro
+    npx promptfoo@latest eval -r google:gemini-3.6-flash google:gemini-3.5-flash-lite
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
     ```bash
-    promptfoo eval -r google:gemini-3.1-pro-preview google:gemini-2.5-pro
+    promptfoo eval -r google:gemini-3.6-flash google:gemini-3.5-flash-lite
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
     ```bash
-    promptfoo eval -r google:gemini-3.1-pro-preview google:gemini-2.5-pro
+    promptfoo eval -r google:gemini-3.6-flash google:gemini-3.5-flash-lite
     ```
   </TabItem>
 </Tabs>
 
 It produces the following table, with Gemini models replacing the GPT models in the config:
 
-![Side-by-side eval of LLM model quality, gemini-3.0-pro vs gemini-2.5](/img/cl-provider-override.png)
+![Side-by-side eval of Gemini model quality](/img/cl-provider-override.png)
 
 A similar approach can be used to run other model comparisons. For example, you can:
 

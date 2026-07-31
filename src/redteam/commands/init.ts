@@ -344,8 +344,12 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-haiku-4-5',
       },
       {
-        name: 'Google Vertex Gemini 2.5 Pro',
-        value: 'vertex:gemini-2.5-pro',
+        name: 'Google Vertex Gemini 3.6 Flash',
+        value: 'vertex:gemini-3.6-flash',
+      },
+      {
+        name: 'Google Vertex Gemini 3.5 Flash-Lite',
+        value: 'vertex:gemini-3.5-flash-lite',
       },
     ];
 

@@ -674,7 +674,7 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.6-flash';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

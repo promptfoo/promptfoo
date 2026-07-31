@@ -16,8 +16,8 @@ providers:
   - anthropic:messages:claude-opus-4-6
   - openai:gpt-5
   - openai:gpt-5-mini
-  - google:gemini-2.5-pro
-  - vertex:gemini-2.5-pro
+  - google:gemini-3.6-flash
+  - vertex:gemini-3.6-flash
 ```
 
 ## Available Providers
@@ -60,8 +60,8 @@ providers:
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
 | [GitHub](./github.md)                                   | GitHub Models - OpenAI, Anthropic, Google, and more              | `github:openai/gpt-5` or `github:anthropic/claude-3.7-sonnet`                                                         |
-| [Google AI Studio](./google.md)                         | Gemini models, Live API, Imagen image generation, and Veo video  | `google:gemini-2.5-pro`, `google:image:imagen-4.0-generate-preview-06-06`, `google:video:veo-3.1-generate-preview`    |
-| [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`, `vertex:video:veo-3.1-generate-preview`                           |
+| [Google AI Studio](./google.md)                         | Gemini models, Live API, Imagen image generation, and Veo video  | `google:gemini-3.6-flash`, `google:gemini-3.5-flash-lite`, `google:video:veo-3.1-generate-preview`                    |
+| [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-3.6-flash`, `vertex:gemini-3.5-flash-lite`, `vertex:video:veo-3.1-generate-001`                        |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
 | [Helicone AI Gateway](./helicone.md)                    | Self-hosted AI gateway for unified provider access               | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                                                         |
 | [Hyperbolic](./hyperbolic.md)                           | OpenAI-compatible Llama 3 provider                               | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                                                        |

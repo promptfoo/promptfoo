@@ -62,6 +62,35 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Python')).toBeVisible();
   });
 
+  it.each([
+    ['Google AI Studio', 'google', 'google:gemini-3.6-flash', {}],
+    ['Google Vertex AI', 'vertex', 'vertex:gemini-3.6-flash', { region: 'global' }],
+  ])('selects the current default for %s', async (providerLabel, providerType, expectedId, expectedConfig) => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Gemini target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    const providerCard = screen.getByText(providerLabel).closest('[role="button"]');
+    expect(providerCard).toBeInTheDocument();
+    await user.click(providerCard!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      {
+        id: expectedId,
+        config: expectedConfig,
+        label: 'Gemini target',
+      },
+      providerType,
+    );
+  });
+
   it('should filter provider options by search term when the user enters text in the search box', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();

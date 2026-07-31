@@ -514,8 +514,8 @@ export async function createDummyFiles(
         ],
       },
       {
-        name: '[Google] Gemini 3.1 Pro, ...',
-        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+        name: '[Google] Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, ...',
+        value: ['vertex:gemini-3.6-flash', 'vertex:gemini-3.5-flash-lite'],
       },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
