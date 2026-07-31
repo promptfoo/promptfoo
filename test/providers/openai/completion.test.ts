@@ -200,6 +200,23 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
     });
 
+    it('should omit service tiers from first-party legacy Completion requests', async () => {
+      mockFetchWithCache.mockResolvedValueOnce(mockResponse);
+      const provider = new OpenAiCompletionProvider('babbage-002', {
+        config: {
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      await provider.callApi('Use the legacy endpoint', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body).not.toHaveProperty('service_tier');
+    });
+
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

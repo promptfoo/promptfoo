@@ -10,6 +10,7 @@ import {
   formatOpenAiError,
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
+  isOpenAiFirstPartyApiUrl,
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_COMPLETION_MODELS,
@@ -88,6 +89,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier) }),
     };
+    // OpenAI's legacy /v1/completions schema rejects service_tier. Custom gateways may support it.
+    if (isOpenAiFirstPartyApiUrl(this.getApiUrl())) {
+      delete body.service_tier;
+    }
     assertOpenAiApiModel(body.model, this.getApiUrl());
 
     let data,
