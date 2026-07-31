@@ -31,11 +31,10 @@ export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
 export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-2.0';
 export const XAI_VOICE_COST_PER_MINUTE = 0.08;
 export const XAI_VOICE_COST_PER_MINUTE_BY_MODEL: Record<string, number> = {
-  // xAI's July 29 release notes say this alias moves from 1.0 to 2.0 on August 5, 2026.
-  'grok-voice-latest': 0.05,
   'grok-voice-think-fast-2.0': 0.08,
   'grok-voice-think-fast-1.0': 0.05,
 };
+const XAI_VOICE_LATEST_2_START_MS = Date.UTC(2026, 7, 5);
 
 export const XAI_VOICE_DEFAULTS = {
   voice: 'eve' as const,
@@ -225,9 +224,15 @@ function convertPcm16ToWav(pcmData: Buffer, sampleRate = 24000): Buffer {
 export function calculateXAIVoiceCost(
   durationMs: number,
   modelName = XAI_VOICE_DEFAULT_MODEL,
+  now = Date.now(),
 ): number {
   const durationMinutes = durationMs / 60000;
-  const costPerMinute = XAI_VOICE_COST_PER_MINUTE_BY_MODEL[modelName] ?? XAI_VOICE_COST_PER_MINUTE;
+  const costPerMinute =
+    modelName === 'grok-voice-latest'
+      ? now >= XAI_VOICE_LATEST_2_START_MS
+        ? 0.08
+        : 0.05
+      : (XAI_VOICE_COST_PER_MINUTE_BY_MODEL[modelName] ?? XAI_VOICE_COST_PER_MINUTE);
   return costPerMinute * durationMinutes;
 }
 

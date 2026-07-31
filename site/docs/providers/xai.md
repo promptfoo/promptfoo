@@ -722,7 +722,8 @@ Use `grok-voice-think-fast-2.0` for the current flagship model, or
 `grok-voice-latest` to follow xAI's recommended alias. xAI's July 29 release
 notes say the alias moves from 1.0 to 2.0 on August 5, 2026. Version 2.0 costs
 $0.08 per minute; the previous-generation `grok-voice-think-fast-1.0` costs
-$0.05 per minute.
+$0.05 per minute. Promptfoo switches the alias estimate on the published
+transition date.
 
 #### Turn Detection
 

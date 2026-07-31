@@ -692,15 +692,8 @@ describe('Provider Registry', () => {
         'realtime',
         'tts',
         'speech',
-        'agents',
-        'chatkit',
-        'assistant',
         'image',
         'video',
-        'codex',
-        'codex-sdk',
-        'codex-desktop',
-        'codex-app-server',
       ];
       for (const modelType of incompatibleModelTypes) {
         await expect(
@@ -708,7 +701,16 @@ describe('Provider Registry', () => {
         ).rejects.toThrow(/transcription-only.*openai:transcription:gpt-transcribe/i);
       }
 
-      for (const modelType of incompatibleModelTypes) {
+      const passthroughModelTypes = [
+        'chat',
+        'responses',
+        'completion',
+        'embedding',
+        'embeddings',
+        'tts',
+        'speech',
+      ];
+      for (const modelType of passthroughModelTypes) {
         for (const passthroughModel of ['gpt-transcribe', 'gpt-live-transcribe']) {
           const expectedError =
             passthroughModel === 'gpt-transcribe'
