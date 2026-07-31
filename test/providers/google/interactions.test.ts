@@ -1049,22 +1049,31 @@ describe('GoogleInteractionsProvider', () => {
 
   it('lets prompt service_tier override a provider passthrough default', async () => {
     mockFetchWithCache.mockResolvedValue({
-      data: { status: 'completed', steps: [] },
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+        usage: {
+          total_input_tokens: 1_000_000,
+          total_output_tokens: 1_000_000,
+          total_tokens: 2_000_000,
+        },
+      },
       cached: false,
     } as any);
     const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
       config: {
         apiKey: 'test-key',
-        passthrough: { service_tier: 'priority' },
+        passthrough: { model: 'gemini-3.5-flash', service_tier: 'priority' },
       },
     });
 
-    await provider.callApi('Plan the next movement.', {
-      prompt: { config: { service_tier: 'flex' } },
+    const result = await provider.callApi('Plan the next movement.', {
+      prompt: { config: { service_tier: 'standard' } },
     } as any);
 
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(request.body as string).service_tier).toBe('flex');
+    expect(JSON.parse(request.body as string).service_tier).toBe('standard');
+    expect(result.cost).toBeCloseTo(10.5, 10);
   });
 
   it('uses an Omni passthrough model for request formatting, output parsing, and billing', async () => {

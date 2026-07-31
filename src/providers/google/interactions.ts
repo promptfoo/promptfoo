@@ -695,6 +695,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
         error: 'Gemini Interactions service_tier must be one of flex, standard, or priority.',
       };
     }
+    const billingConfig = {
+      ...config,
+      service_tier: serviceTier,
+      passthrough: {
+        ...(config.passthrough || {}),
+        service_tier: serviceTier,
+        serviceTier,
+      },
+    };
     const passthrough = {
       ...Object.fromEntries(
         Object.entries(mergedPassthrough).filter(
@@ -997,7 +1006,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ? undefined
       : calculateGoogleCost(
           effectiveModel,
-          config,
+          billingConfig,
           promptTokens,
           outputTokens + thoughtTokens,
           config.vertexai,
