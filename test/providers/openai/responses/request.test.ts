@@ -124,6 +124,36 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.cost).toBeCloseTo(2.2, 10);
   });
 
+  it('should serialize the effective service tier with prompt and passthrough precedence', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: {
+        apiKey: 'test-key',
+        service_tier: 'flex',
+      },
+    });
+
+    const { body: providerBody } = await provider.getOpenAiBody('Use the provider tier');
+    const { body: promptBody } = await provider.getOpenAiBody('Use the prompt tier', {
+      prompt: { config: { service_tier: 'fast' } },
+    } as any);
+    const { body: passthroughBody, config: passthroughConfig } = await provider.getOpenAiBody(
+      'Use the passthrough tier',
+      {
+        prompt: {
+          config: {
+            service_tier: 'fast',
+            passthrough: { service_tier: 'priority' },
+          },
+        },
+      } as any,
+    );
+
+    expect(providerBody.service_tier).toBe('flex');
+    expect(promptBody.service_tier).toBe('fast');
+    expect(passthroughBody.service_tier).toBe('priority');
+    expect(passthroughConfig.service_tier).toBe('priority');
+  });
+
   it('should let lowercase Authorization replace the default Responses credential', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: { status: 'completed', output: [], usage: null },

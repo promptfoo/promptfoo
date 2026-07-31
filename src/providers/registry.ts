@@ -181,7 +181,9 @@ function getEffectiveOpenAiApiModel(
     !modelName &&
     (OPENAI_BARE_RESPONSES_COMPATIBILITY_MODELS.has(modelType) ||
       OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
+      OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) ||
       OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
+      OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
       retiredRoute === 'chat' ||
       retiredRoute === 'responses' ||
       retiredRoute === 'tts' ||

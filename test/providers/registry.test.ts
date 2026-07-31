@@ -2,6 +2,8 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
+import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { OpenAiTtsProvider } from '../../src/providers/openai/tts';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -688,6 +690,33 @@ describe('Provider Registry', () => {
 
       expect(provider.constructor.name).toBe(expectedProvider);
       expect((provider as { modelName?: string }).modelName).toBe(expectedModel);
+    });
+
+    it.each([
+      [
+        'openai:gpt-3.5-turbo-instruct',
+        'gpt-3.5-turbo-instruct',
+        OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES,
+      ],
+      ['openai:gpt-4o-mini-tts', 'gpt-4o-mini-tts', OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES],
+    ])('validates the passthrough model sent by bare catalog provider %s', async (providerPath, registeredModel, registeredModels) => {
+      expect(registeredModels).toContain(registeredModel);
+      const factory = providerMap.find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(
+        factory!.create(
+          providerPath,
+          {
+            ...mockProviderOptions,
+            config: {
+              ...mockProviderOptions.config,
+              passthrough: { model: 'gpt-5.3-codex-spark' },
+            },
+          },
+          mockContext,
+        ),
+      ).rejects.toThrow('only available through openai:codex-sdk');
     });
 
     it('routes transcription-only OpenAI models without falling back to chat', async () => {

@@ -147,6 +147,43 @@ describe('Perplexity Provider', () => {
       });
     });
 
+    it('prefers direct prompt search options over inherited provider passthrough', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          passthrough: {
+            search_domain_filter: ['provider.example'],
+            return_images: true,
+            web_search_options: {
+              search_context_size: 'high',
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            search_domain_filter: ['prompt.example'],
+            return_images: false,
+            web_search_options: {
+              search_context_size: 'low',
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body).toMatchObject({
+        search_domain_filter: ['prompt.example'],
+        return_images: false,
+        web_search_options: {
+          search_context_size: 'low',
+        },
+      });
+    });
+
     it('does not restore provider passthrough fields replaced by prompt passthrough', async () => {
       const provider = new PerplexityProvider('sonar-pro', {
         config: {
