@@ -93,6 +93,7 @@ describe('XAI Video Provider', () => {
       it('accepts valid resolutions', () => {
         expect(validateResolution('720p')).toEqual({ valid: true });
         expect(validateResolution('480p')).toEqual({ valid: true });
+        expect(validateResolution('1080p', 'grok-imagine-video-1.5')).toEqual({ valid: true });
       });
 
       it('rejects invalid resolutions', () => {
@@ -124,8 +125,34 @@ describe('XAI Video Provider', () => {
 
     describe('calculateVideoCost', () => {
       it('calculates cost based on duration', () => {
-        expect(calculateVideoCost(3)).toBeCloseTo(0.15, 2); // 3 seconds * $0.05
-        expect(calculateVideoCost(10)).toBeCloseTo(0.5, 2); // 10 seconds * $0.05
+        expect(calculateVideoCost(3)).toBeCloseTo(0.21, 2); // 3 seconds * $0.07 at 720p
+        expect(calculateVideoCost(10)).toBeCloseTo(0.7, 2); // 10 seconds * $0.07 at 720p
+        expect(
+          calculateVideoCost(10, false, {
+            modelName: 'grok-imagine-video',
+            resolution: '720p',
+            hasImageInput: true,
+          }),
+        ).toBeCloseTo(0.702, 3);
+        expect(
+          calculateVideoCost(10, false, {
+            modelName: 'grok-imagine-video-1.5',
+            resolution: '480p',
+            hasImageInput: true,
+          }),
+        ).toBeCloseTo(0.81, 2);
+        expect(
+          calculateVideoCost(10, false, {
+            modelName: 'grok-imagine-video-1.5-preview',
+            resolution: '720p',
+          }),
+        ).toBeCloseTo(1.4, 2);
+        expect(
+          calculateVideoCost(10, false, {
+            modelName: 'grok-imagine-video-1.5-2026-05-30',
+            resolution: '1080p',
+          }),
+        ).toBeCloseTo(2.5, 2);
       });
 
       it('returns 0 for cached videos', () => {
@@ -144,6 +171,9 @@ describe('XAI Video Provider', () => {
     it('creates provider with specified model', () => {
       const provider = createXAIVideoProvider('xai:video:grok-imagine-video');
       expect(provider.id()).toBe('xai:video:grok-imagine-video');
+
+      const video15Provider = createXAIVideoProvider('xai:video:grok-imagine-video-1.5');
+      expect(video15Provider.id()).toBe('xai:video:grok-imagine-video-1.5');
     });
 
     it('creates provider with custom ID', () => {
@@ -199,6 +229,15 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Video generation flow', () => {
+    it('rejects text-to-video generation for Grok Imagine Video 1.5', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5');
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('requires image input');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('generates video successfully', async () => {
       // Mock job creation
       const createResponse = {
@@ -473,6 +512,19 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Reference-to-video generation', () => {
+    it('rejects reference images for Grok Imagine Video 1.5', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          reference_images: [{ url: 'https://example.com/reference.jpg' }],
+        },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('does not support reference_images');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('includes reference images in the request', async () => {
       const referenceImages = [
         { url: 'https://example.com/person.jpg' },
@@ -555,6 +607,17 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Video editing', () => {
+    it('rejects video editing for Grok Imagine Video 1.5', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: { video: { url: 'https://example.com/source.mp4' } },
+      });
+
+      const result = await provider.callApi('Edit prompt');
+
+      expect(result.error).toContain('supports only image-to-video');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('uses edit endpoint when video URL is provided', async () => {
       const sourceVideoUrl = 'https://example.com/source.mp4';
 

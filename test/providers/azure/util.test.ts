@@ -826,11 +826,16 @@ describe('AZURE_MODELS cost coverage', () => {
     ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],
+    ['grok-4-fast-reasoning', 0.2, 0.5],
+    ['grok-4-fast-non-reasoning', 0.2, 0.5],
+    ['grok-3-mini', 0.25, 1.27],
     ['Kimi-K2-Thinking', 0.6, 2.5],
     ['Kimi-K2.6', 0.95, 4],
     ['DeepSeek-V3.2', 0.58, 1.68],
     ['DeepSeek-V4-Pro', 1.74, 3.48],
     ['gpt-oss-120b', 0.15, 0.6],
+    ['mistral-medium-3-5', 1.5, 7.5],
+    ['Cohere-command-a-plus-05-2026', 0.8, 3.2],
     ['Phi-3-medium-4k-instruct', 0.17, 0.68],
   ])('prices %s at exactly %d in / %d out per 1M', (id, inputPerM, outputPerM) => {
     expect(calculateAzureCost(id, {}, 100_000, 0)).toBeCloseTo((inputPerM as number) / 10, 9);

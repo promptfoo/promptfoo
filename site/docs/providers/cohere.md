@@ -1,6 +1,6 @@
 ---
 sidebar_label: Cohere
-description: Configure Cohere chat models for RAG-optimized inference, with Command A, Aya, and Command R variants plus flexible prompt truncation controls
+description: Configure Cohere chat models for RAG-optimized inference, including Command A+, Command A, Aya, Command R, and flexible prompt truncation controls for evals
 ---
 
 # Cohere
@@ -17,6 +17,7 @@ Next, edit the promptfoo configuration file to point to the Cohere provider.
 
 The following models are confirmed supported. For the complete list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
 
+- `command-a-plus-05-2026`
 - `command-a-03-2025`
 - `command-r7b-12-2024`
 - `command-a-translate-08-2025`
@@ -33,6 +34,10 @@ The following models are confirmed supported. For the complete list of supported
 
 Legacy aliases such as `command`, `command-r`, and `command-r-plus` remain accepted for
 existing configs, but new configurations should use the IDs above.
+
+`command-a-plus-05-2026` supports a 128K-token input context and up to 64K output tokens. Cohere's
+hosted API offers the model without token charges until the account's rate limit; production use is
+available through Cohere Model Vault, so Promptfoo does not assign a speculative per-token price.
 
 Here's an example configuration:
 

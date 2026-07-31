@@ -1085,34 +1085,17 @@ export const AZURE_MODELS: AzureModelCost[] = [
 
   // =============================================================================
   // xAI Grok Models (via Azure AI Foundry)
+  // Current models; grok-4.3 is Preview. grok-4-20 reasoning variants are intentionally omitted
+  // because Azure's Retail Prices API does not expose an unambiguous matching meter.
   // =============================================================================
   {
     id: 'grok-4',
     cost: { input: 3 / 1000000, output: 15 / 1000000 },
   },
   {
-    id: 'grok-4-fast-reasoning',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
-  },
-  {
-    id: 'grok-4-fast-non-reasoning',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
-  },
-  {
-    id: 'grok-3',
-    cost: { input: 3 / 1000000, output: 15 / 1000000 },
-  },
-  {
-    id: 'grok-3-mini',
-    cost: { input: 0.3 / 1000000, output: 0.5 / 1000000 },
-  },
-  {
     id: 'grok-code-fast-1',
     cost: { input: 0.2 / 1000000, output: 1.5 / 1000000 },
   },
-  // Newer Grok on Azure — Global Standard from the Azure Retail Prices API (prices.azure.com).
-  // (grok-4-20 is intentionally omitted: its catalog id maps ambiguously to either the "Grok 4.2"
-  // meter ($1.25/$2.50) or base "Grok-4" ($3/$15), so it is left unpriced rather than guessed.)
   {
     id: 'grok-4.3',
     cost: { input: 1.25 / 1000000, output: 2.5 / 1000000 },
@@ -1124,6 +1107,24 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'grok-4-1-fast-non-reasoning',
     cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  // Retired May 1, 2026. Retained only so historical deployments still report their published
+  // Global Standard cost; use the replacement IDs above for new deployments.
+  {
+    id: 'grok-4-fast-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  {
+    id: 'grok-4-fast-non-reasoning',
+    cost: { input: 0.2 / 1000000, output: 0.5 / 1000000 },
+  },
+  {
+    id: 'grok-3',
+    cost: { input: 3 / 1000000, output: 15 / 1000000 },
+  },
+  {
+    id: 'grok-3-mini',
+    cost: { input: 0.25 / 1000000, output: 1.27 / 1000000 },
   },
 
   // =============================================================================
@@ -1206,6 +1207,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 0.5 / 1000000, output: 1.5 / 1000000 },
   },
   {
+    id: 'mistral-medium-3-5',
+    cost: { input: 1.5 / 1000000, output: 7.5 / 1000000 },
+  },
+  {
     id: 'Mistral-Large-2411',
     cost: { input: 2 / 1000000, output: 6 / 1000000 },
   },
@@ -1253,6 +1258,11 @@ export const AZURE_MODELS: AzureModelCost[] = [
     id: 'cohere-command-a',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
   },
+  {
+    id: 'Cohere-command-a-plus-05-2026',
+    cost: { input: 0.8 / 1000000, output: 3.2 / 1000000 },
+  },
+  // Retired May 12, 2026. Retained for historical deployment cost recognition.
   {
     id: 'Cohere-command-r-plus',
     cost: { input: 2.5 / 1000000, output: 10 / 1000000 },

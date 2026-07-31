@@ -428,6 +428,12 @@ GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and
 
 GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard and pro variants.
 
+:::warning Scheduled retirement
+OpenAI has deprecated `gpt-5.2-chat-latest` and scheduled it to shut down on August 10, 2026.
+Migrate chat evals to `gpt-5.6-sol` (or the `gpt-5.6` alias). Other GPT-5.2 API models remain
+available unless OpenAI lists a separate retirement.
+:::
+
 #### Available Models
 
 | Model                  | Description                     | Best For                           |
@@ -529,6 +535,12 @@ providers:
 ### GPT-5.3 Instant
 
 GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
+
+:::warning Scheduled retirement
+OpenAI has deprecated `gpt-5.3-chat-latest` and scheduled it to shut down on August 10, 2026.
+Migrate chat evals to `gpt-5.6-sol` (or the `gpt-5.6` alias). `gpt-5.3-codex` is also deprecated
+for Codex with ChatGPT sign-in, though API-key access may remain available.
+:::
 
 #### Available Models
 
@@ -795,11 +807,14 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
 - `gpt-image-2` - OpenAI's image generation model with flexible custom sizes
-- `gpt-image-1.5` - High-quality GPT Image model with strong instruction following
+- `gpt-image-1.5` - Deprecated; shuts down December 1, 2026
 - `gpt-image-1` - High-quality image generation model
-- `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
+- `gpt-image-1-mini` - Deprecated; shuts down December 1, 2026
 
 `dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. Promptfoo retains request compatibility for gateways that still expose them; use a current GPT Image model for new evals.
+
+OpenAI has also deprecated `gpt-image-1.5`, `gpt-image-1-mini`, and `chatgpt-image-latest`, with
+shutdown scheduled for December 1, 2026. Use `gpt-image-2` for new evals.
 
 The `openai:image` provider uses the Image API generations endpoint. It supports text-to-image generation; image edit/reference inputs (`image`, `mask`, `input_fidelity`), streaming (`stream`/`partial_images`), and variations are not implemented in this provider.
 
@@ -1769,13 +1784,16 @@ Use these general-purpose audio models with `openai:chat:*`. Current OpenAI docs
 
 OpenAI [retired the older `gpt-4o-audio-preview` model family](https://developers.openai.com/api/docs/deprecations) on May 7, 2026. Use the current `gpt-audio*` models below for new evals.
 
+OpenAI has also deprecated the `gpt-audio` and `gpt-audio-mini` families, with shutdown scheduled
+for January 20, 2027. Use `gpt-audio-1.5` for new audio evals.
+
 **Available audio models:**
 
 - `gpt-audio-1.5` - Flagship audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-audio` - General audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-audio-2025-08-28` - Dated snapshot of `gpt-audio`
-- `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
-- `gpt-audio-mini-2025-12-15` - Dated snapshot of `gpt-audio-mini`
+- `gpt-audio` - Deprecated; shuts down January 20, 2027
+- `gpt-audio-2025-08-28` - Deprecated dated snapshot of `gpt-audio`
+- `gpt-audio-mini` - Deprecated; shuts down January 20, 2027
+- `gpt-audio-mini-2025-12-15` - Deprecated dated snapshot of `gpt-audio-mini`
 
 ### Using audio inputs
 
@@ -1910,7 +1928,7 @@ per-minute figures below are OpenAI's cost estimates. Whisper is billed per minu
 | `gpt-4o-transcribe`                    | GPT-4o optimized for transcription   | $0.006                    |
 | `gpt-4o-mini-transcribe`               | Faster, more cost-effective option   | $0.003                    |
 | `gpt-4o-mini-transcribe-2025-12-15`    | Dated mini transcription snapshot    | $0.003                    |
-| `gpt-4o-mini-transcribe-2025-03-20`    | Previous mini transcription snapshot | $0.003                    |
+| `gpt-4o-mini-transcribe-2025-03-20`    | Deprecated; shuts down Jan 20, 2027  | $0.003                    |
 | `gpt-4o-transcribe-diarize`            | Identifies different speakers        | $0.006                    |
 | `gpt-4o-transcribe-diarize-2025-10-15` | Dated diarization snapshot           | $0.006                    |
 
@@ -2031,20 +2049,25 @@ image inputs with streaming text and audio outputs.
 - `gpt-realtime-2.1-mini` - Current cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens, $0.80/$0.08 per 1M image/cached-image input tokens)
 - `gpt-realtime-2` - Reasoning-capable realtime model ($4/$24 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime-1.5` - Previous flagship realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-realtime` - General-availability realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`
-- `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
-- `gpt-realtime-mini-2025-12-15`
+- `gpt-realtime` - Deprecated; shuts down January 20, 2027
+- `gpt-realtime-2025-08-28` - Deprecated dated snapshot of `gpt-realtime`
+- `gpt-realtime-mini` - Deprecated; shuts down January 20, 2027
+- `gpt-realtime-mini-2025-12-15` - Deprecated dated snapshot of `gpt-realtime-mini`
 - `gpt-4o-mini-realtime-preview-2024-12-17` - Deprecated preview snapshot
 
-Prefer the current `gpt-realtime*` models for new evals. OpenAI removed several older preview
-aliases on May 7, 2026 and marks `gpt-4o-mini-realtime-preview-2024-12-17` deprecated. Check
-OpenAI's deprecation schedule before relying on that snapshot; the current schedule does not
-publish a July 23 shutdown date for it.
+Prefer the current `gpt-realtime-2.1*` models for new evals. OpenAI removed several older preview
+aliases on May 7, 2026, and the original `gpt-realtime*` families are scheduled to shut down on
+January 20, 2027.
 
 The Realtime 2.1 models support a 128k context window and up to 32k output tokens. The current
 Realtime request schema still accepts an integer `max_response_output_tokens` only up to 4,096;
 use `'inf'` to allow the model maximum.
+
+Specialized models use different Realtime session types. `gpt-live-transcribe` and
+`gpt-realtime-whisper` use `/v1/realtime/transcription_sessions`, while
+`gpt-realtime-translate` uses `/v1/realtime/translations`. Promptfoo does not yet expose those as
+standalone providers. `gpt-realtime-whisper` can still be configured as input transcription inside
+a conversational Realtime session.
 
 ### Using Realtime API
 
@@ -2234,8 +2257,8 @@ The Responses API supports a wide range of models, including:
 - `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model
-- `gpt-5.3-chat-latest` - GPT-5.3 chat alias
-- `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
+- `gpt-5.3-chat-latest` - Deprecated; shuts down August 10, 2026
+- `gpt-5.2-chat-latest` - Deprecated; shuts down August 10, 2026
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($21/$168 per 1M tokens)
 - `o1` - Reasoning model
 - `o1-pro` - Higher-compute reasoning model

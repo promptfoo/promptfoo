@@ -580,16 +580,30 @@ Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when av
 
 ### Video Generation
 
-xAI supports video generation through the Grok Imagine API using the `xai:video:grok-imagine-video` provider:
+xAI supports the following Grok Imagine video IDs:
+
+| Model ID                            | Supported input modes                                    | Resolutions       |
+| ----------------------------------- | -------------------------------------------------------- | ----------------- |
+| `grok-imagine-video-1.5`            | Image-to-video                                           | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5-preview`    | Alias for Grok Imagine Video 1.5                         | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5-2026-05-30` | Dated Grok Imagine Video 1.5 snapshot                    | 480p, 720p, 1080p |
+| `grok-imagine-video`                | Text, image, video editing, and reference-to-video input | 480p, 720p        |
+
+[Grok Imagine Video 1.5](https://docs.x.ai/developers/models/grok-imagine-video-1.5) currently
+requires an image input and does not support text-to-video or
+[reference-to-video](https://docs.x.ai/developers/model-capabilities/video/reference-to-video).
+The legacy `grok-imagine-video` model remains the choice for those modes.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'Generate a video of: {{scene}}'
+  - 'Animate this image as: {{scene}}'
 
 providers:
-  - id: xai:video:grok-imagine-video
+  - id: xai:video:grok-imagine-video-1.5
     config:
+      image:
+        url: 'https://example.com/source-image.jpg'
       duration: 5 # 1-15 seconds
       aspect_ratio: '16:9'
       resolution: '720p'
@@ -604,14 +618,14 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Default | Description                                       |
-| ------------------ | ------ | ------- | ------------------------------------------------- |
-| `duration`         | number | 8       | Video length in seconds (1-15)                    |
-| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3 |
-| `resolution`       | string | 720p    | Output resolution: 720p, 480p                     |
-| `reference_images` | array  | -       | Reference images for reference-to-video mode      |
-| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                  |
-| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                    |
+| Option             | Type   | Default | Description                                                         |
+| ------------------ | ------ | ------- | ------------------------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                                      |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                   |
+| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p            |
+| `reference_images` | array  | -       | Reference images for legacy `grok-imagine-video` reference-to-video |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                    |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                                      |
 
 #### Image-to-Video
 
@@ -619,7 +633,7 @@ Animate a static image by providing an image URL:
 
 ```yaml
 providers:
-  - id: xai:video:grok-imagine-video
+  - id: xai:video:grok-imagine-video-1.5
     config:
       image:
         url: 'https://example.com/image.jpg'
@@ -659,11 +673,21 @@ providers:
       duration: 10
 ```
 
-Reference-to-video requires a non-empty prompt, cannot be combined with `image` or `video`, and is limited to 10 seconds.
+Reference-to-video requires a non-empty prompt, cannot be combined with `image` or `video`, and is
+limited to 10 seconds. Grok Imagine Video 1.5 does not support this mode.
 
 #### Pricing
 
 Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
+
+| Model                    | Media input                        | 480p output | 720p output | 1080p output  |
+| ------------------------ | ---------------------------------- | ----------- | ----------- | ------------- |
+| `grok-imagine-video-1.5` | $0.01 per image                    | $0.08/sec   | $0.14/sec   | $0.25/sec     |
+| `grok-imagine-video`     | $0.002/image or $0.01/video second | $0.05/sec   | $0.07/sec   | Not supported |
+
+The local fallback includes image-input and output-video charges. For a video edit without API
+usage data, it cannot infer the source video's duration, so it does not estimate the input-video
+charge.
 
 ### Voice Agent API
 

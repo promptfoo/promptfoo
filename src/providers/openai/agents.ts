@@ -3,7 +3,7 @@ import {
   BatchTraceProcessor,
   getOrCreateTrace,
   protocol,
-  run,
+  Runner,
   startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
@@ -194,10 +194,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
-      // Override model settings if specified
-      if (this.agentConfig.modelSettings) {
-        runOptions.modelSettings = resolveModelSettings(this.agentConfig.modelSettings);
-      }
+      // Runner-level settings apply across the whole workflow, including handoffs. Individual run
+      // options intentionally do not include model/modelSettings in current Agents SDK versions.
+      const runner = new Runner({
+        ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
+        ...(this.agentConfig.modelSettings
+          ? { modelSettings: resolveModelSettings(this.agentConfig.modelSettings) }
+          : {}),
+      });
 
       const traceContext = parseTraceparent(context?.traceparent);
       const traceMetadata = buildTraceMetadata(
@@ -211,7 +215,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       const executeRun = () =>
         getOrCreateTrace(
           async () => {
-            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
+            return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
           },
           {
             ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),

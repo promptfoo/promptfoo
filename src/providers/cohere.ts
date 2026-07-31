@@ -50,6 +50,7 @@ interface CohereChatOptions {
 
 export class CohereChatCompletionProvider implements ApiProvider {
   static COHERE_CHAT_MODELS = [
+    'command-a-plus-05-2026',
     'command-a-03-2025',
     'command-r7b-12-2024',
     'command-a-translate-08-2025',

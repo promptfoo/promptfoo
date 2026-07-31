@@ -270,24 +270,47 @@ export class GoogleInteractionsProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     ) as GoogleProviderConfig;
+    const isVideoModel = this.modelName === 'gemini-omni-flash-preview';
     const passthroughPreviousInteractionId =
       config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
+    const hasConfigTools = Array.isArray(config.tools)
+      ? config.tools.length > 0
+      : Boolean(config.tools);
+    const hasPassthroughTools = Array.isArray(config.passthrough?.tools)
+      ? config.passthrough.tools.length > 0
+      : Boolean(config.passthrough?.tools);
+    const hasClientExecutedTools = Array.isArray(config.passthrough?.tools)
+      ? config.passthrough.tools.some(
+          (tool) =>
+            tool !== null &&
+            typeof tool === 'object' &&
+            !Array.isArray(tool) &&
+            ['function', 'computer_use'].includes(String((tool as { type?: unknown }).type)),
+        )
+      : false;
+    const hasMcpTools = config.mcp?.enabled === true;
     if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {
       return {
         error:
           'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
       };
     }
-    if (
-      (Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools)) ||
-      (Array.isArray(config.passthrough?.tools)
-        ? config.passthrough.tools.length > 0
-        : Boolean(config.passthrough?.tools)) ||
-      Boolean(config.mcp?.enabled)
-    ) {
+    if (isVideoModel && (hasConfigTools || hasPassthroughTools || hasMcpTools)) {
       return {
         error:
           'Gemini Omni Flash does not support tools, including grounding, code execution, or function calling.',
+      };
+    }
+    if (!isVideoModel && (hasConfigTools || hasMcpTools)) {
+      return {
+        error:
+          'Gemini Interactions models require Interactions-native tool declarations in config.passthrough.tools; generateContent-style config.tools and MCP tools are not supported on this route.',
+      };
+    }
+    if (!isVideoModel && hasClientExecutedTools) {
+      return {
+        error:
+          'Gemini Interactions custom function and computer-use tools are not supported because Promptfoo does not yet handle requires_action responses. Use managed built-in tools in config.passthrough.tools.',
       };
     }
     let apiKey: string | undefined;
@@ -407,9 +430,21 @@ export class GoogleInteractionsProvider implements ApiProvider {
         config.vertexai && typeof interactionInput === 'string'
           ? [{ type: 'text', text: interactionInput }]
           : interactionInput,
-      response_format: config.vertexai
-        ? [{ type: 'video', ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}) }]
-        : { type: 'video', ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}) },
+      ...(isVideoModel
+        ? {
+            response_format: config.vertexai
+              ? [
+                  {
+                    type: 'video',
+                    ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+                  },
+                ]
+              : {
+                  type: 'video',
+                  ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+                },
+          }
+        : {}),
       ...(config.previousInteractionId
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
@@ -525,6 +560,79 @@ export class GoogleInteractionsProvider implements ApiProvider {
       .filter((part) => part.type === 'text' && part.text)
       .map((part) => part.text)
       .join('');
+
+    const usage = data.usage;
+    const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
+    const outputTokens = usage?.total_output_tokens ?? 0;
+    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
+    const audioInputTokens =
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
+    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
+    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
+    const imageInputTokens =
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, [
+        'image',
+        'document',
+        'video',
+      ]) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, [
+        'image',
+        'document',
+        'video',
+      ]);
+    const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
+      'audio',
+    ]);
+    const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
+      'image',
+      'document',
+      'video',
+    ]);
+    const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
+      'audio',
+    ]);
+    const videoTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
+      'video',
+    ]);
+    const tokenUsage = {
+      prompt: promptTokens,
+      completion: outputTokens,
+      total: usage?.total_tokens ?? promptTokens + outputTokens + thoughtTokens,
+      cached: usage?.total_cached_tokens ?? 0,
+      numRequests: 1,
+      ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
+    };
+    const cost = cached
+      ? undefined
+      : calculateGoogleCost(
+          this.modelName,
+          config,
+          promptTokens,
+          outputTokens + thoughtTokens,
+          config.vertexai,
+          audioInputTokens,
+          audioOutputTokens,
+          videoTokens,
+          imageInputTokens,
+          usage?.total_cached_tokens,
+          cachedAudioTokens,
+          cachedImageTokens,
+        );
+
+    if (!isVideoModel) {
+      if (!text) {
+        return { error: 'Gemini interaction did not return text output', raw: data };
+      }
+      return {
+        output: text,
+        cached,
+        tokenUsage,
+        cost,
+        metadata: { interactionId: data.id, status: data.status },
+      };
+    }
+
     const video = [...outputContent].reverse().find((part) => part.type === 'video');
     if (!video?.data && !video?.uri) {
       return { error: 'Gemini interaction did not return video output', raw: data };
@@ -629,40 +737,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
       }
     }
 
-    const usage = data.usage;
-    const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
-    const outputTokens = usage?.total_output_tokens ?? 0;
-    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
-    const audioInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
-    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
-    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
-    const imageInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, [
-        'image',
-        'document',
-        'video',
-      ]) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, [
-        'image',
-        'document',
-        'video',
-      ]);
-    const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-      'audio',
-    ]);
-    const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-      'image',
-      'document',
-      'video',
-    ]);
-    const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
-      'audio',
-    ]);
-    const videoTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
-      'video',
-    ]);
     const videoUrl = blobRef?.uri ?? video.uri;
     const sanitizedPrompt = prompt
       .replace(/\r?\n|\r/g, ' ')
@@ -673,30 +747,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     return {
       output: text || `[Video: ${sanitizedPrompt}](${videoUrl})`,
       cached,
-      tokenUsage: {
-        prompt: promptTokens,
-        completion: outputTokens,
-        total: usage?.total_tokens ?? promptTokens + outputTokens + thoughtTokens,
-        cached: usage?.total_cached_tokens ?? 0,
-        numRequests: 1,
-        ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
-      },
-      cost: cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            promptTokens,
-            outputTokens + thoughtTokens,
-            config.vertexai,
-            audioInputTokens,
-            audioOutputTokens,
-            videoTokens,
-            imageInputTokens,
-            usage?.total_cached_tokens,
-            cachedAudioTokens,
-            cachedImageTokens,
-          ),
+      tokenUsage,
+      cost,
       video: {
         id: data.id,
         blobRef,

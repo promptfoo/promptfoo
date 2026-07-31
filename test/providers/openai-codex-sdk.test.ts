@@ -64,6 +64,7 @@ const createMockResponse = (
   usage?: {
     input_tokens?: number;
     cached_input_tokens?: number;
+    cache_write_input_tokens?: number;
     output_tokens?: number;
     reasoning_output_tokens?: number;
   },
@@ -74,6 +75,9 @@ const createMockResponse = (
     ? {
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
+        ...(usage.cache_write_input_tokens === undefined
+          ? {}
+          : { cache_write_input_tokens: usage.cache_write_input_tokens }),
         output_tokens: usage.output_tokens ?? 0,
         ...(usage.reasoning_output_tokens === undefined
           ? {}
@@ -186,7 +190,8 @@ describe('OpenAICodexSDKProvider', () => {
       expect(provider.id()).toBe('custom-provider-id');
     });
 
-    it.each(['unknown-model', 'gpt-5.6'])('should warn about unknown model %s', (model) => {
+    it('should warn about an unknown model', () => {
+      const model = 'unknown-model';
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model } });
@@ -200,8 +205,10 @@ describe('OpenAICodexSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.4-mini' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.6' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -2861,9 +2868,11 @@ describe('OpenAICodexSDKProvider', () => {
 
     describe('GPT-5.2 through GPT-5.6 models', () => {
       it.each([
+        'gpt-5.6',
         'gpt-5.6-sol',
         'gpt-5.6-terra',
         'gpt-5.6-luna',
+        'gpt-5.4-mini',
       ])('should recognize %s as a known model', (model) => {
         const provider = new OpenAICodexSDKProvider({
           config: { model },
@@ -2883,6 +2892,50 @@ describe('OpenAICodexSDKProvider', () => {
 
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.6-sol' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeUndefined();
+      });
+
+      it('should calculate gpt-5.6 cost when Codex reports cache-write tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.6-sol' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.0380625, 6);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it('should not estimate gpt-5.6 cost for a custom Codex binary', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: 0,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-5.6-sol',
+            codex_path_override: '/custom/path/to/codex',
+          },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 

@@ -37,11 +37,21 @@ import type {
 // Types
 // =============================================================================
 
-export type XaiVideoModel = 'grok-imagine-video';
+export type XaiVideoModel =
+  | 'grok-imagine-video'
+  | 'grok-imagine-video-1.5'
+  | 'grok-imagine-video-1.5-preview'
+  | 'grok-imagine-video-1.5-2026-05-30';
 
 export type XaiVideoAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3';
 
-export type XaiVideoResolution = '720p' | '480p';
+export type XaiVideoResolution = '1080p' | '720p' | '480p';
+
+export interface XaiVideoCostOptions {
+  modelName?: string;
+  resolution?: XaiVideoResolution;
+  hasImageInput?: boolean;
+}
 
 export interface XaiVideoJobResponse {
   request_id: string;
@@ -130,8 +140,19 @@ const VALID_ASPECT_RATIOS: readonly XaiVideoAspectRatio[] = [
   '2:3',
 ] as const;
 
-/** Valid resolutions for Grok Imagine */
-const VALID_RESOLUTIONS: readonly XaiVideoResolution[] = ['720p', '480p'] as const;
+const GROK_IMAGINE_VIDEO_15_MODELS = new Set<string>([
+  'grok-imagine-video-1.5',
+  'grok-imagine-video-1.5-preview',
+  'grok-imagine-video-1.5-2026-05-30',
+]);
+
+/** Valid resolutions for the legacy and 1.5 Grok Imagine video families. */
+const LEGACY_VALID_RESOLUTIONS: readonly XaiVideoResolution[] = ['720p', '480p'] as const;
+const VIDEO_15_VALID_RESOLUTIONS: readonly XaiVideoResolution[] = [
+  '1080p',
+  '720p',
+  '480p',
+] as const;
 
 /** Default configuration */
 const DEFAULT_DURATION = 8;
@@ -142,18 +163,38 @@ const MAX_DURATION = 15;
 const MAX_REFERENCE_IMAGE_DURATION = 10;
 const MAX_REFERENCE_IMAGES = 7;
 
-/**
- * Cost per second for Grok Imagine video generation
- * Note: This is an estimate - verify with xAI pricing
- */
-const COST_PER_SECOND = 0.05;
+const LEGACY_VIDEO_COST_PER_SECOND: Record<'720p' | '480p', number> = {
+  '720p': 0.07,
+  '480p': 0.05,
+};
+const VIDEO_15_COST_PER_SECOND: Record<XaiVideoResolution, number> = {
+  '1080p': 0.25,
+  '720p': 0.14,
+  '480p': 0.08,
+};
+const LEGACY_IMAGE_INPUT_COST = 0.002;
+const VIDEO_15_IMAGE_INPUT_COST = 0.01;
 
 // =============================================================================
 // Validation
 // =============================================================================
 
 export const validateAspectRatio = createValidator(VALID_ASPECT_RATIOS, 'aspect ratio');
-export const validateResolution = createValidator(VALID_RESOLUTIONS, 'resolution');
+const validateLegacyResolution = createValidator(LEGACY_VALID_RESOLUTIONS, 'resolution');
+const validateVideo15Resolution = createValidator(VIDEO_15_VALID_RESOLUTIONS, 'resolution');
+
+function isGrokImagineVideo15Model(modelName: string): boolean {
+  return GROK_IMAGINE_VIDEO_15_MODELS.has(modelName);
+}
+
+export function validateResolution(
+  resolution: XaiVideoResolution,
+  modelName: string = DEFAULT_MODEL,
+): { valid: boolean; message?: string } {
+  return isGrokImagineVideo15Model(modelName)
+    ? validateVideo15Resolution(resolution)
+    : validateLegacyResolution(resolution);
+}
 
 export function validateDuration(duration: number): { valid: boolean; message?: string } {
   if (duration < MIN_DURATION || duration > MAX_DURATION) {
@@ -168,11 +209,27 @@ export function validateDuration(duration: number): { valid: boolean; message?: 
 /**
  * Calculate video generation cost
  */
-export function calculateVideoCost(seconds: number, cached: boolean = false): number {
+export function calculateVideoCost(
+  seconds: number,
+  cached: boolean = false,
+  options: XaiVideoCostOptions = {},
+): number {
   if (cached) {
     return 0;
   }
-  return COST_PER_SECOND * seconds;
+
+  const modelName = options.modelName ?? DEFAULT_MODEL;
+  const resolution = options.resolution ?? DEFAULT_RESOLUTION;
+  const isVideo15 = isGrokImagineVideo15Model(modelName);
+  const outputRate = isVideo15
+    ? VIDEO_15_COST_PER_SECOND[resolution]
+    : LEGACY_VIDEO_COST_PER_SECOND[resolution === '480p' ? '480p' : '720p'];
+  const imageInputCost = options.hasImageInput
+    ? isVideo15
+      ? VIDEO_15_IMAGE_INPUT_COST
+      : LEGACY_IMAGE_INPUT_COST
+    : 0;
+  return outputRate * seconds + imageInputCost;
 }
 
 // =============================================================================
@@ -310,12 +367,25 @@ export class XAIVideoProvider implements ApiProvider {
     }
   }
 
-  private validateReferenceImages(
+  private validateVideoInputs(
     prompt: string,
     config: XaiVideoOptions,
     duration: number,
     isEdit: boolean,
   ): string | undefined {
+    if (isGrokImagineVideo15Model(this.modelName)) {
+      if (config.reference_images?.length) {
+        return 'Grok Imagine Video 1.5 does not support reference_images.';
+      }
+      if (isEdit) {
+        return 'Grok Imagine Video 1.5 supports only image-to-video generation.';
+      }
+      if (!config.image?.url) {
+        return 'Grok Imagine Video 1.5 requires image input.';
+      }
+      return undefined;
+    }
+
     if (!config.reference_images?.length) {
       return undefined;
     }
@@ -341,6 +411,30 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     return undefined;
+  }
+
+  private validateGenerationParameters(
+    duration: number,
+    aspectRatio: XaiVideoAspectRatio,
+    resolution: XaiVideoResolution,
+    isEdit: boolean,
+  ): string | undefined {
+    if (isEdit) {
+      return undefined;
+    }
+
+    const durationValidation = validateDuration(duration);
+    if (!durationValidation.valid) {
+      return durationValidation.message;
+    }
+
+    const aspectRatioValidation = validateAspectRatio(aspectRatio);
+    if (!aspectRatioValidation.valid) {
+      return aspectRatioValidation.message;
+    }
+
+    const resolutionValidation = validateResolution(resolution, this.modelName);
+    return resolutionValidation.valid ? undefined : resolutionValidation.message;
   }
 
   /**
@@ -476,27 +570,19 @@ export class XAIVideoProvider implements ApiProvider {
     const isEdit = !!config.video?.url;
     const hasReferenceImages = Boolean(config.reference_images?.length);
 
-    const referenceImageError = this.validateReferenceImages(prompt, config, duration, isEdit);
-    if (referenceImageError) {
-      return { error: referenceImageError };
+    const inputValidationError = this.validateVideoInputs(prompt, config, duration, isEdit);
+    if (inputValidationError) {
+      return { error: inputValidationError };
     }
 
-    // Validate parameters (only for generation, not edits)
-    if (!isEdit) {
-      const durationValidation = validateDuration(duration);
-      if (!durationValidation.valid) {
-        return { error: durationValidation.message };
-      }
-
-      const aspectRatioValidation = validateAspectRatio(aspectRatio);
-      if (!aspectRatioValidation.valid) {
-        return { error: aspectRatioValidation.message };
-      }
-
-      const resolutionValidation = validateResolution(resolution);
-      if (!resolutionValidation.valid) {
-        return { error: resolutionValidation.message };
-      }
+    const generationParameterError = this.validateGenerationParameters(
+      duration,
+      aspectRatio,
+      resolution,
+      isEdit,
+    );
+    if (generationParameterError) {
+      return { error: generationParameterError };
     }
 
     // Generate cache key (skip caching for edits)
@@ -602,7 +688,13 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost = reportedCost ?? calculateVideoCost(actualDuration, false);
+    const cost =
+      reportedCost ??
+      calculateVideoCost(actualDuration, false, {
+        modelName: this.modelName,
+        resolution,
+        hasImageInput: Boolean(config.image?.url),
+      });
 
     // Store cache mapping (skip for edits)
     if (!isEdit) {

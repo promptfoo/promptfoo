@@ -70,6 +70,15 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       videoOutput: 17.5 / 1e6,
     },
   },
+  {
+    id: 'gemini-3.5-live-translate-preview',
+    cost: {
+      input: 3.5 / 1e6,
+      output: 21.0 / 1e6,
+      audioInput: 3.5 / 1e6,
+      audioOutput: 21.0 / 1e6,
+    },
+  },
 
   // Gemini 3.1 models.
   ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-pro-latest'].map(
@@ -300,10 +309,19 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
 
   // Gemini Robotics (1.5-preview is intentionally excluded as a shutdown model;
-  // see the shutdown-models test in test/providers/google/util.test.ts)
+  // see the shutdown-models test in test/providers/google/util.test.ts). ER 1.6 remains
+  // here for historical cost scoring until its announced August 31, 2026 shutdown.
   {
     id: 'gemini-robotics-er-1.6-preview',
-    cost: { input: 1.0 / 1e6, output: 5.0 / 1e6 },
+    cost: { input: 1.0 / 1e6, output: 5.0 / 1e6, audioInput: 2.0 / 1e6 },
+  },
+  {
+    id: 'gemini-robotics-er-2-preview',
+    cost: { input: 2.0 / 1e6, output: 10.0 / 1e6, cacheRead: 0.2 / 1e6 },
+  },
+  {
+    id: 'gemini-robotics-er-2-streaming-preview',
+    cost: { input: 2.0 / 1e6, output: 10.0 / 1e6 },
   },
 
   // Gemini Embedding

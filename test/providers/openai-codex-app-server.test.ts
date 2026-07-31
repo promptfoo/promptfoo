@@ -4473,12 +4473,14 @@ describe('OpenAICodexAppServerProvider', () => {
           last: {
             inputTokens: 100,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 50,
             reasoningOutputTokens: 12,
           },
           total: {
             inputTokens: 200,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 75,
             reasoningOutputTokens: 12,
           },
@@ -4537,8 +4539,12 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(raw.usage).toEqual({
       input_tokens: 100,
       cached_input_tokens: 25,
+      cache_write_input_tokens: 10,
       output_tokens: 50,
       reasoning_output_tokens: 12,
+    });
+    expect(result.tokenUsage?.completionDetails).toMatchObject({
+      cacheCreationInputTokens: 10,
     });
   });
 

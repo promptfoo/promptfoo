@@ -289,6 +289,225 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'test prompt' } });
   });
 
+  it('should keep text output enabled for Gemini Robotics ER 2 Streaming', async () => {
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        generationConfig: { response_modalities: ['text'] },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'Object centered at [500, 500].');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+
+    expect(WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+    );
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        model: 'models/gemini-robotics-er-2-streaming-preview',
+        generationConfig: { responseModalities: ['TEXT'] },
+      },
+    });
+    expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+    expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'Locate the object.' } });
+    expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
+  });
+
+  it('should serialize Gemini 3.5 Live Translate setup and raw PCM audio input', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          translationConfig: {
+            targetLanguageCode: 'pl',
+            echoTargetLanguage: true,
+          },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            outputTranscription: { text: 'Dzien dobry.' },
+            turnComplete: true,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(WebSocket).toHaveBeenCalledWith(
+      expect.stringContaining('generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
+    );
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        model: 'models/gemini-3.5-live-translate-preview',
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
+          translationConfig: {
+            targetLanguageCode: 'pl',
+            echoTargetLanguage: true,
+          },
+        },
+      },
+    });
+    expect(sentMessages[0].setup).not.toHaveProperty('inputAudioTranscription');
+    expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+    expect(sentMessages.slice(1)).toEqual([
+      {
+        realtimeInput: {
+          audio: { mimeType: 'audio/pcm;rate=16000', data: 'YXVkaW8=' },
+        },
+      },
+      { realtimeInput: { audioStreamEnd: true } },
+    ]);
+    expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
+  });
+
+  it.each([
+    'audio/pcm',
+    'audio/pcm;rate=8000',
+  ])('should reject Live Translate input MIME type %s before opening a socket', async (mimeType) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain('audio/pcm;rate=16000');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it('should reject non-audio input for Gemini 3.5 Live Translate before opening a socket', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    await expect(provider.callApi('Translate this text')).resolves.toMatchObject({
+      error: expect.stringContaining('only supports raw PCM audio input'),
+    });
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'a translationConfig',
+      { response_modalities: ['audio'] },
+      'requires generationConfig.translationConfig',
+    ],
+    [
+      'tool configuration',
+      {
+        response_modalities: ['audio'],
+        translationConfig: { targetLanguageCode: 'es' },
+      },
+      'does not support tools or instructions',
+    ],
+  ])('should reject Gemini 3.5 Live Translate with invalid %s', async (_case, generationConfig, error) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig,
+        ...(_case === 'tool configuration'
+          ? { tools: [{ functionDeclarations: [{ name: 'translate_with_tool' }] }] }
+          : {}),
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    await expect(
+      provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      ),
+    ).resolves.toMatchObject({ error: expect.stringContaining(error) });
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
   it('should honor an explicit v1beta Live protocol override for older models', async () => {
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {

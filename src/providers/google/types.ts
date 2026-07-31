@@ -251,6 +251,12 @@ export interface CompletionOptions {
     outputAudioTranscription?: Record<string, any>;
     inputAudioTranscription?: Record<string, any>;
 
+    // Gemini 3.5 Live Translate configuration
+    translationConfig?: {
+      targetLanguageCode?: string;
+      echoTargetLanguage?: boolean;
+    };
+
     // Affective dialog (v1alpha only)
     enableAffectiveDialog?: boolean;
 

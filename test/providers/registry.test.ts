@@ -1567,6 +1567,11 @@ describe('Provider Registry', () => {
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
+        'google:gemini-robotics-er-2-preview',
+        async () =>
+          (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
+      ],
+      [
         'google:gemini-2.5-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],

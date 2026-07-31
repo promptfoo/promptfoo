@@ -35,6 +35,7 @@ describe('calculateBedrockCost', () => {
     { id: 'google.gemma-3-4b-it', input: 0.04, output: 0.08 },
     { id: 'google.gemma-3-12b-it', input: 0.09, output: 0.29 },
     { id: 'google.gemma-3-27b-it', input: 0.23, output: 0.38 },
+    { id: 'amazon.nova-2-lite-v1:0', input: 0.3, output: 2.5 },
     { id: 'writer.palmyra-vision-7b', input: 0.15, output: 0.6 },
     { id: 'us.writer.palmyra-x5-v1:0', input: 0.6, output: 6 },
   ])('uses the base rate for $id', ({ id, input, output }) => {
@@ -57,11 +58,23 @@ describe('calculateBedrockCost', () => {
       input: 0.18,
       output: 0.78,
     },
+    {
+      id: 'us-gov.anthropic.claude-opus-4-8',
+      region: 'us-gov-west-1',
+      input: 6,
+      output: 30,
+    },
   ])('uses the published regional rate for $id in $region', ({ id, region, input, output }) => {
     expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, region)).toBeCloseTo(
       costAtRates(input, output),
       6,
     );
+  });
+
+  it('infers GovCloud pricing from the Claude inference profile ID', () => {
+    expect(
+      calculateBedrockCost('us-gov.anthropic.claude-opus-4-8', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(6, 30), 6);
   });
 
   it('applies service tier pricing multipliers', () => {

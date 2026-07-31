@@ -33,6 +33,8 @@ import type {
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
+const GEMINI_LIVE_TRANSLATE_MODEL = 'gemini-3.5-live-translate-preview';
+
 const formatContentMessages = (
   contents: GeminiFormat,
   contentIndex: number,
@@ -284,6 +286,50 @@ export class GoogleLiveProvider implements ApiProvider {
     );
     let contentIndex = 0;
 
+    if (this.modelName === GEMINI_LIVE_TRANSLATE_MODEL) {
+      if (!config.generationConfig?.translationConfig) {
+        return {
+          error:
+            'Gemini 3.5 Live Translate requires generationConfig.translationConfig (targetLanguageCode defaults to en).',
+        };
+      }
+      const hasTools = Array.isArray(config.tools)
+        ? config.tools.length > 0
+        : Boolean(config.tools);
+      if (
+        hasTools ||
+        config.mcp?.enabled ||
+        Boolean(config.functionToolStatefulApi?.file) ||
+        Boolean(systemInstruction)
+      ) {
+        return {
+          error: 'Gemini 3.5 Live Translate does not support tools or instructions.',
+        };
+      }
+      const hasOnlySupportedPcmAudio =
+        contents.length > 0 &&
+        contents.every(
+          (content) =>
+            content.role === 'user' &&
+            content.parts.length > 0 &&
+            content.parts.every((part) => {
+              const inlineData =
+                (part as { inlineData?: { mimeType?: string } }).inlineData ??
+                (part as { inline_data?: { mime_type?: string } }).inline_data;
+              const mimeType =
+                (inlineData as { mimeType?: string } | undefined)?.mimeType ??
+                (inlineData as { mime_type?: string } | undefined)?.mime_type;
+              return mimeType?.toLowerCase() === 'audio/pcm;rate=16000';
+            }),
+        );
+      if (!hasOnlySupportedPcmAudio) {
+        return {
+          error:
+            'Gemini 3.5 Live Translate only supports raw PCM audio input with MIME type audio/pcm;rate=16000 (16-bit mono); text, image, video, missing sample rates, and other sample rates are not supported.',
+        };
+      }
+    }
+
     let statefulApi: ChildProcess | undefined;
     if (!toolsDisabled && config.functionToolStatefulApi?.file) {
       try {
@@ -343,6 +389,8 @@ export class GoogleLiveProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
       const prefersV1beta =
+        this.modelName === GEMINI_LIVE_TRANSLATE_MODEL ||
+        this.modelName.startsWith('gemini-robotics-er-2-streaming-') ||
         this.modelName.startsWith('gemini-3.1-flash-live') ||
         this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
         this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
@@ -392,11 +440,15 @@ export class GoogleLiveProvider implements ApiProvider {
         config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
       )?.map((modality) => modality.toUpperCase());
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
-      const responseModalities = usesRealtimeTextInput
-        ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')
-        : configuredResponseModalities;
+      const supportsTextResponse = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
+      const responseModalities =
+        usesRealtimeTextInput && !supportsTextResponse
+          ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')
+          : configuredResponseModalities;
       const effectiveResponseModalities =
-        usesRealtimeTextInput && !responseModalities?.length ? ['AUDIO'] : responseModalities;
+        usesRealtimeTextInput && !supportsTextResponse && !responseModalities?.length
+          ? ['AUDIO']
+          : responseModalities;
       if (requestedText && !effectiveResponseModalities?.includes('TEXT')) {
         logger.warn(
           `[Google Live] ${this.modelName} does not support TEXT response modality; requesting AUDIO with output transcription instead. Audio output is billed at audio rates.`,
@@ -427,7 +479,7 @@ export class GoogleLiveProvider implements ApiProvider {
       // Extract transcription config for use in message handler
       const hasOutputTranscription =
         !!config.generationConfig?.outputAudioTranscription ||
-        (usesRealtimeTextInput && requestedText);
+        (usesRealtimeTextInput && !supportsTextResponse && requestedText);
 
       const videoFrameCount = contents.reduce(
         (total, content) =>
@@ -741,7 +793,7 @@ export class GoogleLiveProvider implements ApiProvider {
         const speechConfig = generationSpeechConfig ?? config.speechConfig;
         const outputAudioTranscription =
           configuredOutputAudioTranscription ??
-          (usesRealtimeTextInput && requestedText ? {} : undefined);
+          (usesRealtimeTextInput && !supportsTextResponse && requestedText ? {} : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {
@@ -793,18 +845,26 @@ export class GoogleLiveProvider implements ApiProvider {
                 ? { enable_affective_dialog: enableAffectiveDialog }
                 : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
+              ...(this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
+              inputAudioTranscription !== undefined
+                ? { inputAudioTranscription }
+                : {}),
+              ...(this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
+              configuredOutputAudioTranscription !== undefined
+                ? { outputAudioTranscription: configuredOutputAudioTranscription }
+                : {}),
             },
             ...(toolConfig ? { toolConfig } : {}),
             ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
-            ...(outputAudioTranscription
+            ...(this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL && outputAudioTranscription
               ? {
                   [usesRealtimeTextInput
                     ? 'outputAudioTranscription'
                     : 'output_audio_transcription']: outputAudioTranscription,
                 }
               : {}),
-            ...(inputAudioTranscription
+            ...(this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL && inputAudioTranscription
               ? {
                   [usesRealtimeTextInput ? 'inputAudioTranscription' : 'input_audio_transcription']:
                     inputAudioTranscription,

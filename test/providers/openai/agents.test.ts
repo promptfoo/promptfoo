@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRun = vi.hoisted(() => vi.fn());
+const mockRunnerConfigs = vi.hoisted(() => [] as Record<string, unknown>[]);
 const mockGetOrCreateTrace = vi.hoisted(() => vi.fn(async (fn: () => Promise<unknown>) => fn()));
 const mockRetryPolicies = vi.hoisted(() => {
   const neverPolicy = vi.fn();
@@ -92,6 +93,15 @@ vi.mock('@openai/agents', async (importOriginal) => {
       isEnabled: vi.fn(async () => true),
     })),
     retryPolicies: mockRetryPolicies,
+    Runner: class MockRunner {
+      constructor(config: Record<string, unknown>) {
+        mockRunnerConfigs.push(config);
+      }
+
+      run(...args: unknown[]) {
+        return mockRun(...args);
+      }
+    },
     run: mockRun,
     setTraceProcessors: vi.fn(),
     startTraceExportLoop: vi.fn(),
@@ -153,6 +163,7 @@ import {
 import type { OpenAiAgentsOptions } from '../../../src/providers/openai/agents-types';
 
 function resetOpenAiAgentsMocks() {
+  mockRunnerConfigs.length = 0;
   mockRun.mockReset().mockResolvedValue({
     finalOutput: 'Agent answer',
     usage: {
@@ -370,6 +381,7 @@ describe('OpenAiAgentsProvider', () => {
 
     const agent = mockRun.mock.calls[0][0];
     const runOptions = mockRun.mock.calls[0][2];
+    const runnerConfig = mockRunnerConfigs[0] as any;
 
     expect(agent.tools.map((loadedTool: { name: string }) => loadedTool.name)).toEqual([
       'base_tool',
@@ -386,8 +398,9 @@ describe('OpenAiAgentsProvider', () => {
     ]);
     expect(agent.model).toBe('gpt-5-mini');
     expect(runOptions.model).toBeUndefined();
-    expect(runOptions.modelSettings.retry.maxRetries).toBe(2);
-    expect(typeof runOptions.modelSettings.retry.policy).toBe('function');
+    expect(runnerConfig.model).toBe('gpt-5-mini');
+    expect(runnerConfig.modelSettings.retry.maxRetries).toBe(2);
+    expect(typeof runnerConfig.modelSettings.retry.policy).toBe('function');
     expect(mockRetryPolicies.providerSuggested).toHaveBeenCalledTimes(1);
     expect(mockRetryPolicies.httpStatus).toHaveBeenCalledWith([429]);
     expect(mockRetryPolicies.any).toHaveBeenCalledTimes(1);
@@ -635,6 +648,39 @@ describe('OpenAiAgentsProvider', () => {
     await provider.callApi('Where is my order?');
 
     expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+  });
+
+  it('applies explicit model and model settings to the whole run', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          handoffs: [
+            new Agent({
+              name: 'Escalation Agent',
+              instructions: 'Handle escalations.',
+              model: 'gpt-5.4-mini',
+            }),
+          ],
+        },
+        model: 'gpt-5.6-terra',
+        modelSettings: {
+          temperature: 0.2,
+        },
+      },
+    });
+
+    await provider.callApi('Escalate this request.');
+
+    expect(mockRunnerConfigs).toEqual([
+      {
+        model: 'gpt-5.6-terra',
+        modelSettings: {
+          temperature: 0.2,
+        },
+      },
+    ]);
   });
 
   it.each([

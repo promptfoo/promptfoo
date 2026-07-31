@@ -3056,10 +3056,53 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0015, 10);
     });
 
-    it('should calculate cost for gemini-robotics-er-1.6-preview', () => {
-      // gemini-robotics-er-1.6-preview: input=1.0/1M, output=5.0/1M
-      const cost = calculateGoogleCost('gemini-robotics-er-1.6-preview', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0035, 10);
+    it('should calculate modality-aware cost for gemini-robotics-er-1.6-preview', () => {
+      // Robotics ER 1.6: audio input=$2/1M, output=$5/1M.
+      const cost = calculateGoogleCost(
+        'gemini-robotics-er-1.6-preview',
+        {},
+        1_000,
+        500,
+        false,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(0.0045, 10);
+    });
+
+    it.each([
+      'gemini-robotics-er-2-preview',
+      'gemini-robotics-er-2-streaming-preview',
+    ])('should calculate published Robotics ER 2 pricing for %s', (model) => {
+      expect(calculateGoogleCost(model, {}, 1_000, 500)).toBeCloseTo(0.007, 10);
+    });
+
+    it('should calculate cached-input pricing for gemini-robotics-er-2-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-robotics-er-2-preview',
+        {},
+        1_000,
+        0,
+        false,
+        0,
+        0,
+        undefined,
+        0,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(0.0002, 10);
+    });
+
+    it('should calculate audio pricing for gemini-3.5-live-translate-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-live-translate-preview',
+        {},
+        1_000,
+        500,
+        false,
+        1_000,
+        500,
+      );
+      expect(cost).toBeCloseTo(0.014, 10);
     });
 
     it('should calculate resolved-model cost for gemini-flash-latest', () => {

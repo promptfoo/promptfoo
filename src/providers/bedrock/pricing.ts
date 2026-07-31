@@ -48,8 +48,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
+  // Amazon Nova 2
+  'amazon.nova-2-lite': { input: 0.3, output: 2.5 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
   'amazon.titan-text-express': { input: 0.8, output: 1.6 },
@@ -251,6 +251,8 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
 };
 
 const US_GOV_PRICING: Record<string, BedrockPricing> = {
+  // AWS publishes GovCloud rates directly; do not apply the commercial regional premium again.
+  'anthropic.claude-opus-4-8': { input: 6, output: 30 },
   'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
   'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
   'nemotron-nano': { input: 0.072, output: 0.276 },
@@ -320,6 +322,19 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
+function getBedrockRegionPricing(
+  normalizedModelId: string,
+  region?: string,
+): Record<string, BedrockPricing> | undefined {
+  if (region) {
+    return BEDROCK_REGION_PRICING[region.toLowerCase()];
+  }
+  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.includes('/us-gov.')) {
+    return US_GOV_PRICING;
+  }
+  return undefined;
+}
+
 function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
@@ -334,7 +349,7 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
     return undefined;
   }
 
-  const regionPricing = region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
+  const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
   if (regionPricing) {
     for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
       if (normalizedModelId.includes(modelPrefix)) {
@@ -358,6 +373,13 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
     }
   }
   return undefined;
+}
+
+function hasPublishedRegionalPricing(normalizedModelId: string, region?: string): boolean {
+  const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
+  return regionPricing
+    ? Object.keys(regionPricing).some((modelPrefix) => normalizedModelId.includes(modelPrefix))
+    : false;
 }
 
 const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
@@ -403,7 +425,9 @@ export function calculateBedrockCost(
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
-    isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
+    isClaudeRegionalPremiumModel(normalizedModelId) &&
+    !isGlobalEndpoint &&
+    !hasPublishedRegionalPricing(normalizedModelId, region)
       ? CLAUDE_REGIONAL_ENDPOINT_PREMIUM
       : 1;
   const serviceTierMultiplier =

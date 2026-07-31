@@ -279,11 +279,14 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.5-flash` - Gemini 3.5 Flash, a frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
+- `google:gemini-robotics-er-2-preview` - Gemini Robotics ER 2 through the Interactions API ($2/1M input, $10/1M output, $0.20/1M cached input)
+- `google:live:gemini-robotics-er-2-streaming-preview` - Gemini Robotics ER 2 Streaming through the Live API ($2/1M input, $10/1M text output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -293,6 +296,11 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
 - `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
+
+This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
+evaluations can still be scored; historical pricing data does not mean that Google still serves an
+endpoint. Check Google's [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations)
+before starting new work with an older ID.
 
 ### Embedding Models
 
@@ -431,6 +439,50 @@ prompts:
 ```
 
 Video output is billed at $17.50/1M tokens (about $0.10/second at 720p); text and thinking output use the $9/1M rate.
+
+### Gemini Robotics ER
+
+Gemini Robotics ER 2 has separate standard and streaming endpoints. Both accept text, image, video,
+and audio input with 131,072 input tokens and 65,536 output tokens, but they expose different
+capabilities:
+
+| Promptfoo provider                                   | API          | Output | Supported model capabilities                                                          |
+| ---------------------------------------------------- | ------------ | ------ | ------------------------------------------------------------------------------------- |
+| `google:gemini-robotics-er-2-preview`                | Interactions | Text   | Caching, batch, code execution, file search, Maps/Search grounding, JSON, URL context |
+| `google:live:gemini-robotics-er-2-streaming-preview` | Live         | Text   | Real-time streaming, function calling, Search grounding, thinking                     |
+
+Promptfoo automatically routes the standard ID to the Interactions API. Managed Interactions-native
+tools can be supplied through `passthrough.tools`:
+
+```yaml
+providers:
+  - id: google:gemini-robotics-er-2-preview
+    config:
+      passthrough:
+        tools:
+          - type: google_search
+
+prompts:
+  - 'Locate the requested objects and return normalized [y, x] coordinates.'
+```
+
+Promptfoo does not currently execute custom function or computer-use tools for the Interactions
+route because those calls require a follow-up `requires_action` exchange. Tools with `type: function`
+or `type: computer_use` are rejected instead of returning an incomplete result; managed tools such
+as `google_search` remain supported.
+
+The standard endpoint costs $2/1M input tokens and $10/1M output tokens, including thinking. Cached
+input is $0.20/1M; batch processing is $1/1M input, $5/1M output, and $0.10/1M cached input. The
+streaming endpoint costs $2/1M input and $10/1M output and does not support caching or batch.
+
+:::warning
+Google will shut down `gemini-robotics-er-1.6-preview` on August 31, 2026. Replace it with
+`gemini-robotics-er-2-preview`, or use `google:live:gemini-robotics-er-2-streaming-preview` for
+low-latency streaming. `gemini-robotics-er-1.5-preview` shut down on April 30, 2026.
+:::
+
+See Google's [Gemini Robotics ER documentation](https://ai.google.dev/gemini-api/docs/robotics-overview)
+for capability details and safety guidance.
 
 ### Video Generation Models (Veo)
 
@@ -1091,6 +1143,54 @@ providers:
 ```
 
 Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+
+### Gemini Robotics ER 2 Streaming
+
+The Robotics streaming endpoint uses `v1beta` and returns text rather than generated audio:
+
+```yaml
+providers:
+  - id: google:live:gemini-robotics-er-2-streaming-preview
+    config:
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 30000
+```
+
+It supports text, image, video-frame, and raw PCM audio input plus function calling, Search grounding,
+and thinking. It does not support caching, code execution, computer use, file search, Maps grounding,
+structured output, or URL context.
+
+### Gemini 3.5 Live Translate
+
+Live Translate is an audio-only interpreter model. It requires `translationConfig`, uses the `v1beta`
+Live endpoint, and returns translated audio plus an optional transcript. Supply raw little-endian,
+16-bit mono PCM at 16 kHz; returned audio is 24 kHz. Text, images, video, tools, instructions,
+thinking, grounding, caching, batch, flex, and priority inference are not supported.
+
+```yaml
+providers:
+  - id: google:live:gemini-3.5-live-translate-preview
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        inputAudioTranscription: {}
+        outputAudioTranscription: {}
+        translationConfig:
+          targetLanguageCode: pl
+          echoTargetLanguage: true
+      timeoutMs: 30000
+
+prompts:
+  - |
+    [{"role":"user","parts":[{"inline_data":{"mime_type":"audio/pcm;rate=16000","data":"{{audio_base64}}"}}]}]
+```
+
+The model supports more than 70 languages with a 131,072-token input limit and 65,536-token output
+limit. Pricing is $3.50/1M audio input tokens and $21/1M audio output tokens, approximately $0.0368
+per minute at Google's stated 25 audio tokens per second. See Google's
+[Live Translation guide](https://ai.google.dev/gemini-api/docs/live-api/live-translate) for supported
+language codes and streaming details.
 
 ### Key Features
 

@@ -173,6 +173,91 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
+  it('returns text for Robotics ER 2 without requesting video output', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-robotics-1',
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: '[{"point":[376,508],"label":"banana"}]' }],
+          },
+        ],
+        usage: {
+          total_input_tokens: 1_000,
+          total_output_tokens: 500,
+          total_tokens: 1_500,
+        },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { tools: [{ type: 'google_search' }] },
+      },
+    });
+
+    const result = await provider.callApi('Find the banana.');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toEqual({
+      model: 'gemini-robotics-er-2-preview',
+      input: 'Find the banana.',
+      tools: [{ type: 'google_search' }],
+      background: false,
+      stream: false,
+    });
+    expect(result).toMatchObject({
+      output: '[{"point":[376,508],"label":"banana"}]',
+      tokenUsage: { prompt: 1_000, completion: 500, total: 1_500 },
+      cost: 0.007,
+      metadata: { interactionId: 'interaction-robotics-1', status: 'completed' },
+    });
+    expect(result.video).toBeUndefined();
+  });
+
+  it('rejects generateContent-style Robotics tools instead of silently dropping them', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key', tools: [{ googleSearch: {} }] },
+    });
+
+    await expect(provider.callApi('Find the banana.')).resolves.toMatchObject({
+      error: expect.stringContaining('passthrough.tools'),
+    });
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'custom function',
+      {
+        type: 'function',
+        name: 'move_robot_arm',
+        description: 'Moves the robot arm to a target point.',
+        parameters: {
+          type: 'object',
+          properties: { x: { type: 'number' }, y: { type: 'number' } },
+          required: ['x', 'y'],
+        },
+      },
+    ],
+    ['computer-use', { type: 'computer_use', environment: 'browser' }],
+  ])('rejects client-executed Robotics %s tools', async (_toolKind, tool) => {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { tools: [tool] },
+      },
+    });
+
+    await expect(provider.callApi('Move the arm to the banana.')).resolves.toMatchObject({
+      error: expect.stringContaining('requires_action'),
+    });
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('normalizes Promptfoo chat roles for the Omni Interactions API', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
