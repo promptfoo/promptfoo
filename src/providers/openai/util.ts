@@ -814,6 +814,16 @@ const DEPRECATED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
     },
   },
   {
+    id: 'gpt-4o-realtime-preview-2025-06-03',
+    type: 'chat',
+    cost: {
+      input: 5 / 1e6,
+      output: 20 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  },
+  {
     id: 'gpt-4o-realtime-preview-2024-10-01',
     type: 'chat',
     cost: {

@@ -1063,7 +1063,7 @@ export function calculateOpenAIUsageCost(
 }
 
 function isReasoningModel(modelName: string): boolean {
-  const capabilityModelName = modelName.replace(/(^|\/)ft:/, '$1');
+  const capabilityModelName = modelName.replace(/^bedrock:/, '').replace(/(^|\/)ft:/, '$1');
   return (
     capabilityModelName.startsWith('gpt-5') ||
     capabilityModelName.startsWith('o1') ||

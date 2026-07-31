@@ -621,6 +621,9 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
       true,
     );
+    expect(
+      OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview-2025-06-03'),
+    ).toBe(true);
   });
 
   it('excludes July 23 shutdowns from current model registries while retaining billing', () => {
