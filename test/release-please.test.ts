@@ -17,9 +17,20 @@ type ReleasePleaseConfig = {
   'last-release-sha'?: unknown;
 };
 
-type WorkflowStep = { uses?: unknown };
+type WorkflowStep = {
+  name?: unknown;
+  uses?: unknown;
+  with?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
+type WorkflowJob = {
+  if?: unknown;
+  needs?: unknown;
+  permissions?: Record<string, unknown>;
+  steps?: WorkflowStep[];
+};
 type ReleasePleaseWorkflow = {
-  jobs?: { 'release-please'?: { steps?: WorkflowStep[] } };
+  jobs?: Record<string, WorkflowJob>;
 };
 
 function readRepoFile(relativePath: string) {
@@ -93,5 +104,93 @@ describe('release-please automation', () => {
       'release-please-action `uses:` must carry a `# vN` version comment',
     );
     expect(Number.parseInt(versionMatch[1], 10)).toBeGreaterThanOrEqual(MIN_RELEASE_PLEASE_MAJOR);
+  });
+
+  it('gates code-scan mirror publication on an isolated attestation of the complete payload', () => {
+    const workflow = yaml.load(
+      readRepoFile('.github/workflows/release-please.yml'),
+    ) as ReleasePleaseWorkflow;
+    const buildJob = workflow.jobs?.['build-code-scan-action-release'];
+    const attestJob = workflow.jobs?.['attest-code-scan-action'];
+    const publishJob = workflow.jobs?.['publish-code-scan-action'];
+
+    assert(buildJob, 'code-scan release build job is required');
+    assert(attestJob, 'code-scan release attestation job is required');
+    assert(publishJob, 'code-scan release publication job is required');
+
+    expect(buildJob.permissions).toEqual({ contents: 'read' });
+    expect(JSON.stringify(buildJob)).not.toMatch(/(?:GH_TOKEN|GITHUB_TOKEN|NODE_AUTH_TOKEN)/);
+    expect(
+      buildJob.steps?.some((step) => String(step.uses).includes('create-github-app-token')),
+    ).toBe(false);
+
+    const uploadStep = buildJob.steps?.find(
+      (step) => step.name === 'Upload release payload for attestation',
+    );
+    assert(uploadStep?.with, 'build job must upload the code-scan release payload');
+    expect(uploadStep.uses).toMatch(/^actions\/upload-artifact@[0-9a-f]{40}$/);
+    expect(uploadStep.with.name).toBe('code-scan-action-release-payload');
+    expect(uploadStep.with['if-no-files-found']).toBe('error');
+    expect(uploadStep.with['include-hidden-files']).toBe(true);
+    expect(
+      String(uploadStep.with.path)
+        .trim()
+        .split('\n')
+        .map((entry) => entry.trim()),
+    ).toEqual([
+      '${{ runner.temp }}/code-scan-action-export/dist',
+      '${{ runner.temp }}/code-scan-action-export/action.yml',
+      '${{ runner.temp }}/code-scan-action-export/README.md',
+      '${{ runner.temp }}/code-scan-action-export/CHANGELOG.md',
+      '${{ runner.temp }}/code-scan-action-export/.release-source.json',
+    ]);
+
+    expect(attestJob.needs).toEqual(['build-code-scan-action-release']);
+    expect(attestJob.if).toBe(
+      "${{ always() && !cancelled() && needs.build-code-scan-action-release.result == 'success' }}",
+    );
+    expect(attestJob.permissions).toEqual({
+      contents: 'read',
+      'id-token': 'write',
+      attestations: 'write',
+    });
+    const attestDownload = attestJob.steps?.find(
+      (step) => step.name === 'Download release payload',
+    );
+    const attestStep = attestJob.steps?.find(
+      (step) => step.name === 'Attest build provenance for mirrored artifacts',
+    );
+    expect(attestDownload?.uses).toMatch(/^actions\/download-artifact@[0-9a-f]{40}$/);
+    expect(attestDownload?.with?.name).toBe('code-scan-action-release-payload');
+    expect(attestStep?.uses).toMatch(/^actions\/attest-build-provenance@[0-9a-f]{40}$/);
+    expect(
+      String(attestStep?.with?.['subject-path'])
+        .trim()
+        .split('\n')
+        .map((entry) => entry.trim()),
+    ).toEqual([
+      '${{ runner.temp }}/code-scan-action-attest/dist/*',
+      '${{ runner.temp }}/code-scan-action-attest/action.yml',
+    ]);
+
+    expect(publishJob.needs).toEqual(['release-please', 'attest-code-scan-action']);
+    expect(publishJob.if).toBe(
+      "${{ always() && !cancelled() && needs.attest-code-scan-action.result == 'success' }}",
+    );
+    expect(publishJob.permissions).toEqual({ contents: 'read' });
+    const publishDownloadIndex = publishJob.steps?.findIndex(
+      (step) => step.name === 'Download attested release payload',
+    );
+    const tokenStepIndex = publishJob.steps?.findIndex(
+      (step) => step.name === 'Create app token for code-scan-action mirror',
+    );
+    assert(publishDownloadIndex !== undefined && publishDownloadIndex >= 0);
+    assert(tokenStepIndex !== undefined && tokenStepIndex > publishDownloadIndex);
+    expect(publishJob.steps?.[publishDownloadIndex]?.uses).toMatch(
+      /^actions\/download-artifact@[0-9a-f]{40}$/,
+    );
+    expect(publishJob.steps?.[publishDownloadIndex]?.with?.name).toBe(
+      'code-scan-action-release-payload',
+    );
   });
 });

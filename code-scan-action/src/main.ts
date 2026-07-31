@@ -366,11 +366,13 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 //   scan starts (promptfoo and its dependency tree work without lifecycle scripts)
 // - sanitized env (createSubprocessEnv) with tokens stripped, plus every env-level
 //   npm config override removed (see below)
+// - an action-owned writable install prefix, with the installed binary invoked
+//   directly instead of trusting PATH or a runner-global prefix
 // - cwd outside the checked-out workspace: npm's global mode documents (and testing
 //   confirms) that it ignores the per-project .npmrc, but the workspace holds the
 //   untrusted PR being scanned — no cwd-derived npm config (registry, proxy,
 //   strict-ssl, ignore-scripts…) may ever be in scope
-async function installPromptfooCli(promptfooVersion: string): Promise<void> {
+async function installPromptfooCli(promptfooVersion: string, npmrcDir: string): Promise<string> {
   const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
 
   // npm reads its registry (and other config) from both env vars and user/global
@@ -381,7 +383,7 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
   //  - strip every npm_config_*/NPM_CONFIG_* env var, and
   //  - point --userconfig/--globalconfig at fresh empty files so no on-disk .npmrc is
   //    consulted (two distinct paths: npm rejects loading one file as both).
-  // The pinned version therefore resolves from the runner's default (public) registry.
+  // The pinned version therefore resolves only from the public npm registry.
   // This deliberately bypasses runner-admin npm mirrors configured via env or .npmrc
   // for this one install (the SaaS scan already requires public egress); the scan
   // subprocess keeps workflow-provided npm config because its nested npx (MCP)
@@ -392,9 +394,9 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
       delete env[key];
     }
   }
-  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
   const emptyUserConfig = path.join(npmrcDir, 'user');
   const emptyGlobalConfig = path.join(npmrcDir, 'global');
+  const installPrefix = path.join(npmrcDir, 'prefix');
 
   core.info(`📦 Installing promptfoo@${promptfooVersion}...`);
   await exec.exec(
@@ -404,6 +406,9 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
       '-g',
       `promptfoo@${promptfooVersion}`,
       '--ignore-scripts',
+      '--registry=https://registry.npmjs.org/',
+      '--prefix',
+      installPrefix,
       '--userconfig',
       emptyUserConfig,
       '--globalconfig',
@@ -412,6 +417,9 @@ async function installPromptfooCli(promptfooVersion: string): Promise<void> {
     { env, cwd: installCwd },
   );
   core.info('✅ Promptfoo installed successfully');
+  return process.platform === 'win32'
+    ? path.join(installPrefix, 'promptfoo.cmd')
+    : path.join(installPrefix, 'bin', 'promptfoo');
 }
 
 async function runPromptfooScan(
@@ -419,45 +427,56 @@ async function runPromptfooScan(
   oidcToken: string | undefined,
   promptfooVersion: string,
 ): Promise<ScanResponse> {
-  await installPromptfooCli(promptfooVersion);
+  const installCwd = process.env.RUNNER_TEMP || os.tmpdir();
+  const npmrcDir = fs.mkdtempSync(path.join(installCwd, 'promptfoo-npmrc-'));
 
-  core.info('🚀 Running promptfoo code-scans run...');
+  try {
+    const promptfooCli = await installPromptfooCli(promptfooVersion, npmrcDir);
 
-  let scanOutput = '';
-  let scanError = '';
-  const scanEnv = createScanEnv(oidcToken);
+    core.info('🚀 Running promptfoo code-scans run...');
 
-  const exitCode = await exec.exec('promptfoo', cliArgs, {
-    env: scanEnv,
-    listeners: {
-      stdout: (data: Buffer) => {
-        scanOutput += data.toString();
+    let scanOutput = '';
+    let scanError = '';
+    const scanEnv = createScanEnv(oidcToken);
+
+    const exitCode = await exec.exec(`"${promptfooCli.replaceAll('"', '\\"')}"`, cliArgs, {
+      env: scanEnv,
+      listeners: {
+        stdout: (data: Buffer) => {
+          scanOutput += data.toString();
+        },
+        stderr: (data: Buffer) => {
+          scanError += data.toString();
+        },
       },
-      stderr: (data: Buffer) => {
-        scanError += data.toString();
-      },
-    },
-    ignoreReturnCode: true,
-  });
+      ignoreReturnCode: true,
+    });
 
-  if (exitCode === 0) {
-    core.info('✅ Scan completed successfully');
-    return parseScanOutput(scanOutput);
+    if (exitCode === 0) {
+      core.info('✅ Scan completed successfully');
+      return parseScanOutput(scanOutput);
+    }
+
+    // Keep compatibility with CLI releases that reported an authorized fork skip as text
+    // while the action and CLI roll out independently.
+    if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+      return {
+        success: true,
+        comments: [],
+        skipReason: FORK_PR_AUTH_SKIP_REASON,
+      };
+    }
+
+    core.error(`CLI exited with code ${exitCode}`);
+    core.error(`Error output: ${scanError}`);
+    throw new Error(`Code scan failed with exit code ${exitCode}`);
+  } finally {
+    try {
+      fs.rmSync(npmrcDir, { recursive: true, force: true });
+    } catch (error) {
+      core.warning(`Failed to remove temporary Promptfoo CLI install: ${formatError(error)}`);
+    }
   }
-
-  // Keep compatibility with CLI releases that reported an authorized fork skip as text
-  // while the action and CLI roll out independently.
-  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
-    return {
-      success: true,
-      comments: [],
-      skipReason: FORK_PR_AUTH_SKIP_REASON,
-    };
-  }
-
-  core.error(`CLI exited with code ${exitCode}`);
-  core.error(`Error output: ${scanError}`);
-  throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
 function getScanResponse(
