@@ -695,21 +695,21 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       };
     };
     const promptConfig = context?.prompt?.config as GrokTokenLimitConfig | undefined;
-    const providerConfig = this.config as GrokTokenLimitConfig;
-    const mergedPassthrough = result.config.passthrough as
+    const promptPassthrough = promptConfig?.passthrough;
+    const resolvedConfig = result.config as GrokTokenLimitConfig;
+    const resolvedPassthrough = resolvedConfig.passthrough as
       | { max_tokens?: number; max_completion_tokens?: number }
       | undefined;
+    const inheritedPassthrough = promptPassthrough ? undefined : resolvedPassthrough;
     const maxTokens =
-      promptConfig?.passthrough?.max_tokens ??
-      promptConfig?.passthrough?.max_completion_tokens ??
+      promptPassthrough?.max_tokens ??
+      promptPassthrough?.max_completion_tokens ??
       promptConfig?.max_tokens ??
       promptConfig?.max_completion_tokens ??
-      providerConfig.passthrough?.max_tokens ??
-      providerConfig.passthrough?.max_completion_tokens ??
-      providerConfig.max_tokens ??
-      providerConfig.max_completion_tokens ??
-      mergedPassthrough?.max_tokens ??
-      mergedPassthrough?.max_completion_tokens ??
+      inheritedPassthrough?.max_tokens ??
+      inheritedPassthrough?.max_completion_tokens ??
+      resolvedConfig.max_tokens ??
+      resolvedConfig.max_completion_tokens ??
       result.body.max_completion_tokens;
     const effectiveModel =
       typeof result.body.model === 'string' ? result.body.model : this.modelName;

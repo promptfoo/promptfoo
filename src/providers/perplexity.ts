@@ -154,16 +154,11 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
-    const promptConfig = context?.prompt?.config as Record<string, any> | undefined;
-    const promptPassthrough = promptConfig?.passthrough as Record<string, any> | undefined;
-    const providerPassthrough = this.config?.passthrough as Record<string, any> | undefined;
+    const resolvedConfig = result.config as Record<string, any>;
+    const resolvedPassthrough = resolvedConfig.passthrough as Record<string, any> | undefined;
 
     for (const field of PERPLEXITY_PASSTHROUGH_FIELDS) {
-      const value =
-        promptPassthrough?.[field] ??
-        promptConfig?.[field] ??
-        providerPassthrough?.[field] ??
-        this.config?.[field];
+      const value = resolvedPassthrough?.[field] ?? resolvedConfig[field];
       if (value !== undefined) {
         result.body[field] = value;
       }

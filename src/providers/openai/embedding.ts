@@ -3,7 +3,12 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  getTokenUsage,
+  isOpenAiFirstPartyApiUrl,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderEmbeddingResponse } from '../../types/index';
@@ -101,18 +106,16 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         };
       }
       const billingModelName = this.getBillingModelName(this.config);
+      const billingLookupModel = isOpenAiFirstPartyApiUrl(this.getApiUrl())
+        ? (billingModelName.split('/').pop() ?? billingModelName)
+        : billingModelName;
       return {
         embedding,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
-        cost: calculateOpenAIUsageCost(
-          billingModelName.split('/').pop() ?? billingModelName,
-          this.config,
-          data.usage,
-          {
-            cachedResponse: cached,
-          },
-        ),
+        cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
+          cachedResponse: cached,
+        }),
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);

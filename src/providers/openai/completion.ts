@@ -9,6 +9,7 @@ import {
   assertOpenAiApiModel,
   formatOpenAiError,
   getTokenUsage,
+  isOpenAiFirstPartyApiUrl,
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
@@ -116,20 +117,18 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     }
     try {
       const billingModelName = this.getBillingModelName(this.config);
+      const billingLookupModel = isOpenAiFirstPartyApiUrl(this.getApiUrl())
+        ? (billingModelName.split('/').pop() ?? billingModelName)
+        : billingModelName;
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        cost: calculateOpenAIUsageCost(
-          billingModelName.split('/').pop() ?? billingModelName,
-          this.config,
-          data.usage,
-          {
-            cachedResponse: cached,
-            serviceTier: data.service_tier ?? this.config.service_tier,
-          },
-        ),
+        cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
+          cachedResponse: cached,
+          serviceTier: data.service_tier ?? this.config.service_tier,
+        }),
       };
     } catch (err) {
       return {

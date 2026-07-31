@@ -572,6 +572,32 @@ describe('xAI Chat Provider', () => {
       expect(result.body.max_completion_tokens).toBeUndefined();
     });
 
+    it('does not restore a provider token limit replaced by prompt passthrough', async () => {
+      const provider = createXAIProvider('xai:grok-4.3', {
+        config: {
+          config: {
+            passthrough: {
+              max_tokens: 111,
+            },
+          },
+        },
+      }) as any;
+
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            passthrough: {
+              model: 'grok-build-0.1',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-build-0.1');
+      expect(result.body.max_tokens).toBeUndefined();
+      expect(result.body.max_completion_tokens).toBeUndefined();
+    });
+
     it('uses the effective passthrough model when normalizing Grok Build token limits', async () => {
       const regularProvider = createXAIProvider('xai:grok-4.3') as any;
       const buildResult = await regularProvider.getOpenAiBody('test prompt', {

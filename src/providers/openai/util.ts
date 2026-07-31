@@ -519,6 +519,17 @@ const OPENAI_FIRST_PARTY_API_HOSTNAMES = new Set([
   'eu.api.openai.com',
 ]);
 
+export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
+  if (!apiUrl) {
+    return true;
+  }
+  try {
+    return OPENAI_FIRST_PARTY_API_HOSTNAMES.has(new URL(apiUrl).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 export function assertOpenAiModelEndpointCompatibility(
   model: unknown,
   options: { allowTranscription?: boolean } = {},
@@ -550,14 +561,8 @@ export function assertOpenAiApiModel(
     return;
   }
 
-  if (apiUrl) {
-    try {
-      if (!OPENAI_FIRST_PARTY_API_HOSTNAMES.has(new URL(apiUrl).hostname.toLowerCase())) {
-        return;
-      }
-    } catch {
-      return;
-    }
+  if (!isOpenAiFirstPartyApiUrl(apiUrl)) {
+    return;
   }
 
   const normalizedModel = model.split('/').pop() ?? model;

@@ -147,6 +147,36 @@ describe('Perplexity Provider', () => {
       });
     });
 
+    it('does not restore provider passthrough fields replaced by prompt passthrough', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          passthrough: {
+            search_domain_filter: ['private.example'],
+            web_search_options: {
+              search_context_size: 'high',
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            passthrough: {
+              model: 'sonar-pro',
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body.model).toBe('sonar-pro');
+      expect(body).not.toHaveProperty('search_domain_filter');
+      expect(body).not.toHaveProperty('web_search_options');
+    });
+
     it('should set the correct usage tier', () => {
       const tiers = ['high', 'medium', 'low'] as const;
 
