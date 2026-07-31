@@ -95,7 +95,7 @@ providers:
   - id: deepseek:deepseek-v4-pro
     config:
       max_tokens: 8000
-      showThinking: true # Include reasoning content in output (default)
+      showThinking: true # Include reasoning content in promptfoo's output (default)
       passthrough:
         thinking:
           type: enabled

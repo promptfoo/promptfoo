@@ -128,12 +128,6 @@ Multiple Grok models support reasoning capabilities:
 
 **Grok 4.3**: General-purpose reasoning model. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
 
-**Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
-
-- Function calling and tool usage
-- Web search via `search_parameters`
-- Fast inference with built-in reasoning
-
 ### Grok 4.5 Specific Behavior
 
 Grok 4.5 is xAI's flagship model for coding, agentic tasks, and knowledge work:
@@ -218,13 +212,8 @@ providers:
 
 ### Grok Code Fast Specific Behavior
 
-The Grok Code Fast IDs are aliases of `grok-build-0.1`, xAI's model for agentic coding workflows:
-
-- **Built for Speed**: Designed to be highly responsive for agentic coding tools where multiple tool calls are common
-- **Pricing**: $1/1M input tokens, $0.20/1M cached input tokens, and $2/1M output tokens, with higher rates at the long-context tier
-- **Reasoning Capabilities**: Built-in reasoning for code analysis, debugging, and problem-solving
-- **Tool Integration**: Excellent support for function calling, tool usage, and web search
-- **Coding Expertise**: Particularly adept at TypeScript, Python, Java, Rust, C++, and Go
+Grok Code Fast is retired. For `grok-code-fast-1`, xAI recommends `grok-build-0.1` for code
+workloads; use `xai:grok-build-0.1` in Promptfoo configs instead of relying on the retired slug.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

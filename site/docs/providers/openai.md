@@ -2237,9 +2237,9 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.3-chat-latest` - GPT-5.3 chat alias
 - `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($21/$168 per 1M tokens)
-- `o1` - Powerful reasoning model
-- `o1-pro` - Enhanced reasoning model with more compute
-- `o3-pro` - Highest-tier reasoning model
+- `o1` - Reasoning model
+- `o1-pro` - Higher-compute reasoning model
+- `o3-pro` - Reasoning model
 - `o3` - General-purpose reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Fast, cost-effective reasoning model

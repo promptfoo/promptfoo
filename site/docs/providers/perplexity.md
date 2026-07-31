@@ -222,7 +222,7 @@ Search request fees vary by `web_search_options.search_context_size`:
 
 Deep Research also charges $2 per million citation tokens, $5 per 1,000 search queries, and $3 per million reasoning tokens.
 
-Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/getting-started/pricing) for the latest rates.
+Check [Perplexity's pricing page](https://docs.perplexity.ai/docs/getting-started/pricing) for current rates.
 
 ## Troubleshooting
 

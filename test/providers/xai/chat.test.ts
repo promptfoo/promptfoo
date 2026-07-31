@@ -528,6 +528,22 @@ describe('xAI Chat Provider', () => {
 
       expect(result.body.max_tokens).toBe(654);
       expect(result.body.max_completion_tokens).toBeUndefined();
+
+      const filteredResult = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            max_tokens: 321,
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['END'],
+          },
+        },
+      });
+
+      expect(filteredResult.body.max_tokens).toBe(321);
+      expect(filteredResult.body.presence_penalty).toBeUndefined();
+      expect(filteredResult.body.frequency_penalty).toBeUndefined();
+      expect(filteredResult.body.stop).toBeUndefined();
     });
 
     it.each([
