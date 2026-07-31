@@ -692,6 +692,41 @@ describe('xAI Chat Provider', () => {
       expect(regularResult.body.stop).toEqual(['\\n']);
     });
 
+    it('uses the effective passthrough model for top-level reasoning effort', async () => {
+      const provider = createXAIProvider('xai:grok-2') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            reasoning_effort: 'high',
+            passthrough: {
+              model: 'grok-4.5',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-4.5');
+      expect(result.body.reasoning_effort).toBe('high');
+    });
+
+    it('uses the effective passthrough model for the token-limit field', async () => {
+      const provider = createXAIProvider('xai:grok-2') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            max_completion_tokens: 777,
+            passthrough: {
+              model: 'grok-4.5',
+            },
+          },
+        },
+      });
+
+      expect(result.body.model).toBe('grok-4.5');
+      expect(result.body.max_tokens).toBeUndefined();
+      expect(result.body.max_completion_tokens).toBe(777);
+    });
+
     it('validates Grok 4.5 reasoning effort against the effective passthrough model', async () => {
       const provider = createXAIProvider('xai:grok-2') as any;
 

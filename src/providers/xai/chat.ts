@@ -1,3 +1,4 @@
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -686,17 +687,19 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       return result;
     }
 
-    type GrokTokenLimitConfig = {
+    type GrokRequestConfig = {
       max_tokens?: number;
       max_completion_tokens?: number;
+      reasoning_effort?: unknown;
       passthrough?: {
+        model?: unknown;
         max_tokens?: number;
         max_completion_tokens?: number;
       };
     };
-    const promptConfig = context?.prompt?.config as GrokTokenLimitConfig | undefined;
+    const promptConfig = context?.prompt?.config as GrokRequestConfig | undefined;
     const promptPassthrough = promptConfig?.passthrough;
-    const resolvedConfig = result.config as GrokTokenLimitConfig;
+    const resolvedConfig = result.config as GrokRequestConfig;
     const resolvedPassthrough = resolvedConfig.passthrough as
       | { max_tokens?: number; max_completion_tokens?: number }
       | undefined;
@@ -710,12 +713,39 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       inheritedPassthrough?.max_completion_tokens ??
       resolvedConfig.max_tokens ??
       resolvedConfig.max_completion_tokens ??
-      result.body.max_completion_tokens;
+      result.body.max_completion_tokens ??
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
+    const maxCompletionTokens =
+      promptPassthrough?.max_completion_tokens ??
+      promptConfig?.max_completion_tokens ??
+      inheritedPassthrough?.max_completion_tokens ??
+      resolvedConfig.max_completion_tokens ??
+      result.body.max_completion_tokens ??
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS');
     const effectiveModel =
       typeof result.body.model === 'string' ? result.body.model : this.modelName;
     if (GROK_BUILD_CHAT_MODELS.has(effectiveModel) && maxTokens !== undefined) {
       result.body.max_tokens = maxTokens;
       delete result.body.max_completion_tokens;
+    } else if (GROK_REASONING_MODELS.includes(effectiveModel)) {
+      if (maxCompletionTokens !== undefined) {
+        result.body.max_completion_tokens = maxCompletionTokens;
+      }
+      delete result.body.max_tokens;
+    }
+
+    // The base OpenAI-compatible provider evaluates reasoning capabilities against
+    // the configured model before xAI's passthrough override reaches the body.
+    // Restore a top-level effort value when the effective xAI model supports it.
+    if (
+      GROK_REASONING_EFFORT_MODELS.includes(effectiveModel) &&
+      result.body.reasoning_effort === undefined &&
+      resolvedConfig.reasoning_effort !== undefined
+    ) {
+      result.body.reasoning_effort = renderVarsInObject(
+        resolvedConfig.reasoning_effort,
+        context?.vars,
+      );
     }
 
     // Filter out unsupported sampling controls for Grok-4-family models.
