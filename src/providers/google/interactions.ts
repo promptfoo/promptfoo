@@ -325,42 +325,56 @@ function normalizeInteractionServiceTier(
   return value === 'flex' || value === 'standard' || value === 'priority' ? value : undefined;
 }
 
+type InteractionStructuredOutputLayer = {
+  generationConfigs: unknown[];
+  responseSchema?: string;
+};
+
 function parseInteractionStructuredOutput(
-  generationConfigs: unknown[],
-  responseSchema: string | undefined,
+  layers: InteractionStructuredOutputLayer[],
   contextVars?: CallApiContextParams['vars'],
 ): { mimeType?: string; schema?: unknown } {
   let legacyMimeType: unknown;
   let legacyResponseSchema: unknown;
-  for (const generationConfig of generationConfigs) {
-    if (
-      !generationConfig ||
-      typeof generationConfig !== 'object' ||
-      Array.isArray(generationConfig)
-    ) {
-      continue;
+  for (const layer of layers) {
+    let layerMimeType: unknown;
+    let layerResponseSchema: unknown;
+    for (const generationConfig of layer.generationConfigs) {
+      if (
+        !generationConfig ||
+        typeof generationConfig !== 'object' ||
+        Array.isArray(generationConfig)
+      ) {
+        continue;
+      }
+      const config = generationConfig as Record<string, unknown>;
+      const responseMimeType = config.response_mime_type ?? config.responseMimeType;
+      const responseSchemaValue = config.response_schema ?? config.responseSchema;
+      if (responseMimeType !== undefined) {
+        layerMimeType = responseMimeType;
+      }
+      if (responseSchemaValue !== undefined) {
+        layerResponseSchema = responseSchemaValue;
+      }
     }
-    const config = generationConfig as Record<string, unknown>;
-    const responseMimeType = config.response_mime_type ?? config.responseMimeType;
-    const responseSchemaValue = config.response_schema ?? config.responseSchema;
-    if (responseMimeType !== undefined) {
-      legacyMimeType = responseMimeType;
+    if (layer.responseSchema !== undefined && layerResponseSchema !== undefined) {
+      throw new Error(
+        '`responseSchema` provided but `generationConfig.response_schema` already set.',
+      );
     }
-    if (responseSchemaValue !== undefined) {
-      legacyResponseSchema = responseSchemaValue;
+    if (layerMimeType !== undefined) {
+      legacyMimeType = layerMimeType;
     }
-  }
-  if (responseSchema !== undefined && legacyResponseSchema !== undefined) {
-    throw new Error(
-      '`responseSchema` provided but `generationConfig.response_schema` already set.',
-    );
+    const resolvedLayerSchema = layer.responseSchema ?? layerResponseSchema;
+    if (resolvedLayerSchema !== undefined) {
+      legacyResponseSchema = resolvedLayerSchema;
+    }
   }
 
-  const schemaSource = responseSchema ?? legacyResponseSchema;
   const schema =
-    schemaSource === undefined
+    legacyResponseSchema === undefined
       ? undefined
-      : parseConfigResponseSchema(schemaSource as string, contextVars);
+      : parseConfigResponseSchema(legacyResponseSchema as string, contextVars);
   const mimeType =
     typeof legacyMimeType === 'string'
       ? legacyMimeType
@@ -687,11 +701,21 @@ export class GoogleInteractionsProvider implements ApiProvider {
       !isVideoModel && passthroughResponseFormat === undefined
         ? parseInteractionStructuredOutput(
             [
-              config.generationConfig,
-              config.passthrough?.generationConfig,
-              config.passthrough?.generation_config,
+              {
+                generationConfigs: [this.config.generationConfig],
+                responseSchema: this.config.responseSchema,
+              },
+              {
+                generationConfigs: [promptConfig?.generationConfig],
+                responseSchema: promptConfig?.responseSchema,
+              },
+              {
+                generationConfigs: [
+                  config.passthrough?.generationConfig,
+                  config.passthrough?.generation_config,
+                ],
+              },
             ],
-            config.responseSchema,
             context?.vars,
           )
         : undefined;

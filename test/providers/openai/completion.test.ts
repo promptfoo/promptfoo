@@ -78,7 +78,7 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
     });
 
-    it('should bill the effective passthrough completion model', async () => {
+    it('should bill a qualified passthrough completion model through a custom gateway', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         ...mockResponse,
         data: {
@@ -91,12 +91,43 @@ describe('OpenAI Provider', () => {
         },
       });
       const provider = new OpenAiCompletionProvider('davinci-002', {
-        config: { passthrough: { model: 'openai/babbage-002' } },
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'openai/babbage-002' },
+        },
       });
 
       const result = await provider.callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
 
+      expect(JSON.parse(request[1].body).model).toBe('openai/babbage-002');
       expect(result.cost).toBeCloseTo(0.8, 10);
+    });
+
+    it('should not apply OpenAI pricing to another gateway model namespace', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: {
+            total_tokens: 2_000_000,
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+          },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('davinci-002', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'vendor/babbage-002' },
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('vendor/babbage-002');
+      expect(result.cost).toBeUndefined();
     });
 
     it('should handle API errors', async () => {

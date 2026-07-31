@@ -9,7 +9,7 @@ import {
   assertOpenAiApiModel,
   formatOpenAiError,
   getTokenUsage,
-  isOpenAiFirstPartyApiUrl,
+  normalizeOpenAiBillingModelName,
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
@@ -116,10 +116,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
     try {
+      const passthroughModel = (this.config.passthrough as { model?: unknown } | undefined)?.model;
       const billingModelName = this.getBillingModelName(this.config);
-      const billingLookupModel = isOpenAiFirstPartyApiUrl(this.getApiUrl())
-        ? (billingModelName.split('/').pop() ?? billingModelName)
-        : billingModelName;
+      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName, {
+        apiUrl: this.getApiUrl(),
+        normalizeOpenAiNamespace: typeof passthroughModel === 'string',
+      });
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),

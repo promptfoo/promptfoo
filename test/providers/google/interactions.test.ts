@@ -532,6 +532,59 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      providerConfig: {
+        generationConfig: {
+          response_schema: '{"type":"object","properties":{"provider":{"type":"string"}}}',
+        },
+      },
+      promptConfig: {
+        responseSchema: '{"type":"object","properties":{"prompt":{"type":"string"}}}',
+      },
+    },
+    {
+      providerConfig: {
+        responseSchema: '{"type":"object","properties":{"provider":{"type":"string"}}}',
+      },
+      promptConfig: {
+        generationConfig: {
+          response_schema: '{"type":"object","properties":{"prompt":{"type":"string"}}}',
+        },
+      },
+    },
+  ])('lets prompt structured-output config override provider aliases', async ({
+    providerConfig,
+    promptConfig,
+  }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        ...providerConfig,
+      },
+    });
+
+    await provider.callApi('Locate the target.', {
+      prompt: { config: promptConfig },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).response_format).toEqual([
+      {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: {
+          type: 'object',
+          properties: { prompt: { type: 'string' } },
+        },
+      },
+    ]);
+  });
+
   it('normalizes only supported camelCase generationConfig fields for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
