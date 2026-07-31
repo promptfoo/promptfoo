@@ -788,9 +788,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.getCapabilityModelName() === 'codex-mini-latest' || super.isReasoningModel();
   }
 
+  /**
+   * Normalize a request model for capability checks while preserving the wire model id.
+   * OpenAI-compatible subclasses can strip vendor-specific prefixes from both their configured
+   * model and per-call passthrough overrides.
+   */
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName;
+  }
+
   private getEffectiveModelName(config: OpenAiCompletionOptions): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
-    return typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
+    return typeof passthroughModel === 'string'
+      ? this.normalizeCapabilityModelName(passthroughModel)
+      : this.getCapabilityModelName();
   }
 
   protected getBillingModelName(config: OpenAiCompletionOptions): string {

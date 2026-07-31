@@ -71,6 +71,10 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * lookup keeps a Bedrock-only marker for GPT-5.6 so AWS's rates survive customer proxies.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName.replace(/^openai\./, '');
+  }
+
   /**
    * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
    * detection and the OpenAI billing tables match. The request still sends the real
@@ -78,7 +82,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
    * this provider (see the routing predicates in `mantle.ts`), so no region prefix is expected.
    */
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^openai\./, '');
+    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   /**
@@ -134,8 +138,12 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
  * and `grok-4.3` is not present, so `cost` is left undefined rather than reported incorrectly.
  */
 export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider {
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return modelName.replace(/^xai\./, '');
+  }
+
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^xai\./, '');
+    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   protected isReasoningModel(): boolean {

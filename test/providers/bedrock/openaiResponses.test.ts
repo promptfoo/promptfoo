@@ -334,6 +334,8 @@ describe('bedrock openaiResponses helper', () => {
         config: {
           apiKey: 'bedrock-key',
           passthrough: { model: 'openai.gpt-5.6-luna' },
+          reasoning_effort: 'high',
+          temperature: 0,
         },
       });
       const request = await provider.getOpenAiBody('hello');
@@ -351,6 +353,8 @@ describe('bedrock openaiResponses helper', () => {
       );
 
       expect(request.body.model).toBe('openai.gpt-5.6-luna');
+      expect(request.body.reasoning).toEqual({ effort: 'high' });
+      expect(request.body.temperature).toBeUndefined();
       expect(result.cost).toBeCloseTo(7.7, 10);
     });
 
@@ -789,7 +793,12 @@ describe('bedrock openaiResponses helper', () => {
     it('forwards reasoning effort, sends the real xai. model id, and preserves explicit temperature', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
-        config: { omitDefaults: false, reasoning_effort: 'high', temperature: 0 } as any,
+        config: {
+          omitDefaults: false,
+          passthrough: { model: 'xai.grok-4.3' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        } as any,
       });
       const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
       expect((provider.config as any).omitDefaults).toBe(true);
