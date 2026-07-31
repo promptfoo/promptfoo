@@ -67,6 +67,9 @@ function parseV2Prompt(prompt: string): {
 } {
   try {
     const promptObj = JSON.parse(prompt);
+    if (Array.isArray(promptObj)) {
+      return { parsedPrompt: true, promptParams: { messages: promptObj } };
+    }
     if (typeof promptObj === 'object' && promptObj !== null && !Array.isArray(promptObj)) {
       return { parsedPrompt: true, promptParams: promptObj };
     }
@@ -138,6 +141,23 @@ function getV2TextContent(data: any): string | undefined {
       return '';
     })
     .join('');
+}
+
+function getV2Output(data: any): unknown | undefined {
+  const message = data?.message;
+  const content = getV2TextContent(data);
+  const toolCalls =
+    Array.isArray(message?.tool_calls) && message.tool_calls.length > 0
+      ? message.tool_calls
+      : undefined;
+
+  if (content && toolCalls) {
+    return { ...message, content };
+  }
+  if (toolCalls) {
+    return toolCalls;
+  }
+  return content;
 }
 
 export class CohereChatCompletionProvider implements ApiProvider {
@@ -398,6 +418,10 @@ export class CohereChatCompletionProvider implements ApiProvider {
           }),
         },
         getRequestTimeoutMs(),
+        'json',
+        // The default key includes headers. Bypass persistence because the bearer
+        // token has no safe, non-secret tenant identifier that can replace it.
+        true,
       )) as unknown as { data: any; cached: boolean });
 
       const errorMessage =
@@ -410,7 +434,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
         return { error: errorMessage };
       }
 
-      const output = getV2TextContent(data);
+      const output = getV2Output(data);
       if (output === undefined) {
         return { error: 'Cohere v2 Chat API response did not contain text content.' };
       }

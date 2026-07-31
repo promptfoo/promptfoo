@@ -692,7 +692,7 @@ export class XAIVideoProvider implements ApiProvider {
       calculateVideoCost(actualDuration, false, {
         modelName: this.modelName,
         resolution,
-        imageInputCount: config.reference_images?.length ?? (config.image?.url ? 1 : 0),
+        imageInputCount: config.reference_images?.length || (config.image?.url ? 1 : 0),
       });
 
     // Store cache mapping (skip for edits)

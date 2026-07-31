@@ -106,6 +106,111 @@ describe('CohereChatCompletionProvider', () => {
     expect(body).not.toHaveProperty('preamble_override');
   });
 
+  it('uses a standard JSON message-array prompt as v2 messages', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 4, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+    const messages = [
+      { role: 'system', content: 'Be concise.' },
+      { role: 'user', content: 'Summarize this.' },
+    ];
+    await provider.callApi(JSON.stringify(messages));
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body.messages).toEqual(messages);
+  });
+
+  it('returns v2 tool calls when the response has no text content', async () => {
+    const toolCalls = [
+      {
+        id: 'call_123',
+        type: 'function',
+        function: { name: 'get_weather', arguments: '{"location":"Tokyo"}' },
+      },
+    ];
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [], tool_calls: toolCalls },
+        usage: { tokens: { input_tokens: 6, output_tokens: 3 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('What is the weather?')).resolves.toMatchObject({
+      output: toolCalls,
+      tokenUsage: { prompt: 6, completion: 3, total: 9 },
+    });
+  });
+
+  it('returns the full v2 message when text and tool calls are both present', async () => {
+    const toolCalls = [
+      {
+        id: 'call_456',
+        type: 'function',
+        function: { name: 'search', arguments: '{"query":"test"}' },
+      },
+    ];
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'I will search for that.' }],
+          tool_calls: toolCalls,
+        },
+        usage: { tokens: { input_tokens: 5, output_tokens: 4 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('Search for test')).resolves.toMatchObject({
+      output: {
+        role: 'assistant',
+        content: 'I will search for that.',
+        tool_calls: toolCalls,
+      },
+    });
+  });
+
+  it('bypasses the persistent fetch cache for authenticated v2 requests', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'secret-key-that-must-not-enter-a-cache-key' },
+    });
+    await provider.callApi('Hello');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://api.cohere.ai/v2/chat',
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
   it('does not forward promptfoo loader metadata to the v2 Chat API', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,

@@ -499,15 +499,16 @@ describe('XAI Video Provider', () => {
         .mockResolvedValueOnce(downloadResponse as any);
 
       const provider = new XAIVideoProvider('grok-imagine-video', {
-        config: { image: { url: imageUrl } },
+        config: { image: { url: imageUrl }, reference_images: [] },
       });
-      await provider.callApi(mockPrompt);
+      const result = await provider.callApi(mockPrompt);
 
       // Verify the request included the image
       const calls = vi.mocked(fetch.fetchWithProxy).mock.calls;
       const createCall = calls[0];
       const body = JSON.parse(createCall[1]?.body as string);
       expect(body.image).toEqual({ url: imageUrl });
+      expect(result.cost).toBeCloseTo(0.212, 3);
     });
   });
 
