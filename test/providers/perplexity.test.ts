@@ -216,6 +216,29 @@ describe('Perplexity Provider', () => {
       expect(result.cost).toBe(0.00018); // (10/1M * $3) + (10/1M * $15) = $0.00018
     });
 
+    it('should prefer Perplexity authoritative total cost', () => {
+      const provider = new PerplexityProvider('sonar-pro');
+      const cost = (provider as any).calculateResponseCost(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 10,
+            total_tokens: 20,
+            cost: {
+              input_tokens_cost: 0.00003,
+              output_tokens_cost: 0.00015,
+              request_cost: 0.014,
+              total_cost: 0.01418,
+            },
+          },
+        },
+        {},
+        false,
+      );
+
+      expect(cost).toBe(0.01418);
+    });
+
     it('should handle cached responses correctly', async () => {
       // Mock the parent class callApi method with a cached response
       vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({

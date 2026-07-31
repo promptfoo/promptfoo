@@ -114,18 +114,6 @@ providers:
             required: ['title', 'year', 'summary']
 ```
 
-Or with regex patterns (sonar model only):
-
-```yaml
-providers:
-  - id: perplexity:sonar
-    config:
-      response_format:
-        type: 'regex'
-        regex:
-          regex: '(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'
-```
-
 **Note**: First request with a new schema may take 10-30 seconds to prepare. For reasoning models, the response will include a `<think>` section followed by the structured output.
 
 ### Image Support
@@ -141,7 +129,7 @@ providers:
 
 ### Cost Tracking
 
-promptfoo estimates token costs for Perplexity models using their published input and output prices. Perplexity also charges request fees based on `web_search_options.search_context_size`. Deep Research adds citation-token, search-query, and reasoning-token charges. Check the cost metadata returned by the API when you need the complete request cost.
+promptfoo uses Perplexity's returned `usage.cost.total_cost` when available, which includes request and specialized usage charges. It falls back to an estimate based on published input and output token prices for responses that do not include cost metadata.
 
 ## Advanced Use Cases
 
@@ -196,7 +184,6 @@ model is retired, so use another provider when a task must run without web searc
 ### Structured Output Tips
 
 - When using structured outputs with reasoning models, responses will include a `<think>` section followed by the structured output
-- For regex patterns, ensure they follow the supported syntax
 - JSON schemas cannot include recursive structures or unconstrained objects
 
 ## Example Configurations
@@ -204,7 +191,7 @@ model is retired, so use another provider when a task must run without web searc
 Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-perplexity) with multiple configurations showcasing Perplexity's capabilities:
 
 - **promptfooconfig.yaml**: Basic model comparison
-- **promptfooconfig.structured-output.yaml**: JSON schema and regex patterns
+- **promptfooconfig.structured-output.yaml**: JSON Schema structured output
 - **promptfooconfig.search-filters.yaml**: Date and location-based filters
 - **promptfooconfig.research-reasoning.yaml**: Specialized research and reasoning models
 

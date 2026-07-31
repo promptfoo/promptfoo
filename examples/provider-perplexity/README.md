@@ -13,7 +13,7 @@ cd provider-perplexity
 
 - Real-time web search with academic citations
 - Multiple specialized models for different use cases
-- Structured outputs (JSON schema and regex patterns)
+- Structured outputs with JSON Schema
 - Date-range and location-based search filtering
 - Search domain filtering for trusted sources
 - Chain of thought (CoT) reasoning
@@ -51,10 +51,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml
 
 ### 2. Structured Outputs (`promptfooconfig.structured-output.yaml`)
 
-Demonstrates Perplexity's structured output capabilities:
-
-- JSON schema enforcement for movie information
-- Regex pattern matching for postal codes
+Demonstrates Perplexity's JSON Schema structured output capability for movie information.
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.structured-output.yaml

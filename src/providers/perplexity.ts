@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -172,6 +172,30 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     return result;
   }
 
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData & {
+      usage?: OpenAiChatCompletionCostData['usage'] & {
+        cost?: {
+          total_cost?: unknown;
+        };
+      };
+    },
+    _config: OpenAiCompletionOptions,
+    _cached: boolean,
+  ): number | undefined {
+    const totalCost = data.usage?.cost?.total_cost;
+    if (typeof totalCost === 'number' && Number.isFinite(totalCost) && totalCost >= 0) {
+      return totalCost;
+    }
+
+    return calculatePerplexityCost(
+      this.modelName,
+      data.usage?.prompt_tokens,
+      data.usage?.completion_tokens,
+      this.usageTier,
+    );
+  }
+
   /**
    * Override callApi to use our custom cost calculation
    */
@@ -192,6 +216,10 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     if (response.tokenUsage) {
       if (response.cached) {
         // For cached responses, don't recalculate cost
+        return response;
+      }
+
+      if (typeof response.cost === 'number') {
         return response;
       }
 

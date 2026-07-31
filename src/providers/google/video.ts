@@ -155,10 +155,14 @@ export function validateResolution(
     };
   }
 
-  if (resolution === '4k' && (!model.includes('veo-3.1') || model.includes('lite'))) {
+  const isStableVeo31Fast = model === 'veo-3.1-fast-generate-001';
+  if (
+    resolution === '4k' &&
+    (!model.includes('veo-3.1') || model.includes('lite') || isStableVeo31Fast)
+  ) {
     return {
       valid: false,
-      message: `${model} does not support 4k resolution. Use Veo 3.1 or Veo 3.1 Fast.`,
+      message: `${model} does not support 4k resolution. Use a Veo 3.1 model that supports 4k.`,
     };
   }
 

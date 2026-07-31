@@ -237,6 +237,12 @@ describe('GoogleVideoProvider', () => {
       expect(result.message).toContain('does not support 4k');
     });
 
+    it('should reject 4k for stable Veo 3.1 Fast', () => {
+      const result = validateResolution('veo-3.1-fast-generate-001', '16:9', '4k');
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('does not support 4k');
+    });
+
     it.each([
       ['extendVideoId', { extendVideoId: 'projects/test/operations/123' }],
       ['sourceVideo', { sourceVideo: 'file://source.mp4' }],
