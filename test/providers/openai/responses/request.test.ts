@@ -124,7 +124,47 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(result.cost).toBeCloseTo(2.2, 10);
   });
 
-  it('should preserve namespaced model ids when billing a custom gateway', async () => {
+  it('should bill a qualified passthrough model through a custom gateway', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_openai_gateway',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Gateway response' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000_000,
+          input_tokens_details: { cache_write_tokens: 0 },
+          output_tokens: 1_000_000,
+          total_tokens: 2_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('computer-use-preview', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKey: 'test-key',
+        passthrough: { model: 'openai/gpt-5.6-luna' },
+      },
+    });
+
+    const result = await provider.callApi('Use the OpenAI gateway route');
+    const requestBody = JSON.parse(
+      String(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]?.body),
+    );
+
+    expect(requestBody.model).toBe('openai/gpt-5.6-luna');
+    expect(result.cost).toBeCloseTo(2.2, 10);
+  });
+
+  it('should not apply OpenAI pricing to another passthrough gateway namespace', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
         id: 'resp_custom_gateway',
@@ -138,6 +178,7 @@ describe('OpenAiResponsesProvider request building', () => {
         ],
         usage: {
           input_tokens: 1_000,
+          input_tokens_details: { cache_write_tokens: 0 },
           output_tokens: 500,
           total_tokens: 1_500,
         },
@@ -146,15 +187,20 @@ describe('OpenAiResponsesProvider request building', () => {
       status: 200,
       statusText: 'OK',
     });
-    const provider = new OpenAiResponsesProvider('vendor/gpt-4.1', {
+    const provider = new OpenAiResponsesProvider('computer-use-preview', {
       config: {
         apiBaseUrl: 'https://gateway.example/v1',
         apiKey: 'test-key',
+        passthrough: { model: 'vendor/gpt-5.6-luna' },
       },
     });
 
     const result = await provider.callApi('Use the custom gateway');
+    const requestBody = JSON.parse(
+      String(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]?.body),
+    );
 
+    expect(requestBody.model).toBe('vendor/gpt-5.6-luna');
     expect(result.cost).toBeUndefined();
   });
 

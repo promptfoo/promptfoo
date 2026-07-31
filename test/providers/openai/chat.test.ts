@@ -452,7 +452,7 @@ describe('OpenAI Provider', () => {
       ['openai/gpt-5-search-api', 0.0100625],
       ['openai/gpt-5-search-api-2025-10-14', 0.0100625],
       ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.0250045],
-    ])('should include token rates and the Chat Completions search fee for routed model %s', async (model, cost) => {
+    ])('should include qualified token rates and the Chat Completions search fee for routed model %s', async (model, cost) => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
           choices: [{ message: { content: 'Current answer' }, finish_reason: 'stop' }],

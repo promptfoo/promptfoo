@@ -39,7 +39,7 @@ import {
   getTokenUsage,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
-  isOpenAiFirstPartyApiUrl,
+  normalizeOpenAiBillingModelName,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -832,10 +832,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
-    const effectiveModelName = this.getEffectiveModelName(config);
-    return isOpenAiFirstPartyApiUrl(this.getApiUrl())
-      ? (effectiveModelName.split('/').pop() ?? effectiveModelName)
-      : effectiveModelName;
+    return this.getEffectiveModelName(config);
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -851,8 +848,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
     const billingModelName = this.getBillingModelName(config);
+    const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
     const responseCost = calculateOpenAIUsageCost(
-      billingModelName,
+      billingLookupModel,
       config,
       this.getBillingUsage(data, config),
       {
@@ -863,7 +861,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+      : calculateObservableOpenAIToolCost(data, billingLookupModel, config);
 
     return {
       ...result,

@@ -116,12 +116,8 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
     try {
-      const passthroughModel = (this.config.passthrough as { model?: unknown } | undefined)?.model;
       const billingModelName = this.getBillingModelName(this.config);
-      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName, {
-        apiUrl: this.getApiUrl(),
-        normalizeOpenAiNamespace: typeof passthroughModel === 'string',
-      });
+      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),

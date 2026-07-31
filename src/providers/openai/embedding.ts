@@ -105,14 +105,8 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           error: 'No embedding found in OpenAI embeddings API response',
         };
       }
-      const passthroughModel = (
-        this.config as OpenAiSharedOptions & { passthrough?: { model?: unknown } }
-      ).passthrough?.model;
       const billingModelName = this.getBillingModelName(this.config);
-      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName, {
-        apiUrl: this.getApiUrl(),
-        normalizeOpenAiNamespace: typeof passthroughModel === 'string',
-      });
+      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
       return {
         embedding,
         latencyMs,

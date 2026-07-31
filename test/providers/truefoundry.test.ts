@@ -234,6 +234,27 @@ describe('TrueFoundry', () => {
         expect(result.latencyMs).toBeGreaterThanOrEqual(0);
       });
 
+      it('should not apply OpenAI pricing to another TrueFoundry model namespace', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Vendor output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+        const vendorProvider = new TrueFoundryProvider('vendor/gpt-4', {});
+
+        const result = await vendorProvider.callApi('Test prompt');
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+        expect(JSON.parse(request.body ?? '{}').model).toBe('vendor/gpt-4');
+        expect(result.cost).toBeUndefined();
+      });
+
       it('should add X-TFY-METADATA header when metadata is provided', async () => {
         const providerWithMetadata = new TrueFoundryProvider('openai/gpt-4', {
           config: {
@@ -701,6 +722,7 @@ describe('TrueFoundry', () => {
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
         latencyMs: expect.any(Number),
+        cost: expect.closeTo(0.00000065, 12),
         tokenUsage: {
           total: 5,
           prompt: 5,

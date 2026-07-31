@@ -2921,12 +2921,39 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
       });
 
-      it('should not estimate gpt-5.6 cost for a custom Codex binary', async () => {
+      it('should calculate gpt-5.6 cost when a custom Codex binary reports positive cache-write tokens', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 2000,
             cached_input_tokens: 500,
-            cache_write_input_tokens: 0,
+            cache_write_input_tokens: 250,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-5.6-sol',
+            codex_path_override: '/custom/path/to/codex',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeCloseTo(0.0380625, 6);
+        expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(250);
+      });
+
+      it.each([
+        ['omits cache-write usage', undefined],
+        ['reports zero cache-write usage', 0],
+      ])('should not estimate gpt-5.6 cost when a custom Codex binary %s', async (_description, cacheWriteInputTokens) => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            cache_write_input_tokens: cacheWriteInputTokens,
             output_tokens: 1000,
           }),
         );

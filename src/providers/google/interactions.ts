@@ -487,23 +487,45 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
     const promptConfig = context?.prompt?.config as Partial<CompletionOptions> | undefined;
     const config = mergeGoogleCompletionOptions(this.config, promptConfig) as GoogleProviderConfig;
-    const passthroughModel = config.passthrough?.model;
+    const providerPassthrough = this.config.passthrough || {};
+    const promptPassthrough = promptConfig?.passthrough || {};
+    const mergedPassthrough = {
+      ...providerPassthrough,
+      ...promptPassthrough,
+    };
+    const passthroughModel = promptPassthrough.model ?? providerPassthrough.model;
     const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
     const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
-    const passthroughPreviousInteractionId =
-      config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
-    const passthroughResponseFormat =
-      config.passthrough?.response_format ?? config.passthrough?.responseFormat;
+    const { input: interactionInput, systemInstruction: promptSystemInstruction } =
+      parseInteractionInput(prompt, !isVideoModel);
+    const previousInteractionId =
+      promptPassthrough.previous_interaction_id ??
+      promptPassthrough.previousInteractionId ??
+      promptConfig?.previousInteractionId ??
+      providerPassthrough.previous_interaction_id ??
+      providerPassthrough.previousInteractionId ??
+      this.config.previousInteractionId;
+    const providerPassthroughResponseFormat =
+      providerPassthrough.response_format ?? providerPassthrough.responseFormat;
+    const promptPassthroughResponseFormat =
+      promptPassthrough.response_format ?? promptPassthrough.responseFormat;
+    const providerPassthroughSystemInstruction =
+      providerPassthrough.system_instruction ?? providerPassthrough.systemInstruction;
+    const promptPassthroughSystemInstruction =
+      promptPassthrough.system_instruction ?? promptPassthrough.systemInstruction;
     const passthroughSystemInstruction =
-      config.passthrough?.system_instruction ?? config.passthrough?.systemInstruction;
+      promptPassthroughSystemInstruction ??
+      (promptConfig?.systemInstruction === undefined && promptSystemInstruction === undefined
+        ? providerPassthroughSystemInstruction
+        : undefined);
     const hasConfigTools = Array.isArray(config.tools)
       ? config.tools.length > 0
       : Boolean(config.tools);
-    const hasPassthroughTools = Array.isArray(config.passthrough?.tools)
-      ? config.passthrough.tools.length > 0
-      : Boolean(config.passthrough?.tools);
-    const hasClientExecutedTools = Array.isArray(config.passthrough?.tools)
-      ? config.passthrough.tools.some(
+    const hasPassthroughTools = Array.isArray(mergedPassthrough.tools)
+      ? mergedPassthrough.tools.length > 0
+      : Boolean(mergedPassthrough.tools);
+    const hasClientExecutedTools = Array.isArray(mergedPassthrough.tools)
+      ? mergedPassthrough.tools.some(
           (tool) =>
             tool !== null &&
             typeof tool === 'object' &&
@@ -512,7 +534,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         )
       : false;
     const hasMcpTools = config.mcp?.enabled === true;
-    if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {
+    if (config.vertexai && isVideoModel && previousInteractionId) {
       return {
         error:
           'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
@@ -628,35 +650,54 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (promptGenerationConfig.error) {
       return { error: promptGenerationConfig.error };
     }
-    const passthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
-      config.passthrough?.generationConfig,
+    const providerPassthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
+      providerPassthrough.generationConfig,
     );
-    if (passthroughCamelGenerationConfig.error) {
-      return { error: passthroughCamelGenerationConfig.error };
+    if (providerPassthroughCamelGenerationConfig.error) {
+      return { error: providerPassthroughCamelGenerationConfig.error };
     }
-    const passthroughGenerationConfig = normalizeInteractionGenerationConfig(
-      config.passthrough?.generation_config,
+    const providerPassthroughGenerationConfig = normalizeInteractionGenerationConfig(
+      providerPassthrough.generation_config,
     );
-    if (passthroughGenerationConfig.error) {
-      return { error: passthroughGenerationConfig.error };
+    if (providerPassthroughGenerationConfig.error) {
+      return { error: providerPassthroughGenerationConfig.error };
+    }
+    const promptPassthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
+      promptPassthrough.generationConfig,
+    );
+    if (promptPassthroughCamelGenerationConfig.error) {
+      return { error: promptPassthroughCamelGenerationConfig.error };
+    }
+    const promptPassthroughGenerationConfig = normalizeInteractionGenerationConfig(
+      promptPassthrough.generation_config,
+    );
+    if (promptPassthroughGenerationConfig.error) {
+      return { error: promptPassthroughGenerationConfig.error };
     }
     const generationConfig = {
       ...providerGenerationConfig.config,
+      ...providerPassthroughCamelGenerationConfig.config,
+      ...providerPassthroughGenerationConfig.config,
       ...promptGenerationConfig.config,
-      ...passthroughCamelGenerationConfig.config,
-      ...passthroughGenerationConfig.config,
+      ...promptPassthroughCamelGenerationConfig.config,
+      ...promptPassthroughGenerationConfig.config,
     };
-    const passthroughServiceTier =
-      config.passthrough?.service_tier ?? config.passthrough?.serviceTier ?? config.service_tier;
-    const serviceTier = normalizeInteractionServiceTier(passthroughServiceTier);
-    if (passthroughServiceTier !== undefined && serviceTier === undefined) {
+    const providerServiceTier =
+      providerPassthrough.service_tier ??
+      providerPassthrough.serviceTier ??
+      this.config.service_tier;
+    const promptServiceTier =
+      promptPassthrough.service_tier ?? promptPassthrough.serviceTier ?? promptConfig?.service_tier;
+    const rawServiceTier = promptServiceTier ?? providerServiceTier;
+    const serviceTier = normalizeInteractionServiceTier(rawServiceTier);
+    if (rawServiceTier !== undefined && serviceTier === undefined) {
       return {
         error: 'Gemini Interactions service_tier must be one of flex, standard, or priority.',
       };
     }
     const passthrough = {
       ...Object.fromEntries(
-        Object.entries(config.passthrough || {}).filter(
+        Object.entries(mergedPassthrough).filter(
           ([field]) =>
             field !== 'generation_config' &&
             field !== 'generationConfig' &&
@@ -669,21 +710,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
             field !== 'responseFormat' &&
             field !== 'system_instruction' &&
             field !== 'systemInstruction' &&
+            field !== 'input' &&
+            field !== 'store' &&
+            field !== 'safety_settings' &&
             !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field),
         ),
       ),
-      ...(passthroughPreviousInteractionId === undefined
-        ? {}
-        : { previous_interaction_id: passthroughPreviousInteractionId }),
-      ...(passthroughResponseFormat === undefined
-        ? {}
-        : { response_format: passthroughResponseFormat }),
       ...(!isVideoModel && passthroughSystemInstruction !== undefined
         ? { system_instruction: passthroughSystemInstruction }
         : {}),
     };
-    const { input: interactionInput, systemInstruction: promptSystemInstruction } =
-      parseInteractionInput(prompt, !isVideoModel);
     const systemInstructionContent =
       !isVideoModel && passthroughSystemInstruction === undefined
         ? parseConfigSystemInstruction(config.systemInstruction, context?.vars)
@@ -697,8 +733,32 @@ export class GoogleInteractionsProvider implements ApiProvider {
             ...(promptSystemInstruction ? [promptSystemInstruction] : []),
           ].join('\n')
         : undefined;
-    const structuredOutput =
-      !isVideoModel && passthroughResponseFormat === undefined
+    const promptStructuredOutput =
+      !isVideoModel && promptPassthroughResponseFormat === undefined
+        ? parseInteractionStructuredOutput(
+            [
+              {
+                generationConfigs: [promptConfig?.generationConfig],
+                responseSchema: promptConfig?.responseSchema,
+              },
+              {
+                generationConfigs: [
+                  promptPassthrough.generationConfig,
+                  promptPassthrough.generation_config,
+                ],
+              },
+            ],
+            context?.vars,
+          )
+        : undefined;
+    const hasPromptStructuredOutput =
+      promptStructuredOutput?.mimeType !== undefined ||
+      promptStructuredOutput?.schema !== undefined;
+    const passthroughResponseFormat =
+      promptPassthroughResponseFormat ??
+      (hasPromptStructuredOutput ? undefined : providerPassthroughResponseFormat);
+    const providerStructuredOutput =
+      !isVideoModel && passthroughResponseFormat === undefined && !hasPromptStructuredOutput
         ? parseInteractionStructuredOutput(
             [
               {
@@ -706,59 +766,80 @@ export class GoogleInteractionsProvider implements ApiProvider {
                 responseSchema: this.config.responseSchema,
               },
               {
-                generationConfigs: [promptConfig?.generationConfig],
-                responseSchema: promptConfig?.responseSchema,
-              },
-              {
                 generationConfigs: [
-                  config.passthrough?.generationConfig,
-                  config.passthrough?.generation_config,
+                  providerPassthrough.generationConfig,
+                  providerPassthrough.generation_config,
                 ],
               },
             ],
             context?.vars,
           )
         : undefined;
+    const structuredOutput = hasPromptStructuredOutput
+      ? promptStructuredOutput
+      : providerStructuredOutput;
+    const generatedVideoResponseFormat = config.vertexai
+      ? [
+          {
+            type: 'video',
+            ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+          },
+        ]
+      : {
+          type: 'video',
+          ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+        };
+    const videoResponseFormat =
+      promptPassthroughResponseFormat ??
+      (promptConfig?.aspectRatio === undefined
+        ? (providerPassthroughResponseFormat ?? generatedVideoResponseFormat)
+        : generatedVideoResponseFormat);
+    const requestInput =
+      promptPassthrough.input ??
+      (config.vertexai && typeof interactionInput === 'string'
+        ? [{ type: 'text', text: interactionInput }]
+        : interactionInput);
+    const store =
+      promptPassthrough.store ??
+      promptConfig?.store ??
+      providerPassthrough.store ??
+      this.config.store;
+    const providerSafetySettings =
+      providerPassthrough.safety_settings ??
+      (this.config.safetySettings
+        ? normalizeInteractionSafetySettings(this.config.safetySettings)
+        : undefined);
+    const promptSafetySettings =
+      promptPassthrough.safety_settings ??
+      (promptConfig?.safetySettings
+        ? normalizeInteractionSafetySettings(promptConfig.safetySettings)
+        : undefined);
+    const safetySettings = promptSafetySettings ?? providerSafetySettings;
     const body = {
       model: effectiveModel,
-      input:
-        config.vertexai && typeof interactionInput === 'string'
-          ? [{ type: 'text', text: interactionInput }]
-          : interactionInput,
+      input: requestInput,
       ...(isVideoModel
-        ? {
-            response_format: config.vertexai
-              ? [
+        ? { response_format: videoResponseFormat }
+        : passthroughResponseFormat === undefined
+          ? structuredOutput?.mimeType || structuredOutput?.schema !== undefined
+            ? {
+                response_format: [
                   {
-                    type: 'video',
-                    ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+                    type: 'text',
+                    ...(structuredOutput.mimeType ? { mime_type: structuredOutput.mimeType } : {}),
+                    ...(structuredOutput.schema === undefined
+                      ? {}
+                      : { schema: structuredOutput.schema }),
                   },
-                ]
-              : {
-                  type: 'video',
-                  ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
-                },
-          }
-        : structuredOutput?.mimeType || structuredOutput?.schema !== undefined
-          ? {
-              response_format: [
-                {
-                  type: 'text',
-                  ...(structuredOutput.mimeType ? { mime_type: structuredOutput.mimeType } : {}),
-                  ...(structuredOutput.schema === undefined
-                    ? {}
-                    : { schema: structuredOutput.schema }),
-                },
-              ],
-            }
-          : {}),
-      ...(config.previousInteractionId
-        ? { previous_interaction_id: config.previousInteractionId }
-        : {}),
-      ...(config.store === undefined ? {} : { store: config.store }),
-      ...(config.safetySettings
-        ? { safety_settings: normalizeInteractionSafetySettings(config.safetySettings) }
-        : {}),
+                ],
+              }
+            : {}
+          : { response_format: passthroughResponseFormat }),
+      ...(previousInteractionId === undefined
+        ? {}
+        : { previous_interaction_id: previousInteractionId }),
+      ...(store === undefined ? {} : { store }),
+      ...(safetySettings === undefined ? {} : { safety_settings: safetySettings }),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...(serviceTier ? { service_tier: serviceTier } : {}),

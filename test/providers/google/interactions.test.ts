@@ -162,6 +162,70 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.cost).toBeCloseTo((100 * 1.5 + 120 * 9 + 500 * 17.5) / 1e6, 12);
   });
 
+  it('applies layered response_format precedence for Omni video requests', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const providerDefault = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        aspectRatio: '9:16',
+        passthrough: {
+          response_format: { type: 'video', aspect_ratio: '16:9', resolution: '720p' },
+        },
+      },
+    });
+    const promptConfig = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        aspectRatio: '9:16',
+        passthrough: {
+          response_format: { type: 'video', aspect_ratio: '9:16', resolution: '720p' },
+        },
+      },
+    });
+    const promptPassthrough = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        aspectRatio: '9:16',
+        passthrough: {
+          response_format: { type: 'video', aspect_ratio: '9:16', resolution: '720p' },
+        },
+      },
+    });
+
+    await providerDefault.callApi('A city at dusk');
+    await promptConfig.callApi('A city at dusk', {
+      prompt: { config: { aspectRatio: '16:9' } },
+    } as any);
+    await promptPassthrough.callApi('A city at dusk', {
+      prompt: {
+        config: {
+          aspectRatio: '16:9',
+          passthrough: {
+            response_format: { type: 'video', aspect_ratio: '9:16', resolution: '1080p' },
+          },
+        },
+      },
+    } as any);
+
+    const responseFormats = mockFetchWithCache.mock.calls.map(
+      ([, request]) => JSON.parse((request as RequestInit).body as string).response_format,
+    );
+    expect.soft(responseFormats[0]).toEqual({
+      type: 'video',
+      aspect_ratio: '16:9',
+      resolution: '720p',
+    });
+    expect.soft(responseFormats[1]).toEqual({ type: 'video', aspect_ratio: '16:9' });
+    expect.soft(responseFormats[2]).toEqual({
+      type: 'video',
+      aspect_ratio: '9:16',
+      resolution: '1080p',
+    });
+  });
+
   it('returns a useful error when the Interactions API does not return video', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [{ type: 'model_output', content: [] }] },
@@ -382,6 +446,34 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
+  it('lets prompt-embedded system roles override a provider passthrough default', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { system_instruction: 'Provider default instruction.' },
+      },
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        { role: 'system', content: 'Prompt system instruction.' },
+        { role: 'user', content: 'Move toward the banana.' },
+      ]),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).system_instruction).toBe(
+      'Prompt system instruction.',
+    );
+  });
+
   it('normalizes camelCase passthrough interaction controls with passthrough precedence', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -413,6 +505,77 @@ describe('GoogleInteractionsProvider', () => {
     expect(body).not.toHaveProperty('previousInteractionId');
     expect(body).not.toHaveProperty('responseFormat');
     expect(body).not.toHaveProperty('systemInstruction');
+  });
+
+  it('lets prompt interaction controls override provider passthrough defaults', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          previous_interaction_id: 'provider-previous',
+          system_instruction: 'Provider instruction.',
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          previousInteractionId: 'prompt-previous',
+          systemInstruction: 'Prompt instruction.',
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.previous_interaction_id).toBe('prompt-previous');
+    expect(body.system_instruction).toBe('Prompt instruction.');
+  });
+
+  it('prevents reserved provider passthrough fields from overriding prompt-derived input', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          input: 'Provider passthrough input.',
+          store: false,
+          safety_settings: [{ type: 'dangerous_content', threshold: 'block_none' }],
+        },
+      },
+    });
+
+    await provider.callApi('Prompt-derived input.', {
+      prompt: {
+        config: {
+          store: true,
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
+          ],
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      input: 'Prompt-derived input.',
+      store: true,
+      safety_settings: [{ type: 'hate_speech', threshold: 'block_low_and_above' }],
+    });
   });
 
   it('forwards supported Robotics generation controls and a rendered response schema', async () => {
@@ -585,6 +748,43 @@ describe('GoogleInteractionsProvider', () => {
     ]);
   });
 
+  it('lets prompt structured output override a provider passthrough response format', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          response_format: [{ type: 'text', mime_type: 'text/plain' }],
+        },
+      },
+    });
+
+    await provider.callApi('Locate the target.', {
+      prompt: {
+        config: {
+          responseSchema:
+            '{"type":"object","properties":{"prompt":{"type":"string"}},"required":["prompt"]}',
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).response_format).toEqual([
+      {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: {
+          type: 'object',
+          properties: { prompt: { type: 'string' } },
+          required: ['prompt'],
+        },
+      },
+    ]);
+  });
+
   it('normalizes only supported camelCase generationConfig fields for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -695,6 +895,77 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
+  it('lets prompt generation controls override provider passthrough defaults', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          generation_config: {
+            max_output_tokens: 1_024,
+            stop_sequences: ['PROVIDER'],
+          },
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          maxOutputTokens: 512,
+          stopSequences: ['PROMPT'],
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      max_output_tokens: 512,
+      stop_sequences: ['PROMPT'],
+    });
+  });
+
+  it('merges provider and prompt passthrough before applying prompt precedence', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: {
+          user_metadata: { source: 'provider' },
+          generation_config: {
+            max_output_tokens: 1_024,
+            seed: 1,
+          },
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          maxOutputTokens: 512,
+          passthrough: {
+            generation_config: { seed: 2 },
+          },
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.user_metadata).toEqual({ source: 'provider' });
+    expect(body.generation_config).toEqual({
+      max_output_tokens: 512,
+      seed: 2,
+    });
+  });
+
   it('gives prompt top-level controls precedence over provider generationConfig aliases', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },
@@ -774,6 +1045,26 @@ describe('GoogleInteractionsProvider', () => {
     expect(body.service_tier).toBe(serviceTier);
     expect(body.serviceTier).toBeUndefined();
     expect(body.generation_config).toBeUndefined();
+  });
+
+  it('lets prompt service_tier override a provider passthrough default', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { service_tier: 'priority' },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: { config: { service_tier: 'flex' } },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).service_tier).toBe('flex');
   });
 
   it('uses an Omni passthrough model for request formatting, output parsing, and billing', async () => {
@@ -1512,6 +1803,47 @@ describe('GoogleInteractionsProvider', () => {
     expect(getRequestHeaders).toHaveBeenCalledWith(
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
     );
+  });
+
+  it('allows Vertex Robotics follow-up interactions', async () => {
+    const oauthHeaders = new Headers();
+    oauthHeaders.set('Authorization', 'Bearer vertex-token');
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(oauthHeaders),
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'Continue forward.' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        previousInteractionId: 'interaction-0',
+      },
+    });
+
+    const result = await provider.callApi('Continue the movement plan.');
+
+    expect(result.error).toBeUndefined();
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({
+      model: 'gemini-robotics-er-2-preview',
+      previous_interaction_id: 'interaction-0',
+    });
   });
 
   it('rejects unsupported Vertex Omni follow-up interactions before making a request', async () => {

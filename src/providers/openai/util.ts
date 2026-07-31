@@ -541,17 +541,9 @@ export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
   }
 }
 
-export function normalizeOpenAiBillingModelName(
-  modelName: string,
-  options: { apiUrl?: string; normalizeOpenAiNamespace?: boolean } = {},
-): string {
-  if (
-    !isOpenAiFirstPartyApiUrl(options.apiUrl) &&
-    !(options.normalizeOpenAiNamespace && modelName.startsWith('openai/'))
-  ) {
-    return modelName;
-  }
-  return modelName.split('/').pop() ?? modelName;
+export function normalizeOpenAiBillingModelName(modelName: string): string {
+  const namespaceMatch = /(?:^|\/)openai\/([^/]+)$/.exec(modelName);
+  return namespaceMatch?.[1] ?? modelName;
 }
 
 export function assertOpenAiModelEndpointCompatibility(

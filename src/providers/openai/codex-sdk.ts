@@ -2408,9 +2408,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     usesCustomCodexBinary: boolean,
   ): number | undefined {
     // SDK 0.146 fills an omitted cache-write field with zero. That is reliable for its bundled
-    // Codex binary, but a custom/older binary may omit the field despite performing cache writes.
+    // Codex binary, but a custom/older binary may omit the field (or have it normalized to zero)
+    // despite performing cache writes. A positive value reported by the binary is still usable.
     if (usesCustomCodexBinary && model?.startsWith('gpt-5.6')) {
-      return undefined;
+      const cacheWriteTokens = tokenUsage?.completionDetails?.cacheCreationInputTokens;
+      if (
+        typeof cacheWriteTokens !== 'number' ||
+        !Number.isFinite(cacheWriteTokens) ||
+        cacheWriteTokens <= 0
+      ) {
+        return undefined;
+      }
     }
     return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
   }
