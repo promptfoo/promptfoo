@@ -772,14 +772,58 @@ describe('GoogleLiveProvider', () => {
     expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
   });
 
-  it('should finish a silent Live Translate response after finite input ends', async () => {
+  it('should wait through initial Live Translate silence for delayed output', async () => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
           outputAudioTranscription: {},
           translationConfig: { targetLanguageCode: 'pl' },
         },
-        timeoutMs: 100,
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            serverContent: { outputTranscription: { text: 'Spóźnione.' } },
+          });
+        }, 440);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Spóźnione.' });
+  });
+
+  it('should time out a silent Live Translate response instead of returning empty success', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 80,
         apiKey: 'test-api-key',
       },
     });
@@ -807,8 +851,8 @@ describe('GoogleLiveProvider', () => {
       ]),
     );
 
-    expect(response.error).toBeUndefined();
-    expect(response.output).toMatchObject({ text: '' });
+    expect(response.error).toBe('WebSocket request timed out after 80ms of inactivity');
+    expect(response.output).toBeUndefined();
   });
 
   it('should ignore low-amplitude PCM while waiting for Live Translate completion', async () => {

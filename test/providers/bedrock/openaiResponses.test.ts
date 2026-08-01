@@ -358,6 +358,57 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.cost).toBeCloseTo(7.7, 10);
     });
 
+    it.each([
+      ['provider config', { service_tier: 'flex' }, undefined, 'flex'],
+      [
+        'provider passthrough',
+        { service_tier: 'default', passthrough: { service_tier: 'priority' } },
+        undefined,
+        'priority',
+      ],
+      [
+        'prompt config',
+        { service_tier: 'default' },
+        { prompt: { config: { service_tier: 'flex' } } },
+        'flex',
+      ],
+      [
+        'prompt passthrough',
+        { service_tier: 'default' },
+        { prompt: { config: { passthrough: { service_tier: 'fast' } } } },
+        'fast',
+      ],
+    ] as const)('rejects unsupported Bedrock GPT service tiers from %s', async (_case, config, context, tier) => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: { apiKey: 'bedrock-key', ...config } as any,
+      });
+
+      await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
+        `supports only the standard inference tier; received "${tier}"`,
+      );
+    });
+
+    it.each([
+      ['omitted', undefined],
+      ['default', 'default'],
+      ['null', null],
+    ] as const)('accepts the Bedrock GPT standard tier when %s', async (_case, tier) => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          ...(tier === undefined ? {} : { service_tier: tier }),
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('hello');
+
+      if (tier === 'default') {
+        expect(body.service_tier).toBe('default');
+      } else {
+        expect(body.service_tier).toBeUndefined();
+      }
+    });
+
     it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },

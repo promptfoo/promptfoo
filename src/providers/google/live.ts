@@ -671,7 +671,7 @@ export class GoogleLiveProvider implements ApiProvider {
         this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
       let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
-      let armLiveTranslateCompletion = (_hasMeaningfulOutput: boolean) => {};
+      let armLiveTranslateCompletion = () => {};
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
@@ -758,7 +758,6 @@ export class GoogleLiveProvider implements ApiProvider {
             contentMessage.realtimeInput?.audioStreamEnd
           ) {
             liveTranslateInputEnded = true;
-            armLiveTranslateCompletion(false);
           }
         }
       };
@@ -792,10 +791,6 @@ export class GoogleLiveProvider implements ApiProvider {
       const liveTranslateCompletionGraceMs = Math.min(
         4_000,
         Math.max(1, Math.floor(effectiveTimeoutMs / 2)),
-      );
-      const liveTranslateInitialCompletionGraceMs = Math.min(
-        4_000,
-        Math.max(1, Math.floor(effectiveTimeoutMs * 0.8)),
       );
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const armIdleTimeout = () => {
@@ -1123,7 +1118,7 @@ export class GoogleLiveProvider implements ApiProvider {
         safeResolve(result);
       };
 
-      armLiveTranslateCompletion = (hasMeaningfulOutput) => {
+      armLiveTranslateCompletion = () => {
         if (
           this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL ||
           !liveTranslateInputEnded ||
@@ -1133,24 +1128,19 @@ export class GoogleLiveProvider implements ApiProvider {
           return;
         }
         clearTimeout(liveTranslateCompletionTimeout);
-        liveTranslateCompletionTimeout = setTimeout(
-          () => {
-            liveTranslateCompletionTimeout = undefined;
-            void (async () => {
-              if (contentIndex < contents.length) {
-                await sendNextContentMessages(true);
-                return;
-              }
-              await finalizeResponse();
-            })().catch((err) => {
-              logger.error(`Error advancing Live Translate response: ${err}`);
-              safeResolve({ error: `Error advancing Live Translate response: ${err}` });
-            });
-          },
-          hasMeaningfulOutput
-            ? liveTranslateCompletionGraceMs
-            : liveTranslateInitialCompletionGraceMs,
-        );
+        liveTranslateCompletionTimeout = setTimeout(() => {
+          liveTranslateCompletionTimeout = undefined;
+          void (async () => {
+            if (contentIndex < contents.length) {
+              await sendNextContentMessages(true);
+              return;
+            }
+            await finalizeResponse();
+          })().catch((err) => {
+            logger.error(`Error advancing Live Translate response: ${err}`);
+            safeResolve({ error: `Error advancing Live Translate response: ${err}` });
+          });
+        }, liveTranslateCompletionGraceMs);
       };
 
       ws.onopen = () => {
@@ -1273,7 +1263,7 @@ export class GoogleLiveProvider implements ApiProvider {
               hasAudioStreamEnded = false;
             }
             if (hasMeaningfulPcm(audioBuffer)) {
-              armLiveTranslateCompletion(true);
+              armLiveTranslateCompletion();
             }
             return;
           }
@@ -1393,7 +1383,7 @@ export class GoogleLiveProvider implements ApiProvider {
             }
 
             if (hasMeaningfulLiveTranslateOutput) {
-              armLiveTranslateCompletion(true);
+              armLiveTranslateCompletion();
             }
 
             if (serverContent.turnComplete && contentIndex < contents.length) {

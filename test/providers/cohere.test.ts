@@ -84,6 +84,7 @@ describe('CohereChatCompletionProvider', () => {
             document: { title: 'Source document', url: 'https://example.com/source' },
           },
           { type: 'tool', id: 'tool-1', tool_output: { temperature: '24 C' } },
+          { type: 'web', id: 'web-1', url: 'https://example.com/web' },
         ],
       },
     ];
@@ -109,6 +110,7 @@ describe('CohereChatCompletionProvider', () => {
         citations: [
           { url: 'https://example.com/source', content: 'Grounded answer' },
           { source: 'tool-1', content: 'Grounded answer' },
+          { url: 'https://example.com/web', content: 'Grounded answer' },
         ],
         cohere: { citations },
       },

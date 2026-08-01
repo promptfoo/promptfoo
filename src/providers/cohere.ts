@@ -356,11 +356,25 @@ function normalizeV2CitationSource(
   if (!source || typeof source !== 'object') {
     return undefined;
   }
-  const sourceRecord = source as { id?: unknown; document?: unknown; tool_output?: unknown };
+  const sourceRecord = source as {
+    id?: unknown;
+    document?: unknown;
+    tool_output?: unknown;
+    url?: unknown;
+    uri?: unknown;
+  };
   const payload = sourceRecord.document ?? sourceRecord.tool_output;
   const payloadRecord =
     payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : undefined;
-  const sourceUrl = payloadRecord?.url ?? payloadRecord?.uri;
+  const sourceUrl = [
+    payloadRecord?.url,
+    payloadRecord?.uri,
+    sourceRecord.url,
+    sourceRecord.uri,
+  ].find(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' && /^https?:\/\//i.test(candidate),
+  );
   const fallbackContent =
     payload === undefined
       ? JSON.stringify(source)
@@ -369,7 +383,7 @@ function normalizeV2CitationSource(
         : JSON.stringify(payload);
   const content = citationText || fallbackContent || 'Cohere citation';
 
-  if (typeof sourceUrl === 'string' && /^https?:\/\//i.test(sourceUrl)) {
+  if (sourceUrl) {
     return { url: sourceUrl, content };
   }
   const sourceTitle = payloadRecord?.title;

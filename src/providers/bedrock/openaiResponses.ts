@@ -122,6 +122,30 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
     // so bypass it instead of persisting a derivative of the Bedrock bearer token.
     return true;
   }
+
+  async getOpenAiBody(
+    prompt: string,
+    context?: BedrockOpenAiResponsesBodyContext,
+    callApiOptions?: BedrockOpenAiResponsesCallApiOptions,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    if (isBedrockGrokModel(this.modelName)) {
+      return result;
+    }
+
+    const serviceTier = result.config.service_tier;
+    if (serviceTier === null) {
+      delete (result.body as Record<string, unknown>).service_tier;
+      return result;
+    }
+    if (serviceTier !== undefined && serviceTier !== 'default') {
+      throw new Error(
+        `Amazon Bedrock model "${this.modelName}" supports only the standard inference tier; ` +
+          `received "${serviceTier}". Remove service_tier/serviceTier or set service_tier to "default".`,
+      );
+    }
+    return result;
+  }
 }
 
 /**
