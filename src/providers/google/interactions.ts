@@ -24,13 +24,21 @@ type InteractionContent = {
   data?: string;
   uri?: string;
   mime_type?: string;
+  annotations?: unknown[];
+};
+
+type InteractionStep = {
+  type?: string;
+  content?: InteractionContent[];
+  error?: { message?: string };
+  [key: string]: unknown;
 };
 
 type InteractionResponse = {
   id?: string;
   status?: string;
   error?: { message?: string };
-  steps?: Array<{ type?: string; content?: InteractionContent[]; error?: { message?: string } }>;
+  steps?: InteractionStep[];
   usage?: {
     total_input_tokens?: number;
     total_output_tokens?: number;
@@ -532,6 +540,88 @@ function getModelOutputContent(data: InteractionResponse): InteractionContent[] 
     .slice(Math.max(latestUserInput, latestToolStep) + 1)
     .filter((step) => step.type === 'model_output')
     .flatMap((step) => step.content || []);
+}
+
+function getInteractionAnnotationExcerpt(
+  text: string | undefined,
+  startIndex: unknown,
+  endIndex: unknown,
+): string {
+  if (
+    typeof text !== 'string' ||
+    !Number.isInteger(startIndex) ||
+    !Number.isInteger(endIndex) ||
+    (startIndex as number) < 0 ||
+    (endIndex as number) < (startIndex as number)
+  ) {
+    return '';
+  }
+  const bytes = Buffer.from(text, 'utf8');
+  if ((endIndex as number) > bytes.length) {
+    return '';
+  }
+  return bytes
+    .subarray(startIndex as number, endIndex as number)
+    .toString('utf8')
+    .trim();
+}
+
+function getInteractionGroundingMetadata(
+  data: InteractionResponse,
+  outputContent: InteractionContent[],
+): Record<string, unknown> {
+  const annotations = outputContent.flatMap((part) =>
+    Array.isArray(part.annotations) ? part.annotations : [],
+  );
+  const citations = outputContent.flatMap((part) => {
+    if (!Array.isArray(part.annotations)) {
+      return [];
+    }
+    return part.annotations.flatMap((annotation) => {
+      if (!annotation || typeof annotation !== 'object') {
+        return [];
+      }
+      const record = annotation as {
+        type?: unknown;
+        url?: unknown;
+        title?: unknown;
+        start_index?: unknown;
+        end_index?: unknown;
+        startIndex?: unknown;
+        endIndex?: unknown;
+      };
+      if (
+        record.type !== 'url_citation' ||
+        typeof record.url !== 'string' ||
+        !/^https?:\/\//i.test(record.url)
+      ) {
+        return [];
+      }
+      const startIndex = record.start_index ?? record.startIndex;
+      const endIndex = record.end_index ?? record.endIndex;
+      const excerpt = getInteractionAnnotationExcerpt(part.text, startIndex, endIndex);
+      const title = typeof record.title === 'string' ? record.title.trim() : '';
+      return [
+        {
+          url: record.url,
+          content: [title, excerpt].filter(Boolean).join(': ') || record.url,
+        },
+      ];
+    });
+  });
+
+  const steps = data.steps || [];
+  const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
+  const latestSteps = steps.slice(latestUserInput + 1);
+  const interactionToolCalls = latestSteps.filter((step) => step.type?.endsWith('_call'));
+  const interactionToolResults = latestSteps.filter((step) => step.type?.endsWith('_result'));
+
+  return {
+    ...(annotations.length > 0 ? { annotations } : {}),
+    ...(citations.length > 0 ? { citations } : {}),
+    ...(interactionToolCalls.length > 0 ? { interactionToolCalls } : {}),
+    ...(interactionToolResults.length > 0 ? { interactionToolResults } : {}),
+  };
 }
 
 function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
@@ -1086,6 +1176,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
 
     const outputContent = getModelOutputContent(data);
+    const groundingMetadata = getInteractionGroundingMetadata(data, outputContent);
     const lastTextIndex = outputContent.map((part) => part.type === 'text').lastIndexOf(true);
     const lastNonTextIndex = outputContent
       .slice(0, lastTextIndex)
@@ -1165,7 +1256,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         cached,
         tokenUsage,
         cost,
-        metadata: { interactionId: data.id, status: data.status },
+        metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
       };
     }
 
@@ -1293,7 +1384,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         model: effectiveModel,
         aspectRatio: config.aspectRatio,
       },
-      metadata: { interactionId: data.id, status: data.status },
+      metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
     };
   }
 }

@@ -314,6 +314,73 @@ function appendV2Documents(output: unknown, data: any, showDocuments: boolean): 
   return output;
 }
 
+type NormalizedCohereCitation = { content: string; source?: string; url?: string };
+
+function normalizeV2CitationSource(
+  source: unknown,
+  citationText?: string,
+): NormalizedCohereCitation | undefined {
+  if (!source || typeof source !== 'object') {
+    return undefined;
+  }
+  const sourceRecord = source as { id?: unknown; document?: unknown; tool_output?: unknown };
+  const payload = sourceRecord.document ?? sourceRecord.tool_output;
+  const payloadRecord =
+    payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : undefined;
+  const sourceUrl = payloadRecord?.url ?? payloadRecord?.uri;
+  const fallbackContent =
+    payload === undefined
+      ? JSON.stringify(source)
+      : typeof payload === 'string'
+        ? payload
+        : JSON.stringify(payload);
+  const content = citationText || fallbackContent || 'Cohere citation';
+
+  if (typeof sourceUrl === 'string' && /^https?:\/\//i.test(sourceUrl)) {
+    return { url: sourceUrl, content };
+  }
+  const sourceTitle = payloadRecord?.title;
+  return {
+    source:
+      typeof sourceTitle === 'string'
+        ? sourceTitle
+        : typeof sourceRecord.id === 'string'
+          ? sourceRecord.id
+          : 'Cohere',
+    content,
+  };
+}
+
+function normalizeV2Citation(citation: unknown): NormalizedCohereCitation[] {
+  if (!citation || typeof citation !== 'object') {
+    return [];
+  }
+  const citationRecord = citation as { text?: unknown; sources?: unknown };
+  const citationText =
+    typeof citationRecord.text === 'string' && citationRecord.text.trim()
+      ? citationRecord.text
+      : undefined;
+  if (!Array.isArray(citationRecord.sources) || citationRecord.sources.length === 0) {
+    return citationText ? [{ source: 'Cohere', content: citationText }] : [];
+  }
+  return citationRecord.sources
+    .map((source) => normalizeV2CitationSource(source, citationText))
+    .filter((citation): citation is NormalizedCohereCitation => citation !== undefined);
+}
+
+function getV2ResponseMetadata(data: any): Record<string, unknown> | undefined {
+  const rawCitations = data?.message?.citations;
+  if (!Array.isArray(rawCitations) || rawCitations.length === 0) {
+    return undefined;
+  }
+  const citations = rawCitations.flatMap(normalizeV2Citation);
+
+  return {
+    ...(citations.length > 0 ? { citations } : {}),
+    cohere: { citations: rawCitations },
+  };
+}
+
 export class CohereChatCompletionProvider implements ApiProvider {
   static COHERE_CHAT_MODELS = [
     'command-a-plus-05-2026',
@@ -658,11 +725,13 @@ export class CohereChatCompletionProvider implements ApiProvider {
         completion: completionTokens,
         numRequests: 1,
       };
+      const metadata = getV2ResponseMetadata(data);
 
       return {
         cached,
         output,
         tokenUsage,
+        ...(metadata ? { metadata } : {}),
       };
     } catch (error) {
       logger.error(`API call error: ${error}`);

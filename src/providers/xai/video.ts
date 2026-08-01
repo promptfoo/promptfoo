@@ -220,18 +220,17 @@ function buildVideoInputReference(config: XaiVideoOptions): string | null {
     return `image:${config.image.url}`;
   }
 
-  const referenceInputs = [
-    config.reference_images?.length
-      ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
-      : undefined,
-    config.reference_audios?.length
-      ? `reference_audios:${config.reference_audios
-          .map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id))
-          .join('|')}`
-      : undefined,
-  ].filter((value): value is string => value !== undefined);
+  if (!config.reference_images?.length && !config.reference_audios?.length) {
+    return null;
+  }
 
-  return referenceInputs.length ? referenceInputs.join(';') : null;
+  return JSON.stringify({
+    type: 'xai-reference-media',
+    reference_images: config.reference_images?.map(({ url }) => url) ?? [],
+    reference_audios:
+      config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ??
+      [],
+  });
 }
 
 /**

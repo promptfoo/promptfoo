@@ -46,6 +46,8 @@ const ROBOTICS_GROUNDING_ERROR =
   'Gemini Robotics ER 2 Streaming does not support Google Maps or URL context grounding. Use Google Search instead.';
 const ROBOTICS_STRUCTURED_OUTPUT_ERROR =
   'Gemini Robotics ER 2 Streaming does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
+const LIVE_TRANSLATE_STRUCTURED_OUTPUT_ERROR =
+  'Gemini 3.5 Live Translate does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
 const ROBOTICS_UNSUPPORTED_TOOL_ERROR =
   'Gemini Robotics ER 2 Streaming only supports function declarations and Google Search tools.';
 const ROBOTICS_API_VERSION_ERROR =
@@ -76,24 +78,27 @@ function getLiveTranslateResponseModalityError(
     : LIVE_TRANSLATE_AUDIO_MODALITY_ERROR;
 }
 
-function getRoboticsStructuredOutputError(
-  isRoboticsStreamingModel: boolean,
-  config: CompletionOptions,
-): string | undefined {
-  if (!isRoboticsStreamingModel) {
-    return undefined;
-  }
+function hasStructuredOutputConfiguration(config: CompletionOptions): boolean {
   const generationConfig = config.generationConfig as
     | (NonNullable<CompletionOptions['generationConfig']> & {
         responseSchema?: unknown;
         responseMimeType?: unknown;
       })
     | undefined;
-  return config.responseSchema !== undefined ||
+  return (
+    config.responseSchema !== undefined ||
     generationConfig?.response_schema !== undefined ||
     generationConfig?.response_mime_type !== undefined ||
     generationConfig?.responseSchema !== undefined ||
     generationConfig?.responseMimeType !== undefined
+  );
+}
+
+function getRoboticsStructuredOutputError(
+  isRoboticsStreamingModel: boolean,
+  config: CompletionOptions,
+): string | undefined {
+  return isRoboticsStreamingModel && hasStructuredOutputConfiguration(config)
     ? ROBOTICS_STRUCTURED_OUTPUT_ERROR
     : undefined;
 }
@@ -254,6 +259,9 @@ function getUnsupportedLiveTranslateConfigurationError(
     getLiveTranslateResponseModalityError(responseModalities) ??
     (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)
       ? 'Gemini 3.5 Live Translate does not support tools or instructions.'
+      : undefined) ??
+    (hasStructuredOutputConfiguration(config)
+      ? LIVE_TRANSLATE_STRUCTURED_OUTPUT_ERROR
       : undefined) ??
     (hasUnsupportedLiveTranslateServiceTier(serviceTier)
       ? 'Gemini 3.5 Live Translate does not support flex, priority, batch, or other non-standard inference tiers; remove service_tier/serviceTier or set it to standard.'

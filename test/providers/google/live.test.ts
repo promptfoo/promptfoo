@@ -1308,6 +1308,29 @@ describe('GoogleLiveProvider', () => {
       },
       'does not support flex, priority, batch, or other non-standard inference tiers',
     ],
+    [
+      'top-level structured output',
+      {
+        responseSchema: '{"type":"object"}',
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'does not support structured output',
+    ],
+    [
+      'snake-case structured output',
+      {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+          response_schema: { type: 'OBJECT' },
+          response_mime_type: 'application/json',
+        },
+      },
+      'does not support structured output',
+    ],
   ])('should reject Live Translate with unsupported %s', async (_case, config, error) => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {

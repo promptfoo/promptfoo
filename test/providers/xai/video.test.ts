@@ -1082,7 +1082,11 @@ describe('XAI Video Provider', () => {
       expect(videoUtils.generateVideoCacheKey).toHaveBeenNthCalledWith(
         2,
         expect.objectContaining({
-          inputReference: `reference_images:${sharedUrl}`,
+          inputReference: JSON.stringify({
+            type: 'xai-reference-media',
+            reference_images: [sharedUrl],
+            reference_audios: [],
+          }),
         }),
       );
     });
@@ -1096,9 +1100,34 @@ describe('XAI Video Provider', () => {
 
       expect(videoUtils.generateVideoCacheKey).toHaveBeenCalledWith(
         expect.objectContaining({
-          inputReference: 'reference_audios:eve|leo',
+          inputReference: JSON.stringify({
+            type: 'xai-reference-media',
+            reference_images: [],
+            reference_audios: ['eve', 'leo'],
+          }),
         }),
       );
+    });
+
+    it('uses unambiguous cache identities for mixed reference media', async () => {
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
+      const baseUrl = 'https://img.example/p.jpg';
+
+      await new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: { reference_images: [{ url: `${baseUrl};reference_audios:eve` }] },
+      }).callApi(mockPrompt);
+      await new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          reference_images: [{ url: baseUrl }],
+          reference_audios: [{ voice_id: 'eve' }],
+        },
+      }).callApi(mockPrompt);
+
+      const firstReference = vi.mocked(videoUtils.generateVideoCacheKey).mock.calls[0][0]
+        .inputReference;
+      const secondReference = vi.mocked(videoUtils.generateVideoCacheKey).mock.calls[1][0]
+        .inputReference;
+      expect(firstReference).not.toBe(secondReference);
     });
   });
 

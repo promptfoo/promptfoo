@@ -70,6 +70,51 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
+  it('preserves and normalizes citations from v2 text responses', async () => {
+    const citations = [
+      {
+        start: 0,
+        end: 15,
+        text: 'Grounded answer',
+        type: 'TEXT_CONTENT',
+        sources: [
+          {
+            type: 'document',
+            id: 'doc-1',
+            document: { title: 'Source document', url: 'https://example.com/source' },
+          },
+          { type: 'tool', id: 'tool-1', tool_output: { temperature: '24 C' } },
+        ],
+      },
+    ];
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Grounded answer' }],
+          citations,
+        },
+        usage: { tokens: { input_tokens: 4, output_tokens: 2 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('Answer with sources')).resolves.toMatchObject({
+      output: 'Grounded answer',
+      metadata: {
+        citations: [
+          { url: 'https://example.com/source', content: 'Grounded answer' },
+          { source: 'tool-1', content: 'Grounded answer' },
+        ],
+        cohere: { citations },
+      },
+    });
+  });
+
   it('preserves v2 server cache usage while marking a local cached response fully cached', async () => {
     const data = {
       message: { role: 'assistant', content: [{ type: 'text', text: 'Cached answer' }] },

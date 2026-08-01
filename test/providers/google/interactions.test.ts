@@ -290,6 +290,65 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.video).toBeUndefined();
   });
 
+  it('preserves Interactions grounding annotations and Google Search steps', async () => {
+    const googleSearchCall = {
+      type: 'google_search_call',
+      id: 'search-1',
+      arguments: { queries: ['Euro 2024 winner'] },
+    };
+    const googleSearchResult = {
+      type: 'google_search_result',
+      call_id: 'search-1',
+      result: [{ search_suggestions: '<div>Search suggestions</div>' }],
+    };
+    const annotations = [
+      {
+        type: 'url_citation',
+        url: 'https://example.com/euro-2024',
+        title: 'Example Sports',
+        start_index: 2,
+        end_index: 9,
+      },
+    ];
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-grounded-1',
+        status: 'completed',
+        steps: [
+          googleSearchCall,
+          googleSearchResult,
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: '¡España ganó.', annotations }],
+          },
+        ],
+        usage: { total_input_tokens: 10, total_output_tokens: 3, total_tokens: 13 },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { tools: [{ type: 'google_search' }] },
+      },
+    });
+
+    await expect(provider.callApi('Who won Euro 2024?')).resolves.toMatchObject({
+      output: '¡España ganó.',
+      metadata: {
+        annotations,
+        citations: [
+          {
+            url: 'https://example.com/euro-2024',
+            content: 'Example Sports: España',
+          },
+        ],
+        interactionToolCalls: [googleSearchCall],
+        interactionToolResults: [googleSearchResult],
+      },
+    });
+  });
+
   it('normalizes standard multimodal input_text parts for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },
