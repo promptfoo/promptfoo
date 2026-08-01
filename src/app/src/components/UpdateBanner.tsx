@@ -121,7 +121,12 @@ export default function UpdateBanner() {
         'dark:bg-blue-950',
       )}
     >
-      <div className="flex items-start gap-3 sm:items-center">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex items-start gap-3 sm:items-center"
+      >
         <RefreshCw className="size-4 shrink-0" />
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-medium">
@@ -130,6 +135,13 @@ export default function UpdateBanner() {
           <span className="text-sm text-muted-foreground">
             (current: v{versionInfo.currentVersion})
           </span>
+          {versionInfo.commandType === 'docker' &&
+            !versionInfo.updateCommands?.isCustomContainer && (
+              <span className="text-sm text-muted-foreground">
+                If this is a derived image, update its Promptfoo base and rebuild before
+                redeploying.
+              </span>
+            )}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">

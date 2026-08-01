@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
@@ -117,6 +120,36 @@ const nodeEngineComparatorSets: NodeEngineComparator[][] = [
   [{ operator: '>=', version: '22.22.0' }],
 ];
 describe('entrypoint version check logic', () => {
+  describe('production entrypoint runtime guard', () => {
+    it.each([
+      'v20.20.0',
+      'v22.21.9',
+    ])('rejects unsupported Node.js %s before importing CLI dependencies', (version) => {
+      const preload = encodeURIComponent(
+        `Object.defineProperty(process, "version", { value: ${JSON.stringify(version)} })`,
+      );
+      const result = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', path.resolve(__dirname, '../src/entrypoint.ts'), '--version'],
+        {
+          cwd: path.resolve(__dirname, '..'),
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=data:text/javascript,${preload}`]
+              .filter(Boolean)
+              .join(' '),
+          },
+        },
+      );
+
+      expect(result.status, result.stderr || result.stdout).toBe(1);
+      expect(result.stderr).toContain(`Detected: ${version}`);
+      expect(result.stderr).toContain('Required: >=22.22.0');
+      expect(result.stderr).toContain('Install a supported Node.js version and try again.');
+    });
+  });
+
   describe('Node.js version parsing', () => {
     it('parses full semver versions with optional prefixes and suffixes', () => {
       expect(parseNodeEngineVersion('v20.9.0')).toEqual([20, 9, 0]);

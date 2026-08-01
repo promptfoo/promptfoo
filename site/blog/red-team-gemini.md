@@ -43,7 +43,7 @@ The unique capabilities of Gemini 2.5 Pro (and similar models in that family) pr
 
 Before you begin, ensure you have:
 
-- **Node.js 22+**: [Download Node.js](https://nodejs.org/en/download/)
+- **Node.js `>=22.22.0`** (Node.js 24 LTS recommended): [Download Node.js](https://nodejs.org/en/download/)
 - **Google AI Studio API Key**: Sign up for a [Google AI Studio account](https://aistudio.google.com/) and obtain an API key
 - **Promptfoo**: No prior installation needed; we'll use `npx` to run commands
 

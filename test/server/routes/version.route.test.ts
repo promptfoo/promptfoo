@@ -30,6 +30,8 @@ describe('Version Route', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.resetAllMocks();
   });
 
@@ -56,15 +58,74 @@ describe('Version Route', () => {
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {
-    mockedGetLatestVersion.mockRejectedValue(new Error('Network error'));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2099-01-01T00:00:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('98.0.0');
+
+    const cachedResponse = await request(app).get('/api/version');
+
+    expect(cachedResponse.status).toBe(200);
+    expect(cachedResponse.body.latestVersion).toBe('98.0.0');
+
+    vi.setSystemTime(new Date('2099-01-01T00:06:00.000Z'));
+    mockedGetLatestVersion.mockRejectedValueOnce(new Error('Network error'));
 
     const response = await request(app).get('/api/version');
 
-    // Should still return 200, not 500 — schema must match even on fallback path
+    // An expired cache must attempt the failing fetch and retain its stale value.
     expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(2);
     expect(typeof response.body.currentVersion).toBe('string');
-    expect(typeof response.body.latestVersion).toBe('string');
-    expect(typeof response.body.updateAvailable).toBe('boolean');
+    expect(response.body.latestVersion).toBe('98.0.0');
+    expect(response.body.updateAvailable).toBe(true);
+  });
+
+  it('should refresh a cached version when the clock moves backward', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2099-01-02T00:00:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('98.0.0');
+
+    const futureResponse = await request(app).get('/api/version');
+
+    expect(futureResponse.status).toBe(200);
+    expect(futureResponse.body.latestVersion).toBe('98.0.0');
+
+    vi.setSystemTime(new Date('2099-01-01T23:59:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('99.0.0');
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(2);
+    expect(response.body.latestVersion).toBe('99.0.0');
+  });
+
+  it('should retry after the clock moves behind a failed update attempt', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2099-01-03T00:00:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('98.0.0');
+
+    const cachedResponse = await request(app).get('/api/version');
+
+    expect(cachedResponse.status).toBe(200);
+    expect(cachedResponse.body.latestVersion).toBe('98.0.0');
+
+    vi.setSystemTime(new Date('2099-01-03T00:10:00.000Z'));
+    mockedGetLatestVersion.mockRejectedValueOnce(new Error('Network error'));
+
+    const failedResponse = await request(app).get('/api/version');
+
+    expect(failedResponse.status).toBe(200);
+    expect(failedResponse.body.latestVersion).toBe('98.0.0');
+
+    vi.setSystemTime(new Date('2099-01-03T00:06:00.000Z'));
+    mockedGetLatestVersion.mockResolvedValueOnce('99.0.0');
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(mockedGetLatestVersion).toHaveBeenCalledTimes(3);
+    expect(response.body.latestVersion).toBe('99.0.0');
   });
 
   it('should skip upstream update checks when they are disabled', async () => {

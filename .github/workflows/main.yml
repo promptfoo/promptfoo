@@ -37,13 +37,13 @@ jobs:
             {"node":"22.22","os":"windows-2025-vs2026","shard":2},
             {"node":"22.22","os":"windows-2025-vs2026","shard":3}
           '
+          build_matrix='{"node":["22.22","24.x","26.x"]}'
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             # PRs: add 1 macOS version only
             extra_entries='
               ,{"node":"22.22","os":"macOS-latest","shard":""}
             '
-            build_matrix='{"node":["22.22","24.x","26.x"]}'
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
             extra_entries='
@@ -56,7 +56,6 @@ jobs:
               {"node":"26.x","os":"windows-2025-vs2026","shard":2},
               {"node":"26.x","os":"windows-2025-vs2026","shard":3}
             '
-            build_matrix='{"node":["22.22","24.x","26.x"]}'
           fi
 
           # Build the matrix JSON (shard:"" is falsy in GHA expressions, used to skip shard flags)
@@ -87,7 +86,7 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
       - name: Use Python 3.14
@@ -167,7 +166,7 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: ${{ matrix.node }}
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
       - name: Install Dependencies
@@ -207,7 +206,6 @@ jobs:
           fi
 
       - name: Test Package Artifact
-        if: matrix.node == '22.22' || matrix.node == '26.x'
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact

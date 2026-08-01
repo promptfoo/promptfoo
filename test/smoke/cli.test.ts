@@ -11,7 +11,6 @@ import * as fs from 'fs';
 import { createServer, type Server as HttpServer } from 'http';
 import * as path from 'path';
 
-import semver from 'semver';
 import { Server as SocketIOServer } from 'socket.io';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -48,7 +47,7 @@ function runEntrypoint(
   args: string[],
   options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [ENTRYPOINT_PATH, ...args], {
+  const result = spawnSync(process.execPath, [ENTRYPOINT_PATH, ...args], {
     cwd: options.cwd || ROOT_DIR,
     encoding: 'utf-8',
     env: { ...process.env, ...options.env, NO_COLOR: '1' },
@@ -60,6 +59,20 @@ function runEntrypoint(
     stderr: result.stderr || '',
     exitCode: result.status ?? 1,
   };
+}
+
+function runEntrypointWithNodeVersion(version: string) {
+  const preload = encodeURIComponent(
+    `Object.defineProperty(process, "version", { value: ${JSON.stringify(version)} })`,
+  );
+
+  return runEntrypoint(['--version'], {
+    env: {
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=data:text/javascript,${preload}`]
+        .filter(Boolean)
+        .join(' '),
+    },
+  });
 }
 
 function runEntrypointAsync(
@@ -299,51 +312,23 @@ describe('CLI Smoke Tests', () => {
       expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
     });
 
-    it('1.7.5 - shipped runtime guard enforces the package.json engine range', () => {
-      // test/entrypoint.test.ts exercises test-local copies of the guard helpers, so it cannot
-      // catch a bad build-time injection. Assert against the BUILT bundle and the real
-      // package.json instead: tsdown injects both the range and its comparator sets, and a
-      // broken define here is how an unsupported runtime would silently be admitted.
-      const bundle = fs.readFileSync(ENTRYPOINT_PATH, 'utf-8');
-      const enginesRange: string = JSON.parse(
-        fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf-8'),
-      ).engines.node;
+    it.each([
+      'v20.20.0',
+      'v22.21.9',
+    ])('1.7.5 - shipped runtime guard rejects unsupported Node.js %s', (version) => {
+      const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
 
-      expect(bundle).toContain(JSON.stringify(enginesRange));
-      expect(bundle).not.toContain('__PROMPTFOO_NODE_ENGINE_RANGE__');
-      expect(bundle).not.toContain('__PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__');
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain(`Detected: ${version}`);
+      expect(stderr).toContain('Required: >=22.22.0');
+      expect(stderr).toContain('Install a supported Node.js version and try again.');
+    });
 
-      // The declared range must actually exclude every retired major and admit the floor.
-      const range = new semver.Range(enginesRange);
-      for (const rejected of ['18.20.8', '20.19.5', '20.20.0', '20.99.99', '21.7.0']) {
-        expect(semver.satisfies(rejected, range)).toBe(false);
-      }
-      for (const accepted of ['22.22.0', '24.18.0', '26.5.0']) {
-        expect(semver.satisfies(accepted, range)).toBe(true);
-      }
+    it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
+      const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');
 
-      // The guard does not evaluate the range string — it evaluates the comparator sets tsdown
-      // injects beside it. Parse those out of the bundle and check the data the shipped guard
-      // really uses, which is the piece a test-local copy can never verify.
-      const comparatorMatch = bundle.match(/const nodeEngineComparatorSets = (\[\[[\s\S]*?\]\]);/);
-      expect(comparatorMatch).not.toBeNull();
-      const comparatorSets: { operator: string; version: string }[][] = JSON.parse(
-        comparatorMatch![1],
-      );
-      const comparatorRange = new semver.Range(
-        comparatorSets
-          .map((set) => set.map((c) => `${c.operator}${c.version}`).join(' '))
-          .join(' || '),
-      );
-      for (const rejected of ['18.20.8', '20.19.5', '20.20.0', '20.99.99', '21.7.0']) {
-        expect(semver.satisfies(rejected, comparatorRange)).toBe(false);
-      }
-      for (const accepted of ['22.22.0', '24.18.0', '26.5.0']) {
-        expect(semver.satisfies(accepted, comparatorRange)).toBe(true);
-      }
-
-      // And the guard lets the runtime running this suite through.
-      expect(runEntrypoint(['--version']).exitCode).toBe(0);
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);
     });
   });
 
