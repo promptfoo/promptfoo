@@ -1064,6 +1064,28 @@ describe('GoogleLiveProvider', () => {
       },
       'requires apiVersion v1beta; remove the override or set apiVersion to v1beta',
     ],
+    [
+      'flex inference',
+      {
+        service_tier: 'flex',
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'does not support flex, priority, batch, or other non-standard inference tiers',
+    ],
+    [
+      'the passthrough priority alias',
+      {
+        passthrough: { serviceTier: 'priority' },
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+      },
+      'does not support flex, priority, batch, or other non-standard inference tiers',
+    ],
   ])('should reject Live Translate with unsupported %s', async (_case, config, error) => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {

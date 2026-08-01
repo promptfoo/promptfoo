@@ -204,6 +204,14 @@ function hasUnsupportedLiveTranslateThinkingConfig(config: CompletionOptions): b
   );
 }
 
+function hasUnsupportedLiveTranslateServiceTier(config: CompletionOptions): boolean {
+  const passthrough = config.passthrough as
+    | { service_tier?: unknown; serviceTier?: unknown }
+    | undefined;
+  const serviceTier = passthrough?.service_tier ?? passthrough?.serviceTier ?? config.service_tier;
+  return serviceTier !== undefined && serviceTier !== 'standard';
+}
+
 function getUnsupportedLiveTranslateConfigurationError(
   config: CompletionOptions,
   systemInstruction: unknown,
@@ -213,6 +221,9 @@ function getUnsupportedLiveTranslateConfigurationError(
     getLiveTranslateResponseModalityError(responseModalities) ??
     (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)
       ? 'Gemini 3.5 Live Translate does not support tools or instructions.'
+      : undefined) ??
+    (hasUnsupportedLiveTranslateServiceTier(config)
+      ? 'Gemini 3.5 Live Translate does not support flex, priority, batch, or other non-standard inference tiers; remove service_tier/serviceTier or set it to standard.'
       : undefined)
   );
 }
