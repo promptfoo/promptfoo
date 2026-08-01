@@ -13,6 +13,7 @@ import * as path from 'path';
 
 import { Server as SocketIOServer } from 'socket.io';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { spoofedNodeVersionEnv } from '../util/utils';
 
 // Path to the built CLI binaries
 const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
@@ -61,22 +62,29 @@ function runEntrypoint(
   };
 }
 
-function getCiNodeExecutable(
-  variable: 'PROMPTFOO_NODE20_BIN' | 'PROMPTFOO_MIN_NODE_BIN',
-): string | undefined {
-  const nodeExecutable = process.env[variable];
+/**
+ * Versions CI installs a real executable for. The workflow records each `process.execPath`
+ * into these variables; anything absent here has no real binary worth installing and is
+ * exercised with a spoofed `process.version` instead.
+ */
+const CI_NODE_EXECUTABLE_VARS: Record<string, string> = {
+  'v20.20.0': 'PROMPTFOO_NODE20_BIN',
+  'v22.22.0': 'PROMPTFOO_MIN_NODE_BIN',
+};
 
-  if (process.env.GITHUB_ACTIONS === 'true') {
+function runEntrypointWithNodeVersion(version: string) {
+  const variable = CI_NODE_EXECUTABLE_VARS[version];
+  const nodeExecutable = variable ? process.env[variable] : undefined;
+
+  if (variable && process.env.GITHUB_ACTIONS === 'true') {
+    // Fail loudly rather than silently degrading to the spoofed path, which would leave the
+    // real runtime boundary untested while still reporting green.
     expect(
       nodeExecutable,
       `CI must provide an actual Node.js executable through ${variable}`,
     ).toBeTruthy();
   }
 
-  return nodeExecutable;
-}
-
-function runEntrypointWithNodeVersion(version: string, nodeExecutable?: string) {
   if (nodeExecutable) {
     const actualVersion = spawnSync(nodeExecutable, ['--version'], {
       cwd: ROOT_DIR,
@@ -91,17 +99,7 @@ function runEntrypointWithNodeVersion(version: string, nodeExecutable?: string) 
     return runEntrypoint(['--version'], { nodeExecutable });
   }
 
-  const preload = encodeURIComponent(
-    `Object.defineProperty(process, "version", { value: ${JSON.stringify(version)} })`,
-  );
-
-  return runEntrypoint(['--version'], {
-    env: {
-      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=data:text/javascript,${preload}`]
-        .filter(Boolean)
-        .join(' '),
-    },
-  });
+  return runEntrypoint(['--version'], { env: spoofedNodeVersionEnv(version) });
 }
 
 function runEntrypointAsync(
@@ -345,9 +343,7 @@ describe('CLI Smoke Tests', () => {
       'v20.20.0',
       'v22.21.9',
     ])('1.7.5 - shipped runtime guard rejects unsupported Node.js %s', (version) => {
-      const nodeExecutable =
-        version === 'v20.20.0' ? getCiNodeExecutable('PROMPTFOO_NODE20_BIN') : undefined;
-      const { stderr, exitCode } = runEntrypointWithNodeVersion(version, nodeExecutable);
+      const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
 
       expect(exitCode).toBe(1);
       expect(stderr).toContain(`Detected: ${version}`);
@@ -356,10 +352,7 @@ describe('CLI Smoke Tests', () => {
     });
 
     it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
-      const { stdout, exitCode } = runEntrypointWithNodeVersion(
-        'v22.22.0',
-        getCiNodeExecutable('PROMPTFOO_MIN_NODE_BIN'),
-      );
+      const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');
 
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);

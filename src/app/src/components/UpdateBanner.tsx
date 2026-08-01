@@ -6,6 +6,12 @@ import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
 import { Check, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
 
+const COPY_COMMAND_LABELS = {
+  docker: 'Copy Docker Command',
+  npx: 'Copy npx Command',
+  npm: 'Copy Update Command',
+} as const;
+
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copied, setCopied] = useState(false);
@@ -177,13 +183,7 @@ export default function UpdateBanner() {
               ) : (
                 <Copy className="size-3" />
               )}
-              {copied
-                ? 'Copied'
-                : versionInfo.commandType === 'docker'
-                  ? 'Copy Docker Command'
-                  : versionInfo.commandType === 'npx'
-                    ? 'Copy npx Command'
-                    : 'Copy Update Command'}
+              {copied ? 'Copied' : COPY_COMMAND_LABELS[versionInfo.commandType ?? 'npm']}
             </Button>
           )
         )}

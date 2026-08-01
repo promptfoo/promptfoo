@@ -92,9 +92,10 @@ export function useVersionCheck(): UseVersionCheckResult {
 
     return () => {
       active = false;
-      if (retryTimer !== undefined) {
-        window.clearTimeout(retryTimer);
-      }
+      // clearTimeout(undefined) is a documented no-op, so no guard is needed here. The
+      // `retryTimer = undefined` reset when the retry fires still matters: it stops this
+      // cleanup from clearing a recycled timer id.
+      window.clearTimeout(retryTimer);
     };
   }, []);
 

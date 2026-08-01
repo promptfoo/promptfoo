@@ -289,8 +289,39 @@ function findTestFiles(dir: string): string[] {
   });
 }
 
+// The policy checks below each walk, read, and parse the same ~800-file corpus. Nothing here
+// mutates, so cache all three by their pure inputs; this keeps the suite fast without needing
+// per-detector lexical pre-filters that must stay in sync with what the parser can resolve.
+let cachedRootTestFiles: string[] | undefined;
+const sourceCache = new Map<string, string>();
+const parsedFixtureCache = new Map<string, ts.SourceFile>();
+
 function findRootTestFiles(): string[] {
-  return findTestFiles(testDir).filter((file) => file !== thisFile);
+  cachedRootTestFiles ??= findTestFiles(testDir).filter((file) => file !== thisFile);
+  return cachedRootTestFiles;
+}
+
+function readTestSource(file: string): string {
+  let source = sourceCache.get(file);
+  if (source === undefined) {
+    source = readFileSync(file, 'utf8');
+    sourceCache.set(file, source);
+  }
+  return source;
+}
+
+/**
+ * Parse a source string for AST-based policy detection. Callers must not depend on
+ * `sourceFile.fileName` — every caller passes the same placeholder name so trees are shared
+ * across detectors that see identical source.
+ */
+function parseFixture(source: string): ts.SourceFile {
+  let sourceFile = parsedFixtureCache.get(source);
+  if (!sourceFile) {
+    sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+    parsedFixtureCache.set(source, sourceFile);
+  }
+  return sourceFile;
 }
 
 function toPosixRelativePath(file: string) {
@@ -371,7 +402,7 @@ function hasSleepPromise(source: string) {
     return false;
   }
 
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseFixture(source);
   let found = false;
 
   function isSleepNewExpression(node: ts.Node): boolean {
@@ -435,7 +466,7 @@ function hasModuleScopePersistentMockWithoutReset(source: string) {
   if (globalMockResetPattern.test(source)) {
     return false;
   }
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseFixture(source);
 
   // Build a lookup for module-scope variable / function declarations whose
   // value is a function literal, so that `vi.mock('x', factory)` with a
@@ -580,7 +611,7 @@ function hasDirectProcessEnvMutation(source: string) {
     return false;
   }
 
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseFixture(source);
   let found = false;
 
   function visit(node: ts.Node) {
@@ -633,7 +664,7 @@ function hasProcessEnvReferenceSnapshot(source: string) {
     return false;
   }
 
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  const sourceFile = parseFixture(source);
   let found = false;
 
   function isSnapshotIdentifier(node: ts.Node): boolean {
@@ -674,7 +705,7 @@ function hasProcessEnvReferenceSnapshot(source: string) {
 
 function findFilesMatchingPolicy(predicate: (source: string) => boolean): string[] {
   return findRootTestFiles()
-    .filter((file) => predicate(readFileSync(file, 'utf8')))
+    .filter((file) => predicate(readTestSource(file)))
     .map(toPosixRelativePath)
     .sort();
 }
@@ -701,7 +732,7 @@ function findStalePolicyAllowlistFiles(
       }
 
       try {
-        return !predicate(readFileSync(filePath, 'utf8'));
+        return !predicate(readTestSource(filePath));
       } catch (error) {
         if (
           error instanceof Error &&
@@ -810,7 +841,7 @@ function findTestControlUsages(file: string, source: string): TestControlUsage[]
 
 function findRootTestControlUsages(): TestControlUsage[] {
   return findRootTestFiles().flatMap((file) =>
-    findTestControlUsages(toPosixRelativePath(file), readFileSync(file, 'utf8')),
+    findTestControlUsages(toPosixRelativePath(file), readTestSource(file)),
   );
 }
 

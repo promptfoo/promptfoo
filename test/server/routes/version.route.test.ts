@@ -35,6 +35,18 @@ describe('Version Route', () => {
     vi.resetAllMocks();
   });
 
+  /** Prime the route's 5-minute version cache at a fixed time so a test can then advance the clock. */
+  async function seedVersionCache(isoTime: string, latestVersion = '98.0.0') {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(isoTime));
+    mockedGetLatestVersion.mockResolvedValueOnce(latestVersion);
+
+    const response = await request(app).get('/api/version');
+
+    expect(response.status).toBe(200);
+    expect(response.body.latestVersion).toBe(latestVersion);
+  }
+
   it('should return 200 with valid response schema shape', async () => {
     mockedGetLatestVersion.mockResolvedValue('99.0.0');
 
@@ -58,14 +70,7 @@ describe('Version Route', () => {
   });
 
   it('should not return 500 when fetch fails (graceful fallback)', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2099-01-01T00:00:00.000Z'));
-    mockedGetLatestVersion.mockResolvedValueOnce('98.0.0');
-
-    const cachedResponse = await request(app).get('/api/version');
-
-    expect(cachedResponse.status).toBe(200);
-    expect(cachedResponse.body.latestVersion).toBe('98.0.0');
+    await seedVersionCache('2099-01-01T00:00:00.000Z');
 
     vi.setSystemTime(new Date('2099-01-01T00:06:00.000Z'));
     mockedGetLatestVersion.mockRejectedValueOnce(new Error('Network error'));
@@ -81,14 +86,7 @@ describe('Version Route', () => {
   });
 
   it('should refresh a cached version when the clock moves backward', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2099-01-02T00:00:00.000Z'));
-    mockedGetLatestVersion.mockResolvedValueOnce('98.0.0');
-
-    const futureResponse = await request(app).get('/api/version');
-
-    expect(futureResponse.status).toBe(200);
-    expect(futureResponse.body.latestVersion).toBe('98.0.0');
+    await seedVersionCache('2099-01-02T00:00:00.000Z');
 
     vi.setSystemTime(new Date('2099-01-01T23:59:00.000Z'));
     mockedGetLatestVersion.mockResolvedValueOnce('99.0.0');
@@ -101,14 +99,7 @@ describe('Version Route', () => {
   });
 
   it('should retry after the clock moves behind a failed update attempt', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2099-01-03T00:00:00.000Z'));
-    mockedGetLatestVersion.mockResolvedValueOnce('98.0.0');
-
-    const cachedResponse = await request(app).get('/api/version');
-
-    expect(cachedResponse.status).toBe(200);
-    expect(cachedResponse.body.latestVersion).toBe('98.0.0');
+    await seedVersionCache('2099-01-03T00:00:00.000Z');
 
     vi.setSystemTime(new Date('2099-01-03T00:10:00.000Z'));
     mockedGetLatestVersion.mockRejectedValueOnce(new Error('Network error'));

@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { spoofedNodeVersionEnv } from './util/utils';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
 type NodeEngineVersionTuple = [number, number, number];
@@ -125,21 +126,13 @@ describe('entrypoint version check logic', () => {
       'v20.20.0',
       'v22.21.9',
     ])('rejects unsupported Node.js %s before importing CLI dependencies', (version) => {
-      const preload = encodeURIComponent(
-        `Object.defineProperty(process, "version", { value: ${JSON.stringify(version)} })`,
-      );
       const result = spawnSync(
         process.execPath,
         ['--import', 'tsx', path.resolve(__dirname, '../src/entrypoint.ts'), '--version'],
         {
           cwd: path.resolve(__dirname, '..'),
           encoding: 'utf8',
-          env: {
-            ...process.env,
-            NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=data:text/javascript,${preload}`]
-              .filter(Boolean)
-              .join(' '),
-          },
+          env: { ...process.env, ...spoofedNodeVersionEnv(version) },
         },
       );
 
@@ -172,20 +165,18 @@ describe('entrypoint version check logic', () => {
   });
 
   describe('engine range matching', () => {
-    it('rejects Node.js versions below the supported patch level', () => {
-      const unsupportedVersions = ['v22.13.0', 'v22.21.9'];
-
-      for (const version of unsupportedVersions) {
-        expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
-      }
-    });
-
-    it('rejects Node.js majors that are no longer supported', () => {
-      const unsupportedVersions = ['v20.9.0', 'v20.19.0', 'v20.20.0', 'v21.0.0', 'v21.7.0'];
-
-      for (const version of unsupportedVersions) {
-        expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
-      }
+    // A single `>=22.22.0` comparator set means retired majors and below-floor patches now
+    // take the same path; there is no longer a gap between ranges to fall into.
+    it.each([
+      'v20.9.0',
+      'v20.19.0',
+      'v20.20.0',
+      'v21.0.0',
+      'v21.7.0',
+      'v22.13.0',
+      'v22.21.9',
+    ])('rejects Node.js %s below the supported range', (version) => {
+      expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
     });
 
     it('accepts Node.js versions that satisfy the exact supported range', () => {
@@ -316,8 +307,13 @@ describe('entrypoint version check logic', () => {
     });
 
     it('uses the injected engine range and comparator sets when provided', () => {
-      const __PROMPTFOO_NODE_ENGINE_RANGE__ = '>=22.22.0';
-      const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ = nodeEngineComparatorSets;
+      // Deliberately NOT the current engine range: if the injected value equalled the
+      // fallback, both ternary branches would satisfy the assertions and this test could
+      // never fail.
+      const __PROMPTFOO_NODE_ENGINE_RANGE__ = '>=99.1.2';
+      const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: NodeEngineComparator[][] = [
+        [{ operator: '>=', version: '99.1.2' }],
+      ];
 
       const injectedRange =
         typeof __PROMPTFOO_NODE_ENGINE_RANGE__ === 'undefined'
@@ -328,8 +324,8 @@ describe('entrypoint version check logic', () => {
           ? [[{ operator: '>=', version: '22.22.0' }]]
           : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
 
-      expect(injectedRange).toBe('>=22.22.0');
-      expect(injectedComparatorSets).toEqual(nodeEngineComparatorSets);
+      expect(injectedRange).toBe('>=99.1.2');
+      expect(injectedComparatorSets).toEqual([[{ operator: '>=', version: '99.1.2' }]]);
     });
   });
 });

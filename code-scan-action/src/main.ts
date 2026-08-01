@@ -371,6 +371,9 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 //   proxy, strict-ssl, ignore-scripts…) may ever be in scope
 // - both npm and the scanner run under the action runtime, not a possibly unsupported
 //   Node version selected by the calling workflow
+// Distinct from isPathWithinOrEqualTo below, which stays string-prefix based on purpose:
+// path.relative() case-folds on win32, and that function documents a deliberate
+// case-sensitive comparison. Do not collapse the two.
 function isPathWithinDirectory(directory: string, candidate: string): boolean {
   const relativePath = path.relative(directory, candidate);
   return (
@@ -378,6 +381,13 @@ function isPathWithinDirectory(directory: string, candidate: string): boolean {
     (relativePath !== '..' &&
       !relativePath.startsWith(`..${path.sep}`) &&
       !path.isAbsolute(relativePath))
+  );
+}
+
+/** Containment that excludes the directory itself, for paths that must name a file inside it. */
+function isFileWithinDirectory(directory: string, candidate: string): boolean {
+  return (
+    Boolean(path.relative(directory, candidate)) && isPathWithinDirectory(directory, candidate)
   );
 }
 
@@ -489,13 +499,7 @@ function resolveInstalledPromptfooEntrypoint(installDir: string): string {
   }
 
   const entrypoint = path.resolve(packageDir, relativeEntrypoint);
-  const relativePath = path.relative(packageDir, entrypoint);
-  if (
-    !relativePath ||
-    relativePath === '..' ||
-    relativePath.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativePath)
-  ) {
+  if (!isFileWithinDirectory(packageDir, entrypoint)) {
     throw new Error('Installed promptfoo executable must remain within its package directory');
   }
 
@@ -503,13 +507,7 @@ function resolveInstalledPromptfooEntrypoint(installDir: string): string {
   // package-internal symlink from redirecting the OIDC-bearing scanner elsewhere.
   const canonicalPackageDir = fs.realpathSync(packageDir);
   const canonicalEntrypoint = fs.realpathSync(entrypoint);
-  const canonicalRelativePath = path.relative(canonicalPackageDir, canonicalEntrypoint);
-  if (
-    !canonicalRelativePath ||
-    canonicalRelativePath === '..' ||
-    canonicalRelativePath.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(canonicalRelativePath)
-  ) {
+  if (!isFileWithinDirectory(canonicalPackageDir, canonicalEntrypoint)) {
     throw new Error('Installed promptfoo executable must remain within its package directory');
   }
 

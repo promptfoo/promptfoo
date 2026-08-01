@@ -86,6 +86,8 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
+          # Keep the matrix label at 22.22 for stable check names, but install exactly
+          # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
@@ -166,6 +168,8 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
+          # Keep the matrix label at 22.22 for stable check names, but install exactly
+          # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
           node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
