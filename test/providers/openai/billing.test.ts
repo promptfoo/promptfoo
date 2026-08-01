@@ -596,7 +596,10 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
-  it('uses current long-context flex rates for supported pro models', () => {
+  it.each([
+    'batch',
+    'flex',
+  ])('does not estimate unpublished GPT-5.5 Pro long-context %s rates', (serviceTier) => {
     expect(
       calculateOpenAIUsageCost(
         'gpt-5.5-pro',
@@ -605,9 +608,9 @@ describe('OpenAI billing helpers', () => {
           input_tokens: 300_000,
           output_tokens: 1_000,
         },
-        { serviceTier: 'flex' },
+        { serviceTier },
       ),
-    ).toBeCloseTo((300_000 * 30 + 1_000 * 135) / 1e6, 10);
+    ).toBeUndefined();
   });
 
   it('does not invent flex pricing for unsupported models', () => {

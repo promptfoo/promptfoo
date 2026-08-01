@@ -11,6 +11,17 @@ Perplexity follows OpenAI's chat completion API format - see our [OpenAI documen
 
 The four model IDs below are Perplexity's current Sonar catalog. The provider forwards model IDs without a local allow-list, but it targets the Sonar chat-completions endpoint. Perplexity's separate [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) uses vendor-qualified IDs through a different endpoint.
 
+:::note Sonar and the Agent API
+
+Perplexity now classifies Sonar Chat Completions as a legacy API. It remains supported, including by
+this provider, but Perplexity recommends the Agent API for new projects. The closest Agent API preset
+mappings are Sonar to `fast`, Sonar Pro to `low`, Sonar Reasoning Pro to `medium`, and Sonar Deep
+Research to `high`. See Perplexity's
+[migration guide](https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview) before moving a
+configuration because the Agent API uses a different request and response shape.
+
+:::
+
 ## Setup
 
 1. Get an API key from your [Perplexity Settings](https://www.perplexity.ai/settings/api)

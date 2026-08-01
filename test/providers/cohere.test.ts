@@ -20,6 +20,37 @@ describe('CohereChatCompletionProvider', () => {
     expect(CohereChatCompletionProvider.COHERE_CHAT_MODELS).toContain('command-a-plus-05-2026');
   });
 
+  it('recognizes the published North Mini Code model ID', () => {
+    expect(CohereChatCompletionProvider.COHERE_CHAT_MODELS).toContain('north-mini-code-1-0');
+  });
+
+  it('uses the v2 Chat API for North Mini Code', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        finish_reason: 'COMPLETE',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 3, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('north-mini-code-1-0', {
+      config: { apiKey: 'test-key' },
+    });
+    const result = await provider.callApi('Fix the bug');
+
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe('https://api.cohere.ai/v2/chat');
+    expect(JSON.parse((request as RequestInit).body as string)).toMatchObject({
+      model: 'north-mini-code-1-0',
+      messages: [{ role: 'user', content: 'Fix the bug' }],
+    });
+    expect(result).toMatchObject({
+      output: 'Done',
+      tokenUsage: { prompt: 3, completion: 1, total: 4 },
+    });
+  });
+
   it('uses the v2 Chat API for Command A+ and parses its response', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,

@@ -69,11 +69,6 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
     });
 
-    it('should calculate cost for Claude Sonnet 4 latest model', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-latest', { cost: 0.02 }, 100, 200);
-      expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
-    });
-
     it('should calculate default cost for Claude Opus 4.1 model', () => {
       const cost = calculateAnthropicCost('claude-opus-4-1-20250805', {}, 100, 200);
       expect(cost).toBe(0.0165); // (0.000015 * 100) + (0.000075 * 200) - using default model costs
@@ -99,8 +94,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
     });
 
-    it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
-      const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
+    it('should calculate default cost for the Claude Haiku 4.5 alias', () => {
+      const cost = calculateAnthropicCost('claude-haiku-4-5', {}, 100, 200);
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
     });
 
@@ -212,18 +207,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeUndefined();
     });
 
-    it('should calculate default cost for Claude Opus 4.6 latest model', () => {
-      const cost = calculateAnthropicCost('claude-opus-4-6-latest', {}, 100, 200);
-      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
-    });
-
     it('should calculate default cost for Claude Sonnet 4.6 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 100, 200);
-      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
-    });
-
-    it('should calculate default cost for Claude Sonnet 4.6 latest model', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 100, 200);
       expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
     });
 
@@ -232,9 +217,21 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
-    it('should calculate default cost for Claude Opus 4.5 latest model', () => {
-      const cost = calculateAnthropicCost('claude-opus-4-5-latest', {}, 100, 200);
+    it('should calculate default cost for the Claude Opus 4.5 alias', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-5', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it.each([
+      'claude-opus-4-6-latest',
+      'claude-sonnet-4-6-latest',
+      'claude-opus-4-5-latest',
+      'claude-sonnet-4-5-latest',
+      'claude-haiku-4-5-latest',
+      'claude-opus-4-latest',
+      'claude-sonnet-4-latest',
+    ])('should leave unpublished first-party alias %s unpriced', (model) => {
+      expect(calculateAnthropicCost(model, {}, 100, 200)).toBeUndefined();
     });
 
     it('bills Claude Sonnet 4.5 at the standard rate below 200k tokens', () => {
@@ -249,8 +246,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
     });
 
-    it('bills the Claude Sonnet 4.5 latest alias at the standard rate above 200k tokens', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-5-latest', {}, 300_000, 20_000);
+    it('bills the Claude Sonnet 4.5 alias at the standard rate above 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5', {}, 300_000, 20_000);
       expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
     });
 
@@ -264,11 +261,6 @@ describe('Anthropic utilities', () => {
       // standard pricing — a 900k-token request bills at the same per-token rate as 9k.
       const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 300_000, 20_000);
       expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
-    });
-
-    it('bills the Claude Sonnet 4.6 latest alias at the standard rate above 200k tokens', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
-      expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
     });
 
     it('should calculate default cost for Claude Opus 5 model', () => {
@@ -326,7 +318,7 @@ describe('Anthropic utilities', () => {
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
       // Other Sonnet 4 models bill at the same standard rate
-      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];
+      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0'];
 
       models.forEach((model) => {
         const cost = calculateAnthropicCost(model, {}, 300_000, 20_000);

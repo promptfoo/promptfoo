@@ -266,6 +266,18 @@ describe('NovaSonic Provider', () => {
         maxConcurrentStreams: 20,
       });
     });
+
+    it('should reject Nova 2 Sonic outside its published in-region endpoints', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: { region: 'eu-west-1' },
+      });
+
+      await expect((testProvider as any).getBedrockClient()).rejects.toThrow(
+        'Supported Regions: us-east-1, us-west-2, eu-north-1, ap-northeast-1',
+      );
+      expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+    });
   });
 
   describe('API Interactions', () => {
@@ -306,6 +318,79 @@ describe('NovaSonic Provider', () => {
       await provider.callApi(testPrompt);
 
       expect(createSessionSpy).toHaveBeenCalledWith('mocked-session-id');
+    });
+
+    it('should forward the published Nova 2 Sonic prompt configuration', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const configuredProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: {
+          region: 'us-east-1',
+          interfaceConfig: {
+            maxTokens: 2048,
+            topP: 0.8,
+            temperature: 0.5,
+          },
+          turnDetectionConfiguration: { endpointingSensitivity: 'MEDIUM' },
+          textOutputConfiguration: { mediaType: 'text/plain' },
+          toolConfig: {
+            tools: [
+              {
+                toolSpec: {
+                  name: 'get_weather',
+                  description: 'Get weather information',
+                  inputSchema: {
+                    json: {
+                      type: 'object',
+                      properties: {},
+                      required: [],
+                    },
+                  },
+                },
+              },
+            ],
+          },
+          toolUseOutputConfiguration: { mediaType: 'application/json' },
+        },
+      });
+      (configuredProvider as any).bedrockClient = bedrockClient;
+      const sendEventSpy = vi.spyOn(configuredProvider as any, 'sendEvent');
+
+      await configuredProvider.callApi('Test prompt');
+
+      const promptStart = sendEventSpy.mock.calls
+        .map(
+          ([, event]) =>
+            (event as { event: { promptStart?: Record<string, unknown> } }).event.promptStart,
+        )
+        .find(Boolean);
+      expect(promptStart).toMatchObject({
+        textOutputConfiguration: { mediaType: 'text/plain' },
+        toolConfiguration: {
+          tools: [
+            {
+              toolSpec: {
+                name: 'get_weather',
+              },
+            },
+          ],
+        },
+        toolUseOutputConfiguration: { mediaType: 'application/json' },
+      });
+      expect(sendEventSpy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          event: {
+            sessionStart: {
+              inferenceConfiguration: {
+                maxTokens: 2048,
+                topP: 0.8,
+                temperature: 0.5,
+              },
+              turnDetectionConfiguration: { endpointingSensitivity: 'MEDIUM' },
+            },
+          },
+        }),
+      );
     });
   });
 

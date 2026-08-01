@@ -2684,6 +2684,67 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it.each([
+      ['gemini-3.6-flash', 1.5, 7.5],
+      ['gemini-3.5-flash-lite', 0.3, 2.5],
+    ])('should calculate standard pricing for %s', (modelId, inputPrice, outputPrice) => {
+      const cost = calculateGoogleCost(modelId, {}, 1_000_000, 1_000_000);
+
+      expect(cost).toBeCloseTo(inputPrice + outputPrice, 10);
+    });
+
+    it('should apply exact flex and priority cache pricing for gemini-3.5-flash-lite', () => {
+      const flexCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'flex' },
+        1_000_000,
+        1_000_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+      const priorityCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000_000,
+        1_000_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+
+      expect(flexCost).toBeCloseTo(0.02 + 1.25, 10);
+      expect(priorityCost).toBeCloseTo(0.05 + 4.5, 10);
+    });
+
+    it.each([
+      ['global', 'flex', 0.015 + 1.25],
+      ['global', 'priority', 0.054 + 4.5],
+      ['us-central1', 'flex', (0.015 + 1.25) * 1.1],
+      ['us-central1', 'priority', (0.054 + 4.5) * 1.1],
+    ])('should apply Vertex %s endpoint pricing for gemini-3.5-flash-lite %s', (region, serviceTier, expected) => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region, service_tier: serviceTier },
+        1_000_000,
+        1_000_000,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
     it('should calculate cost for gemini-omni-flash-preview', () => {
       const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.006, 10);

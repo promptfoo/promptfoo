@@ -16,9 +16,14 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ### Gemini Models
 
+**Gemini 3.6:**
+
+- `vertex:gemini-3.6-flash` - GA model for efficient agentic and multimodal tasks ($1.50/1M input, $7.50/1M output)
+
 **Gemini 3.5:**
 
 - `vertex:gemini-3.5-flash` - Frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash-lite` - GA model for low-latency, high-volume automation ($0.30/1M input, $2.50/1M output on the global endpoint; regional and multi-regional endpoints add 10%)
 
 **Gemini 3.1:**
 
@@ -35,6 +40,12 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 1M context
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
+
+Google's [Gemini model lifecycle](https://ai.google.dev/gemini-api/docs/deprecations) lists
+`gemini-3.5-flash-lite` as the replacement for `gemini-3.1-flash-lite`, whose earliest AI Studio
+shutdown date is May 7, 2027. Check the
+[Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
+before choosing a model for a new deployment.
 
 ### Claude Models
 

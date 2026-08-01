@@ -276,9 +276,11 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Chat and Multimodal Models
 
+- `google:gemini-3.6-flash` - Gemini 3.6 Flash GA model for efficient agentic and multimodal tasks ($1.50/1M input, $7.50/1M output)
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.5-flash` - Gemini 3.5 Flash, a frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.5-flash-lite` - Gemini 3.5 Flash-Lite GA model for low-latency, high-volume automation ($0.30/1M input, $2.50/1M output)
 - `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
@@ -301,6 +303,14 @@ This list describes current endpoints. Promptfoo may retain pricing for retired 
 evaluations can still be scored; historical pricing data does not mean that Google still serves an
 endpoint. Check Google's [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations)
 before starting new work with an older ID.
+
+Google has announced May 7, 2027 as the earliest shutdown date for `gemini-3.1-flash-lite` and
+recommends `gemini-3.5-flash-lite` as its replacement. For Gemini 3.6 Flash and 3.5 Flash-Lite,
+Google documents a 1M-token input context, 64K maximum output, multimodal input, and its full set of
+built-in tools. Remove the deprecated `temperature`, `top_p`, and `top_k` sampling controls when
+migrating an existing configuration. See Google's
+[latest-model migration guide](https://ai.google.dev/gemini-api/docs/latest-model) for the complete
+behavior changes.
 
 ### Embedding Models
 

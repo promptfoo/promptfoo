@@ -229,6 +229,8 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
   'o4-mini-2025-04-16',
 ]);
 
+const GPT_5_5_PRO_MODELS = new Set(['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23']);
+
 const FAST_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6', 'gpt-5.6-sol'],
@@ -723,6 +725,20 @@ function getFineTunedModelRates(
   };
 }
 
+function hasUnpublishedLongContextTierRates(
+  modelName: string,
+  tier: OpenAIProcessingTier,
+  totalInputTokens: number,
+  longContext: { threshold: number } | undefined,
+): boolean {
+  return (
+    (tier === 'batch' || tier === 'flex') &&
+    GPT_5_5_PRO_MODELS.has(modelName) &&
+    longContext !== undefined &&
+    totalInputTokens > longContext.threshold
+  );
+}
+
 function getModelRates(
   modelName: string,
   tier: OpenAIProcessingTier,
@@ -765,8 +781,13 @@ function getModelRates(
   }
 
   const model = TEXT_MODELS_BY_ID.get(modelName);
+  const longContext = model?.cost?.longContext;
+  if (hasUnpublishedLongContextTierRates(modelName, tier, totalInputTokens, longContext)) {
+    // OpenAI publishes GPT-5.5 Pro's standard long-context rates, but not Batch or Flex
+    // rates above 272K input tokens. Fail closed instead of assuming the usual 50% discount.
+    return undefined;
+  }
   if (tier === 'fast' && FAST_TEXT_RATES[modelName]) {
-    const longContext = model?.cost?.longContext;
     if (longContext && totalInputTokens > longContext.threshold) {
       return undefined;
     }

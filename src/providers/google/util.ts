@@ -19,7 +19,7 @@ import {
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GOOGLE_MODELS, type GoogleModelCost } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -222,6 +222,101 @@ export function stripExecutableToolFileReferences(
   return stripExecutableToolFileReferencesFromValue(renderVarsInObject(tools, vars));
 }
 
+function getServiceTierCacheRead(
+  modelCost: GoogleModelCost,
+  serviceTier: unknown,
+): number | undefined {
+  if (serviceTier === 'priority') {
+    return modelCost.priorityCacheRead;
+  }
+  if (serviceTier === 'flex') {
+    return modelCost.flexCacheRead;
+  }
+  return undefined;
+}
+
+function resolveServiceTierCacheCost(
+  defaultCost: number,
+  exactTierCost: number | undefined,
+  serviceTierMultiplier: number,
+  hasOverride: boolean,
+): number {
+  return !hasOverride && exactTierCost !== undefined
+    ? exactTierCost / serviceTierMultiplier
+    : defaultCost;
+}
+
+function resolveGoogleServiceTierCosts(
+  config: ProviderConfig,
+  modelCost: GoogleModelCost,
+  serviceTier: unknown,
+  cachedInputCost: number,
+  cachedAudioInputCost: number,
+  cachedImageInputCost: number,
+  audioInputCost: number,
+): {
+  serviceTierMultiplier: number;
+  serviceTierCachedInputCost: number;
+  serviceTierCachedAudioInputCost: number;
+  serviceTierCachedImageInputCost: number;
+  serviceTierAudioInputCost: number;
+} {
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+
+  const hasCachedInputOverride = config.inputCost !== undefined || config.cost !== undefined;
+  const hasCachedAudioInputOverride =
+    config.audioInputCost !== undefined || config.audioCost !== undefined || hasCachedInputOverride;
+  const hasCachedImageInputOverride = config.imageInputCost !== undefined || hasCachedInputOverride;
+  const tierCacheRead = getServiceTierCacheRead(modelCost, serviceTier);
+  const serviceTierCachedInputCost = resolveServiceTierCacheCost(
+    cachedInputCost,
+    tierCacheRead,
+    serviceTierMultiplier,
+    hasCachedInputOverride,
+  );
+  const serviceTierCachedAudioInputCost = resolveServiceTierCacheCost(
+    cachedAudioInputCost,
+    tierCacheRead,
+    serviceTierMultiplier,
+    hasCachedAudioInputOverride,
+  );
+  const serviceTierCachedImageInputCost = resolveServiceTierCacheCost(
+    cachedImageInputCost,
+    tierCacheRead,
+    serviceTierMultiplier,
+    hasCachedImageInputOverride,
+  );
+
+  // A modality/base cost override on the request takes precedence over the
+  // catalog's tier-specific audio rate.
+  const hasAudioInputOverride =
+    config.audioInputCost !== undefined ||
+    config.audioCost !== undefined ||
+    config.inputCost !== undefined ||
+    config.cost !== undefined;
+  let serviceTierAudioInputCost = audioInputCost;
+  if (!hasAudioInputOverride) {
+    if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
+      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
+    } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
+      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
+    }
+  }
+
+  return {
+    serviceTierMultiplier,
+    serviceTierCachedInputCost,
+    serviceTierCachedAudioInputCost,
+    serviceTierCachedImageInputCost,
+    serviceTierAudioInputCost,
+  };
+}
+
 /**
  * Calculates the cost for a Google API call.
  *
@@ -245,7 +340,7 @@ export function stripExecutableToolFileReferences(
  */
 export function calculateGoogleCost(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
@@ -354,39 +449,42 @@ export function calculateGoogleCost(
       ?.service_tier ??
     (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
     config.service_tier;
-  let serviceTierMultiplier = 1;
-  if (serviceTier === 'priority') {
-    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
-  } else if (serviceTier === 'flex') {
-    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
-  }
-  // A modality/base cost override on the request takes precedence over the
-  // catalog's tier-specific audio rate.
-  const hasAudioInputOverride =
-    config.audioInputCost !== undefined ||
-    config.audioCost !== undefined ||
-    config.inputCost !== undefined ||
-    config.cost !== undefined;
-  let serviceTierAudioInputCost = audioInputCost;
-  if (!hasAudioInputOverride) {
-    if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
-    } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
-    }
-  }
+  const {
+    serviceTierMultiplier,
+    serviceTierCachedInputCost,
+    serviceTierCachedAudioInputCost,
+    serviceTierCachedImageInputCost,
+    serviceTierAudioInputCost,
+  } = resolveGoogleServiceTierCosts(
+    config,
+    modelCost,
+    serviceTier,
+    cachedInputCost,
+    cachedAudioInputCost,
+    cachedImageInputCost,
+    audioInputCost,
+  );
+
+  const vertexRegionalMultiplier =
+    isVertexMode &&
+    model?.vertexRegionalPremium !== undefined &&
+    config.region !== undefined &&
+    config.region !== 'global'
+      ? model.vertexRegionalPremium
+      : 1;
 
   return (
     ((textInputTokens - cachedTextTokens) * inputCost +
-      cachedTextTokens * cachedInputCost +
+      cachedTextTokens * serviceTierCachedInputCost +
       (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
-      cachedAudioTokens * cachedAudioInputCost +
+      cachedAudioTokens * serviceTierCachedAudioInputCost +
       (imageInputTokens - cachedImageTokens) * imageInputCost +
-      cachedImageTokens * cachedImageInputCost +
+      cachedImageTokens * serviceTierCachedImageInputCost +
       (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
       audioOutputTokens * audioOutputCost +
       videoOutputTokens * videoOutputCost) *
-    serviceTierMultiplier
+    serviceTierMultiplier *
+    vertexRegionalMultiplier
   );
 }
 

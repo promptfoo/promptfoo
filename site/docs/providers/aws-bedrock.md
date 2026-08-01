@@ -658,27 +658,42 @@ providers:
 
 The same parameter constraints apply when using the Converse API.
 
-### Amazon Nova Sonic Model
+### Amazon Nova Sonic Models
 
-The Amazon Nova Sonic model (`amazon.nova-sonic-v1:0`) is a multimodal model that supports audio input and text/audio output with tool-using capabilities. It has a different configuration structure compared to other Nova models:
+Amazon Nova Sonic models support real-time speech-to-speech conversations with text, audio, and tool use. Promptfoo routes them through Bedrock's `InvokeModelWithBidirectionalStream` API; they do not support the ordinary InvokeModel or Converse routes.
+
+| Model ID                   | Promptfoo shorthand    | Notes                                                                    |
+| -------------------------- | ---------------------- | ------------------------------------------------------------------------ |
+| `amazon.nova-2-sonic-v1:0` | `bedrock:nova-2-sonic` | Current Nova 2 Sonic model; 1M-token context and up to 64K output tokens |
+| `amazon.nova-sonic-v1:0`   | `bedrock:nova-sonic`   | Original Nova Sonic model                                                |
+
+Nova 2 Sonic supports only the Standard service tier and only the in-region endpoints `us-east-1`, `us-west-2`, `eu-north-1`, and `ap-northeast-1`. AWS does not publish geo or global inference IDs for this model, so use the bare model ID with `config.region`. See the [Nova 2 Sonic model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-2-sonic.html) for current availability.
+
+The Sonic provider uses a different configuration structure from other Nova models:
 
 ```yaml
 providers:
-  - id: bedrock:amazon.nova-sonic-v1:0
+  - id: bedrock:amazon.nova-2-sonic-v1:0
     config:
-      inferenceConfiguration:
+      region: us-east-1
+      interfaceConfig:
         maxTokens: 1024 # Maximum number of tokens to generate
         temperature: 0.7 # Controls randomness (0.0 to 1.0)
         topP: 0.95 # Nucleus sampling parameter
+      turnDetectionConfiguration:
+        endpointingSensitivity: MEDIUM # HIGH, MEDIUM, or LOW
       textOutputConfiguration:
         mediaType: text/plain
-      toolConfiguration: # Optional tool configuration
+      toolConfig: # Optional tool configuration
         tools:
           - toolSpec:
               name: 'getDateTool'
               description: 'Get information about the current date'
               inputSchema:
-                json: '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{},"required":[]}'
+                json:
+                  type: object
+                  properties: {}
+                  required: []
       toolUseOutputConfiguration:
         mediaType: application/json
       # Optional audio output configuration
@@ -692,7 +707,7 @@ providers:
         audioType: SPEECH
 ```
 
-Note: Nova Sonic has advanced multimodal capabilities including audio input/output, but audio input requires base64 encoded data which may be better handled through the API directly rather than in the configuration file.
+Audio input must be base64-encoded. You can use either the exact Bedrock model ID shown above or its Promptfoo shorthand.
 
 ### Amazon Nova Reel (Video Generation)
 

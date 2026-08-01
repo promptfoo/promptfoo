@@ -113,6 +113,8 @@ const DEFAULT_CONFIG = {
   },
 };
 
+const NOVA_2_SONIC_REGIONS = ['us-east-1', 'us-west-2', 'eu-north-1', 'ap-northeast-1'] as const;
+
 export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiProvider {
   private sessions = new Map<string, SessionState>();
   private bedrockClient?: BedrockRuntimeClient;
@@ -128,6 +130,17 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       return this.bedrockClient;
     }
 
+    const region = this.getRegion();
+    if (
+      this.modelName === 'amazon.nova-2-sonic-v1:0' &&
+      !NOVA_2_SONIC_REGIONS.includes(region as (typeof NOVA_2_SONIC_REGIONS)[number])
+    ) {
+      throw new Error(
+        `Amazon Bedrock model "${this.modelName}" is not available in AWS region "${region}". ` +
+          `Supported Regions: ${NOVA_2_SONIC_REGIONS.join(', ')}.`,
+      );
+    }
+
     // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
     const sessionTimeout = this.config?.sessionTimeout ?? 300000;
     const requestTimeout = this.config?.requestTimeout ?? 300000;
@@ -137,7 +150,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
 
       this.bedrockClient = new BedrockRuntimeClient({
-        region: this.getRegion(),
+        region,
         requestHandler: new NodeHttp2Handler({
           requestTimeout,
           sessionTimeout,
@@ -373,6 +386,9 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         event: {
           sessionStart: {
             inferenceConfiguration: this.config?.interfaceConfig || DEFAULT_CONFIG.inference,
+            ...(this.config?.turnDetectionConfiguration && {
+              turnDetectionConfiguration: this.config.turnDetectionConfiguration,
+            }),
           },
         },
       });
@@ -386,6 +402,9 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             textOutputConfiguration: this.config?.textOutputConfiguration || DEFAULT_CONFIG.text,
             audioOutputConfiguration:
               this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output,
+            ...(this.config?.toolUseOutputConfiguration && {
+              toolUseOutputConfiguration: this.config.toolUseOutputConfiguration,
+            }),
             ...(this.config?.toolConfig && { toolConfiguration: this.config?.toolConfig }),
           },
         },

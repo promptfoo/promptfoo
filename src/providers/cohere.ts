@@ -79,7 +79,7 @@ interface CohereV2Message {
   content: unknown;
 }
 
-const COHERE_V2_CHAT_MODELS = new Set(['command-a-plus-05-2026']);
+const COHERE_V2_CHAT_MODELS = new Set(['command-a-plus-05-2026', 'north-mini-code-1-0']);
 
 function toV2Role(role: string): string {
   return role.toLowerCase() === 'chatbot' ? 'assistant' : role.toLowerCase();
@@ -431,6 +431,7 @@ function getV2ResponseMetadata(data: any): Record<string, unknown> | undefined {
 export class CohereChatCompletionProvider implements ApiProvider {
   static COHERE_CHAT_MODELS = [
     'command-a-plus-05-2026',
+    'north-mini-code-1-0',
     'command-a-03-2025',
     'command-r7b-12-2024',
     'command-a-translate-08-2025',

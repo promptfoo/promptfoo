@@ -1002,13 +1002,30 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('bedrock:kb:knowledge-base-id');
     });
 
-    it('should handle bedrock Nova Sonic providers correctly', async () => {
-      const factories = await getProviderFactories('bedrock:nova-sonic');
-      const factory = factories.find((f) => f.test('bedrock:nova-sonic'));
+    it.each([
+      ['bedrock:nova-sonic', 'amazon.nova-sonic-v1:0'],
+      ['bedrock:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
+      ['bedrock:nova-2-sonic', 'amazon.nova-2-sonic-v1:0'],
+      ['bedrock:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
+    ])('should route %s through the Nova Sonic bidirectional provider', async (path, modelName) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
       expect(factory).toBeDefined();
 
-      const provider = await factory!.create('bedrock:nova-sonic', { config: {} }, mockContext);
+      const provider = await factory!.create(path, { config: {} }, mockContext);
       expect(provider.constructor.name).toBe('NovaSonicProvider');
+      expect(provider).toHaveProperty('modelName', modelName);
+    });
+
+    it.each([
+      ['bedrock:completion:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:converse:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:us.amazon.nova-2-sonic-v1:0', 'does not support geo inference IDs'],
+    ])('should reject unsupported Nova 2 Sonic route %s', async (path, error) => {
+      const factories = await getProviderFactories(path);
+      const factory = factories.find((f) => f.test(path));
+
+      await expect(factory!.create(path, { config: {} }, mockContext)).rejects.toThrow(error);
     });
 
     it.each([

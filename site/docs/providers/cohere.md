@@ -18,6 +18,7 @@ Next, edit the promptfoo configuration file to point to the Cohere provider.
 The following models are confirmed supported. For the complete list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
 
 - `command-a-plus-05-2026`
+- `north-mini-code-1-0`
 - `command-a-03-2025`
 - `command-r7b-12-2024`
 - `command-a-translate-08-2025`
@@ -39,6 +40,10 @@ existing configs, but new configurations should use the IDs above.
 hosted API offers the model without token charges until the account's rate limit; production use is
 available through Cohere Model Vault, so Promptfoo does not assign a speculative per-token price.
 
+`north-mini-code-1-0` is Cohere's agentic coding model. It supports a 256K-token context and up to
+64K output tokens through the v2 Chat API. Cohere also offers it without token charges until the
+account's rate limit, with production deployment available through Model Vault.
+
 Here's an example configuration:
 
 ```yaml
@@ -54,11 +59,11 @@ providers:
 
 ## Control over prompting
 
-By default, a regular string prompt is wrapped in the appropriate chat format. Command A+ uses Cohere's
-v2 Chat API, so Promptfoo sends it in a `messages` array; existing models continue to use the v1 `message`
-field. For Command A+, Promptfoo also converts `chatHistory` and `preamble_override` to v2 messages.
-The v1-only `connectors`, `search_queries_only`, and `prompt_truncation` features are not available with
-Command A+; use v2 tools instead of connectors.
+By default, a regular string prompt is wrapped in the appropriate chat format. Command A+ and North
+Mini Code use Cohere's v2 Chat API, so Promptfoo sends them in a `messages` array; existing models
+continue to use the v1 `message` field. For those v2 models, Promptfoo also converts `chatHistory` and
+`preamble_override` to v2 messages. The v1-only `connectors`, `search_queries_only`, and
+`prompt_truncation` features are not available with them; use v2 tools instead of connectors.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -118,6 +123,17 @@ defaultTest:
 ```
 
 This configuration sets the default embedding provider for all tests that require embeddings (such as similarity assertions) to use Cohere's `embed-english-v3.0` model.
+
+For text inputs with Cohere's current embedding model, use `embed-v4.0`. The v3 model IDs remain
+valid for text-focused workloads.
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cohere:embedding:embed-v4.0
+```
 
 2. You can also specify the embedding provider for individual assertions:
 

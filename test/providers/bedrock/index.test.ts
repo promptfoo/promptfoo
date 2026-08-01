@@ -3700,8 +3700,10 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Global cross-region inference
     expect(AWS_BEDROCK_MODELS['global.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
 
-    // Note: Nova 2 Sonic uses bidirectional streaming API like Nova Sonic v1,
-    // so it's handled separately via NovaSonicProvider in registry.ts
+    // Nova 2 Sonic supports only InvokeModelWithBidirectionalStream. It must not appear in the
+    // ordinary InvokeModel mapping, and AWS publishes no geo inference profile for it.
+    expect(AWS_BEDROCK_MODELS['amazon.nova-2-sonic-v1:0']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-sonic-v1:0']).toBeUndefined();
   });
 });
 

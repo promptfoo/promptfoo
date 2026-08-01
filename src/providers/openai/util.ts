@@ -576,12 +576,6 @@ export function getOpenAiEffectiveServiceTier<TServiceTier extends string | null
     : providerPassthroughServiceTier;
 }
 
-export function normalizeOpenAiServiceTierForWire(
-  serviceTier: string | null | undefined,
-): string | null | undefined {
-  return serviceTier === 'fast' ? 'priority' : serviceTier;
-}
-
 export function assertOpenAiModelEndpointCompatibility(
   model: unknown,
   options: { allowTranscription?: boolean } = {},

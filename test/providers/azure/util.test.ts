@@ -77,13 +77,12 @@ describe('calculateAzureCost', () => {
     { id: 'gpt-5.6-sol', input: 5, output: 30, longInput: 10, longOutput: 45 },
     { id: 'gpt-5.6-terra', input: 2.5, output: 15, longInput: 5, longOutput: 22.5 },
     { id: 'gpt-5.6-luna', input: 1, output: 6, longInput: 2, longOutput: 9 },
-    { id: 'gpt-5.5-pro', input: 30, output: 180, longInput: 60, longOutput: 270 },
     {
-      id: 'gpt-5.5-pro-2026-04-23',
-      input: 30,
-      output: 180,
-      longInput: 60,
-      longOutput: 270,
+      id: 'gpt-5.5-2026-04-24',
+      input: 5,
+      output: 30,
+      longInput: 10,
+      longOutput: 45,
     },
   ])('uses the correct standard and long-context pricing for $id', ({
     id,
@@ -140,22 +139,13 @@ describe('calculateAzureCost', () => {
       longOutput: 9,
     },
     {
-      id: 'gpt-5.5-pro',
-      input: 30,
-      cached: 3,
-      output: 180,
-      longInput: 60,
-      longCached: 6,
-      longOutput: 270,
-    },
-    {
-      id: 'gpt-5.5-pro-2026-04-23',
-      input: 30,
-      cached: 3,
-      output: 180,
-      longInput: 60,
-      longCached: 6,
-      longOutput: 270,
+      id: 'gpt-5.5-2026-04-24',
+      input: 5,
+      cached: 0.5,
+      output: 30,
+      longInput: 10,
+      longCached: 1,
+      longOutput: 45,
     },
   ])('uses the correct cached-input rate for $id', ({
     id,
@@ -350,8 +340,17 @@ describe('calculateAzureCost', () => {
     ['gpt-5-chat-2025-10-03', 0.125],
     ['gpt-5-codex-2025-09-15', 0.125],
     ['gpt-5.5', 0.5],
+    ['gpt-5.5-2026-04-24', 0.5],
+    ['gpt-chat-latest', 0.5],
+    ['gpt-chat-latest-2026-06-24', 0.5],
+    ['gpt-chat-latest-2026-05-28', 0.5],
+    ['gpt-chat-latest-2026-05-05', 0.5],
     ['gpt-5.4', 0.25],
     ['gpt-5.2-2025-12-11', 0.175],
+    ['gpt-5.2-chat-2026-02-10', 0.175],
+    ['gpt-5.2-codex-2026-01-14', 0.175],
+    ['gpt-5.3-chat-2026-03-03', 0.175],
+    ['gpt-5.3-codex-2026-02-24', 0.175],
     ['gpt-5.1-codex-mini-2025-11-13', 0.025],
     ['gpt-4.1', 0.5],
     ['gpt-4.1-mini', 0.1],
@@ -359,6 +358,8 @@ describe('calculateAzureCost', () => {
     ['gpt-4o', 1.25],
     ['o4-mini', 0.275],
     ['o3-mini', 0.55],
+    ['claude-mythos-5', 1],
+    ['claude-mythos-preview', 2.5],
     ['claude-opus-4-6-20260205', 0.5],
   ])('uses the catalog cached-input rate for %s', (id, cachedInput) => {
     expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(
@@ -582,6 +583,18 @@ describe('calculateAzureCost', () => {
     expect(cost).toBeUndefined();
   });
 
+  it.each([
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    'gpt-5-chat-latest',
+  ])('does not price unpublished Azure model id %s', (id) => {
+    expect(AZURE_MODELS.some((model) => model.id === id)).toBe(false);
+    expect(calculateAzureCost(id, {}, 100, 50)).toBeUndefined();
+  });
+
   it('calculates cost for Microsoft MAI image models from output tokens', () => {
     // MAI-Image-2.5 bills image output at $33/1M tokens; input is unused here.
     const cost = calculateAzureCost('MAI-Image-2.5', {}, 0, 1000);
@@ -791,11 +804,16 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.6-terra', 2.5, 15],
     ['gpt-5.6-luna', 1, 6],
     ['gpt-5.5', 5, 30],
-    ['gpt-5.5-pro', 30, 180],
-    ['gpt-5.5-pro-2026-04-23', 30, 180],
+    ['gpt-5.5-2026-04-24', 5, 30],
+    ['gpt-chat-latest', 5, 30],
+    ['gpt-chat-latest-2026-06-24', 5, 30],
+    ['gpt-chat-latest-2026-05-28', 5, 30],
+    ['gpt-chat-latest-2026-05-05', 5, 30],
     ['gpt-5.2', 1.75, 14],
-    ['gpt-5.2-pro', 21, 168],
-    ['gpt-5.2-pro-2025-12-11', 21, 168],
+    ['gpt-5.2-chat-2026-02-10', 1.75, 14],
+    ['gpt-5.2-codex-2026-01-14', 1.75, 14],
+    ['gpt-5.3-chat-2026-03-03', 1.75, 14],
+    ['gpt-5.3-codex-2026-02-24', 1.75, 14],
     ['gpt-5.1-codex-max', 1.25, 10],
     ['gpt-5', 1.25, 10],
     ['gpt-5-pro', 15, 120],
@@ -811,6 +829,8 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.4-mini', 0.75, 4.5],
     ['gpt-5.4-nano', 0.2, 1.25],
     ['Phi-4-multimodal-instruct', 0.08, 0.32],
+    ['claude-mythos-5', 10, 50],
+    ['claude-mythos-preview', 25, 125],
     ['claude-haiku-4-5', 1, 5],
     ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],

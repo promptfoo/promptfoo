@@ -12,7 +12,6 @@ import {
   getTokenUsage,
   isOpenAiFirstPartyApiUrl,
   normalizeOpenAiBillingModelName,
-  normalizeOpenAiServiceTierForWire,
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
@@ -77,9 +76,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       : this.config.passthrough;
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
     const isFirstPartyCompletionApi = isOpenAiFirstPartyApiUrl(this.getApiUrl());
-    const requestServiceTier = isFirstPartyCompletionApi
-      ? undefined
-      : normalizeOpenAiServiceTierForWire(effectiveServiceTier);
+    const requestServiceTier = isFirstPartyCompletionApi ? undefined : effectiveServiceTier;
     const body = {
       model: this.modelName,
       prompt,

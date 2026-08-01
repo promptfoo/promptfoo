@@ -54,35 +54,35 @@ This also enables [model-graded assertions](#model-graded-tests) such as `llm-ru
 The `anthropic` provider passes model IDs to the Messages API. These are Anthropic's active
 models:
 
-| Model ID                                                                   | Description               |
-| -------------------------------------------------------------------------- | ------------------------- |
-| `anthropic:messages:claude-fable-5`                                        | Claude Fable 5            |
-| `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5 (limited) |
-| `anthropic:messages:claude-opus-5`                                         | Claude Opus 5             |
-| `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus           |
-| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus           |
-| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus           |
-| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus           |
-| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5           |
-| `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet         |
-| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet         |
-| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Claude 4.5 Haiku          |
+| Model ID                                                              | Description               |
+| --------------------------------------------------------------------- | ------------------------- |
+| `anthropic:messages:claude-fable-5`                                   | Claude Fable 5            |
+| `anthropic:messages:claude-mythos-5`                                  | Claude Mythos 5 (limited) |
+| `anthropic:messages:claude-opus-5`                                    | Claude Opus 5             |
+| `anthropic:messages:claude-opus-4-8`                                  | Claude 4.8 Opus           |
+| `anthropic:messages:claude-opus-4-7`                                  | Claude 4.7 Opus           |
+| `anthropic:messages:claude-opus-4-6`                                  | Claude 4.6 Opus           |
+| `anthropic:messages:claude-opus-4-5` (`claude-opus-4-5-20251101`)     | Claude 4.5 Opus           |
+| `anthropic:messages:claude-sonnet-5`                                  | Claude Sonnet 5           |
+| `anthropic:messages:claude-sonnet-4-6`                                | Claude 4.6 Sonnet         |
+| `anthropic:messages:claude-sonnet-4-5` (`claude-sonnet-4-5-20250929`) | Claude 4.5 Sonnet         |
+| `anthropic:messages:claude-haiku-4-5` (`claude-haiku-4-5-20251001`)   | Claude 4.5 Haiku          |
 
 Anthropic-operated endpoints have a separate lifecycle from Amazon Bedrock and Google Cloud.
 Promptfoo still accepts historical IDs for compatible gateways and cached-result cost scoring,
 but Anthropic's API will reject retired models:
 
-| Model ID                                  | Anthropic API state | Migration                                     |
-| ----------------------------------------- | ------------------- | --------------------------------------------- |
-| `claude-mythos-preview`                   | Deprecated          | Use `claude-mythos-5`                         |
-| `claude-opus-4-1-20250805`                | Deprecated          | Retires August 5, 2026; use `claude-opus-4-8` |
-| `claude-opus-4-20250514`                  | Retired             | Use `claude-opus-4-8`                         |
-| `claude-sonnet-4-20250514`                | Retired             | Use `claude-sonnet-4-6`                       |
-| `claude-3-7-sonnet-20250219`              | Retired             | Use `claude-sonnet-4-6`                       |
-| `claude-3-5-sonnet-20241022` / `20240620` | Retired             | Use `claude-sonnet-4-6`                       |
-| `claude-3-5-haiku-20241022`               | Retired             | Use `claude-haiku-4-5-20251001`               |
-| `claude-3-opus-20240229`                  | Retired             | Use `claude-opus-4-8`                         |
-| `claude-3-haiku-20240307`                 | Retired             | Use `claude-haiku-4-5-20251001`               |
+| Model ID                                  | Anthropic API state | Migration                                   |
+| ----------------------------------------- | ------------------- | ------------------------------------------- |
+| `claude-mythos-preview`                   | Deprecated          | Use `claude-mythos-5`                       |
+| `claude-opus-4-1-20250805`                | Deprecated          | Retires August 5, 2026; use `claude-opus-5` |
+| `claude-opus-4-20250514`                  | Retired             | Use `claude-opus-5`                         |
+| `claude-sonnet-4-20250514`                | Retired             | Use `claude-sonnet-4-6`                     |
+| `claude-3-7-sonnet-20250219`              | Retired             | Use `claude-sonnet-4-6`                     |
+| `claude-3-5-sonnet-20241022` / `20240620` | Retired             | Use `claude-sonnet-4-6`                     |
+| `claude-3-5-haiku-20241022`               | Retired             | Use `claude-haiku-4-5-20251001`             |
+| `claude-3-opus-20240229`                  | Retired             | Use `claude-opus-5`                         |
+| `claude-3-haiku-20240307`                 | Retired             | Use `claude-haiku-4-5-20251001`             |
 
 Check [Anthropic's model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations)
 for current dates and replacements.
@@ -105,12 +105,12 @@ lifecycle dates.
 | Claude Sonnet 5   | claude-sonnet-5                                       | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
-| Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
-| Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5-latest) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
-| Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5-latest)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
+| Claude 4.5 Opus   | claude-opus-4-5 (claude-opus-4-5-20251101)            | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
+| Claude 4.5 Sonnet | claude-sonnet-4-5 (claude-sonnet-4-5-20250929)        | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
+| Claude 4.5 Haiku  | claude-haiku-4-5 (claude-haiku-4-5-20251001)          | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
 | Claude 4.1 Opus   | claude-opus-4-1-20250805                              | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | claude-opus-4-20250514 (claude-opus-4-latest)         | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
-| Claude 4 Sonnet   | claude-sonnet-4-20250514 (claude-sonnet-4-latest)     | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
+| Claude 4 Opus     | claude-opus-4-0 (claude-opus-4-20250514)              | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
+| Claude 4 Sonnet   | claude-sonnet-4-0 (claude-sonnet-4-20250514)          | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
 | Claude 3.7 Sonnet | claude-3-7-sonnet-20250219 (claude-3-7-sonnet-latest) | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20241022 (claude-3-5-sonnet-latest) | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
 | Claude 3.5 Haiku  | claude-3-5-haiku-20241022 (claude-3-5-haiku-latest)   | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
@@ -627,7 +627,10 @@ $0.30/$3.75/$6.00 afterward, per million cached tokens.
 
 ### Claude Opus 4.8 notes
 
-Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
+Opus 4.8 is a previous-generation Opus model that builds directly on Opus 4.7. For current
+Opus-tier workloads, use Opus 5; for Anthropic's highest-capability generally available model,
+use Fable 5. Opus 4.8 supports the same feature set as Opus 4.7, so the guidance below applies
+unchanged. Promptfoo handles the model-level differences automatically:
 
 - **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
 - **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model decide how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Manual budget-based thinking (`thinking: { type: 'enabled', budget_tokens: N }`) is rejected with a 400.

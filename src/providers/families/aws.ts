@@ -4,6 +4,12 @@ import { isBedrockMantleResponsesModel } from '../bedrock/mantle';
 
 import type { ProviderFactory } from '../registryTypes';
 
+const NOVA_SONIC_MODEL_IDS = new Set(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0']);
+
+function isUnsupportedNova2SonicGeoId(modelName: string): boolean {
+  return /^[^.]+\.amazon\.nova-2-sonic-v1:0$/.test(modelName);
+}
+
 export const awsProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath.startsWith('bedrock:'),
@@ -11,11 +17,37 @@ export const awsProviderFactories: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      const isLegacyType = modelType === 'converse' || modelType === 'completion';
+      const bareModelName = splits.slice(1).join(':');
+
+      const requestedNovaSonicModel =
+        splits.length === 2 && modelType === 'nova-sonic'
+          ? 'amazon.nova-sonic-v1:0'
+          : splits.length === 2 && modelType === 'nova-2-sonic'
+            ? 'amazon.nova-2-sonic-v1:0'
+            : splits.length === 3 && NOVA_SONIC_MODEL_IDS.has(bareModelName)
+              ? bareModelName
+              : undefined;
+      if (isUnsupportedNova2SonicGeoId(bareModelName) || isUnsupportedNova2SonicGeoId(modelName)) {
+        throw new Error(
+          `Amazon Bedrock model "${bareModelName}" does not support geo inference IDs. ` +
+            'Use the bare "bedrock:amazon.nova-2-sonic-v1:0" model ID in a supported region.',
+        );
+      }
+      if (isLegacyType && NOVA_SONIC_MODEL_IDS.has(modelName)) {
+        throw new Error(
+          `Amazon Bedrock model "${modelName}" supports only InvokeModelWithBidirectionalStream, ` +
+            'not Converse or InvokeModel. Use its bare bedrock model ID.',
+        );
+      }
+      if (requestedNovaSonicModel) {
+        const { NovaSonicProvider } = await import('../bedrock/nova-sonic');
+        return new NovaSonicProvider(requestedNovaSonicModel, providerOptions);
+      }
 
       // Mythos is available only through Bedrock's Anthropic-compatible Messages endpoint.
       // Fable and Opus also support that endpoint when explicitly selected, while their bare
       // forms continue through Bedrock Runtime below.
-      const isLegacyType = modelType === 'converse' || modelType === 'completion';
       const anthropicModel =
         modelType === 'messages'
           ? modelName
@@ -115,12 +147,6 @@ export const awsProviderFactories: ProviderFactory[] = [
       // Handle Converse API
       if (modelType === 'converse') {
         return new AwsBedrockConverseProvider(modelName, providerOptions);
-      }
-
-      // Handle nova-sonic model
-      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
-        const { NovaSonicProvider } = await import('../bedrock/nova-sonic');
-        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
       // Handle Luma Ray video model

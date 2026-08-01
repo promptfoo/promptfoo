@@ -270,10 +270,7 @@ interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   };
 }
 
-type ContentType = 'AUDIO' | 'TEXT' | 'TOOL';
-
 type AudioMediaType = 'audio/wav' | 'audio/lpcm' | 'audio/mulaw' | 'audio/mpeg';
-type TextMediaType = 'text/plain' | 'application/json';
 
 interface AudioConfiguration {
   readonly mediaType: AudioMediaType;
@@ -285,26 +282,43 @@ interface AudioConfiguration {
 }
 
 interface TextConfiguration {
-  readonly contentType: ContentType;
-  readonly mediaType: TextMediaType;
+  readonly mediaType: 'text/plain';
 }
 
 export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
-    max_new_tokens?: number;
+    maxTokens?: number;
     temperature?: number;
-    top_p?: number;
-    top_k?: number;
-    stopSequences?: string[];
+    topP?: number;
+  };
+  turnDetectionConfiguration?: {
+    endpointingSensitivity?: 'HIGH' | 'MEDIUM' | 'LOW';
   };
   audioInputConfiguration?: Omit<AudioConfiguration, 'voiceId'>;
   audioOutputConfiguration?: Omit<AudioConfiguration, 'mediaType'> & {
     mediaType: 'audio/lpcm';
-    voiceId?: 'matthew' | 'tiffany' | 'amy';
+    voiceId?:
+      | 'matthew'
+      | 'tiffany'
+      | 'amy'
+      | 'olivia'
+      | 'lupe'
+      | 'carlos'
+      | 'ambre'
+      | 'florian'
+      | 'lennart'
+      | 'beatrice'
+      | 'lorenzo'
+      | 'tina'
+      | 'carolina'
+      | 'leo'
+      | 'kiara'
+      | 'arjun';
   };
   textInputConfiguration?: TextConfiguration;
-  textOutputConfiguration?: Omit<TextConfiguration, 'mediaType'> & {
-    mediaType: 'text/plain';
+  textOutputConfiguration?: TextConfiguration;
+  toolUseOutputConfiguration?: {
+    mediaType: 'application/json';
   };
   toolConfig?: {
     tools?: {
@@ -314,18 +328,19 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
         inputSchema: {
           json: {
             type: 'object';
-            properties: {
-              [propertyName: string]: {
-                description: string;
-                type: string;
-              };
-            };
+            properties: Record<string, unknown>;
             required: string[];
           };
         };
       };
     }[];
-    toolChoice?: 'any' | 'auto' | string; // Tool name
+    toolChoice?: {
+      any?: Record<string, never>;
+      auto?: Record<string, never>;
+      tool?: {
+        name: string;
+      };
+    };
   };
   /** Session timeout in milliseconds (default: 300000 = 5 minutes) */
   sessionTimeout?: number;
@@ -2338,7 +2353,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   // Nova 2 models with extended thinking support
   'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
-  'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
   'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2445,7 +2459,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
-  'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,

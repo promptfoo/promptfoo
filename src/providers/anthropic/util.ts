@@ -92,22 +92,23 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  // Claude 4.6 models
-  ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
+  // Claude 4.6 IDs are dateless pinned snapshots. Anthropic does not publish separate
+  // `-latest` pointers for them.
+  ...['claude-sonnet-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-opus-4-6', 'claude-opus-4-6-latest'].map((model) => ({
+  ...['claude-opus-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...['claude-opus-4-5', 'claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+  ...['claude-opus-4-5', 'claude-opus-4-5-20251101'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
@@ -119,7 +120,6 @@ export const ANTHROPIC_MODELS = [
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
     'claude-opus-4-0',
-    'claude-opus-4-latest',
   ].map((model) => ({
     id: model,
     cost: {
@@ -130,10 +130,8 @@ export const ANTHROPIC_MODELS = [
   ...[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-5-latest',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-0',
-    'claude-sonnet-4-latest',
   ].map((model) => ({
     id: model,
     cost: {
@@ -141,7 +139,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6, // $1 / MTok
