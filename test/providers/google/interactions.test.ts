@@ -1075,7 +1075,7 @@ describe('GoogleInteractionsProvider', () => {
             basePath: providerBasePath,
             responseSchema: 'file://response-schema.json',
             generationConfig: {
-              response_mime_type: 'application/vnd.provider+json',
+              response_mime_type: 'text/plain',
             },
           },
         });
@@ -1085,7 +1085,7 @@ describe('GoogleInteractionsProvider', () => {
             config: {
               basePath: promptBasePath,
               generationConfig: {
-                [mimeTypeField]: 'application/vnd.prompt+json',
+                [mimeTypeField]: 'application/json',
               },
             },
           },
@@ -1095,7 +1095,7 @@ describe('GoogleInteractionsProvider', () => {
         expect(JSON.parse(request.body as string).response_format).toEqual([
           {
             type: 'text',
-            mime_type: 'application/vnd.prompt+json',
+            mime_type: 'application/json',
             schema: {
               type: 'object',
               properties: { provider: { type: 'string' } },
@@ -1108,7 +1108,36 @@ describe('GoogleInteractionsProvider', () => {
     });
   }
 
-  it('merges a provider MIME type with a prompt-owned schema', async () => {
+  it('drops an inherited schema when a prompt requests plain text output', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        responseSchema: '{"type":"object","properties":{"provider":{"type":"string"}}}',
+      },
+    });
+
+    await provider.callApi('Locate the target.', {
+      prompt: {
+        config: {
+          generationConfig: { responseMimeType: 'text/plain' },
+        },
+      },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).response_format).toEqual([
+      {
+        type: 'text',
+        mime_type: 'text/plain',
+      },
+    ]);
+  });
+
+  it('defaults a prompt-owned schema to JSON instead of inheriting the provider MIME type', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },
       cached: false,
@@ -1134,7 +1163,7 @@ describe('GoogleInteractionsProvider', () => {
           basePath: providerBasePath,
           responseSchema: 'file://response-schema.json',
           generationConfig: {
-            response_mime_type: 'application/vnd.provider+json',
+            response_mime_type: 'text/plain',
           },
         },
       });
@@ -1152,7 +1181,7 @@ describe('GoogleInteractionsProvider', () => {
       expect(JSON.parse(request.body as string).response_format).toEqual([
         {
           type: 'text',
-          mime_type: 'application/vnd.provider+json',
+          mime_type: 'application/json',
           schema: {
             type: 'object',
             properties: { prompt: { type: 'string' } },

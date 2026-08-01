@@ -1009,8 +1009,12 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const rawResponseSchema = promptOwnsResponseSchema
       ? promptStructuredOutput.responseSchema
       : providerStructuredOutput?.responseSchema;
+    const responseMimeType =
+      promptStructuredOutput?.mimeType ??
+      (promptOwnsResponseSchema ? undefined : providerStructuredOutput?.mimeType) ??
+      (rawResponseSchema === undefined ? undefined : 'application/json');
     const responseSchema =
-      rawResponseSchema === undefined
+      rawResponseSchema === undefined || responseMimeType !== 'application/json'
         ? undefined
         : parseConfigResponseSchema(
             rawResponseSchema as string,
@@ -1018,10 +1022,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             promptOwnsResponseSchema ? promptBasePath : this.config.basePath,
           );
     const structuredOutput = {
-      mimeType:
-        promptStructuredOutput?.mimeType ??
-        providerStructuredOutput?.mimeType ??
-        (responseSchema === undefined ? undefined : 'application/json'),
+      mimeType: responseMimeType,
       schema: responseSchema,
     };
     const generatedVideoResponseFormat = config.vertexai
