@@ -11,6 +11,8 @@ interface VersionInfo {
   updateCommands?: {
     primary: string;
     alternative: string | null;
+    /** Custom images have no copyable command; the owner rebuilds from their own source. */
+    isCustomContainer?: boolean;
   };
   commandType?: 'docker' | 'npx' | 'npm';
 }

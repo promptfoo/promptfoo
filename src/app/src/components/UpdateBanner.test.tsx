@@ -97,6 +97,87 @@ describe('UpdateBanner', () => {
     });
   });
 
+  it('should announce a successful copy to assistive technology', async () => {
+    const user = userEvent.setup();
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: { primary: 'npm i -g promptfoo@latest', alternative: null },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+    mockClipboard({ writeText: vi.fn().mockResolvedValue(undefined) as Clipboard['writeText'] });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(screen.queryByText(/copied to clipboard/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Copy Update Command/i }));
+
+    // The icon swap alone conveys nothing to a screen reader, so both the accessible name and
+    // the polite live region must reflect the success.
+    await waitFor(() => {
+      expect(screen.getByText(/Update command copied to clipboard/i)).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /^Copied$/i })).toBeInTheDocument();
+  });
+
+  it('should not be an assertive live region', () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: { primary: 'npm i -g promptfoo@latest', alternative: null },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    // An available update is informational; role="alert" would interrupt screen readers.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /Update available/i })).toBeInTheDocument();
+  });
+
+  it('should tell custom-container users to rebuild instead of offering a command', () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        // /api/version returns an empty primary command for custom images: there is no
+        // command the user can run, so the banner must render rebuild guidance instead.
+        updateCommands: { primary: '', alternative: null, isCustomContainer: true },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+
+    renderWithProviders(<UpdateBanner />);
+
+    expect(
+      screen.getByText(/Update the Promptfoo source, dependency, or parent image/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Copy/i })).not.toBeInTheDocument();
+  });
+
   it("should make the don't remind me action clickable", async () => {
     const user = userEvent.setup();
     const dismiss = vi.fn();
