@@ -9,6 +9,7 @@
     "test": "promptfoo eval"
   },
   "dependencies": {
+    "@hono/node-server": "2.0.12",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.3.6"
   },

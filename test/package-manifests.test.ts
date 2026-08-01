@@ -9,7 +9,6 @@ type PackageManifest = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
-  overrides?: Record<string, string | Record<string, string>>;
   peerDependencies?: Record<string, string>;
 };
 
@@ -237,7 +236,8 @@ describe('package manifests', () => {
     expect(sdkRange).toBeDefined();
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
-    expect(packageJson.overrides?.[adapterName]).toBe('2.0.12');
+    expect(packageJson.optionalDependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBe('2.0.12');
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
     expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
@@ -250,6 +250,7 @@ describe('package manifests', () => {
     ]) {
       const manifest = readPackageJson<PackageManifest>(manifestPath);
       expect(manifest.dependencies?.[sdkName], manifestPath).toBe(sdkRange);
+      expect(manifest.dependencies?.[adapterName], manifestPath).toBe('2.0.12');
     }
   });
 
