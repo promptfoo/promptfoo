@@ -90,6 +90,8 @@ export interface AssistantErrorEntry {
 
 /** Hard cap for attribute body length on synthesized tool spans. */
 const TOOL_SPAN_BODY_LIMIT = 4096;
+const REDACTED_SUBAGENT_TRANSCRIPT =
+  '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -213,6 +215,48 @@ function isRawSubagentTranscript(result: unknown): boolean {
     'isRawTranscript' in result.task &&
     result.task.isRawTranscript === true
   );
+}
+
+function redactRawSubagentToolOutput(result: unknown): unknown {
+  if (!isRawSubagentTranscript(result)) {
+    return result;
+  }
+
+  const output = result as Record<string, unknown>;
+  const nestedTask = 'task' in output && typeof output.task === 'object' && output.task !== null;
+  const task = (nestedTask ? output.task : output) as Record<string, unknown>;
+  const redactedTask = {
+    ...task,
+    output: REDACTED_SUBAGENT_TRANSCRIPT,
+    ...('result' in task ? { result: REDACTED_SUBAGENT_TRANSCRIPT } : {}),
+    isRawTranscript: false,
+  };
+
+  return nestedTask ? { ...output, task: redactedTask } : redactedTask;
+}
+
+function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
+  return {
+    matcher: 'TaskOutput',
+    hooks: [
+      async (input) => {
+        if (
+          input.hook_event_name !== 'PostToolUse' ||
+          input.tool_name !== 'TaskOutput' ||
+          !isRawSubagentTranscript(input.tool_response)
+        ) {
+          return {};
+        }
+
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
+            updatedToolOutput: redactRawSubagentToolOutput(input.tool_response),
+          },
+        };
+      },
+    ],
+  };
 }
 
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
@@ -1215,6 +1259,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
+    // Sanitize raw background-agent transcripts before TaskOutput reaches the
+    // main model. User-provided hook matchers remain installed after this one.
+    const hooks = config.forward_subagent_text
+      ? config.hooks
+      : {
+          ...config.hooks,
+          PostToolUse: [
+            createTaskOutputTranscriptRedactionHook(),
+            ...(config.hooks?.PostToolUse ?? []),
+          ],
+        };
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     // Keys listed here are excluded from the cache key because they're either
@@ -1263,7 +1319,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       continue: config.continue,
       agents: config.agents,
       outputFormat: config.output_format,
-      hooks: config.hooks,
+      hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
       forwardSubagentText: config.forward_subagent_text,
@@ -1588,7 +1644,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                         entry.name === 'TaskOutput' &&
                         isRawSubagentTranscript(msg.tool_use_result) &&
                         !config.forward_subagent_text
-                          ? '[Subagent transcript omitted; set forward_subagent_text: true to include it]'
+                          ? REDACTED_SUBAGENT_TRANSCRIPT
                           : block.content;
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);

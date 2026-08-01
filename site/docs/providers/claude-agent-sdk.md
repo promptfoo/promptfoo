@@ -1024,7 +1024,7 @@ If you're testing scenarios where the agent asks questions, consider what answer
 
 ## Hooks
 
-Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+Promptfoo preserves all configured hooks, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Unless `forward_subagent_text` is enabled, Promptfoo first installs a `TaskOutput` hook that removes raw subagent transcripts before the main agent can read them. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
 
 The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
 
@@ -1038,8 +1038,10 @@ export default {
           matcher: 'Bash',
           hooks: [
             async (input) => ({
-              hookEventName: 'PostToolUse',
-              updatedToolOutput: redact(input.tool_response),
+              hookSpecificOutput: {
+                hookEventName: 'PostToolUse',
+                updatedToolOutput: redact(input.tool_response),
+              },
             }),
           ],
         },
@@ -1103,7 +1105,7 @@ assert:
 
 For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
 
-By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. If `TaskOutput` returns an unsummarized background-subagent transcript, Promptfoo redacts it from tool metadata, tracing, and cached eval results. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
+By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. If `TaskOutput` returns an unsummarized background-subagent transcript, Promptfoo redacts it before the main agent sees the tool result and again from tool metadata, tracing, and cached eval results. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
 
 ```yaml
 providers:

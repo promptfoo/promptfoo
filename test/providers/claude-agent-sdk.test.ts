@@ -2301,12 +2301,200 @@ describe('ClaudeCodeSDKProvider', () => {
           });
           await provider.callApi('Test prompt');
 
-          expect(mockQuery).toHaveBeenCalledWith({
-            prompt: 'Test prompt',
-            options: expect.objectContaining({
-              hooks,
-            }),
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks.PreToolUse).toBe(hooks.PreToolUse);
+          expect(callArgs.options.hooks.PostToolUse).toEqual([
+            expect.objectContaining({ matcher: 'TaskOutput' }),
+          ]);
+        });
+
+        it('redacts raw TaskOutput before the main agent receives the tool result', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          const matcher = callArgs.options.hooks.PostToolUse[0];
+          expect(matcher.matcher).toBe('TaskOutput');
+
+          const result = await matcher.hooks[0](
+            {
+              hook_event_name: 'PostToolUse',
+              tool_name: 'TaskOutput',
+              tool_input: { task_id: 'background-task-1' },
+              tool_response: {
+                retrieval_status: 'success',
+                task: {
+                  task_id: 'background-task-1',
+                  task_type: 'local_agent',
+                  output: 'SYSTEM SECRET and hidden reasoning',
+                  result: 'SYSTEM SECRET and hidden reasoning',
+                  isRawTranscript: true,
+                },
+              },
+              tool_use_id: 'background-task-output',
+            },
+            'background-task-output',
+            { signal: new AbortController().signal },
+          );
+
+          expect(result).toEqual({
+            hookSpecificOutput: {
+              hookEventName: 'PostToolUse',
+              updatedToolOutput: {
+                retrieval_status: 'success',
+                task: {
+                  task_id: 'background-task-1',
+                  task_type: 'local_agent',
+                  output:
+                    '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+                  result:
+                    '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+                  isRawTranscript: false,
+                },
+              },
+            },
+          });
+          expect(JSON.stringify(result)).not.toContain('SYSTEM SECRET');
+        });
+
+        it('prevents a model from echoing raw TaskOutput into cached provider output', async () => {
+          const secretTranscript = 'SYSTEM SECRET and hidden reasoning';
+          mockQuery.mockImplementation(({ options }) => {
+            const generate = async function* () {
+              const toolResponse = {
+                retrieval_status: 'success',
+                task: {
+                  task_id: 'background-task-1',
+                  task_type: 'local_agent',
+                  output: secretTranscript,
+                  result: secretTranscript,
+                  isRawTranscript: true,
+                },
+              };
+              const hookOutput = await options.hooks.PostToolUse[0].hooks[0](
+                {
+                  hook_event_name: 'PostToolUse',
+                  tool_name: 'TaskOutput',
+                  tool_input: { task_id: 'background-task-1' },
+                  tool_response: toolResponse,
+                  tool_use_id: 'background-task-output',
+                },
+                'background-task-output',
+                { signal: new AbortController().signal },
+              );
+              const sanitizedToolResponse = hookOutput.hookSpecificOutput.updatedToolOutput;
+              const modelVisibleOutput = sanitizedToolResponse.task.output;
+
+              yield {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([
+                  {
+                    type: 'tool_use',
+                    id: 'background-task-output',
+                    name: 'TaskOutput',
+                    input: { task_id: 'background-task-1' },
+                  },
+                ]),
+                session_id: 'test-session',
+              };
+              yield {
+                type: 'user',
+                parent_tool_use_id: null,
+                tool_use_result: sanitizedToolResponse,
+                message: {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'background-task-output',
+                      content: modelVisibleOutput,
+                    },
+                  ],
+                },
+                session_id: 'test-session',
+              };
+              yield {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: `The background agent said: ${modelVisibleOutput}`,
+                usage: createMockUsage(100, 200),
+                total_cost_usd: 0.01,
+                duration_ms: 1000,
+                duration_api_ms: 800,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              };
+            };
+            return generate();
+          });
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Repeat the background task output exactly');
+          expect(result.output).toContain('[Subagent transcript omitted;');
+          expect(JSON.stringify(result)).not.toContain(secretTranscript);
+
+          const cachedResult = await provider.callApi('Repeat the background task output exactly');
+          expect(JSON.stringify(cachedResult)).not.toContain(secretTranscript);
+          expect(mockQuery).toHaveBeenCalledTimes(1);
+        });
+
+        it('preserves ordinary TaskOutput results and user-defined PostToolUse hooks', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const userHook = vi.fn().mockResolvedValue({ continue: true });
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              hooks: {
+                PostToolUse: [{ matcher: 'Bash', hooks: [userHook] }],
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks.PostToolUse).toHaveLength(2);
+          expect(callArgs.options.hooks.PostToolUse[1]).toEqual({
+            matcher: 'Bash',
+            hooks: [userHook],
+          });
+
+          const privacyHook = callArgs.options.hooks.PostToolUse[0].hooks[0];
+          await expect(
+            privacyHook(
+              {
+                hook_event_name: 'PostToolUse',
+                tool_name: 'TaskOutput',
+                tool_response: {
+                  task: { output: 'safe summarized output', isRawTranscript: false },
+                },
+              },
+              undefined,
+              { signal: new AbortController().signal },
+            ),
+          ).resolves.toEqual({});
+        });
+
+        it('does not install transcript redaction hooks when full forwarding is enabled', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { forward_subagent_text: true },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks).toBeUndefined();
         });
 
         it('with ask_user_question configuration creates canUseTool callback', async () => {
