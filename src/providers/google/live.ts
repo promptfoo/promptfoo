@@ -30,12 +30,18 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions, FunctionCall } from './types';
+import type { CompletionOptions, FunctionCall, Tool } from './types';
 import type { GeminiFormat } from './util';
 
 const GEMINI_LIVE_TRANSLATE_MODEL = 'gemini-3.5-live-translate-preview';
 const ROBOTICS_TEXT_MODALITY_ERROR =
   'Gemini Robotics ER 2 Streaming only supports TEXT response modality. Omit generationConfig.response_modalities/responseModalities to use the TEXT default, or set it to ["TEXT"].';
+const LIVE_TRANSLATE_AUDIO_MODALITY_ERROR =
+  'Gemini 3.5 Live Translate only supports AUDIO response modality. Omit generationConfig.response_modalities/responseModalities to use the AUDIO default, or set it to ["AUDIO"].';
+const ROBOTICS_CODE_EXECUTION_ERROR =
+  'Gemini Robotics ER 2 Streaming does not support code execution. Use function calling or Google Search instead.';
+const ROBOTICS_STRUCTURED_OUTPUT_ERROR =
+  'Gemini Robotics ER 2 Streaming does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
 
 function getRoboticsResponseModalityError(
   isRoboticsStreamingModel: boolean,
@@ -49,6 +55,62 @@ function getRoboticsResponseModalityError(
     : ROBOTICS_TEXT_MODALITY_ERROR;
 }
 
+function getLiveTranslateResponseModalityError(
+  responseModalities: string[] | undefined,
+): string | undefined {
+  if (responseModalities === undefined) {
+    return undefined;
+  }
+  return responseModalities.length === 1 && responseModalities[0] === 'AUDIO'
+    ? undefined
+    : LIVE_TRANSLATE_AUDIO_MODALITY_ERROR;
+}
+
+function getRoboticsStructuredOutputError(
+  isRoboticsStreamingModel: boolean,
+  config: CompletionOptions,
+): string | undefined {
+  if (!isRoboticsStreamingModel) {
+    return undefined;
+  }
+  const generationConfig = config.generationConfig as
+    | (NonNullable<CompletionOptions['generationConfig']> & {
+        responseSchema?: unknown;
+        responseMimeType?: unknown;
+      })
+    | undefined;
+  return config.responseSchema !== undefined ||
+    generationConfig?.response_schema !== undefined ||
+    generationConfig?.response_mime_type !== undefined ||
+    generationConfig?.responseSchema !== undefined ||
+    generationConfig?.responseMimeType !== undefined
+    ? ROBOTICS_STRUCTURED_OUTPUT_ERROR
+    : undefined;
+}
+
+function hasCodeExecutionTool(tools: Tool[]): boolean {
+  return tools.some(
+    (tool) =>
+      tool.codeExecution !== undefined ||
+      (tool as Tool & { code_execution?: unknown }).code_execution !== undefined,
+  );
+}
+
+function getRoboticsConfigError(
+  isRoboticsStreamingModel: boolean,
+  config: CompletionOptions,
+  responseModalities: string[] | undefined,
+  tools: Tool[],
+): string | undefined {
+  return (
+    getRoboticsResponseModalityError(isRoboticsStreamingModel, responseModalities) ??
+    getRoboticsStructuredOutputError(isRoboticsStreamingModel, config) ??
+    (isRoboticsStreamingModel && hasCodeExecutionTool(tools)
+      ? ROBOTICS_CODE_EXECUTION_ERROR
+      : undefined)
+  );
+}
+
 function hasUnsupportedLiveTranslateToolsOrInstructions(
   config: CompletionOptions,
   systemInstruction: unknown,
@@ -56,9 +118,25 @@ function hasUnsupportedLiveTranslateToolsOrInstructions(
   const hasTools = Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools);
   return (
     hasTools ||
+    config.tool_choice !== undefined ||
+    config.toolConfig !== undefined ||
+    config.tool_config !== undefined ||
     config.mcp?.enabled ||
     Boolean(config.functionToolStatefulApi?.file) ||
     Boolean(systemInstruction)
+  );
+}
+
+function getUnsupportedLiveTranslateConfigurationError(
+  config: CompletionOptions,
+  systemInstruction: unknown,
+  responseModalities: string[] | undefined,
+): string | undefined {
+  return (
+    getLiveTranslateResponseModalityError(responseModalities) ??
+    (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)
+      ? 'Gemini 3.5 Live Translate does not support tools or instructions.'
+      : undefined)
   );
 }
 
@@ -307,13 +385,6 @@ export class GoogleLiveProvider implements ApiProvider {
     const configuredResponseModalities = (
       config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
     )?.map((modality) => modality.toUpperCase());
-    const responseModalityError = getRoboticsResponseModalityError(
-      supportsTextResponse,
-      configuredResponseModalities,
-    );
-    if (responseModalityError) {
-      return { error: responseModalityError };
-    }
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -343,10 +414,13 @@ export class GoogleLiveProvider implements ApiProvider {
             'Gemini 3.5 Live Translate requires apiVersion v1beta; remove the override or set apiVersion to v1beta.',
         };
       }
-      if (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)) {
-        return {
-          error: 'Gemini 3.5 Live Translate does not support tools or instructions.',
-        };
+      const unsupportedConfigurationError = getUnsupportedLiveTranslateConfigurationError(
+        config,
+        systemInstruction,
+        configuredResponseModalities,
+      );
+      if (unsupportedConfigurationError) {
+        return { error: unsupportedConfigurationError };
       }
       const hasOnlySupportedPcmAudio =
         contents.length > 0 &&
@@ -427,6 +501,15 @@ export class GoogleLiveProvider implements ApiProvider {
     const requestTools = toolsDisabled
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
+    const roboticsConfigError = getRoboticsConfigError(
+      supportsTextResponse,
+      config,
+      configuredResponseModalities,
+      requestTools,
+    );
+    if (roboticsConfigError) {
+      return { error: roboticsConfigError };
+    }
 
     // Lazy-load the `ws` implementation so merely importing this module stays cheap;
     // the Live provider is itself dynamically imported by the Google provider family.

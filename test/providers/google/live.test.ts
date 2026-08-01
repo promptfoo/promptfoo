@@ -293,6 +293,17 @@ describe('GoogleLiveProvider', () => {
     provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
       config: {
         generationConfig: { response_modalities: ['text'] },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'locate_object',
+                description: 'Locate an object in the current scene.',
+              },
+            ],
+          },
+          { googleSearch: {} },
+        ],
         timeoutMs: 500,
         apiKey: 'test-api-key',
       },
@@ -317,6 +328,17 @@ describe('GoogleLiveProvider', () => {
       setup: {
         model: 'models/gemini-robotics-er-2-streaming-preview',
         generationConfig: { responseModalities: ['TEXT'] },
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'locate_object',
+                description: 'Locate an object in the current scene.',
+              },
+            ],
+          },
+          { googleSearch: {} },
+        ],
       },
     });
     expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
@@ -348,6 +370,74 @@ describe('GoogleLiveProvider', () => {
     const response = await provider.callApi('Locate the object.');
 
     expect(response.error).toContain('only supports TEXT response modality');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['camel-case code execution', { tools: [{ codeExecution: {} }] }, 'code execution'],
+    ['snake-case code execution', { tools: [{ code_execution: {} }] }, 'code execution'],
+    ['top-level responseSchema', { responseSchema: '{"type":"object"}' }, 'structured output'],
+    [
+      'generationConfig.response_schema',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          response_schema: { type: 'OBJECT' },
+        },
+      },
+      'structured output',
+    ],
+    [
+      'generationConfig.response_mime_type',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          response_mime_type: 'application/json',
+        },
+      },
+      'structured output',
+    ],
+    [
+      'generationConfig.responseSchema',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          responseSchema: { type: 'OBJECT' },
+        },
+      },
+      'structured output',
+    ],
+    [
+      'generationConfig.responseMimeType',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          responseMimeType: 'application/json',
+        },
+      },
+      'structured output',
+    ],
+  ])('should reject unsupported %s for Gemini Robotics ER 2 Streaming before opening a socket', async (_case, unsupportedConfig, error) => {
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        generationConfig: { responseModalities: ['TEXT'] },
+        ...unsupportedConfig,
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      } as any,
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+
+    expect(response.error).toContain(error);
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
@@ -385,7 +475,6 @@ describe('GoogleLiveProvider', () => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
-          response_modalities: ['audio'],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           translationConfig: {
@@ -456,6 +545,95 @@ describe('GoogleLiveProvider', () => {
       { realtimeInput: { audioStreamEnd: true } },
     ]);
     expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
+  });
+
+  it.each([
+    ['IMAGE response_modalities', { response_modalities: ['IMAGE'] }],
+    ['mixed responseModalities', { responseModalities: ['AUDIO', 'IMAGE'] }],
+    ['empty response_modalities', { response_modalities: [] }],
+  ])('should reject Live Translate with %s before opening a socket', async (_case, responseModalities) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          ...responseModalities,
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain('only supports AUDIO response modality');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['tool_choice', { tool_choice: 'none' }],
+    ['toolConfig', { toolConfig: { functionCallingConfig: { mode: 'NONE' } } }],
+    ['tool_config', { tool_config: { function_calling_config: { mode: 'NONE' } } }],
+  ])('should reject Live Translate %s without tools before opening a socket', async (_case, toolPolicy) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+        ...toolPolicy,
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      } as any,
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain('does not support tools or instructions');
+    expect(WebSocket).not.toHaveBeenCalled();
   });
 
   it.each([
