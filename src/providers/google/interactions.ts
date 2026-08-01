@@ -88,10 +88,16 @@ function parseInteractionInput(
 ): ParsedInteractionInput {
   try {
     const parsedPrompt = JSON.parse(prompt) as unknown;
-    const envelopeSystemInstruction =
+    const promptEnvelope =
       parsedPrompt && typeof parsedPrompt === 'object' && !Array.isArray(parsedPrompt)
-        ? getInteractionText((parsedPrompt as { system_instruction?: unknown }).system_instruction)
-        : [];
+        ? (parsedPrompt as {
+            system_instruction?: unknown;
+            systemInstruction?: unknown;
+          })
+        : undefined;
+    const envelopeSystemInstruction = getInteractionText(
+      promptEnvelope?.system_instruction ?? promptEnvelope?.systemInstruction,
+    );
     const parsed =
       parsedPrompt &&
       typeof parsedPrompt === 'object' &&
@@ -386,6 +392,7 @@ type InteractionStructuredOutputLayer = {
 function parseInteractionStructuredOutput(
   layers: InteractionStructuredOutputLayer[],
   contextVars?: CallApiContextParams['vars'],
+  basePath?: string,
 ): { mimeType?: string; schema?: unknown } {
   let legacyMimeType: unknown;
   let legacyResponseSchema: unknown;
@@ -427,7 +434,7 @@ function parseInteractionStructuredOutput(
   const schema =
     legacyResponseSchema === undefined
       ? undefined
-      : parseConfigResponseSchema(legacyResponseSchema as string, contextVars);
+      : parseConfigResponseSchema(legacyResponseSchema as string, contextVars, basePath);
   const mimeType =
     typeof legacyMimeType === 'string'
       ? legacyMimeType
@@ -458,8 +465,11 @@ function getInteractionModalityTokenCount(
 function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
   const steps = data.steps || [];
   const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
+  const latestToolStep = steps
+    .map((step) => step.type?.endsWith('_call') || step.type?.endsWith('_result'))
+    .lastIndexOf(true);
   return steps
-    .slice(latestUserInput + 1)
+    .slice(Math.max(latestUserInput, latestToolStep) + 1)
     .filter((step) => step.type === 'model_output')
     .flatMap((step) => step.content || []);
 }
@@ -846,6 +856,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
               },
             ],
             context?.vars,
+            this.config.basePath,
           )
         : undefined;
     const hasPromptStructuredOutput =
@@ -870,6 +881,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
               },
             ],
             context?.vars,
+            this.config.basePath,
           )
         : undefined;
     const structuredOutput = hasPromptStructuredOutput

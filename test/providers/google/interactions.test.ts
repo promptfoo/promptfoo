@@ -1,6 +1,11 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { storeBlob } from '../../../src/blobs';
 import { fetchWithCache } from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import { GoogleInteractionsProvider } from '../../../src/providers/google/interactions';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
@@ -402,6 +407,36 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
+  it('preserves camelCase systemInstruction from a Gemini prompt envelope', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi(
+      JSON.stringify({
+        systemInstruction: { parts: [{ text: 'Keep the robot inside the marked area.' }] },
+        contents: [{ role: 'user', parts: [{ text: 'Move toward the banana.' }] }],
+      }),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.system_instruction).toBe('Keep the robot inside the marked area.');
+    expect(body.input).toEqual([
+      {
+        type: 'user_input',
+        content: [{ type: 'text', text: 'Move toward the banana.' }],
+      },
+    ]);
+  });
+
   it('extracts standard chat system roles into the Robotics system instruction', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -703,6 +738,55 @@ describe('GoogleInteractionsProvider', () => {
         },
       },
     ]);
+  });
+
+  it('resolves responseSchema files from the provider basePath before the CLI base path', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-interactions-schema-'));
+    const providerBasePath = path.join(root, 'provider');
+    const cliBasePath = path.join(root, 'cli');
+    fs.mkdirSync(providerBasePath);
+    fs.mkdirSync(cliBasePath);
+    fs.writeFileSync(
+      path.join(providerBasePath, 'response-schema.json'),
+      JSON.stringify({ type: 'object', properties: { provider: { type: 'string' } } }),
+    );
+    fs.writeFileSync(
+      path.join(cliBasePath, 'response-schema.json'),
+      JSON.stringify({ type: 'object', properties: { cli: { type: 'string' } } }),
+    );
+    const originalCliBasePath = cliState.basePath;
+    cliState.basePath = cliBasePath;
+
+    try {
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          basePath: providerBasePath,
+          responseSchema: 'file://response-schema.json',
+        },
+      });
+
+      await provider.callApi('Locate the target.');
+
+      const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(request.body as string).response_format).toEqual([
+        {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: {
+            type: 'object',
+            properties: { provider: { type: 'string' } },
+          },
+        },
+      ]);
+    } finally {
+      cliState.basePath = originalCliBasePath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('translates generationConfig structured-output fields for Robotics ER 2', async () => {
@@ -1245,6 +1329,37 @@ describe('GoogleInteractionsProvider', () => {
       metadata: { interactionId: 'interaction-robotics-override', status: 'completed' },
     });
     expect(result.video).toBeUndefined();
+  });
+
+  it('returns only model output after the final managed-tool step', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'I will search for the current answer.' }],
+          },
+          { type: 'google_search_call' },
+          { type: 'google_search_result' },
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'The grounded final answer.' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { tools: [{ type: 'google_search' }] },
+      },
+    });
+
+    const result = await provider.callApi('Find the current answer.');
+
+    expect(result.output).toBe('The grounded final answer.');
   });
 
   it('rejects generateContent-style Robotics tools instead of silently dropping them', async () => {

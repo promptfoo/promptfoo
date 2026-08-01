@@ -440,6 +440,9 @@ export interface CompletionOptions {
  * { vertexai: true, apiKey: 'your-key' }
  */
 export interface GoogleProviderConfig extends CompletionOptions {
+  /** Base directory for resolving relative file references in provider configuration. */
+  basePath?: string;
+
   /**
    * Explicitly enable Vertex AI mode.
    *

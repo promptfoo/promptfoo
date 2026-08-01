@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import path from 'path';
 
 import Clone from 'rfdc';
 import { z } from 'zod';
@@ -1335,15 +1336,20 @@ export function parseConfigSystemInstruction(
  *
  * @param configResponseSchema - Inline JSON or a reference to an external schema file
  * @param contextVars - Variables for template rendering
+ * @param basePath - Optional base directory for resolving relative schema file references
  * @returns The parsed and rendered response schema
  */
 export function parseConfigResponseSchema(
   configResponseSchema: string,
   contextVars?: Record<string, VarValue>,
+  basePath?: string,
 ): unknown {
-  let responseSchema = maybeLoadFromExternalFile(
-    renderVarsInObject(configResponseSchema, contextVars),
-  );
+  const renderedSchema = renderVarsInObject(configResponseSchema, contextVars);
+  const schemaReference =
+    basePath && typeof renderedSchema === 'string' && renderedSchema.startsWith('file://')
+      ? `file://${path.resolve(basePath, renderedSchema.slice('file://'.length))}`
+      : renderedSchema;
+  let responseSchema = maybeLoadFromExternalFile(schemaReference);
   if (typeof responseSchema === 'string') {
     try {
       responseSchema = JSON.parse(responseSchema);

@@ -603,14 +603,14 @@ providers:
   - id: xai:video:grok-imagine-video-1.5
     config:
       image:
-        url: 'https://example.com/source-image.jpg'
+        url: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/google-vertex/assets/red-panda.jpg'
       duration: 5 # 1-15 seconds
       aspect_ratio: '16:9'
       resolution: '720p'
 
 tests:
   - vars:
-      scene: a cat playing with yarn
+      scene: a red panda playing with yarn
     assert:
       - type: cost
         threshold: 1.0
