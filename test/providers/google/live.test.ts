@@ -441,6 +441,102 @@ describe('GoogleLiveProvider', () => {
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      'response modality',
+      { generationConfig: { responseModalities: ['AUDIO'] } },
+      'only supports TEXT response modality',
+      undefined,
+    ],
+    [
+      'structured output',
+      {
+        generationConfig: {
+          responseModalities: ['TEXT'],
+          response_mime_type: 'application/json',
+        },
+      },
+      'structured output',
+      undefined,
+    ],
+    [
+      'code execution',
+      {
+        tools: [{ codeExecution: {} }],
+      },
+      'code execution',
+      undefined,
+    ],
+    [
+      'camel-case Google Maps',
+      {
+        tools: [{ googleMaps: {} }],
+      },
+      'Google Maps or URL context',
+      undefined,
+    ],
+    [
+      'camel-case URL context',
+      {
+        tools: [{ urlContext: {} }],
+      },
+      'Google Maps or URL context',
+      undefined,
+    ],
+    [
+      'external snake-case Google Maps',
+      {
+        tools: 'file://tools.js:getTools',
+      },
+      'Google Maps or URL context',
+      [{ google_maps: {} }],
+    ],
+    [
+      'external snake-case URL context',
+      {
+        tools: 'file://tools.js:getTools',
+      },
+      'Google Maps or URL context',
+      [{ url_context: {} }],
+    ],
+  ])('should reject Robotics ER 2 Streaming %s before starting a worker or opening a socket', async (_case, rejectedConfig, error, externalTools) => {
+    const mockSpawn = vi.mocked((await import('child_process')).spawn);
+    mockSpawn.mockClear();
+    mockImportModule.mockReset();
+    if (externalTools) {
+      mockImportModule.mockResolvedValue({
+        getTools: () => externalTools,
+      });
+    }
+
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        generationConfig: { responseModalities: ['TEXT'] },
+        ...rejectedConfig,
+        functionToolStatefulApi: {
+          file: 'examples/google-live/counter_api.py',
+          url: 'http://127.0.0.1:8765',
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      } as any,
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+
+    expect(response.error).toContain(error);
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
   it('should default Gemini Robotics ER 2 Streaming to text output', async () => {
     provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
       config: {

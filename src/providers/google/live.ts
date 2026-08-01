@@ -40,6 +40,8 @@ const LIVE_TRANSLATE_AUDIO_MODALITY_ERROR =
   'Gemini 3.5 Live Translate only supports AUDIO response modality. Omit generationConfig.response_modalities/responseModalities to use the AUDIO default, or set it to ["AUDIO"].';
 const ROBOTICS_CODE_EXECUTION_ERROR =
   'Gemini Robotics ER 2 Streaming does not support code execution. Use function calling or Google Search instead.';
+const ROBOTICS_GROUNDING_ERROR =
+  'Gemini Robotics ER 2 Streaming does not support Google Maps or URL context grounding. Use Google Search instead.';
 const ROBOTICS_STRUCTURED_OUTPUT_ERROR =
   'Gemini Robotics ER 2 Streaming does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
 
@@ -96,6 +98,36 @@ function hasCodeExecutionTool(tools: Tool[]): boolean {
   );
 }
 
+function hasUnsupportedRoboticsGroundingTool(tools: Tool[]): boolean {
+  return tools.some((tool) => {
+    const groundingTool = tool as Tool & {
+      googleMaps?: unknown;
+      google_maps?: unknown;
+      urlContext?: unknown;
+      url_context?: unknown;
+    };
+    return (
+      groundingTool.googleMaps !== undefined ||
+      groundingTool.google_maps !== undefined ||
+      groundingTool.urlContext !== undefined ||
+      groundingTool.url_context !== undefined
+    );
+  });
+}
+
+function getRoboticsToolError(
+  isRoboticsStreamingModel: boolean,
+  tools: Tool[],
+): string | undefined {
+  if (!isRoboticsStreamingModel) {
+    return undefined;
+  }
+  if (hasCodeExecutionTool(tools)) {
+    return ROBOTICS_CODE_EXECUTION_ERROR;
+  }
+  return hasUnsupportedRoboticsGroundingTool(tools) ? ROBOTICS_GROUNDING_ERROR : undefined;
+}
+
 function getRoboticsConfigError(
   isRoboticsStreamingModel: boolean,
   config: CompletionOptions,
@@ -105,9 +137,7 @@ function getRoboticsConfigError(
   return (
     getRoboticsResponseModalityError(isRoboticsStreamingModel, responseModalities) ??
     getRoboticsStructuredOutputError(isRoboticsStreamingModel, config) ??
-    (isRoboticsStreamingModel && hasCodeExecutionTool(tools)
-      ? ROBOTICS_CODE_EXECUTION_ERROR
-      : undefined)
+    getRoboticsToolError(isRoboticsStreamingModel, tools)
   );
 }
 
@@ -450,6 +480,33 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
+    // Load and validate tools before starting the stateful worker or creating a WebSocket.
+    // Disabled mode removes executable Python/JS tool refs before loading so non-function
+    // tools stay available without executing user code.
+    const configTools = toolsDisabled
+      ? stripExecutableToolFileReferences(config.tools, context?.vars)
+      : config.tools;
+    const fileTools = configTools
+      ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
+      : [];
+    const normalizedTools = Array.isArray(fileTools)
+      ? normalizeTools(fileTools)
+      : fileTools
+        ? [fileTools]
+        : [];
+    const requestTools = toolsDisabled
+      ? removeGoogleFunctionDeclarations(normalizedTools)
+      : normalizedTools;
+    const roboticsConfigError = getRoboticsConfigError(
+      supportsTextResponse,
+      config,
+      configuredResponseModalities,
+      requestTools,
+    );
+    if (roboticsConfigError) {
+      return { error: roboticsConfigError };
+    }
+
     let statefulApi: ChildProcess | undefined;
     if (!toolsDisabled && config.functionToolStatefulApi?.file) {
       try {
@@ -482,33 +539,6 @@ export class GoogleLiveProvider implements ApiProvider {
       } catch (err) {
         logger.error(`Failed to spawn Python API: ${JSON.stringify(err)}`);
       }
-    }
-
-    // Load tools before creating WebSocket Promise. Disabled mode removes executable
-    // Python/JS tool refs before loading so non-function tools stay available without
-    // executing user code.
-    const configTools = toolsDisabled
-      ? stripExecutableToolFileReferences(config.tools, context?.vars)
-      : config.tools;
-    const fileTools = configTools
-      ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
-      : [];
-    const normalizedTools = Array.isArray(fileTools)
-      ? normalizeTools(fileTools)
-      : fileTools
-        ? [fileTools]
-        : [];
-    const requestTools = toolsDisabled
-      ? removeGoogleFunctionDeclarations(normalizedTools)
-      : normalizedTools;
-    const roboticsConfigError = getRoboticsConfigError(
-      supportsTextResponse,
-      config,
-      configuredResponseModalities,
-      requestTools,
-    );
-    if (roboticsConfigError) {
-      return { error: roboticsConfigError };
     }
 
     // Lazy-load the `ws` implementation so merely importing this module stays cheap;

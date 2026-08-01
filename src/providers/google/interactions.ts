@@ -399,11 +399,10 @@ type InteractionStructuredOutputLayer = {
   responseSchema?: string;
 };
 
-function parseInteractionStructuredOutput(
-  layers: InteractionStructuredOutputLayer[],
-  contextVars?: CallApiContextParams['vars'],
-  basePath?: string,
-): { mimeType?: string; schema?: unknown } {
+function resolveInteractionStructuredOutput(layers: InteractionStructuredOutputLayer[]): {
+  mimeType?: string;
+  responseSchema?: unknown;
+} {
   let legacyMimeType: unknown;
   let legacyResponseSchema: unknown;
   for (const layer of layers) {
@@ -441,17 +440,10 @@ function parseInteractionStructuredOutput(
     }
   }
 
-  const schema =
-    legacyResponseSchema === undefined
-      ? undefined
-      : parseConfigResponseSchema(legacyResponseSchema as string, contextVars, basePath);
-  const mimeType =
-    typeof legacyMimeType === 'string'
-      ? legacyMimeType
-      : schema === undefined
-        ? undefined
-        : 'application/json';
-  return { mimeType, schema };
+  return {
+    ...(typeof legacyMimeType === 'string' ? { mimeType: legacyMimeType } : {}),
+    ...(legacyResponseSchema === undefined ? {} : { responseSchema: legacyResponseSchema }),
+  };
 }
 
 function normalizeInteractionSafetySettings(
@@ -861,51 +853,61 @@ export class GoogleInteractionsProvider implements ApiProvider {
         : undefined;
     const promptStructuredOutput =
       !isVideoModel && promptPassthroughResponseFormat === undefined
-        ? parseInteractionStructuredOutput(
-            [
-              {
-                generationConfigs: [promptConfig?.generationConfig],
-                responseSchema: promptConfig?.responseSchema,
-              },
-              {
-                generationConfigs: [
-                  promptPassthrough.generationConfig,
-                  promptPassthrough.generation_config,
-                ],
-              },
-            ],
-            context?.vars,
-            promptBasePath,
-          )
+        ? resolveInteractionStructuredOutput([
+            {
+              generationConfigs: [promptConfig?.generationConfig],
+              responseSchema: promptConfig?.responseSchema,
+            },
+            {
+              generationConfigs: [
+                promptPassthrough.generationConfig,
+                promptPassthrough.generation_config,
+              ],
+            },
+          ])
         : undefined;
     const hasPromptStructuredOutput =
       promptStructuredOutput?.mimeType !== undefined ||
-      promptStructuredOutput?.schema !== undefined;
+      promptStructuredOutput?.responseSchema !== undefined;
     const passthroughResponseFormat =
       promptPassthroughResponseFormat ??
       (hasPromptStructuredOutput ? undefined : providerPassthroughResponseFormat);
     const providerStructuredOutput =
-      !isVideoModel && passthroughResponseFormat === undefined && !hasPromptStructuredOutput
-        ? parseInteractionStructuredOutput(
-            [
-              {
-                generationConfigs: [this.config.generationConfig],
-                responseSchema: this.config.responseSchema,
-              },
-              {
-                generationConfigs: [
-                  providerPassthrough.generationConfig,
-                  providerPassthrough.generation_config,
-                ],
-              },
-            ],
-            context?.vars,
-            this.config.basePath,
-          )
+      !isVideoModel &&
+      passthroughResponseFormat === undefined &&
+      providerPassthroughResponseFormat === undefined
+        ? resolveInteractionStructuredOutput([
+            {
+              generationConfigs: [this.config.generationConfig],
+              responseSchema: this.config.responseSchema,
+            },
+            {
+              generationConfigs: [
+                providerPassthrough.generationConfig,
+                providerPassthrough.generation_config,
+              ],
+            },
+          ])
         : undefined;
-    const structuredOutput = hasPromptStructuredOutput
-      ? promptStructuredOutput
-      : providerStructuredOutput;
+    const promptOwnsResponseSchema = promptStructuredOutput?.responseSchema !== undefined;
+    const rawResponseSchema = promptOwnsResponseSchema
+      ? promptStructuredOutput.responseSchema
+      : providerStructuredOutput?.responseSchema;
+    const responseSchema =
+      rawResponseSchema === undefined
+        ? undefined
+        : parseConfigResponseSchema(
+            rawResponseSchema as string,
+            context?.vars,
+            promptOwnsResponseSchema ? promptBasePath : this.config.basePath,
+          );
+    const structuredOutput = {
+      mimeType:
+        promptStructuredOutput?.mimeType ??
+        providerStructuredOutput?.mimeType ??
+        (responseSchema === undefined ? undefined : 'application/json'),
+      schema: responseSchema,
+    };
     const generatedVideoResponseFormat = config.vertexai
       ? [
           {

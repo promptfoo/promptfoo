@@ -929,6 +929,125 @@ describe('GoogleInteractionsProvider', () => {
     }
   });
 
+  for (const [alias, mimeTypeField] of [
+    ['camelCase', 'responseMimeType'],
+    ['snake_case', 'response_mime_type'],
+  ]) {
+    it(`merges a provider-owned schema with a prompt MIME type using the ${alias} alias`, async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { status: 'completed', steps: [] },
+        cached: false,
+      } as any);
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-interactions-layered-schema-'));
+      const providerBasePath = path.join(root, 'provider');
+      const promptBasePath = path.join(root, 'prompt');
+      fs.mkdirSync(providerBasePath);
+      fs.mkdirSync(promptBasePath);
+      fs.writeFileSync(
+        path.join(providerBasePath, 'response-schema.json'),
+        JSON.stringify({ type: 'object', properties: { provider: { type: 'string' } } }),
+      );
+      fs.writeFileSync(
+        path.join(promptBasePath, 'response-schema.json'),
+        JSON.stringify({ type: 'object', properties: { prompt: { type: 'string' } } }),
+      );
+
+      try {
+        const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerBasePath,
+            responseSchema: 'file://response-schema.json',
+            generationConfig: {
+              response_mime_type: 'application/vnd.provider+json',
+            },
+          },
+        });
+
+        await provider.callApi('Locate the target.', {
+          prompt: {
+            config: {
+              basePath: promptBasePath,
+              generationConfig: {
+                [mimeTypeField]: 'application/vnd.prompt+json',
+              },
+            },
+          },
+        } as any);
+
+        const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+        expect(JSON.parse(request.body as string).response_format).toEqual([
+          {
+            type: 'text',
+            mime_type: 'application/vnd.prompt+json',
+            schema: {
+              type: 'object',
+              properties: { provider: { type: 'string' } },
+            },
+          },
+        ]);
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it('merges a provider MIME type with a prompt-owned schema', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-interactions-layered-mime-'));
+    const providerBasePath = path.join(root, 'provider');
+    const promptBasePath = path.join(root, 'prompt');
+    fs.mkdirSync(providerBasePath);
+    fs.mkdirSync(promptBasePath);
+    fs.writeFileSync(
+      path.join(providerBasePath, 'response-schema.json'),
+      JSON.stringify({ type: 'object', properties: { provider: { type: 'string' } } }),
+    );
+    fs.writeFileSync(
+      path.join(promptBasePath, 'response-schema.json'),
+      JSON.stringify({ type: 'object', properties: { prompt: { type: 'string' } } }),
+    );
+
+    try {
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          basePath: providerBasePath,
+          responseSchema: 'file://response-schema.json',
+          generationConfig: {
+            response_mime_type: 'application/vnd.provider+json',
+          },
+        },
+      });
+
+      await provider.callApi('Locate the target.', {
+        prompt: {
+          config: {
+            basePath: promptBasePath,
+            responseSchema: 'file://response-schema.json',
+          },
+        },
+      } as any);
+
+      const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(request.body as string).response_format).toEqual([
+        {
+          type: 'text',
+          mime_type: 'application/vnd.provider+json',
+          schema: {
+            type: 'object',
+            properties: { prompt: { type: 'string' } },
+          },
+        },
+      ]);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('translates generationConfig structured-output fields for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
