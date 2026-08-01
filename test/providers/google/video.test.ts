@@ -65,9 +65,15 @@ const durationConstrainedConfigs = [
   ]
 >;
 
+function resolveTestFileRef(fileRef: string): string {
+  return path.resolve(fileRef.slice('file://'.length));
+}
+
 describe('GoogleVideoProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
     mockRequest.mockReset();
     mockFetchWithTimeout.mockReset();
     mockStoreBlob.mockReset();
@@ -122,9 +128,6 @@ describe('GoogleVideoProvider', () => {
     mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
     mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
     mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-    // Reset fs mocks to prevent leakage between tests
-    vi.mocked(fs.existsSync).mockReset();
-    vi.mocked(fs.readFileSync).mockReset();
   });
 
   describe('constructor and id', () => {
@@ -1036,12 +1039,9 @@ describe('GoogleVideoProvider', () => {
 
   describe('image-to-video', () => {
     it('should include image data in request', async () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/image.png') {
-          return true;
-        }
-        return false;
-      });
+      const image = 'file:///path/to/image.png';
+      const expectedImagePath = resolveTestFileRef(image);
+      vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedImagePath);
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('fake-image-data'));
 
       const operationName =
@@ -1069,7 +1069,7 @@ describe('GoogleVideoProvider', () => {
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
-          image: 'file:///path/to/image.png',
+          image,
           pollIntervalMs: 10,
         },
       });
@@ -1102,12 +1102,16 @@ describe('GoogleVideoProvider', () => {
 
   describe('reference images (Veo 3.1)', () => {
     it('should include reference images in request', async () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/ref1.png' || path === '/path/to/ref2.png') {
-          return true;
-        }
-        return false;
-      });
+      const referenceImages = [
+        { image: 'file:///path/to/ref1.png', referenceType: 'asset' as const },
+        { image: 'file:///path/to/ref2.png', referenceType: 'asset' as const },
+      ];
+      const expectedReferencePaths = new Set(
+        referenceImages.map(({ image }) => resolveTestFileRef(image)),
+      );
+      vi.mocked(fs.existsSync).mockImplementation((candidate) =>
+        expectedReferencePaths.has(candidate.toString()),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
 
       const operationName =
@@ -1135,10 +1139,7 @@ describe('GoogleVideoProvider', () => {
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
-          referenceImages: [
-            { image: 'file:///path/to/ref1.png', referenceType: 'asset' },
-            { image: 'file:///path/to/ref2.png', referenceType: 'asset' },
-          ],
+          referenceImages,
           pollIntervalMs: 10,
         },
       });
@@ -1153,15 +1154,18 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should limit reference images to 3', async () => {
-      vi.mocked(fs.existsSync).mockReset();
-      // Return true only for the reference image file paths
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        const pathStr = path.toString();
-        if (pathStr.includes('/path/to/ref')) {
-          return true; // Reference image files exist
-        }
-        return false;
-      });
+      const referenceImages = [
+        { image: 'file:///path/to/ref1.png', referenceType: 'asset' as const },
+        { image: 'file:///path/to/ref2.png', referenceType: 'asset' as const },
+        { image: 'file:///path/to/ref3.png', referenceType: 'asset' as const },
+        { image: 'file:///path/to/ref4.png', referenceType: 'asset' as const },
+      ];
+      const expectedReferencePaths = new Set(
+        referenceImages.map(({ image }) => resolveTestFileRef(image)),
+      );
+      vi.mocked(fs.existsSync).mockImplementation((candidate) =>
+        expectedReferencePaths.has(candidate.toString()),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
 
       const operationName =
@@ -1189,12 +1193,7 @@ describe('GoogleVideoProvider', () => {
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
-          referenceImages: [
-            { image: 'file:///path/to/ref1.png', referenceType: 'asset' },
-            { image: 'file:///path/to/ref2.png', referenceType: 'asset' },
-            { image: 'file:///path/to/ref3.png', referenceType: 'asset' },
-            { image: 'file:///path/to/ref4.png', referenceType: 'asset' }, // Should be ignored
-          ],
+          referenceImages,
           pollIntervalMs: 10,
         },
       });
@@ -1211,12 +1210,14 @@ describe('GoogleVideoProvider', () => {
 
   describe('interpolation (Veo 3.1)', () => {
     it('should include last frame in request', async () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/first.png' || path === '/path/to/last.png') {
-          return true;
-        }
-        return false;
-      });
+      const image = 'file:///path/to/first.png';
+      const lastFrame = 'file:///path/to/last.png';
+      const expectedFramePaths = new Set(
+        [image, lastFrame].map((fileRef) => resolveTestFileRef(fileRef)),
+      );
+      vi.mocked(fs.existsSync).mockImplementation((candidate) =>
+        expectedFramePaths.has(candidate.toString()),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('frame-data'));
 
       const operationName =
@@ -1244,8 +1245,8 @@ describe('GoogleVideoProvider', () => {
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
-          image: 'file:///path/to/first.png',
-          lastFrame: 'file:///path/to/last.png',
+          image,
+          lastFrame,
           pollIntervalMs: 10,
         },
       });
@@ -1260,12 +1261,14 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should support lastImage alias for interpolation', async () => {
-      vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/first.png' || path === '/path/to/last.png') {
-          return true;
-        }
-        return false;
-      });
+      const image = 'file:///path/to/first.png';
+      const lastImage = 'file:///path/to/last.png';
+      const expectedFramePaths = new Set(
+        [image, lastImage].map((fileRef) => resolveTestFileRef(fileRef)),
+      );
+      vi.mocked(fs.existsSync).mockImplementation((candidate) =>
+        expectedFramePaths.has(candidate.toString()),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('frame-data'));
 
       const operationName = 'test-op';
@@ -1284,8 +1287,8 @@ describe('GoogleVideoProvider', () => {
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
-          image: 'file:///path/to/first.png',
-          lastImage: 'file:///path/to/last.png',
+          image,
+          lastImage,
           pollIntervalMs: 10,
         },
       });
