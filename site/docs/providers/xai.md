@@ -611,7 +611,7 @@ tests:
       scene: a red panda playing with yarn
     assert:
       - type: cost
-        threshold: 1.0
+        threshold: 1.5
 ```
 
 #### Configuration Options

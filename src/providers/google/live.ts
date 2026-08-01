@@ -473,10 +473,29 @@ export class GoogleLiveProvider implements ApiProvider {
     let contentIndex = 0;
 
     if (this.modelName === GEMINI_LIVE_TRANSLATE_MODEL) {
-      if (!config.generationConfig?.translationConfig) {
+      const translationConfig = config.generationConfig?.translationConfig;
+      if (!translationConfig) {
         return {
           error:
             'Gemini 3.5 Live Translate requires generationConfig.translationConfig (targetLanguageCode defaults to en).',
+        };
+      }
+      if (
+        translationConfig.targetLanguageCode !== undefined &&
+        translationConfig.targetLanguageCode.trim().length === 0
+      ) {
+        return {
+          error:
+            'Gemini 3.5 Live Translate requires a non-empty targetLanguageCode in generationConfig.translationConfig when provided.',
+        };
+      }
+      if (translationConfig.targetLanguageCode === undefined) {
+        config.generationConfig = {
+          ...config.generationConfig,
+          translationConfig: {
+            ...translationConfig,
+            targetLanguageCode: 'en',
+          },
         };
       }
       if (hasUnsupportedLiveTranslateThinkingConfig(config)) {

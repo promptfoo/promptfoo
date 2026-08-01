@@ -681,6 +681,85 @@ describe('GoogleLiveProvider', () => {
     expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
   });
 
+  it('should serialize the English default when Live Translate omits a target language', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          translationConfig: { echoTargetLanguage: true },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        generationConfig: {
+          translationConfig: {
+            targetLanguageCode: 'en',
+            echoTargetLanguage: true,
+          },
+        },
+      },
+    });
+  });
+
+  it('should reject an empty Live Translate target language before opening a socket', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          translationConfig: { targetLanguageCode: '   ' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain('non-empty targetLanguageCode');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['IMAGE response_modalities', { response_modalities: ['IMAGE'] }],
     ['mixed responseModalities', { responseModalities: ['AUDIO', 'IMAGE'] }],
