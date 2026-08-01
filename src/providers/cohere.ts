@@ -66,6 +66,16 @@ interface CohereChatOptions {
   p?: number;
   frequency_penalty?: number;
   presence_penalty?: number;
+  stop_sequences?: string[];
+  seed?: number;
+  logprobs?: boolean;
+  tools?: Array<Record<string, unknown>>;
+  tool_choice?: 'REQUIRED' | 'NONE';
+  strict_tools?: boolean;
+  response_format?: Record<string, unknown>;
+  safety_mode?: 'CONTEXTUAL' | 'STRICT' | 'OFF';
+  thinking?: Record<string, unknown>;
+  priority?: number;
 
   // promptfoo-provided options
   basePath?: string;
@@ -80,6 +90,33 @@ interface CohereV2Message {
 }
 
 const COHERE_V2_CHAT_MODELS = new Set(['command-a-plus-05-2026', 'north-mini-code-1-0']);
+
+const COHERE_V2_REQUEST_FIELDS = [
+  'tools',
+  'response_format',
+  'safety_mode',
+  'max_tokens',
+  'stop_sequences',
+  'temperature',
+  'seed',
+  'frequency_penalty',
+  'presence_penalty',
+  'k',
+  'p',
+  'logprobs',
+  'tool_choice',
+  'thinking',
+  'priority',
+  'strict_tools',
+] as const satisfies readonly (keyof CohereChatOptions)[];
+
+function pickV2RequestParams(params: Record<string, any>): Record<string, unknown> {
+  return Object.fromEntries(
+    COHERE_V2_REQUEST_FIELDS.flatMap((field) =>
+      params[field] === undefined ? [] : [[field, params[field]]],
+    ),
+  );
+}
 
 function toV2Role(role: string): string {
   return role.toLowerCase() === 'chatbot' ? 'assistant' : role.toLowerCase();
@@ -670,29 +707,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       return { error: configError };
     }
 
-    const {
-      apiKey: _apiKey,
-      basePath: _basePath,
-      linkedTargetId: _linkedTargetId,
-      modelName: _modelName,
-      chatHistory: _chatHistory,
-      chat_history: _chatHistoryFromPrompt,
-      message: _message,
-      messages: _messages,
-      preamble: _preamble,
-      preamble_override: _preambleOverride,
-      connectors: _connectors,
-      prompt_truncation: _promptTruncation,
-      search_queries_only: _searchQueriesOnly,
-      documents: _documents,
-      citation_options: _citationOptions,
-      showDocuments: _showDocuments,
-      showSearchQueries: _showSearchQueries,
-      prefix: _prefix,
-      suffix: _suffix,
-      provider: _provider,
-      ...v2Params
-    } = params;
+    const v2Params = pickV2RequestParams(params);
 
     const { documents, citationOptions } = normalizeV2Documents(params);
 

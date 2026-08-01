@@ -2984,6 +2984,35 @@ describe('VertexChatProvider.callClaudeApi', () => {
     expect(result.cost).toBeCloseTo(expectedCost, 6);
   });
 
+  it('prices the Vertex-only Sonnet 4.5 latest alias without changing request routing', async () => {
+    const model = 'claude-sonnet-4-5-latest';
+    provider = new VertexChatProvider(model, {
+      config: { region: 'global', max_tokens: 32 },
+    });
+    const mockRequest = mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: 150_000,
+        output_tokens: 10_000,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest.mock.calls[0][0].url).toContain(
+      '/publishers/anthropic/models/claude-sonnet-4-5-latest:rawPredict',
+    );
+    expect(result.cost).toBeCloseTo(0.6, 6);
+  });
+
   it('bills Vertex Sonnet 5 one-hour cache writes at the one-hour rate', async () => {
     vi.useFakeTimers();
     try {

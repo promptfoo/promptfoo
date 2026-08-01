@@ -553,15 +553,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
+      // `-latest` is a published Vertex alias, but not a valid first-party Anthropic model ID.
+      // Keep the alias for request routing while using the canonical Vertex-equivalent ID for billing.
+      const pricingModelName =
+        normalizedModelName === 'claude-sonnet-4-5-latest'
+          ? 'claude-sonnet-4-5'
+          : normalizedModelName;
 
       // Regional and multi-region Vertex endpoints bill Claude 4.5+ models at a premium
       // over the global endpoint (see isClaudeRegionalPremiumModel).
       const pricingConfig =
         this.getRegion() === 'global'
           ? this.config
-          : applyClaudeRegionalPremium(normalizedModelName, this.config);
+          : applyClaudeRegionalPremium(pricingModelName, this.config);
       const effectivePricingConfig = applyVertexClaudeLongContextPricing(
-        normalizedModelName,
+        pricingModelName,
         pricingConfig,
         data.usage?.input_tokens,
         data.usage?.cache_read_input_tokens,
@@ -572,7 +578,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
-          normalizedModelName,
+          pricingModelName,
           effectivePricingConfig,
           data.usage?.input_tokens,
           data.usage?.output_tokens,

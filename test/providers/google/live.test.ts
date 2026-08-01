@@ -925,6 +925,14 @@ describe('GoogleLiveProvider', () => {
       },
     });
     let completedInputs = 0;
+    let signalSecondInputSent!: () => void;
+    const secondInputSent = new Promise<void>((resolve) => {
+      signalSecondInputSent = resolve;
+    });
+    let releaseSecondFrame!: () => void;
+    const secondFrameReleased = new Promise<void>((resolve) => {
+      releaseSecondFrame = resolve;
+    });
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -937,19 +945,19 @@ describe('GoogleLiveProvider', () => {
         }
         completedInputs += 1;
         const inputNumber = completedInputs;
-        setTimeout(
-          () => {
-            simulateMessage(mockWs, {
-              serverContent: {
-                outputTranscription: {
-                  text: inputNumber === 1 ? 'Pierwsze. ' : 'Drugie.',
-                },
-                turnComplete: true,
+        if (inputNumber === 2) {
+          signalSecondInputSent();
+        }
+        void (inputNumber === 1 ? Promise.resolve() : secondFrameReleased).then(() => {
+          simulateMessage(mockWs, {
+            serverContent: {
+              outputTranscription: {
+                text: inputNumber === 1 ? 'Pierwsze. ' : 'Drugie.',
               },
-            });
-          },
-          inputNumber === 1 ? 5 : 150,
-        );
+              turnComplete: true,
+            },
+          });
+        });
       });
       return mockWs;
     });
@@ -965,10 +973,16 @@ describe('GoogleLiveProvider', () => {
         },
       ],
     };
-    const response = await provider.callApi(JSON.stringify([input, input]));
-    // Let the intentionally delayed second frame drain even when the fail-first implementation
-    // resolves too early, so it cannot leak into the following test.
-    await new Promise<void>((resolve) => setTimeout(resolve, 180));
+    let requestSettled = false;
+    const responsePromise = provider.callApi(JSON.stringify([input, input])).finally(() => {
+      requestSettled = true;
+    });
+    await secondInputSent;
+    await flushAsyncEvents();
+
+    expect(requestSettled).toBe(false);
+    releaseSecondFrame();
+    const response = await responsePromise;
 
     expect(completedInputs).toBe(2);
     expect(response.error).toBeUndefined();

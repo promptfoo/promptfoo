@@ -704,6 +704,49 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
+  it('only forwards supported request fields to the v2 Chat API', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        headers: { Authorization: 'Bearer prompt-secret' },
+        cost: 0.25,
+        inputCost: 0.5,
+        outputCost: 1,
+        passthrough: { token: 'nested-prompt-secret' },
+        response_format: { type: 'json_object' },
+        stop_sequences: ['DONE'],
+        temperature: 0.2,
+      } as any,
+    });
+    await provider.callApi('Respond with JSON');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body).toMatchObject({
+      response_format: { type: 'json_object' },
+      stop_sequences: ['DONE'],
+      temperature: 0.2,
+    });
+    expect(body).not.toHaveProperty('headers');
+    expect(body).not.toHaveProperty('cost');
+    expect(body).not.toHaveProperty('inputCost');
+    expect(body).not.toHaveProperty('outputCost');
+    expect(body).not.toHaveProperty('passthrough');
+    expect(JSON.stringify(body)).not.toContain('prompt-secret');
+    expect(JSON.stringify(body)).not.toContain('nested-prompt-secret');
+    expect((request as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer test-key',
+    });
+  });
+
   it('does not forward prompt wrapper metadata to the v2 Chat API', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
