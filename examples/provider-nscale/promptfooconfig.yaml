@@ -7,7 +7,7 @@ providers:
     config:
       temperature: 0.7
       max_tokens: 1024
-  - id: nscale:meta/llama-3.3-70b-instruct
+  - id: nscale:meta-llama/Llama-3.3-70B-Instruct
     config:
       temperature: 0.5
       max_tokens: 1024
