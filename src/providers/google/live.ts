@@ -493,7 +493,8 @@ export class GoogleLiveProvider implements ApiProvider {
       }
       if (
         translationConfig.targetLanguageCode !== undefined &&
-        translationConfig.targetLanguageCode.trim().length === 0
+        (typeof translationConfig.targetLanguageCode !== 'string' ||
+          translationConfig.targetLanguageCode.trim().length === 0)
       ) {
         return {
           error:

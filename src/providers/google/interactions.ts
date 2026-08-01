@@ -604,10 +604,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!prompt.trim()) {
-      return { error: 'Prompt is required for Gemini Interactions API' };
-    }
-
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleCompletionOptions(this.config, promptConfig) as GoogleProviderConfig;
     const promptBasePath = promptConfig?.basePath ?? this.config.basePath;

@@ -760,15 +760,18 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
-  it('should reject an empty Live Translate target language before opening a socket', async () => {
+  it.each([
+    ['empty', '   '],
+    ['non-string', 42],
+  ])('should reject a %s Live Translate target language before opening a socket', async (_case, targetLanguageCode) => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
-          translationConfig: { targetLanguageCode: '   ' },
+          translationConfig: { targetLanguageCode },
         },
         timeoutMs: 500,
         apiKey: 'test-api-key',
-      },
+      } as any,
     });
 
     const response = await provider.callApi(

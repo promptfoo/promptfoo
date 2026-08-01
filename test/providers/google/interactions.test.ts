@@ -813,6 +813,30 @@ describe('GoogleInteractionsProvider', () => {
     expect(bodies[1].input).toBe('Prompt passthrough input.');
   });
 
+  it('accepts an empty prompt when passthrough provides semantic input', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'robot plan' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { input: [{ type: 'text', text: 'Provider passthrough input.' }] },
+      },
+    });
+
+    const response = await provider.callApi('');
+
+    expect(response.error).toBeUndefined();
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).input).toEqual([
+      { type: 'text', text: 'Provider passthrough input.' },
+    ]);
+  });
+
   it('forwards supported Robotics generation controls and a rendered response schema', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
