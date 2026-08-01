@@ -525,18 +525,18 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Description                                                                                                                                                                                                                                                                                             |
-| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                                                                                                                                                                                                                          |
-| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k support is model-specific. Google AI Studio extension is 720p-only. On Vertex, Veo 3.1 extension supports 1080p and, for 4k-capable models, 4k                                                                                                                   |
-| `durationSeconds`  | number | Veo 3.x: 4, 6, or 8 seconds; Veo 2: 5, 6, or 8. Extension and reference images require 8 seconds. Google AI Studio also requires 8 seconds for 1080p/4k; Vertex permits 4 or 6 seconds at 1080p                                                                                                         |
-| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                                                                                                                                                                                                                   |
-| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                                                                                                                                                                                                                |
-| `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                                                                                                                                                                                                                        |
-| `image`            | string | Source image for image-to-video generation                                                                                                                                                                                                                                                              |
-| `lastImage`        | string | End frame for interpolation (requires `image`)                                                                                                                                                                                                                                                          |
-| `extendVideoId`    | string | Legacy Vertex operation-ID input; availability depends on the selected Vertex model                                                                                                                                                                                                                     |
-| `sourceVideo`      | string | Source video input for Veo 3.1 extension. The Google AI Studio preview Lite model (`google:video:veo-3.1-lite-generate-preview`) does not support extension; the stable Vertex model ID `vertex:video:veo-3.1-lite-generate-001` does. Use base64 or `file://` with AI Studio, or a Vertex operation ID |
+| Option             | Type   | Description                                                                                                                                                                                                                                                                                                           |
+| ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                                                                                                                                                                                                                                        |
+| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k support is model-specific. Google AI Studio extension is 720p-only. On Vertex, Veo 3.1 extension supports 1080p and, for 4k-capable models, 4k                                                                                                                                 |
+| `durationSeconds`  | number | Veo 3.x: 4, 6, or 8 seconds; Veo 2: 5, 6, or 8. Extension and reference images require 8 seconds. Google AI Studio also requires 8 seconds for 1080p/4k; Vertex permits 4 or 6 seconds at 1080p                                                                                                                       |
+| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                                                                                                                                                                                                                                 |
+| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                                                                                                                                                                                                                              |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                                                                                                                                                                                                                                      |
+| `image`            | string | Source image for image-to-video generation                                                                                                                                                                                                                                                                            |
+| `lastImage`        | string | End frame for interpolation (requires `image`)                                                                                                                                                                                                                                                                        |
+| `extendVideoId`    | string | Legacy Vertex operation-ID input; availability depends on the selected Vertex model                                                                                                                                                                                                                                   |
+| `sourceVideo`      | string | Source video input for Veo 3.1 extension. The Google AI Studio preview Lite model (`google:video:veo-3.1-lite-generate-preview`) does not support extension; the stable Vertex model ID `vertex:video:veo-3.1-lite-generate-001` does. Use the prior generation's Gemini URI with AI Studio, or a Vertex operation ID |
 
 #### Image-to-Video Generation
 
@@ -576,14 +576,14 @@ prompts:
 
 #### Video Extension (Veo 3.1 Only)
 
-Extend a previously generated Veo video using video data:
+Extend a previously generated Veo video using its original Gemini API URI:
 
 ```yaml
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      vertexai: false # sourceVideo with file:// uses the Google AI Studio route
-      sourceVideo: file://assets/veo-input.mp4
+      vertexai: false
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video
       resolution: '720p'
       durationSeconds: 8
 
@@ -598,7 +598,9 @@ tests:
 :::note
 This example requires `GOOGLE_API_KEY` or `GEMINI_API_KEY` and explicitly uses the Google AI
 Studio route. The Gemini API only extends videos generated by Veo. Pass the prior video as
-base64 or a `file://` path through `sourceVideo`; operation IDs are not accepted on this route.
+the `metadata.sourceVideoUri` returned by its generation response; downloaded files, base64
+bytes, and operation IDs are not accepted on this route. Gemini retains generated video URIs
+for two days, and referencing one for extension resets that retention window.
 :::
 
 #### Reference Images

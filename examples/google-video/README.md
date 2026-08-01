@@ -59,7 +59,7 @@ npx promptfoo@latest eval
 | `image`            | string | Source image for image-to-video                                     |
 | `lastImage`        | string | End frame for interpolation                                         |
 | `extendVideoId`    | string | Legacy Vertex operation-ID input                                    |
-| `sourceVideo`      | string | Base64 or `file://` Veo video to extend                             |
+| `sourceVideo`      | string | Gemini URI returned by the prior Veo generation                     |
 | `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)              |
 
 ## Features
@@ -74,10 +74,10 @@ Generate videos from a starting image (see `promptfooconfig-image.yaml`).
 
 ### Video Extension (Veo 3.1)
 
-Extend a previously generated Veo video by passing its saved video data to the Gemini API
+Extend a previously generated Veo video by passing its original Gemini URI to the Gemini API
 (see `promptfooconfig-extension.yaml`). This configuration requires `GOOGLE_API_KEY` or
-`GEMINI_API_KEY`; it explicitly uses the Google AI Studio route because Vertex expects an
-operation ID rather than a local `file://` video.
+`GEMINI_API_KEY`; use the prior response's `metadata.sourceVideoUri` within two days of the
+original generation. Downloaded files and base64 bytes cannot be used for Gemini extension.
 
 ## Notes
 

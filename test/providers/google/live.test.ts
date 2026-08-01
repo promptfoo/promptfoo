@@ -408,6 +408,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it.each([
+    ['v1alpha API version', { apiVersion: 'v1alpha' }, 'requires apiVersion v1beta'],
     ['camel-case code execution', { tools: [{ codeExecution: {} }] }, 'code execution'],
     ['snake-case code execution', { tools: [{ code_execution: {} }] }, 'code execution'],
     ['camel-case file search', { tools: [{ fileSearch: {} }] }, 'file search or computer use'],
@@ -739,6 +740,10 @@ describe('GoogleLiveProvider', () => {
               responseTokenCount: 3,
               totalTokenCount: 5,
             },
+          });
+        }, 20);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
             serverContent: { outputTranscription: { text: 'dobry.' } },
           });
         }, 35);
@@ -765,6 +770,103 @@ describe('GoogleLiveProvider', () => {
     expect(response.error).toBeUndefined();
     expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
     expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+  });
+
+  it('should finish a silent Live Translate response after finite input ends', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 100,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: '' });
+  });
+
+  it('should ignore low-amplitude PCM while waiting for Live Translate completion', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 120,
+        apiKey: 'test-api-key',
+      },
+    });
+    const lowAmplitudeTimers: ReturnType<typeof setTimeout>[] = [];
+    let lowAmplitudeFramesSent = 0;
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: { outputTranscription: { text: 'Cicho.' } },
+        });
+        for (const delayMs of [20, 40, 60, 80, 100]) {
+          lowAmplitudeTimers.push(
+            setTimeout(() => {
+              lowAmplitudeFramesSent += 1;
+              mockWs.onmessage?.({
+                data: Buffer.from([1, 0, 0xff, 0xff]),
+              } as WebSocket.MessageEvent);
+            }, delayMs),
+          );
+        }
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    for (const timer of lowAmplitudeTimers) {
+      clearTimeout(timer);
+    }
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Cicho.' });
+    expect(lowAmplitudeFramesSent).toBeLessThan(5);
   });
 
   it('should wait for the final Live Translate input before completing a multi-input request', async () => {
@@ -2144,6 +2246,61 @@ describe('GoogleLiveProvider', () => {
 
     expect(response.tokenUsage?.cached).toBe(1_000);
     expect(response.cost).toBeCloseTo((1_000 * 0.075 + 500 * 12) / 1e6, 12);
+  });
+
+  it('should bill only audio modality tokens for Gemini 3.5 Live Translate', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            outputTranscription: { text: 'Dzien dobry.' },
+            turnComplete: true,
+          },
+          usageMetadata: {
+            promptTokenCount: 110,
+            responseTokenCount: 20,
+            totalTokenCount: 130,
+            promptTokensDetails: [
+              { modality: 'TEXT', tokenCount: 100 },
+              { modality: 'AUDIO', tokenCount: 10 },
+            ],
+            responseTokensDetails: [{ modality: 'AUDIO', tokenCount: 20 }],
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.tokenUsage).toMatchObject({ prompt: 110, completion: 20, total: 130 });
+    expect(response.cost).toBeCloseTo((10 * 3.5 + 20 * 21) / 1e6, 12);
   });
 
   it('should prefer closing Gemini Live usage over an interim usage frame', async () => {

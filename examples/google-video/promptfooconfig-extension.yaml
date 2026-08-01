@@ -7,9 +7,9 @@ prompts:
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      vertexai: false # sourceVideo with file:// uses the Google AI Studio route
-      # Use a downloaded video from a previous Veo generation
-      sourceVideo: file://assets/veo-input.mp4
+      vertexai: false
+      # Use metadata.sourceVideoUri from a previous Veo generation response
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video
       resolution: '720p'
       durationSeconds: 8 # Video extension requires 8 seconds
 
@@ -25,5 +25,5 @@ tests:
 
 # To use this:
 # 1. First generate a video using promptfooconfig.yaml
-# 2. Save the generated video as assets/veo-input.mp4
+# 2. Copy metadata.sourceVideoUri from the generation response above
 # 3. Run this config within two days of the original generation

@@ -193,10 +193,8 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('config-relative media paths', () => {
-    it.each([
-      ['loadImageData', 'image', 'file://assets/start-frame.png'],
-      ['loadVideoData', 'video', 'file://assets/veo-input.mp4'],
-    ])('resolves %s for a %s relative to the config directory', (method, _kind, fileRef) => {
+    it('resolves image files relative to the config directory', () => {
+      const fileRef = 'file://assets/start-frame.png';
       const basePath = path.resolve('/tmp', 'google-video');
       const expectedPath = path.resolve(basePath, fileRef.slice('file://'.length));
       vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
@@ -205,16 +203,14 @@ describe('GoogleVideoProvider', () => {
         config: { basePath },
       });
 
-      expect((provider as any)[method](fileRef)).toEqual({
+      expect((provider as any).loadImageData(fileRef)).toEqual({
         data: Buffer.from('media-data').toString('base64'),
       });
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
 
-    it.each([
-      ['buildVertexRequestBody', 'image', 'file://assets/start-frame.png'],
-      ['buildAiStudioRequestBody', 'sourceVideo', 'file://assets/veo-input.mp4'],
-    ])('uses the request basePath when %s loads %s media', (method, mediaField, fileRef) => {
+    it('uses the request basePath when the Vertex request loads image media', () => {
+      const fileRef = 'file://assets/start-frame.png';
       const providerBasePath = path.resolve('/tmp', 'provider-config');
       const requestBasePath = path.resolve('/tmp', 'prompt-config');
       const expectedPath = path.resolve(requestBasePath, fileRef.slice('file://'.length));
@@ -224,10 +220,10 @@ describe('GoogleVideoProvider', () => {
         config: { basePath: providerBasePath },
       });
 
-      const result = (provider as any)[method]('test prompt', {
+      const result = (provider as any).buildVertexRequestBody('test prompt', {
         ...provider.config,
         basePath: requestBasePath,
-        [mediaField]: fileRef,
+        image: fileRef,
       });
 
       expect(result.error).toBeUndefined();
@@ -647,9 +643,10 @@ describe('GoogleVideoProvider', () => {
       mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
 
       const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
+      const inputVideoUri =
+        'https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video';
       const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';
       const videoBytes = Buffer.from('fake ai studio video data');
-      const sourceVideo = Buffer.from('source video data').toString('base64');
 
       mockFetchWithTimeout
         .mockResolvedValueOnce(
@@ -686,7 +683,7 @@ describe('GoogleVideoProvider', () => {
         config: {
           pollIntervalMs: 10,
           maxPollTimeMs: 5000,
-          sourceVideo,
+          sourceVideo: inputVideoUri,
         },
       });
 
@@ -699,6 +696,7 @@ describe('GoogleVideoProvider', () => {
       expect(result.error).toBeUndefined();
       expect(result.video?.model).toBe('veo-3.1-generate-preview');
       expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
+      expect(result.metadata?.sourceVideoUri).toBe(videoUri);
       expect(mockStoreBlob).toHaveBeenCalledWith(
         expect.any(Buffer),
         'video/mp4',
@@ -729,8 +727,7 @@ describe('GoogleVideoProvider', () => {
       expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain('"durationSeconds":8');
       const requestBody = JSON.parse(mockFetchWithTimeout.mock.calls[0]?.[1]?.body as string);
       expect(requestBody.instances[0].video).toEqual({
-        encodedVideo: sourceVideo,
-        encoding: 'video/mp4',
+        uri: inputVideoUri,
       });
       expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
         2,

@@ -48,7 +48,10 @@ const ROBOTICS_STRUCTURED_OUTPUT_ERROR =
   'Gemini Robotics ER 2 Streaming does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
 const ROBOTICS_UNSUPPORTED_TOOL_ERROR =
   'Gemini Robotics ER 2 Streaming only supports function declarations and Google Search tools.';
+const ROBOTICS_API_VERSION_ERROR =
+  'Gemini Robotics ER 2 Streaming requires apiVersion v1beta; remove the override or set apiVersion to v1beta.';
 const ROBOTICS_SUPPORTED_TOOL_FIELDS = new Set(['functionDeclarations', 'googleSearch']);
+const LIVE_TRANSLATE_SILENCE_PEAK_THRESHOLD = 32;
 
 function getRoboticsResponseModalityError(
   isRoboticsStreamingModel: boolean,
@@ -172,6 +175,9 @@ function getRoboticsConfigError(
   tools: Tool[],
 ): string | undefined {
   return (
+    (isRoboticsStreamingModel && config.apiVersion && config.apiVersion !== 'v1beta'
+      ? ROBOTICS_API_VERSION_ERROR
+      : undefined) ??
     getRoboticsResponseModalityError(isRoboticsStreamingModel, responseModalities) ??
     getRoboticsStructuredOutputError(isRoboticsStreamingModel, config) ??
     getRoboticsToolError(isRoboticsStreamingModel, tools)
@@ -227,8 +233,15 @@ function hasUnsupportedLiveTranslateServiceTier(serviceTier: unknown): boolean {
   return serviceTier !== undefined && serviceTier !== 'standard';
 }
 
-function hasNonSilentPcm(audio: Buffer): boolean {
-  return audio.some((byte) => byte !== 0);
+function hasMeaningfulPcm(audio: Buffer): boolean {
+  // Live Translate returns signed 16-bit little-endian PCM. A small noise floor
+  // prevents near-zero trailing samples from keeping a finite request alive.
+  for (let offset = 0; offset + 1 < audio.length; offset += 2) {
+    if (Math.abs(audio.readInt16LE(offset)) > LIVE_TRANSLATE_SILENCE_PEAK_THRESHOLD) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function getUnsupportedLiveTranslateConfigurationError(
@@ -650,6 +663,7 @@ export class GoogleLiveProvider implements ApiProvider {
         this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
       let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
+      let armLiveTranslateCompletion = (_hasMeaningfulOutput: boolean) => {};
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
@@ -736,6 +750,7 @@ export class GoogleLiveProvider implements ApiProvider {
             contentMessage.realtimeInput?.audioStreamEnd
           ) {
             liveTranslateInputEnded = true;
+            armLiveTranslateCompletion(false);
           }
         }
       };
@@ -769,6 +784,10 @@ export class GoogleLiveProvider implements ApiProvider {
       const liveTranslateCompletionGraceMs = Math.min(
         4_000,
         Math.max(1, Math.floor(effectiveTimeoutMs / 2)),
+      );
+      const liveTranslateInitialCompletionGraceMs = Math.min(
+        4_000,
+        Math.max(1, Math.floor(effectiveTimeoutMs * 0.8)),
       );
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const armIdleTimeout = () => {
@@ -944,6 +963,18 @@ export class GoogleLiveProvider implements ApiProvider {
               ),
             0,
           );
+          const hasPromptModalityDetails = usageMetadata.some((usage) => {
+            const details = usage.promptTokensDetails ?? usage.prompt_tokens_details;
+            return Array.isArray(details) && details.length > 0;
+          });
+          const hasResponseModalityDetails = usageMetadata.some((usage) => {
+            const details =
+              usage.responseTokensDetails ??
+              usage.candidatesTokensDetails ??
+              usage.response_tokens_details ??
+              usage.candidates_tokens_details;
+            return Array.isArray(details) && details.length > 0;
+          });
           const imagePromptTokens = usageMetadata.reduce(
             (total, usage) =>
               total +
@@ -1038,11 +1069,22 @@ export class GoogleLiveProvider implements ApiProvider {
             ...(cachedPromptTokens > 0 ? { cached: cachedPromptTokens } : {}),
             ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
           };
+          // Live Translate is billed only for input and output audio tokens. Its
+          // usage payload may also include internal text context, which remains
+          // visible in tokenUsage but must not contribute to cost.
+          const costPromptTokens =
+            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL && hasPromptModalityDetails
+              ? audioPromptTokens
+              : Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0);
+          const costCompletionTokens =
+            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL && hasResponseModalityDetails
+              ? audioCompletionTokens
+              : billableCompletionTokens;
           const tokenCost = calculateGoogleCost(
             this.modelName,
             config,
-            Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0),
-            billableCompletionTokens,
+            costPromptTokens,
+            costCompletionTokens,
             false,
             audioPromptTokens,
             audioCompletionTokens,
@@ -1073,7 +1115,7 @@ export class GoogleLiveProvider implements ApiProvider {
         safeResolve(result);
       };
 
-      const armLiveTranslateCompletion = () => {
+      armLiveTranslateCompletion = (hasMeaningfulOutput) => {
         if (
           this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL ||
           !liveTranslateInputEnded ||
@@ -1083,19 +1125,24 @@ export class GoogleLiveProvider implements ApiProvider {
           return;
         }
         clearTimeout(liveTranslateCompletionTimeout);
-        liveTranslateCompletionTimeout = setTimeout(() => {
-          liveTranslateCompletionTimeout = undefined;
-          void (async () => {
-            if (contentIndex < contents.length) {
-              await sendNextContentMessages(true);
-              return;
-            }
-            await finalizeResponse();
-          })().catch((err) => {
-            logger.error(`Error advancing Live Translate response: ${err}`);
-            safeResolve({ error: `Error advancing Live Translate response: ${err}` });
-          });
-        }, liveTranslateCompletionGraceMs);
+        liveTranslateCompletionTimeout = setTimeout(
+          () => {
+            liveTranslateCompletionTimeout = undefined;
+            void (async () => {
+              if (contentIndex < contents.length) {
+                await sendNextContentMessages(true);
+                return;
+              }
+              await finalizeResponse();
+            })().catch((err) => {
+              logger.error(`Error advancing Live Translate response: ${err}`);
+              safeResolve({ error: `Error advancing Live Translate response: ${err}` });
+            });
+          },
+          hasMeaningfulOutput
+            ? liveTranslateCompletionGraceMs
+            : liveTranslateInitialCompletionGraceMs,
+        );
       };
 
       ws.onopen = () => {
@@ -1217,8 +1264,8 @@ export class GoogleLiveProvider implements ApiProvider {
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
-            if (hasNonSilentPcm(audioBuffer)) {
-              armLiveTranslateCompletion();
+            if (hasMeaningfulPcm(audioBuffer)) {
+              armLiveTranslateCompletion(true);
             }
             return;
           }
@@ -1300,7 +1347,7 @@ export class GoogleLiveProvider implements ApiProvider {
                   hasAudioContent = true;
                   const audioChunk = Buffer.from(part.inlineData.data, 'base64');
                   responseAudioChunks.push(audioChunk);
-                  if (hasNonSilentPcm(audioChunk)) {
+                  if (hasMeaningfulPcm(audioChunk)) {
                     hasMeaningfulLiveTranslateOutput = true;
                   }
                   if (isAudioExpected) {
@@ -1338,7 +1385,7 @@ export class GoogleLiveProvider implements ApiProvider {
             }
 
             if (hasMeaningfulLiveTranslateOutput) {
-              armLiveTranslateCompletion();
+              armLiveTranslateCompletion(true);
             }
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
@@ -1471,6 +1518,8 @@ export class GoogleLiveProvider implements ApiProvider {
                 }
               }
             }
+          } else if (frameUsageMetadata) {
+            logger.debug('Usage metadata update received.');
           } else if (response.sessionResumptionUpdate) {
             logger.debug(
               `Session resumption update received: ${JSON.stringify(response.sessionResumptionUpdate)}`,

@@ -313,26 +313,6 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   /**
-   * Load video data from file:// path or return as-is if base64
-   */
-  private loadVideoData(
-    videoPath: string,
-    config: Pick<GoogleVideoOptions, 'basePath'> = this.config,
-  ): { data?: string; error?: string } {
-    if (videoPath.startsWith('file://')) {
-      const filePath = path.resolve(
-        config.basePath || process.cwd(),
-        videoPath.slice('file://'.length),
-      );
-      if (!fs.existsSync(filePath)) {
-        return { error: `Video file not found: ${filePath}` };
-      }
-      return { data: fs.readFileSync(filePath).toString('base64') };
-    }
-    return { data: videoPath };
-  }
-
-  /**
    * Create a new video generation job
    */
   private async createVideoJob(
@@ -504,16 +484,17 @@ export class GoogleVideoProvider implements ApiProvider {
       if (sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Provide base64/file:// video data via `sourceVideo`.',
+            'Google AI Studio Veo does not accept operation IDs for video extension. Provide the URI returned by a previous Veo generation via `sourceVideo`.',
         };
       }
-      const { data: videoData, error } = this.loadVideoData(sourceVideo, config);
-      if (error) {
-        return { error };
+      if (!sourceVideo.startsWith('https://generativelanguage.googleapis.com/')) {
+        return {
+          error:
+            'Google AI Studio Veo video extension requires the URI returned by a previous Veo generation; downloaded files and base64 video bytes are not supported.',
+        };
       }
       instance.video = {
-        encodedVideo: videoData,
-        encoding: 'video/mp4',
+        uri: sourceVideo,
       };
     }
 
@@ -1003,6 +984,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Step 3: Store video to blob storage
     let blobRef: BlobRef | undefined;
+    let sourceVideoUri: string | undefined;
 
     // Check for base64 encoded video (new format)
     const base64Video = completedOp.response?.videos?.[0]?.bytesBase64Encoded;
@@ -1021,6 +1003,7 @@ export class GoogleVideoProvider implements ApiProvider {
         logger.debug(`[Google Video] Response: ${JSON.stringify(completedOp.response)}`);
         return { error: 'No video data in response' };
       }
+      sourceVideoUri = videoUri;
 
       const { blobRef: ref, error: downloadError } = await this.downloadVideoToBlob(
         videoUri,
@@ -1069,6 +1052,7 @@ export class GoogleVideoProvider implements ApiProvider {
         resolution,
         durationSeconds,
         blobHash: blobRef.hash,
+        ...(sourceVideoUri ? { sourceVideoUri } : {}),
       },
     };
   }
