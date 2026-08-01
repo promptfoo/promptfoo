@@ -1937,6 +1937,37 @@ describe('util', () => {
   });
 
   describe('normalizeTools', () => {
+    it('should canonicalize and sanitize snake_case function declarations', () => {
+      const normalized = normalizeTools([
+        {
+          function_declarations: [
+            {
+              name: 'lookup',
+              parameters: {
+                type: 'object',
+                properties: { query: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          ],
+        } as any,
+      ]);
+
+      expect(normalized).toEqual([
+        {
+          functionDeclarations: [
+            {
+              name: 'lookup',
+              parameters: {
+                type: 'OBJECT',
+                properties: { query: { type: 'STRING' } },
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
     it('should canonicalize snake_case tool properties to camelCase', () => {
       const tools = [
         {

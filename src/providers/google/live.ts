@@ -555,11 +555,9 @@ export class GoogleLiveProvider implements ApiProvider {
     const fileTools = configTools
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
       : [];
-    const normalizedTools = Array.isArray(fileTools)
-      ? normalizeTools(fileTools)
-      : fileTools
-        ? [fileTools]
-        : [];
+    const normalizedTools = fileTools
+      ? normalizeTools(Array.isArray(fileTools) ? fileTools : [fileTools])
+      : [];
     const requestTools = toolsDisabled
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;

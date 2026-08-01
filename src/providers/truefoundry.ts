@@ -9,7 +9,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 type TrueFoundryMetadata = Record<string, any>;
 
@@ -38,6 +38,7 @@ type TrueFoundryProviderOptions = ProviderOptions & {
 type JsonRecord = Record<string, unknown>;
 
 const TRUEFOUNDRY_GUARDRAIL_ERROR_TYPE = 'guardrail_checks_failed';
+const TRUEFOUNDRY_OPENAI_ACCOUNT_PREFIX = 'openai-main/';
 const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set(['content_filter', 'content_policy_violation']);
 const DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS = [
   /\bresponse content blocked by label\b/i,
@@ -52,6 +53,12 @@ function isJsonRecord(value: unknown): value is JsonRecord {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function getTrueFoundryBillingModelName(modelName: string): string {
+  return modelName.startsWith(TRUEFOUNDRY_OPENAI_ACCOUNT_PREFIX)
+    ? modelName.slice(TRUEFOUNDRY_OPENAI_ACCOUNT_PREFIX.length)
+    : modelName;
 }
 
 function hasGuardrailCheck(value: unknown): boolean {
@@ -209,6 +216,10 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     });
   }
 
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    return getTrueFoundryBillingModelName(super.getBillingModelName(config));
+  }
+
   /**
    * Override isReasoningModel to correctly detect GPT-5 and other reasoning models
    * despite TrueFoundry's provider-account/model-name format
@@ -323,6 +334,10 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
         apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
       },
     });
+  }
+
+  protected getBillingModelName(config: OpenAiSharedOptions): string {
+    return getTrueFoundryBillingModelName(super.getBillingModelName(config));
   }
 
   /**

@@ -234,9 +234,31 @@ describe('TrueFoundry', () => {
         expect(result.latencyMs).toBeGreaterThanOrEqual(0);
       });
 
+      it('should apply OpenAI pricing to the documented openai-main namespace', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+        const documentedProvider = new TrueFoundryProvider('openai-main/gpt-4o', {});
+
+        const result = await documentedProvider.callApi('Test prompt');
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+        expect(JSON.parse(request.body ?? '{}').model).toBe('openai-main/gpt-4o');
+        expect(result.cost).toBeCloseTo(0.0000625, 10);
+      });
+
       it.each([
         'vendor/gpt-4',
         'vendor/openai/gpt-4',
+        'vendor/openai-main/gpt-4',
       ])('should not apply OpenAI pricing to another TrueFoundry model namespace: %s', async (model) => {
         const mockResponse = {
           choices: [{ message: { content: 'Vendor output' } }],
@@ -734,6 +756,30 @@ describe('TrueFoundry', () => {
         },
       });
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should apply OpenAI pricing to the documented openai-main embedding namespace', async () => {
+      const mockResponse = {
+        data: [{ embedding: [0.1, 0.2, 0.3], index: 0 }],
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+      };
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        }),
+      );
+      const documentedProvider = new TrueFoundryEmbeddingProvider(
+        'openai-main/text-embedding-3-large',
+        {},
+      );
+
+      const result = await documentedProvider.callEmbeddingApi('Test text');
+      const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+      expect(JSON.parse(request.body ?? '{}').model).toBe('openai-main/text-embedding-3-large');
+      expect(result.cost).toBeCloseTo(0.00000065, 12);
     });
 
     it('should add TrueFoundry headers to embedding requests', async () => {

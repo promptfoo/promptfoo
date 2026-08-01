@@ -98,7 +98,7 @@ Note: Accelerated variants are text-only and don't support image inputs.
 
 Basic text generation works with all models:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - llamaapi:Llama-3.3-70B-Instruct
@@ -159,7 +159,7 @@ tests:
 
 Generate responses following a specific JSON schema:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: llamaapi:Llama-4-Maverick-17B-128E-Instruct-FP8
@@ -204,7 +204,7 @@ tests:
 
 Enable models to call external functions:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: llamaapi:Llama-3.3-70B-Instruct

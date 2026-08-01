@@ -1065,15 +1065,24 @@ export function normalizeTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
     const {
       code_execution: codeExecutionAlias,
+      function_declarations: functionDeclarationsAlias,
       google_search: googleSearchAlias,
       google_search_retrieval: googleSearchRetrievalAlias,
       ...canonicalTool
     } = tool as Tool & {
       code_execution?: Tool['codeExecution'];
+      function_declarations?: Tool['functionDeclarations'];
       google_search?: Tool['googleSearch'];
       google_search_retrieval?: Tool['googleSearchRetrieval'];
     };
     const normalizedTool: Tool = { ...canonicalTool };
+
+    if (
+      normalizedTool.functionDeclarations === undefined &&
+      functionDeclarationsAlias !== undefined
+    ) {
+      normalizedTool.functionDeclarations = functionDeclarationsAlias;
+    }
 
     if (normalizedTool.googleSearch === undefined && googleSearchAlias !== undefined) {
       normalizedTool.googleSearch = googleSearchAlias;

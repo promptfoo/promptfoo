@@ -1,4 +1,5 @@
 import {
+  Agent,
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
@@ -20,7 +21,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, Session, Tool } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -29,6 +30,63 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
+
+const AGENT_TOOL_METADATA = Symbol.for('promptfoo.openaiAgents.agentToolMetadata');
+const AGENT_AS_TOOL_INSTRUMENTED = Symbol.for('promptfoo.openaiAgents.asToolInstrumented');
+
+type AgentToolEventRegistration = {
+  name: string;
+  handler: (...args: any[]) => unknown;
+};
+
+type AgentToolMetadata = {
+  sourceAgent: Agent<any, any>;
+  options: Parameters<Agent<any, any>['asTool']>[0];
+  eventRegistrations: AgentToolEventRegistration[];
+};
+
+type TrackedAgentTool = Tool<any> & {
+  [AGENT_TOOL_METADATA]?: AgentToolMetadata;
+  on?: (name: string, handler: (...args: any[]) => unknown) => TrackedAgentTool;
+};
+
+function instrumentAgentAsTool(): void {
+  const prototype = Agent.prototype as Agent<any, any> & {
+    asTool: Agent<any, any>['asTool'] & { [AGENT_AS_TOOL_INSTRUMENTED]?: boolean };
+  };
+  const currentAsTool = prototype.asTool;
+  if (currentAsTool[AGENT_AS_TOOL_INSTRUMENTED]) {
+    return;
+  }
+
+  const instrumentedAsTool = function (
+    this: Agent<any, any>,
+    options: Parameters<Agent<any, any>['asTool']>[0],
+  ): ReturnType<Agent<any, any>['asTool']> {
+    const tool = currentAsTool.call(this, options) as TrackedAgentTool;
+    const metadata: AgentToolMetadata = {
+      sourceAgent: this,
+      options,
+      eventRegistrations: [],
+    };
+    Object.defineProperty(tool, AGENT_TOOL_METADATA, { value: metadata });
+
+    if (typeof tool.on === 'function') {
+      const originalOn = tool.on.bind(tool);
+      tool.on = (name, handler) => {
+        metadata.eventRegistrations.push({ name, handler });
+        originalOn(name, handler);
+        return tool;
+      };
+    }
+
+    return tool as ReturnType<Agent<any, any>['asTool']>;
+  };
+  Object.defineProperty(instrumentedAsTool, AGENT_AS_TOOL_INSTRUMENTED, { value: true });
+  prototype.asTool = instrumentedAsTool as Agent<any, any>['asTool'];
+}
+
+instrumentAgentAsTool();
 
 /**
  * OpenAI Agents Provider
@@ -492,8 +550,27 @@ function applyExecutionOverrides(
       ...(overrides.model === undefined ? {} : { model: overrides.model }),
       ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
       handoffs: [],
+      tools: [],
     });
     clonedAgents.set(source, cloned);
+    cloned.tools = source.tools.map((tool) => {
+      const trackedTool = tool as TrackedAgentTool;
+      const metadata = trackedTool[AGENT_TOOL_METADATA];
+      if (!metadata) {
+        if (typeof trackedTool.on === 'function') {
+          throw new Error(
+            `Cannot safely apply provider model overrides to pre-existing agent tool "${tool.name}". Create Agent.asTool() tools after loading the OpenAI Agents provider, or configure the nested agent with the same model and model settings.`,
+          );
+        }
+        return tool;
+      }
+
+      const clonedTool = cloneAgent(metadata.sourceAgent).asTool(metadata.options);
+      for (const { name, handler } of metadata.eventRegistrations) {
+        clonedTool.on(name as any, handler as any);
+      }
+      return clonedTool;
+    });
     cloned.handoffs = source.handoffs.map((candidate) => {
       if ('clone' in candidate && 'agent' in candidate) {
         const handoff = candidate as Handoff<any, any>;

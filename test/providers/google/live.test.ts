@@ -349,6 +349,37 @@ describe('GoogleLiveProvider', () => {
     expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
   });
 
+  it('should normalize a singleton Google Search tool loaded from an external file', async () => {
+    mockImportModule.mockReset();
+    mockImportModule.mockResolvedValue({
+      getTools: () => ({ google_search: {} }),
+    });
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        generationConfig: { responseModalities: ['TEXT'] },
+        tools: 'file://tools.js:getTools',
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+    mockImportModule.mockReset();
+
+    expect(response.error).toBeUndefined();
+    expect(WebSocket).toHaveBeenCalledTimes(1);
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0].setup.tools).toEqual([{ googleSearch: {} }]);
+  });
+
   it.each([
     ['empty response_modalities', { response_modalities: [] }],
     ['AUDIO responseModalities', { responseModalities: ['AUDIO'] }],

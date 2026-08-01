@@ -68,6 +68,27 @@ vi.mock('@openai/agents', async (importOriginal) => {
         ...config,
       });
     }
+
+    asTool(options: Record<string, any> = {}) {
+      const sourceAgent = this;
+      const handlers = new Map<string, Set<(event: unknown) => unknown>>();
+      const agentTool: Record<string, any> = {
+        type: 'function',
+        name: options.toolName ?? this.name,
+        description: options.toolDescription ?? '',
+        invoke: vi.fn(async () => ({
+          model: sourceAgent.model,
+          modelSettings: sourceAgent.modelSettings,
+        })),
+        on: (name: string, handler: (event: unknown) => unknown) => {
+          const registered = handlers.get(name) ?? new Set();
+          registered.add(handler);
+          handlers.set(name, registered);
+          return agentTool;
+        },
+      };
+      return agentTool;
+    }
   }
 
   const createMockHandoff = (agent: MockAgent, config?: Record<string, any>) => {
@@ -692,6 +713,34 @@ describe('OpenAiAgentsProvider', () => {
         },
       },
     ]);
+  });
+
+  it('applies explicit model and model settings to nested agent tools', async () => {
+    const childAgent = new Agent({
+      name: 'Child Agent',
+      instructions: 'Handle delegated work.',
+      model: 'gpt-5.4-mini',
+      modelSettings: { temperature: 0.9 },
+    });
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          tools: [childAgent.asTool({ toolName: 'delegate_to_child' })],
+        },
+        model: 'gpt-5.6-terra',
+        modelSettings: { temperature: 0.2 },
+      },
+    });
+
+    await provider.callApi('Delegate this request.');
+
+    const executedAgent = mockRun.mock.calls[0][0] as Agent<any, any>;
+    await expect((executedAgent.tools[0] as any).invoke()).resolves.toEqual({
+      model: 'gpt-5.6-terra',
+      modelSettings: { temperature: 0.2 },
+    });
   });
 
   it.each([
