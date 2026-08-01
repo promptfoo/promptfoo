@@ -592,6 +592,52 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Reference-to-video generation', () => {
+    it('sends preset reference voices for Grok Imagine Video 1.5', async () => {
+      const referenceAudios = [{ voice_id: 'eve' }, { voice_id: 'leo' }];
+      const createResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+      };
+      const completedResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          status: 'done',
+          video: { url: mockVideoUrl, duration: 15 },
+          model: 'grok-imagine-video-1.5',
+        }),
+      };
+      const downloadResponse = {
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+      };
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce(createResponse as any)
+        .mockResolvedValueOnce(completedResponse as any)
+        .mockResolvedValueOnce(downloadResponse as any);
+
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          reference_audios: referenceAudios,
+          duration: 15,
+          resolution: '720p',
+        },
+      });
+
+      const result = await provider.callApi(
+        'The speaker uses <AUDIO_0>, then the narrator uses <AUDIO_1>.',
+      );
+
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      expect(JSON.parse(createCall[1]?.body as string)).toMatchObject({
+        model: 'grok-imagine-video-1.5',
+        duration: 15,
+        resolution: '720p',
+        reference_audios: referenceAudios,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.hasReferenceAudios).toBe(true);
+    });
+
     it('generates a Grok Imagine Video 1.5 video from reference images', async () => {
       const referenceImages = [
         { url: 'https://example.com/person.jpg' },
@@ -622,7 +668,7 @@ describe('XAI Video Provider', () => {
         config: {
           reference_images: referenceImages,
           duration: 10,
-          resolution: '1080p',
+          resolution: '720p',
         },
       });
 
@@ -635,18 +681,18 @@ describe('XAI Video Provider', () => {
         prompt: mockPrompt,
         duration: 10,
         aspect_ratio: '16:9',
-        resolution: '1080p',
+        resolution: '720p',
         reference_images: referenceImages,
       });
       expect(videoUtils.storeVideoContent).toHaveBeenCalledOnce();
       expect(videoUtils.storeCacheMapping).toHaveBeenCalledOnce();
       expect(result.error).toBeUndefined();
-      expect(result.cost).toBeCloseTo(1.02, 5);
+      expect(result.cost).toBeCloseTo(0.58, 5);
       expect(result.video).toMatchObject({
         storageRef: { key: mockStorageKey },
         model: 'grok-imagine-video-1.5',
         duration: 4,
-        resolution: '1080p',
+        resolution: '720p',
       });
       expect(result.metadata?.hasReferenceImages).toBe(true);
     });
@@ -703,6 +749,69 @@ describe('XAI Video Provider', () => {
       expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
     });
 
+    it('rejects reference voices on the legacy video model', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: { reference_audios: [{ voice_id: 'eve' }] },
+      });
+
+      const result = await provider.callApi('Use <AUDIO_0> for the speaker.');
+
+      expect(result.error).toContain('only supported by Grok Imagine Video 1.5');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('rejects more than three reference voices', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          reference_audios: ['eve', 'leo', 'ara', 'rex'].map((voice_id) => ({ voice_id })),
+        },
+      });
+
+      const result = await provider.callApi('Use the preset voices.');
+
+      expect(result.error).toContain('Must be between 1 and 3');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty reference voice ID', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: { reference_audios: [{ voice_id: '  ' }] },
+      });
+
+      const result = await provider.callApi('Use the preset voice.');
+
+      expect(result.error).toContain('non-empty voice_id');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('rejects reference voices combined with image-to-video', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          image: { url: 'https://example.com/frame.jpg' },
+          reference_audios: [{ voice_id: 'eve' }],
+        },
+      });
+
+      const result = await provider.callApi('Use <AUDIO_0> for the speaker.');
+
+      expect(result.error).toContain('reference media cannot be combined with image input');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('rejects 1080p reference-to-video requests', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: {
+          reference_images: [{ url: 'https://example.com/reference.jpg' }],
+          resolution: '1080p',
+        },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('capped at 720p');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('rejects more than seven reference images', async () => {
       const provider = new XAIVideoProvider('grok-imagine-video', {
         config: {
@@ -728,7 +837,7 @@ describe('XAI Video Provider', () => {
 
       const result = await provider.callApi(mockPrompt);
 
-      expect(result.error).toContain('for reference_images');
+      expect(result.error).toContain('for reference-to-video');
       expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
     });
   });
@@ -969,6 +1078,20 @@ describe('XAI Video Provider', () => {
         2,
         expect.objectContaining({
           inputReference: `reference_images:${sharedUrl}`,
+        }),
+      );
+    });
+
+    it('includes reference voice IDs in the cache key', async () => {
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
+
+      await new XAIVideoProvider('grok-imagine-video-1.5', {
+        config: { reference_audios: [{ voice_id: 'eve' }, { voice_id: 'leo' }] },
+      }).callApi('Use both preset voices.');
+
+      expect(videoUtils.generateVideoCacheKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputReference: 'reference_audios:eve|leo',
         }),
       );
     });

@@ -4,7 +4,8 @@
  * Supports:
  * - Text-to-video generation
  * - Image-to-video generation (with image.url)
- * - Video editing (with video.url)
+ * - Reference-to-video generation (with reference images and Video 1.5 preset voices)
+ * - Video editing (with video.url, legacy model only)
  *
  * API Documentation: https://docs.x.ai/docs/guides/video-generations-and-edits
  */
@@ -114,6 +115,8 @@ export interface XaiVideoOptions {
   image?: { url: string };
   /** Reference image URLs for reference-to-video generation */
   reference_images?: { url: string }[];
+  /** Preset voice IDs for Grok Imagine Video 1.5 reference-to-video generation */
+  reference_audios?: { voice_id: string }[];
   /** Video URL for video editing */
   video?: { url: string };
   /** Polling interval in ms (default: 10000) */
@@ -161,8 +164,9 @@ const DEFAULT_ASPECT_RATIO: XaiVideoAspectRatio = '16:9';
 const DEFAULT_RESOLUTION: XaiVideoResolution = '720p';
 const MIN_DURATION = 1;
 const MAX_DURATION = 15;
-const MAX_REFERENCE_IMAGE_DURATION = 10;
+const LEGACY_MAX_REFERENCE_DURATION = 10;
 const MAX_REFERENCE_IMAGES = 7;
+const MAX_REFERENCE_AUDIOS = 3;
 
 const LEGACY_VIDEO_COST_PER_SECOND: Record<'720p' | '480p', number> = {
   '720p': 0.07,
@@ -205,6 +209,25 @@ export function validateDuration(duration: number): { valid: boolean; message?: 
     };
   }
   return { valid: true };
+}
+
+function buildVideoInputReference(config: XaiVideoOptions): string | null {
+  if (config.image?.url) {
+    return `image:${config.image.url}`;
+  }
+
+  const referenceInputs = [
+    config.reference_images?.length
+      ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
+      : undefined,
+    config.reference_audios?.length
+      ? `reference_audios:${config.reference_audios
+          .map(({ voice_id }) => voice_id.trim())
+          .join('|')}`
+      : undefined,
+  ].filter((value): value is string => value !== undefined);
+
+  return referenceInputs.length ? referenceInputs.join(';') : null;
 }
 
 /**
@@ -338,6 +361,13 @@ export class XAIVideoProvider implements ApiProvider {
       body.reference_images = config.reference_images.map(({ url }) => ({ url }));
     }
 
+    // Preset voices for Grok Imagine Video 1.5 reference-to-video
+    if (config.reference_audios?.length) {
+      body.reference_audios = config.reference_audios.map(({ voice_id }) => ({
+        voice_id: voice_id.trim(),
+      }));
+    }
+
     // Video editing
     if (config.video?.url) {
       body.video = { url: config.video.url };
@@ -370,34 +400,61 @@ export class XAIVideoProvider implements ApiProvider {
     prompt: string,
     config: XaiVideoOptions,
     duration: number,
+    resolution: XaiVideoResolution,
     isEdit: boolean,
   ): string | undefined {
-    if (isGrokImagineVideo15Model(this.modelName) && isEdit) {
+    const isVideo15 = isGrokImagineVideo15Model(this.modelName);
+    const referenceImageCount = config.reference_images?.length ?? 0;
+    const referenceAudioCount = config.reference_audios?.length ?? 0;
+    const hasReferenceImages = referenceImageCount > 0;
+    const hasReferenceAudios = referenceAudioCount > 0;
+    const hasReferenceMedia = hasReferenceImages || hasReferenceAudios;
+
+    if (isVideo15 && isEdit) {
       return 'Grok Imagine Video 1.5 does not support video editing.';
     }
 
-    if (!config.reference_images?.length) {
+    if (hasReferenceAudios && !isVideo15) {
+      return 'reference_audios are only supported by Grok Imagine Video 1.5.';
+    }
+
+    if (!hasReferenceMedia) {
       return undefined;
     }
 
     if (config.image?.url) {
-      return 'reference_images cannot be combined with image input. Use one video generation mode per request.';
+      return hasReferenceAudios
+        ? 'reference media cannot be combined with image input. Use one video generation mode per request.'
+        : 'reference_images cannot be combined with image input. Use one video generation mode per request.';
     }
 
     if (isEdit) {
-      return 'reference_images cannot be combined with video edits. Use one video generation mode per request.';
+      return 'reference media cannot be combined with video edits. Use one video generation mode per request.';
     }
 
     if (!prompt.trim()) {
-      return 'reference_images require a non-empty prompt.';
+      return 'Reference-to-video requires a non-empty prompt.';
     }
 
-    if (config.reference_images.length > MAX_REFERENCE_IMAGES) {
-      return `Invalid reference_images count "${config.reference_images.length}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
+    if (referenceImageCount > MAX_REFERENCE_IMAGES) {
+      return `Invalid reference_images count "${referenceImageCount}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
     }
 
-    if (duration > MAX_REFERENCE_IMAGE_DURATION) {
-      return `Invalid duration "${duration}" for reference_images. Must be between ${MIN_DURATION} and ${MAX_REFERENCE_IMAGE_DURATION} seconds.`;
+    if (referenceAudioCount > MAX_REFERENCE_AUDIOS) {
+      return `Invalid reference_audios count "${referenceAudioCount}". Must be between 1 and ${MAX_REFERENCE_AUDIOS}.`;
+    }
+
+    if (config.reference_audios?.some(({ voice_id }) => !voice_id.trim())) {
+      return 'Each reference_audios entry must contain a non-empty voice_id.';
+    }
+
+    const maxReferenceDuration = isVideo15 ? MAX_DURATION : LEGACY_MAX_REFERENCE_DURATION;
+    if (duration > maxReferenceDuration) {
+      return `Invalid duration "${duration}" for reference-to-video. Must be between ${MIN_DURATION} and ${maxReferenceDuration} seconds.`;
+    }
+
+    if (resolution === '1080p') {
+      return 'Reference-to-video resolution is capped at 720p.';
     }
 
     return undefined;
@@ -559,8 +616,15 @@ export class XAIVideoProvider implements ApiProvider {
     const evalId = context?.evaluationId;
     const isEdit = !!config.video?.url;
     const hasReferenceImages = Boolean(config.reference_images?.length);
+    const hasReferenceAudios = Boolean(config.reference_audios?.length);
 
-    const inputValidationError = this.validateVideoInputs(prompt, config, duration, isEdit);
+    const inputValidationError = this.validateVideoInputs(
+      prompt,
+      config,
+      duration,
+      resolution,
+      isEdit,
+    );
     if (inputValidationError) {
       return { error: inputValidationError };
     }
@@ -582,11 +646,7 @@ export class XAIVideoProvider implements ApiProvider {
       model: this.modelName,
       size: `${aspectRatio}:${resolution}`,
       seconds: duration,
-      inputReference: config.image?.url
-        ? `image:${config.image.url}`
-        : config.reference_images?.length
-          ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
-          : null,
+      inputReference: buildVideoInputReference(config),
     });
 
     // Check cache (skip for edits)
@@ -621,6 +681,7 @@ export class XAIVideoProvider implements ApiProvider {
             resolution,
             duration,
             hasReferenceImages,
+            hasReferenceAudios,
           },
         };
       }
@@ -722,6 +783,7 @@ export class XAIVideoProvider implements ApiProvider {
         storageKey,
         isEdit,
         hasReferenceImages,
+        hasReferenceAudios,
       },
     };
   }

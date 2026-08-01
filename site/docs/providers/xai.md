@@ -584,7 +584,7 @@ xAI supports the following Grok Imagine video IDs:
 
 | Model ID                            | Supported input modes                                    | Resolutions       |
 | ----------------------------------- | -------------------------------------------------------- | ----------------- |
-| `grok-imagine-video-1.5`            | Text, image, and reference-to-video input                | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5`            | Text, image, and reference images or preset voices       | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-preview`    | Alias for Grok Imagine Video 1.5                         | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-2026-05-30` | Dated Grok Imagine Video 1.5 snapshot                    | 480p, 720p, 1080p |
 | `grok-imagine-video`                | Text, image, video editing, and reference-to-video input | 480p, 720p        |
@@ -621,7 +621,8 @@ tests:
 | `duration`         | number | 8       | Video length in seconds (1-15)                           |
 | `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3        |
 | `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p |
-| `reference_images` | array  | -       | Reference images for reference-to-video generation       |
+| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation         |
+| `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)        |
 | `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                         |
 | `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                           |
 
@@ -659,7 +660,8 @@ Video editing skips duration, aspect ratio, and resolution validation since thes
 
 #### Reference-to-Video
 
-Guide generation with up to seven reference images:
+Guide generation with up to seven reference images and, on Grok Imagine Video 1.5, up to three
+preset voices:
 
 ```yaml
 providers:
@@ -668,11 +670,17 @@ providers:
       reference_images:
         - url: 'https://example.com/person.jpg'
         - url: 'https://example.com/shirt.jpg'
-      duration: 10
+      reference_audios:
+        - voice_id: 'eve'
+      duration: 15
+      resolution: '720p'
 ```
 
-Reference-to-video requires a non-empty prompt, cannot be combined with `image` or `video`, and is
-limited to 10 seconds.
+Reference-to-video requires a non-empty prompt and at least one reference image or preset voice. It
+cannot be combined with `image` or `video`, and its resolution is capped at 720p. The Video 1.5
+family supports durations up to 15 seconds; the legacy `grok-imagine-video` model is limited to 10
+seconds and does not support `reference_audios`. Preset voice IDs are case-insensitive and are
+currently available only to trusted partners in the United States.
 
 #### Pricing
 
