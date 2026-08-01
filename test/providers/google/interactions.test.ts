@@ -423,6 +423,46 @@ describe('GoogleInteractionsProvider', () => {
     }
   });
 
+  it('resolves prompt-owned systemInstruction files from the prompt basePath', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'promptfoo-interactions-prompt-instruction-'),
+    );
+    const providerBasePath = path.join(root, 'provider');
+    const promptBasePath = path.join(root, 'prompt');
+    fs.mkdirSync(providerBasePath);
+    fs.mkdirSync(promptBasePath);
+    fs.writeFileSync(path.join(providerBasePath, 'instruction.txt'), 'Provider instruction.');
+    fs.writeFileSync(path.join(promptBasePath, 'instruction.txt'), 'Prompt instruction.');
+
+    try {
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          basePath: providerBasePath,
+          systemInstruction: 'file://instruction.txt',
+        },
+      });
+
+      await provider.callApi('Plan the next movement.', {
+        prompt: {
+          config: {
+            basePath: promptBasePath,
+            systemInstruction: 'file://instruction.txt',
+          },
+        },
+      } as any);
+
+      const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(request.body as string).system_instruction).toBe('Prompt instruction.');
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('keeps passthrough system_instruction precedence for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -832,6 +872,59 @@ describe('GoogleInteractionsProvider', () => {
       ]);
     } finally {
       cliState.basePath = originalCliBasePath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves prompt-owned responseSchema files from the prompt basePath', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-interactions-prompt-schema-'));
+    const providerBasePath = path.join(root, 'provider');
+    const promptBasePath = path.join(root, 'prompt');
+    fs.mkdirSync(providerBasePath);
+    fs.mkdirSync(promptBasePath);
+    fs.writeFileSync(
+      path.join(providerBasePath, 'response-schema.json'),
+      JSON.stringify({ type: 'object', properties: { provider: { type: 'string' } } }),
+    );
+    fs.writeFileSync(
+      path.join(promptBasePath, 'response-schema.json'),
+      JSON.stringify({ type: 'object', properties: { prompt: { type: 'string' } } }),
+    );
+
+    try {
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          basePath: providerBasePath,
+          responseSchema: 'file://response-schema.json',
+        },
+      });
+
+      await provider.callApi('Locate the target.', {
+        prompt: {
+          config: {
+            basePath: promptBasePath,
+            responseSchema: 'file://response-schema.json',
+          },
+        },
+      } as any);
+
+      const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(request.body as string).response_format).toEqual([
+        {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: {
+            type: 'object',
+            properties: { prompt: { type: 'string' } },
+          },
+        },
+      ]);
+    } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
@@ -1285,6 +1378,49 @@ describe('GoogleInteractionsProvider', () => {
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(request.body as string).service_tier).toBe('standard');
     expect(result.cost).toBeCloseTo(10.5, 10);
+  });
+
+  it('rejects a provider passthrough override to a Live-only model before dispatch', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'wrong route' }] }],
+      },
+      cached: false,
+    } as any);
+    const modelName = 'gemini-3.5-live-translate-preview';
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { model: modelName },
+      },
+    });
+
+    const result = await provider.callApi('Translate this audio.');
+
+    expect(result.error).toContain(`Use google:live:${modelName}`);
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('rejects a prompt passthrough override to a Live-only model before dispatch', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'wrong route' }] }],
+      },
+      cached: false,
+    } as any);
+    const modelName = 'gemini-robotics-er-2-streaming-preview';
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Plan the next movement.', {
+      prompt: { config: { passthrough: { model: modelName } } },
+    } as any);
+
+    expect(result.error).toContain(`Use google:live:${modelName}`);
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
   it('uses an Omni passthrough model for request formatting, output parsing, and billing', async () => {

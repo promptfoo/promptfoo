@@ -1699,6 +1699,18 @@ describe('Provider Registry', () => {
       );
     });
 
+    it.each([
+      ['google:chat:gemini-robotics-er-2-preview', 'google:gemini-robotics-er-2-preview'],
+      ['palm:chat:gemini-robotics-er-2-preview', 'palm:gemini-robotics-er-2-preview'],
+    ])('rejects unsupported standard Robotics alias %s', async (providerPath, validRoute) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        `Use ${validRoute}`,
+      );
+    });
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

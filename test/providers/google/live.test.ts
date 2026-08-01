@@ -324,6 +324,33 @@ describe('GoogleLiveProvider', () => {
     expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
   });
 
+  it.each([
+    ['empty response_modalities', { response_modalities: [] }],
+    ['AUDIO responseModalities', { responseModalities: ['AUDIO'] }],
+    ['mixed response_modalities', { response_modalities: ['TEXT', 'AUDIO'] }],
+  ])('should reject %s for Gemini Robotics ER 2 Streaming before opening a socket', async (_case, generationConfig) => {
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        generationConfig,
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+
+    expect(response.error).toContain('only supports TEXT response modality');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
   it('should default Gemini Robotics ER 2 Streaming to text output', async () => {
     provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
       config: {

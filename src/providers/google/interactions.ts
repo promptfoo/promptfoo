@@ -260,6 +260,16 @@ function hasSemanticInteractionInput(value: unknown): boolean {
   return value !== null && value !== undefined;
 }
 
+function getLiveOnlyModelRouteError(modelName: string): string | undefined {
+  if (
+    modelName === 'gemini-3.5-live-translate-preview' ||
+    modelName.startsWith('gemini-robotics-er-2-streaming-')
+  ) {
+    return `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`;
+  }
+  return undefined;
+}
+
 const INTERACTION_GENERATION_FIELDS = new Set([
   'max_output_tokens',
   'seed',
@@ -548,8 +558,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       return { error: 'Prompt is required for Gemini Interactions API' };
     }
 
-    const promptConfig = context?.prompt?.config as Partial<CompletionOptions> | undefined;
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleCompletionOptions(this.config, promptConfig) as GoogleProviderConfig;
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const providerPassthrough = this.config.passthrough || {};
     const promptPassthrough = promptConfig?.passthrough || {};
     const mergedPassthrough = {
@@ -558,6 +569,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
     };
     const passthroughModel = promptPassthrough.model ?? providerPassthrough.model;
     const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
+    const routeError = getLiveOnlyModelRouteError(effectiveModel);
+    if (routeError) {
+      return { error: routeError };
+    }
     const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
     const allowSamplingControls = config.vertexai && isVideoModel;
     const {
@@ -832,7 +847,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? parseConfigSystemInstruction(
             config.systemInstruction,
             context?.vars,
-            this.config.basePath,
+            promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
           )
         : undefined;
     const systemInstruction =
@@ -860,7 +875,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
               },
             ],
             context?.vars,
-            this.config.basePath,
+            promptBasePath,
           )
         : undefined;
     const hasPromptStructuredOutput =

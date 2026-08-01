@@ -34,6 +34,33 @@ import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
 const GEMINI_LIVE_TRANSLATE_MODEL = 'gemini-3.5-live-translate-preview';
+const ROBOTICS_TEXT_MODALITY_ERROR =
+  'Gemini Robotics ER 2 Streaming only supports TEXT response modality. Omit generationConfig.response_modalities/responseModalities to use the TEXT default, or set it to ["TEXT"].';
+
+function getRoboticsResponseModalityError(
+  isRoboticsStreamingModel: boolean,
+  responseModalities: string[] | undefined,
+): string | undefined {
+  if (!isRoboticsStreamingModel || responseModalities === undefined) {
+    return undefined;
+  }
+  return responseModalities.length === 1 && responseModalities[0] === 'TEXT'
+    ? undefined
+    : ROBOTICS_TEXT_MODALITY_ERROR;
+}
+
+function hasUnsupportedLiveTranslateToolsOrInstructions(
+  config: CompletionOptions,
+  systemInstruction: unknown,
+): boolean {
+  const hasTools = Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools);
+  return (
+    hasTools ||
+    config.mcp?.enabled ||
+    Boolean(config.functionToolStatefulApi?.file) ||
+    Boolean(systemInstruction)
+  );
+}
 
 const formatContentMessages = (
   contents: GeminiFormat,
@@ -276,6 +303,17 @@ export class GoogleLiveProvider implements ApiProvider {
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     );
+    const supportsTextResponse = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
+    const configuredResponseModalities = (
+      config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
+    )?.map((modality) => modality.toUpperCase());
+    const responseModalityError = getRoboticsResponseModalityError(
+      supportsTextResponse,
+      configuredResponseModalities,
+    );
+    if (responseModalityError) {
+      return { error: responseModalityError };
+    }
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -305,15 +343,7 @@ export class GoogleLiveProvider implements ApiProvider {
             'Gemini 3.5 Live Translate requires apiVersion v1beta; remove the override or set apiVersion to v1beta.',
         };
       }
-      const hasTools = Array.isArray(config.tools)
-        ? config.tools.length > 0
-        : Boolean(config.tools);
-      if (
-        hasTools ||
-        config.mcp?.enabled ||
-        Boolean(config.functionToolStatefulApi?.file) ||
-        Boolean(systemInstruction)
-      ) {
+      if (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)) {
         return {
           error: 'Gemini 3.5 Live Translate does not support tools or instructions.',
         };
@@ -452,11 +482,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
-      const configuredResponseModalities = (
-        config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
-      )?.map((modality) => modality.toUpperCase());
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
-      const supportsTextResponse = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
       const responseModalities =
         usesRealtimeTextInput && !supportsTextResponse
           ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')

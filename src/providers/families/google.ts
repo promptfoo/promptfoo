@@ -101,6 +101,12 @@ export const googleProviderFactories: ProviderFactory[] = [
       if (splits.length >= 3) {
         const serviceType = splits[1];
         const modelName = splits.slice(2).join(':');
+        if (modelName === GEMINI_ROBOTICS_STANDARD_MODEL && serviceType === 'chat') {
+          const providerPrefix = splits[0];
+          throw new Error(
+            `Model "${modelName}" uses the standard Gemini Interactions API and does not support ${providerPrefix}:chat:. Use ${providerPrefix}:${modelName}.`,
+          );
+        }
         validateGoogleModelRoute(modelName, serviceType);
 
         if (serviceType === 'live') {
