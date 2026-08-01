@@ -437,7 +437,7 @@ describe('Perplexity Provider', () => {
       expect(result).toMatchObject({
         output: 'Search-backed output',
         metadata: {
-          citations,
+          citations: [{ url: citations[0], content: citations[0] }],
           perplexity: {
             citations,
             search_results: searchResults,

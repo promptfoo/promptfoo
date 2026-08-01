@@ -503,6 +503,28 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
+  it.each([
+    ['empty content', []],
+    ['non-text content', [{ type: 'citation', url: 'https://example.com' }]],
+    ['invalid text content', [{ type: 'text', text: 42 }]],
+  ])('rejects a v2 response with %s and no tool calls', async (_label, content) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content },
+        usage: { tokens: { input_tokens: 1, output_tokens: 0 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('Hello')).resolves.toEqual({
+      error: 'Cohere v2 Chat API response did not contain text content.',
+    });
+  });
+
   it('returns the full v2 message when text and tool calls are both present', async () => {
     const toolCalls = [
       {

@@ -211,6 +211,10 @@ export function validateDuration(duration: number): { valid: boolean; message?: 
   return { valid: true };
 }
 
+function normalizeReferenceAudioVoiceId(voiceId: string): string {
+  return voiceId.trim().toLowerCase();
+}
+
 function buildVideoInputReference(config: XaiVideoOptions): string | null {
   if (config.image?.url) {
     return `image:${config.image.url}`;
@@ -222,7 +226,7 @@ function buildVideoInputReference(config: XaiVideoOptions): string | null {
       : undefined,
     config.reference_audios?.length
       ? `reference_audios:${config.reference_audios
-          .map(({ voice_id }) => voice_id.trim())
+          .map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id))
           .join('|')}`
       : undefined,
   ].filter((value): value is string => value !== undefined);
@@ -364,7 +368,7 @@ export class XAIVideoProvider implements ApiProvider {
     // Preset voices for Grok Imagine Video 1.5 reference-to-video
     if (config.reference_audios?.length) {
       body.reference_audios = config.reference_audios.map(({ voice_id }) => ({
-        voice_id: voice_id.trim(),
+        voice_id: normalizeReferenceAudioVoiceId(voice_id),
       }));
     }
 
@@ -405,7 +409,11 @@ export class XAIVideoProvider implements ApiProvider {
   ): string | undefined {
     const isVideo15 = isGrokImagineVideo15Model(this.modelName);
     const referenceImageCount = config.reference_images?.length ?? 0;
-    const referenceAudioCount = config.reference_audios?.length ?? 0;
+    const referenceAudios: unknown = config.reference_audios;
+    if (referenceAudios !== undefined && !Array.isArray(referenceAudios)) {
+      return 'reference_audios must be an array of preset voice objects.';
+    }
+    const referenceAudioCount = referenceAudios?.length ?? 0;
     const hasReferenceImages = referenceImageCount > 0;
     const hasReferenceAudios = referenceAudioCount > 0;
     const hasReferenceMedia = hasReferenceImages || hasReferenceAudios;
@@ -444,7 +452,16 @@ export class XAIVideoProvider implements ApiProvider {
       return `Invalid reference_audios count "${referenceAudioCount}". Must be between 1 and ${MAX_REFERENCE_AUDIOS}.`;
     }
 
-    if (config.reference_audios?.some(({ voice_id }) => !voice_id.trim())) {
+    if (
+      referenceAudios?.some(
+        (entry: unknown) =>
+          typeof entry !== 'object' ||
+          entry === null ||
+          !('voice_id' in entry) ||
+          typeof entry.voice_id !== 'string' ||
+          !entry.voice_id.trim(),
+      )
+    ) {
       return 'Each reference_audios entry must contain a non-empty voice_id.';
     }
 

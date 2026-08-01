@@ -256,7 +256,7 @@ function getV2Output(data: any): unknown | undefined {
   if (toolCalls) {
     return toolCalls;
   }
-  return content;
+  return content || undefined;
 }
 
 function getUniqueV2CitedDocuments(data: any): string[] {

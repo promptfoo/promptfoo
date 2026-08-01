@@ -773,9 +773,14 @@ describe('XAI Video Provider', () => {
       expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
     });
 
-    it('rejects an empty reference voice ID', async () => {
+    it.each([
+      ['missing voice_id', {}],
+      ['null entry', null],
+      ['non-string voice_id', { voice_id: 42 }],
+      ['blank voice_id', { voice_id: '  ' }],
+    ])('rejects a malformed reference voice entry with %s', async (_label, entry) => {
       const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
-        config: { reference_audios: [{ voice_id: '  ' }] },
+        config: { reference_audios: [entry as any] },
       });
 
       const result = await provider.callApi('Use the preset voice.');
@@ -1086,7 +1091,7 @@ describe('XAI Video Provider', () => {
       vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
 
       await new XAIVideoProvider('grok-imagine-video-1.5', {
-        config: { reference_audios: [{ voice_id: 'eve' }, { voice_id: 'leo' }] },
+        config: { reference_audios: [{ voice_id: 'Eve' }, { voice_id: ' leo ' }] },
       }).callApi('Use both preset voices.');
 
       expect(videoUtils.generateVideoCacheKey).toHaveBeenCalledWith(

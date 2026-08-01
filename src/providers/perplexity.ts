@@ -111,6 +111,14 @@ const PERPLEXITY_PASSTHROUGH_FIELDS = [
   'web_search_options',
 ] as const;
 
+function normalizePerplexityCitations(citations: unknown[]): unknown[] {
+  return citations.map((citation) =>
+    typeof citation === 'string' && /^https?:\/\//i.test(citation)
+      ? { url: citation, content: citation }
+      : citation,
+  );
+}
+
 /**
  * Perplexity API provider
  *
@@ -219,7 +227,9 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     }
 
     return {
-      ...(Array.isArray(raw.citations) ? { citations: raw.citations } : {}),
+      ...(Array.isArray(raw.citations)
+        ? { citations: normalizePerplexityCitations(raw.citations) }
+        : {}),
       ...(Object.keys(perplexity).length > 0 ? { perplexity } : {}),
     };
   }
