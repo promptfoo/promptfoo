@@ -686,10 +686,10 @@ currently available only to trusted partners in the United States.
 
 Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. For generation requests where the output resolution is known, Promptfoo falls back to the video provider's local duration-based estimate when the API omits usage.
 
-| Model                    | Media input                        | 480p output | 720p output | 1080p output  |
-| ------------------------ | ---------------------------------- | ----------- | ----------- | ------------- |
-| `grok-imagine-video-1.5` | $0.01 per image                    | $0.08/sec   | $0.14/sec   | $0.25/sec     |
-| `grok-imagine-video`     | $0.002/image or $0.01/video second | $0.05/sec   | $0.07/sec   | Not supported |
+| Model                    | Media input                         | 480p output | 720p output | 1080p output  |
+| ------------------------ | ----------------------------------- | ----------- | ----------- | ------------- |
+| `grok-imagine-video-1.5` | $0.01 per image; preset voices free | $0.08/sec   | $0.14/sec   | $0.25/sec     |
+| `grok-imagine-video`     | $0.002/image or $0.01/video second  | $0.05/sec   | $0.07/sec   | Not supported |
 
 The local fallback includes image-input and output-video charges. For a video edit without API
 usage data, Promptfoo leaves cost undefined because the edit endpoint ignores the configured
