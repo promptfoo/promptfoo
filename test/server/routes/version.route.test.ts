@@ -9,6 +9,7 @@ import { createApp } from '../../../src/server/server';
 import { getLatestVersion } from '../../../src/updates';
 import { getUpdateCommands } from '../../../src/updates/updateCommands';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockedGetLatestVersion = vi.mocked(getLatestVersion);
 const mockedGetUpdateCommands = vi.mocked(getUpdateCommands);
@@ -64,6 +65,103 @@ describe('Version Route', () => {
     expect(typeof response.body.currentVersion).toBe('string');
     expect(typeof response.body.latestVersion).toBe('string');
     expect(typeof response.body.updateAvailable).toBe('boolean');
+  });
+
+  it('should skip upstream update checks when they are disabled', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(mockedGetLatestVersion).not.toHaveBeenCalled();
+      expect(response.body.latestVersion).toBe(response.body.currentVersion);
+      expect(response.body.updateAvailable).toBe(false);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should not classify generic self-hosted mode as Docker', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body.selfHosted).toBe(true);
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isContainer: false,
+        isOfficialDockerImage: false,
+        isNpx: false,
+      });
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should use Docker guidance only when the official-image marker is set', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body.selfHosted).toBe(true);
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isContainer: true,
+        isOfficialDockerImage: true,
+        isNpx: false,
+      });
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should distinguish custom containers from official images', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+      PROMPTFOO_SELF_HOSTED: 'true',
+    });
+    mockedGetLatestVersion.mockResolvedValue('99.0.0');
+    mockedGetUpdateCommands.mockReturnValue({
+      primary: '',
+      alternative: null,
+      commandType: 'npm',
+      isCustomContainer: true,
+    });
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        commandType: 'npm',
+        updateCommands: {
+          primary: '',
+          alternative: null,
+          commandType: 'npm',
+          isCustomContainer: true,
+        },
+      });
+      expect(mockedGetUpdateCommands).toHaveBeenCalledWith({
+        isContainer: true,
+        isOfficialDockerImage: false,
+        isNpx: false,
+      });
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should include all required fields matching UpdateCommandResult shape', async () => {

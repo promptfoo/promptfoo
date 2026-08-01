@@ -83,7 +83,11 @@ export default function UpdateBanner() {
         document.body.appendChild(textarea);
         textarea.select();
         try {
-          document.execCommand('copy');
+          // execCommand reports rejection via its return value, not by throwing. Without this
+          // check a refused copy would still render the "Copied!" success state.
+          if (!document.execCommand('copy')) {
+            throw new Error('Fallback copy command was rejected');
+          }
           onSuccess();
         } catch (fallbackError) {
           console.error('Fallback copy also failed:', fallbackError);
