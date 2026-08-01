@@ -36,8 +36,6 @@
         // Imported by test/code-scan-action/*.test.ts; declared in
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
-        // Published security pin for the MCP adapter; required even in slim installs.
-        "@hono/node-server",
         "@octokit/rest",
         // Types for a dynamically-imported dependency.
         "@types/pdf-parse",

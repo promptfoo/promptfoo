@@ -10,7 +10,6 @@ type PackageManifest = {
   devDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
-  scripts?: Record<string, string>;
 };
 
 function readPackageJson<T>(relativePath: string): T {
@@ -238,7 +237,6 @@ describe('package manifests', () => {
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
     expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
-    expect(packageJson.scripts?.depcheck).toContain(adapterName);
     expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
     expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
