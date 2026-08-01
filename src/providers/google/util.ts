@@ -1291,11 +1291,13 @@ function processImagesInContents(
  *
  * @param configSystemInstruction - The systemInstruction from config (can be string, Content, or undefined)
  * @param contextVars - Variables for Nunjucks template rendering
+ * @param basePath - Optional base directory for resolving relative instruction file references
  * @returns Processed Content object or undefined
  */
 export function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
   contextVars?: Record<string, VarValue>,
+  basePath?: string,
 ): Content | undefined {
   if (!configSystemInstruction) {
     return undefined;
@@ -1306,7 +1308,11 @@ export function parseConfigSystemInstruction(
 
   // Load systemInstruction from file if it's a file path
   if (typeof configSystemInstruction === 'string') {
-    configInstruction = loadFile(configSystemInstruction, contextVars);
+    const instructionReference =
+      basePath && configSystemInstruction.startsWith('file://')
+        ? `file://${path.resolve(basePath, configSystemInstruction.slice('file://'.length))}`
+        : configSystemInstruction;
+    configInstruction = loadFile(instructionReference, contextVars);
   }
 
   // Convert string to Content structure

@@ -376,6 +376,53 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
+  it('resolves systemInstruction files from the provider basePath and preserves absolute refs', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-interactions-instruction-'));
+    const providerBasePath = path.join(root, 'provider');
+    const cliBasePath = path.join(root, 'cli');
+    const absoluteInstructionPath = path.join(root, 'absolute-instruction.txt');
+    fs.mkdirSync(providerBasePath);
+    fs.mkdirSync(cliBasePath);
+    fs.writeFileSync(path.join(providerBasePath, 'instruction.txt'), 'Provider instruction.');
+    fs.writeFileSync(path.join(cliBasePath, 'instruction.txt'), 'CLI instruction.');
+    fs.writeFileSync(absoluteInstructionPath, 'Absolute instruction.');
+    const originalCliBasePath = cliState.basePath;
+    cliState.basePath = cliBasePath;
+
+    try {
+      const relativeProvider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          basePath: providerBasePath,
+          systemInstruction: 'file://instruction.txt',
+        },
+      });
+      const absoluteProvider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: {
+          apiKey: 'test-key',
+          basePath: providerBasePath,
+          systemInstruction: `file://${absoluteInstructionPath}`,
+        },
+      });
+
+      await relativeProvider.callApi('Plan the next movement.');
+      await absoluteProvider.callApi('Plan the next movement.');
+
+      const bodies = mockFetchWithCache.mock.calls.map(([, request]) =>
+        JSON.parse((request as RequestInit).body as string),
+      );
+      expect(bodies[0].system_instruction).toBe('Provider instruction.');
+      expect(bodies[1].system_instruction).toBe('Absolute instruction.');
+    } finally {
+      cliState.basePath = originalCliBasePath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('keeps passthrough system_instruction precedence for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {

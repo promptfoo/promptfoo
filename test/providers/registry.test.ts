@@ -1658,6 +1658,47 @@ describe('Provider Registry', () => {
       );
     });
 
+    it.each([
+      'google:video:gemini-robotics-er-2-streaming-preview',
+      'google:embedding:gemini-robotics-er-2-streaming-preview',
+      'google:embeddings:gemini-robotics-er-2-streaming-preview',
+      'vertex:video:gemini-robotics-er-2-streaming-preview',
+      'vertex:embedding:gemini-robotics-er-2-streaming-preview',
+      'vertex:embeddings:gemini-robotics-er-2-streaming-preview',
+      'google:video:gemini-3.5-live-translate-preview',
+      'google:embedding:gemini-3.5-live-translate-preview',
+      'google:embeddings:gemini-3.5-live-translate-preview',
+      'vertex:video:gemini-3.5-live-translate-preview',
+      'vertex:embedding:gemini-3.5-live-translate-preview',
+      'vertex:embeddings:gemini-3.5-live-translate-preview',
+    ])('rejects incompatible Live-only model route %s before provider dispatch', async (providerPath) => {
+      const modelName = providerPath.split(':').slice(2).join(':');
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        `Use google:live:${modelName}`,
+      );
+    });
+
+    it.each([
+      'google:live:gemini-robotics-er-2-preview',
+      'google:video:gemini-robotics-er-2-preview',
+      'google:embedding:gemini-robotics-er-2-preview',
+      'google:embeddings:gemini-robotics-er-2-preview',
+      'vertex:live:gemini-robotics-er-2-preview',
+      'vertex:video:gemini-robotics-er-2-preview',
+      'vertex:embedding:gemini-robotics-er-2-preview',
+      'vertex:embeddings:gemini-robotics-er-2-preview',
+    ])('rejects incompatible standard Robotics ER 2 route %s', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'Use google:gemini-robotics-er-2-preview',
+      );
+    });
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

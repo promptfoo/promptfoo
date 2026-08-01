@@ -646,8 +646,10 @@ export class CohereChatCompletionProvider implements ApiProvider {
       const promptTokens = usage.input_tokens || 0;
       const completionTokens = usage.output_tokens || 0;
       const totalTokens = promptTokens + completionTokens;
+      const serverCachedTokens =
+        typeof data?.usage?.cached_tokens === 'number' ? data.usage.cached_tokens : 0;
       const tokenUsage: TokenUsage = {
-        cached: cached ? totalTokens : 0,
+        cached: cached ? totalTokens : serverCachedTokens,
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,

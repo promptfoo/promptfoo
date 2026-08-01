@@ -829,7 +829,11 @@ export class GoogleInteractionsProvider implements ApiProvider {
     };
     const systemInstructionContent =
       !isVideoModel && passthroughSystemInstruction === undefined
-        ? parseConfigSystemInstruction(config.systemInstruction, context?.vars)
+        ? parseConfigSystemInstruction(
+            config.systemInstruction,
+            context?.vars,
+            this.config.basePath,
+          )
         : undefined;
     const systemInstruction =
       !isVideoModel && passthroughSystemInstruction === undefined

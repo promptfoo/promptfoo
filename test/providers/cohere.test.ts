@@ -70,6 +70,38 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
+  it('preserves v2 server cache usage while marking a local cached response fully cached', async () => {
+    const data = {
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Cached answer' }] },
+      usage: {
+        cached_tokens: 3,
+        tokens: { input_tokens: 5, output_tokens: 2 },
+      },
+    };
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({ cached: false, data } as any)
+      .mockResolvedValueOnce({ cached: true, data } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const serverResponse = await provider.callApi('First request');
+    const localCacheResponse = await provider.callApi('Repeated request');
+
+    expect(serverResponse.tokenUsage).toMatchObject({
+      cached: 3,
+      prompt: 5,
+      completion: 2,
+      total: 7,
+    });
+    expect(localCacheResponse.tokenUsage).toMatchObject({
+      cached: 7,
+      prompt: 5,
+      completion: 2,
+      total: 7,
+    });
+  });
+
   it('converts legacy Cohere chat history and preamble to v2 messages', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,

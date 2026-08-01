@@ -1,5 +1,7 @@
 import type { ProviderFactory } from '../registryTypes';
 
+const GEMINI_ROBOTICS_STANDARD_MODEL = 'gemini-robotics-er-2-preview';
+
 function isLiveOnlyModel(modelName: string): boolean {
   return (
     modelName === 'gemini-3.5-live-translate-preview' ||
@@ -7,10 +9,19 @@ function isLiveOnlyModel(modelName: string): boolean {
   );
 }
 
-function rejectBareLiveOnlyModel(modelName: string): void {
-  if (isLiveOnlyModel(modelName)) {
+function validateGoogleModelRoute(modelName: string, serviceType?: string): void {
+  if (isLiveOnlyModel(modelName) && serviceType !== 'live') {
     throw new Error(
       `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`,
+    );
+  }
+  if (
+    modelName === GEMINI_ROBOTICS_STANDARD_MODEL &&
+    serviceType !== undefined &&
+    serviceType !== 'chat'
+  ) {
+    throw new Error(
+      `Model "${modelName}" uses the standard Gemini Interactions API. Use google:${modelName} or vertex:${modelName}.`,
     );
   }
 }
@@ -27,13 +38,20 @@ export const googleProviderFactories: ProviderFactory[] = [
       const firstPart = splits[1];
       if (firstPart === 'live') {
         const modelName = splits.slice(2).join(':');
+        validateGoogleModelRoute(modelName, firstPart);
         throw new Error(
           `Vertex AI does not support the Gemini Live API. Use google:live:${modelName}.`,
         );
       }
+      const explicitServiceType = ['chat', 'video', 'embedding', 'embeddings'].includes(firstPart)
+        ? firstPart
+        : undefined;
+      const routedModelName = explicitServiceType
+        ? splits.slice(2).join(':')
+        : splits.slice(1).join(':');
+      validateGoogleModelRoute(routedModelName, explicitServiceType);
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
-      rejectBareLiveOnlyModel(modelName);
       if (
         modelName === 'gemini-omni-flash-preview' ||
         modelName === 'gemini-robotics-er-2-preview'
@@ -83,6 +101,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       if (splits.length >= 3) {
         const serviceType = splits[1];
         const modelName = splits.slice(2).join(':');
+        validateGoogleModelRoute(modelName, serviceType);
 
         if (serviceType === 'live') {
           // This is a Live API request
@@ -116,7 +135,7 @@ export const googleProviderFactories: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
-      rejectBareLiveOnlyModel(modelName);
+      validateGoogleModelRoute(modelName);
 
       if (
         modelName === 'gemini-omni-flash-preview' ||
