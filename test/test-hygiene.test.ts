@@ -686,8 +686,13 @@ function findStalePolicyAllowlistFiles(
   return Array.from(allowlist)
     .filter((file) => {
       const filePath = path.join(testDir, file);
+      const relativePath = path.relative(testDir, filePath);
 
       if (
+        path.isAbsolute(file) ||
+        relativePath === '..' ||
+        relativePath.startsWith(`..${path.sep}`) ||
+        path.isAbsolute(relativePath) ||
         filePath === thisFile ||
         !testFilePattern.test(filePath) ||
         toPosixRelativePath(filePath) !== file
@@ -1023,6 +1028,22 @@ describe('root test hygiene', () => {
     expect(findStalePolicyAllowlistFiles(new Set(['database.test.ts']), () => false)).toEqual([
       'database.test.ts',
     ]);
+  });
+
+  it('rejects allowlisted paths outside the root test directory without inspecting them', () => {
+    const outsideFile = '../src/app/src/stores/redteamJobStore.test.ts';
+    const absoluteOutsideFile = path.join(repoRoot, 'src/app/src/stores/redteamJobStore.test.ts');
+    const inspectedSources: string[] = [];
+    const staleFiles = findStalePolicyAllowlistFiles(
+      new Set([outsideFile, absoluteOutsideFile]),
+      (source) => {
+        inspectedSources.push(source);
+        return hasSleepPromise(source);
+      },
+    );
+
+    expect(staleFiles).toEqual([outsideFile, absoluteOutsideFile].sort());
+    expect(inspectedSources).toEqual([]);
   });
 
   it('keeps new root tests from adding direct process.env mutations', () => {
