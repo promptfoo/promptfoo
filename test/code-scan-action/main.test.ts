@@ -6,7 +6,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Stats } from 'node:fs';
+import type { PathLike, Stats } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // The action embeds the monorepo's promptfoo version at build time and pins the
@@ -103,6 +103,8 @@ const mocks = vi.hoisted(() => {
   };
 
   const fs = {
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
@@ -139,6 +141,8 @@ vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
+    existsSync: mocks.fs.existsSync,
+    readFileSync: mocks.fs.readFileSync,
     unlinkSync: mocks.fs.unlinkSync,
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
@@ -155,29 +159,51 @@ vi.mock('fs', async () => {
 
 const originalEnv = { ...process.env };
 
-// Matches the deterministic fs.mkdtempSync mock; the install passes empty user/global
-// npm config files under this dir to isolate the registry from a poisoned .npmrc.
-const MOCK_NPMRC_DIR = path.join(os.tmpdir(), 'promptfoo-npmrc-test');
+// Matches the deterministic fs.mkdtempSync mock; the install keeps its local
+// prefix and isolated user/global npm config outside the checked-out workspace.
+const MOCK_INSTALL_DIR = path.join(os.tmpdir(), 'promptfoo-install-test');
+const MOCK_NPM_CLI_PATH = path.join(
+  path.dirname(process.execPath),
+  '..',
+  'lib',
+  'node_modules',
+  'npm',
+  'bin',
+  'npm-cli.js',
+);
+const MOCK_PROMPTFOO_PACKAGE_DIR = path.join(MOCK_INSTALL_DIR, 'node_modules', 'promptfoo');
+const MOCK_PROMPTFOO_ENTRYPOINT = path.join(
+  MOCK_PROMPTFOO_PACKAGE_DIR,
+  'dist',
+  'src',
+  'entrypoint.js',
+);
 
 function expectedInstallArgs(version: string): string[] {
   return [
     'install',
-    '-g',
+    '--prefix',
+    MOCK_INSTALL_DIR,
     `promptfoo@${version}`,
     '--ignore-scripts',
+    '--registry=https://registry.npmjs.org/',
     '--userconfig',
-    path.join(MOCK_NPMRC_DIR, 'user'),
+    path.join(MOCK_INSTALL_DIR, 'user'),
     '--globalconfig',
-    path.join(MOCK_NPMRC_DIR, 'global'),
+    path.join(MOCK_INSTALL_DIR, 'global'),
   ];
 }
 
 interface PromptfooExecCall {
+  command: string;
+  entrypoint: string;
   args: string[];
   options?: { env?: Record<string, string> };
 }
 
 interface NpmExecCall {
+  command: string;
+  npmCliPath: string;
   args: string[];
   options?: { env?: Record<string, string>; cwd?: string };
 }
@@ -225,9 +251,15 @@ function setupMocks() {
   mocks.core.getBooleanInput.mockReturnValue(false);
   mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
 
-  // Deterministic temp dir for the install's isolated --userconfig/--globalconfig
-  // files, so tests can assert the exact npm args without touching disk.
-  mocks.fs.mkdtempSync.mockReturnValue(MOCK_NPMRC_DIR);
+  // Deterministic temp dir for the install's isolated prefix and npm config files,
+  // so tests can assert the exact npm args without touching disk.
+  mocks.fs.mkdtempSync.mockReturnValue(MOCK_INSTALL_DIR);
+  mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+    return String(candidate) === MOCK_NPM_CLI_PATH;
+  });
+  mocks.fs.readFileSync.mockReturnValue(
+    JSON.stringify({ bin: { promptfoo: 'dist/src/entrypoint.js' } }),
+  );
   mocks.fs.realpathSync.mockImplementation((p: string) => p);
   // Default: target file does not exist yet, so writeSarifFile won't trip the symlink check.
   mocks.fs.lstatSync.mockImplementation(() => {
@@ -239,10 +271,10 @@ function setupMocks() {
   mocks.exec.exec.mockImplementation(
     async (
       command: string,
-      _args: string[] | undefined,
+      args: string[] | undefined,
       options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
     ) => {
-      if (command === 'promptfoo' && options?.listeners?.stdout) {
+      if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
         const response = JSON.stringify({
           success: true,
           comments: [],
@@ -281,12 +313,25 @@ function setupMocks() {
   mocks.config.generateConfigFile.mockReturnValue('/tmp/test-config.yaml');
 }
 
+function isPromptfooExecCommand(command: unknown, args: unknown): args is string[] {
+  return (
+    command === process.execPath &&
+    Array.isArray(args) &&
+    typeof args[0] === 'string' &&
+    args[0].startsWith(`${MOCK_PROMPTFOO_PACKAGE_DIR}${path.sep}`)
+  );
+}
+
+function getActionNodeExecCalls(): unknown[][] {
+  return mocks.exec.exec.mock.calls.filter(([command]) => command === process.execPath);
+}
+
 async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   await import('../../code-scan-action/src/main');
 
   const call = await vi.waitFor(() => {
-    const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+    const promptfooCall = mocks.exec.exec.mock.calls.find(([command, args]) =>
+      isPromptfooExecCommand(command, args),
     );
 
     if (!promptfooCall || !Array.isArray(promptfooCall[1])) {
@@ -297,7 +342,9 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
   });
 
   return {
-    args: call[1],
+    command: call[0],
+    entrypoint: call[1][0],
+    args: call[1].slice(1),
     options: call[2] as PromptfooExecCall['options'],
   };
 }
@@ -305,12 +352,15 @@ async function importActionAndGetPromptfooCall(): Promise<PromptfooExecCall> {
 function isNpmInstallCall(call: unknown[]): boolean {
   const [command, args] = call;
   return (
-    command === 'npm' &&
+    command === process.execPath &&
     Array.isArray(args) &&
-    args[0] === 'install' &&
-    args[1] === '-g' &&
-    typeof args[2] === 'string' &&
-    args[2].startsWith('promptfoo@')
+    typeof args[0] === 'string' &&
+    path.basename(args[0]) === 'npm-cli.js' &&
+    args[1] === 'install' &&
+    args[2] === '--prefix' &&
+    typeof args[3] === 'string' &&
+    typeof args[4] === 'string' &&
+    args[4].startsWith('promptfoo@')
   );
 }
 
@@ -328,7 +378,9 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   });
 
   return {
-    args: call[1] as string[],
+    command: call[0] as string,
+    npmCliPath: (call[1] as string[])[0],
+    args: (call[1] as string[]).slice(1),
     options: call[2] as NpmExecCall['options'],
   };
 }
@@ -337,8 +389,8 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
   await import('../../code-scan-action/src/main');
 
   const calls = await vi.waitFor(() => {
-    const promptfooCall = mocks.exec.exec.mock.calls.find(
-      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+    const promptfooCall = mocks.exec.exec.mock.calls.find(([command, args]) =>
+      isPromptfooExecCommand(command, args),
     );
     const npmCall = mocks.exec.exec.mock.calls.find(isNpmInstallCall);
 
@@ -351,11 +403,15 @@ async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpm
 
   return {
     npmInstall: {
-      args: calls.npmCall[1] as string[],
+      command: calls.npmCall[0] as string,
+      npmCliPath: (calls.npmCall[1] as string[])[0],
+      args: (calls.npmCall[1] as string[]).slice(1),
       options: calls.npmCall[2] as NpmExecCall['options'],
     },
     promptfoo: {
-      args: calls.promptfooCall[1],
+      command: calls.promptfooCall[0],
+      entrypoint: calls.promptfooCall[1][0],
+      args: calls.promptfooCall[1].slice(1),
       options: calls.promptfooCall[2] as PromptfooExecCall['options'],
     },
   };
@@ -515,6 +571,213 @@ describe('code-scan-action main', () => {
       });
     }
 
+    it('runs npm and the scanner under the bundled action Node instead of the workflow Node', async () => {
+      mockProcessEnv({ PATH: path.join(os.tmpdir(), 'workflow-node20', 'bin') });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.command).toBe(process.execPath);
+      expect(npmInstall.npmCliPath).toBe(MOCK_NPM_CLI_PATH);
+      expect(npmInstall.args).toEqual(expectedInstallArgs(pinnedPromptfooVersion));
+      expect(promptfoo.command).toBe(process.execPath);
+      expect(promptfoo.entrypoint).toBe(MOCK_PROMPTFOO_ENTRYPOINT);
+      expect(getActionNodeExecCalls()).toHaveLength(2);
+    });
+
+    it('finds PATH-installed npm in the Windows Node layout when the action runtime has no npm', async () => {
+      const workflowNodeDir = path.join(os.tmpdir(), 'workflow-node20');
+      const workflowNpmCliPath = path.join(
+        workflowNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const workflowNpmExecutable = path.join(
+        workflowNodeDir,
+        process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      );
+      mockProcessEnv({ PATH: workflowNodeDir });
+      mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+        return (
+          String(candidate) === workflowNpmExecutable || String(candidate) === workflowNpmCliPath
+        );
+      });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.command).toBe(process.execPath);
+      expect(npmInstall.npmCliPath).toBe(workflowNpmCliPath);
+      expect(promptfoo.command).toBe(process.execPath);
+    });
+
+    it('does not resolve npm from relative PATH entries inside an untrusted checkout', async () => {
+      const workflowNodeDir = path.join(os.tmpdir(), 'workflow-node20');
+      const workflowNpmCliPath = path.join(
+        workflowNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const workflowNpmExecutable = path.join(
+        workflowNodeDir,
+        process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      );
+      mockProcessEnv({ PATH: ['untrusted-bin', workflowNodeDir].join(path.delimiter) });
+      mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+        return (
+          String(candidate) === workflowNpmExecutable ||
+          String(candidate) === workflowNpmCliPath ||
+          String(candidate) ===
+            path.join('untrusted-bin', 'node_modules', 'npm', 'bin', 'npm-cli.js')
+        );
+      });
+
+      const { npmCliPath } = await importActionAndGetNpmInstallCall();
+
+      expect(npmCliPath).toBe(workflowNpmCliPath);
+      expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(
+        path.join('untrusted-bin', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+      );
+    });
+
+    it('rejects checkout-derived absolute PATH bins even when they contain a fake npm install', async () => {
+      const workspace = path.resolve('/test/workspace');
+      const untrustedNodeDir = path.join(workspace, 'node_modules', '.bin');
+      const trustedNodeDir = path.join(os.tmpdir(), 'trusted-node20');
+      const executableName = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      const untrustedNpmExecutable = path.join(untrustedNodeDir, executableName);
+      const trustedNpmExecutable = path.join(trustedNodeDir, executableName);
+      const untrustedNpmCliPath = path.join(
+        untrustedNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const trustedNpmCliPath = path.join(
+        trustedNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const existingPaths = new Set([
+        untrustedNpmExecutable,
+        untrustedNpmCliPath,
+        trustedNpmExecutable,
+        trustedNpmCliPath,
+      ]);
+      mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
+      mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+        return existingPaths.has(String(candidate));
+      });
+
+      const { npmCliPath } = await importActionAndGetNpmInstallCall();
+
+      expect(npmCliPath).toBe(trustedNpmCliPath);
+      expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(untrustedNpmExecutable);
+    });
+
+    it.each([
+      'directory',
+      'executable',
+      'npm-cli',
+    ])('rejects a PATH %s symlink that resolves inside the untrusted checkout', async (symlinkTarget) => {
+      const workspace = path.resolve('/test/workspace');
+      const untrustedNodeDir = path.join(os.tmpdir(), 'untrusted-node20');
+      const trustedNodeDir = path.join(os.tmpdir(), 'trusted-node20');
+      const executableName = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      const untrustedNpmExecutable = path.join(untrustedNodeDir, executableName);
+      const trustedNpmExecutable = path.join(trustedNodeDir, executableName);
+      const untrustedNpmCliPath = path.join(
+        untrustedNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const trustedNpmCliPath = path.join(
+        trustedNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const existingPaths = new Set([
+        untrustedNpmExecutable,
+        untrustedNpmCliPath,
+        trustedNpmExecutable,
+        trustedNpmCliPath,
+      ]);
+      mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
+      mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+        return existingPaths.has(String(candidate));
+      });
+      mocks.fs.realpathSync.mockImplementation((candidate: string) => {
+        if (
+          (symlinkTarget === 'directory' && candidate === untrustedNodeDir) ||
+          (symlinkTarget === 'executable' && candidate === untrustedNpmExecutable) ||
+          (symlinkTarget === 'npm-cli' && candidate === untrustedNpmCliPath)
+        ) {
+          return path.join(workspace, 'attacker', 'npm-cli.js');
+        }
+        return candidate;
+      });
+
+      const { npmCliPath } = await importActionAndGetNpmInstallCall();
+
+      expect(npmCliPath).toBe(trustedNpmCliPath);
+    });
+
+    it('does not execute an npm-cli.js from a PATH directory without an npm executable', async () => {
+      const untrustedNodeDir = path.join(os.tmpdir(), 'untrusted-node20');
+      const trustedNodeDir = path.join(os.tmpdir(), 'trusted-node20');
+      const trustedNpmExecutable = path.join(
+        trustedNodeDir,
+        process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      );
+      const untrustedNpmCliPath = path.join(
+        untrustedNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const trustedNpmCliPath = path.join(
+        trustedNodeDir,
+        'node_modules',
+        'npm',
+        'bin',
+        'npm-cli.js',
+      );
+      const existingPaths = new Set([untrustedNpmCliPath, trustedNpmExecutable, trustedNpmCliPath]);
+      mockProcessEnv({ PATH: [untrustedNodeDir, trustedNodeDir].join(path.delimiter) });
+      mocks.fs.existsSync.mockImplementation((candidate: PathLike) => {
+        return existingPaths.has(String(candidate));
+      });
+
+      const { npmCliPath } = await importActionAndGetNpmInstallCall();
+
+      expect(npmCliPath).toBe(trustedNpmCliPath);
+      expect(mocks.fs.existsSync).not.toHaveBeenCalledWith(untrustedNpmCliPath);
+    });
+
+    it('fails clearly without invoking a subprocess when npm cannot be found', async () => {
+      mockProcessEnv({ PATH: '' });
+      mocks.fs.existsSync.mockReturnValue(false);
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('npm CLI not found'),
+        );
+      });
+      expect(getActionNodeExecCalls()).toHaveLength(0);
+    });
+
     it('installs the release-pinned promptfoo version with lifecycle scripts disabled and isolated npm config', async () => {
       const { args } = await importActionAndGetNpmInstallCall();
 
@@ -527,6 +790,70 @@ describe('code-scan-action main', () => {
       const { args } = await importActionAndGetNpmInstallCall();
 
       expect(args).toEqual(expectedInstallArgs('0.100.5'));
+    });
+
+    it('uses the legacy installed bin entrypoint for older promptfoo-version overrides', async () => {
+      mockPromptfooVersionInput('0.100.5');
+      mocks.fs.readFileSync.mockReturnValue(
+        JSON.stringify({ bin: { promptfoo: 'dist/src/main.js' } }),
+      );
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.args).toEqual(expectedInstallArgs('0.100.5'));
+      expect(promptfoo.entrypoint).toBe(
+        path.join(MOCK_PROMPTFOO_PACKAGE_DIR, 'dist', 'src', 'main.js'),
+      );
+    });
+
+    it('supports a string npm package bin declaration', async () => {
+      mocks.fs.readFileSync.mockReturnValue(JSON.stringify({ bin: './dist/src/entrypoint.js' }));
+
+      const { entrypoint } = await importActionAndGetPromptfooCall();
+
+      expect(entrypoint).toBe(MOCK_PROMPTFOO_ENTRYPOINT);
+    });
+
+    it.each([
+      ['a missing executable', {}, 'does not declare a promptfoo executable'],
+      ['an empty executable', { promptfoo: '' }, 'does not declare a promptfoo executable'],
+      [
+        'an executable outside the installed package',
+        { promptfoo: '../outside.js' },
+        'must remain within its package directory',
+      ],
+      [
+        'an absolute executable',
+        { promptfoo: path.join(os.tmpdir(), 'outside.js') },
+        'must remain within its package directory',
+      ],
+    ])('rejects %s without running the scanner', async (_label, bin, expectedError) => {
+      mocks.fs.readFileSync.mockReturnValue(JSON.stringify({ bin }));
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(expect.stringContaining(expectedError));
+      });
+      expect(getActionNodeExecCalls()).toHaveLength(1);
+      expect(isNpmInstallCall(getActionNodeExecCalls()[0])).toBe(true);
+    });
+
+    it('rejects an installed executable symlink that resolves outside the package', async () => {
+      mocks.fs.realpathSync.mockImplementation((candidate: string) => {
+        return candidate === MOCK_PROMPTFOO_ENTRYPOINT
+          ? path.join(os.tmpdir(), 'outside.js')
+          : candidate;
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('must remain within its package directory'),
+        );
+      });
+      expect(getActionNodeExecCalls()).toHaveLength(1);
     });
 
     it('accepts an exact prerelease promptfoo-version override', async () => {
@@ -562,6 +889,20 @@ describe('code-scan-action main', () => {
 
       expect(npmInstall.options?.env?.NODE_OPTIONS).toBeUndefined();
       expect(promptfoo.options?.env?.NODE_OPTIONS).toBeUndefined();
+    });
+
+    it('strips private npm tokens from the public install but preserves them for scanner npx', async () => {
+      mockProcessEnv({
+        NODE_AUTH_TOKEN: 'private-registry-node-token',
+        NPM_TOKEN: 'private-registry-npm-token',
+      });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.NODE_AUTH_TOKEN).toBeUndefined();
+      expect(npmInstall.options?.env?.NPM_TOKEN).toBeUndefined();
+      expect(promptfoo.options?.env?.NODE_AUTH_TOKEN).toBe('private-registry-node-token');
+      expect(promptfoo.options?.env?.NPM_TOKEN).toBe('private-registry-npm-token');
     });
 
     it('strips env-level npm config overrides from the install but not the scan', async () => {
@@ -713,10 +1054,10 @@ describe('code-scan-action main', () => {
       mocks.exec.exec.mockImplementation(
         async (
           command: string,
-          _args: string[] | undefined,
+          args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
+          if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
                 JSON.stringify({
@@ -748,12 +1089,12 @@ describe('code-scan-action main', () => {
       mocks.exec.exec.mockImplementation(
         async (
           command: string,
-          _args: string[] | undefined,
+          args: string[] | undefined,
           options:
             | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
             | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stderr) {
+          if (isPromptfooExecCommand(command, args) && options?.listeners?.stderr) {
             options.listeners.stderr(Buffer.from('Fork PR scanning not authorized'));
             return 1;
           }
@@ -796,10 +1137,10 @@ describe('code-scan-action main', () => {
       mocks.exec.exec.mockImplementation(
         async (
           command: string,
-          _args: string[] | undefined,
+          args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
+          if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
             options.listeners.stdout(Buffer.from(JSON.stringify(response)));
           }
           return 0;
@@ -864,10 +1205,10 @@ describe('code-scan-action main', () => {
       mocks.exec.exec.mockImplementation(
         async (
           command: string,
-          _args: string[] | undefined,
+          args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
+          if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
                 JSON.stringify({
@@ -1117,11 +1458,7 @@ describe('code-scan-action main', () => {
 
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
-      expect(mocks.exec.exec).not.toHaveBeenCalledWith(
-        'promptfoo',
-        expect.anything(),
-        expect.anything(),
-      );
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
     });
 
     it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {

@@ -47,7 +47,7 @@ The OpenAI Codex SDK provider requires the `@openai/codex-sdk` package to be ins
 npm install @openai/codex-sdk@^0.146.0
 ```
 
-Use Node.js `^20.20.0` or `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
+Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
 
 :::note
 

@@ -38,11 +38,8 @@ on:
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
       - 'src/envars.ts'
-      - 'src/globalConfig/runtimeNoticeState.ts'
-      - 'src/runtimeCompatibility*.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
-      - 'src/types/runtimeCompatibility.ts'
       - 'src/updates.ts'
       - 'src/updates/**'
   push:
@@ -52,11 +49,8 @@ on:
       - '.github/workflows/docker.yml'
       - 'Dockerfile'
       - 'src/envars.ts'
-      - 'src/globalConfig/runtimeNoticeState.ts'
-      - 'src/runtimeCompatibility*.ts'
       - 'src/server/routes/version*.ts'
       - 'src/types/api/version.ts'
-      - 'src/types/runtimeCompatibility.ts'
       - 'src/updates.ts'
       - 'src/updates/**'
 
