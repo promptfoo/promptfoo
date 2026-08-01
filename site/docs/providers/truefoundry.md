@@ -81,13 +81,16 @@ If not specified, the default URL `https://llm-gateway.truefoundry.com` is used.
 
 ### TrueFoundry-Specific Configuration
 
-TrueFoundry provides additional configuration options for metadata tracking and logging:
+TrueFoundry provides additional configuration options for metadata tracking, logging, and local
+OpenAI cost lookup:
 
 ```yaml
 providers:
-  - id: truefoundry:openai-main/gpt-5
+  - id: truefoundry:production-east/gpt-5
     config:
       temperature: 0.7
+      openaiAccountNames:
+        - production-east
       metadata:
         user_id: 'test-user'
         environment: 'production'
@@ -100,6 +103,9 @@ Configuration options:
 
 - `metadata`: Custom metadata to track with each request (object with key-value pairs)
 - `loggingConfig`: Logging configuration for observability (must include `enabled: true`)
+- `openaiAccountNames`: Additional TrueFoundry OpenAI account names to use for local OpenAI cost
+  lookup. `openai-main` is recognized by default. This option does not rewrite the model ID sent to
+  TrueFoundry.
 
 ## Model Support
 

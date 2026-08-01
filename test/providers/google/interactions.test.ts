@@ -290,6 +290,39 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.video).toBeUndefined();
   });
 
+  it('normalizes standard multimodal input_text parts for Robotics ER 2', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Locate the object in this image.' },
+            { type: 'input_image', image_url: 'data:image/png;base64,aW1hZ2U=' },
+          ],
+        },
+      ]),
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).input).toEqual([
+      {
+        type: 'user_input',
+        content: [
+          { type: 'text', text: 'Locate the object in this image.' },
+          { type: 'image', mime_type: 'image/png', data: 'aW1hZ2U=' },
+        ],
+      },
+    ]);
+  });
+
   it('omits sampling controls that the Interactions generation_config schema rejects', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {

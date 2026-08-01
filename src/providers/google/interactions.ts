@@ -150,6 +150,9 @@ function parseInteractionInput(
             return part;
           }
           const imagePart = part as { type?: string; image_url?: string | { url?: string } };
+          if (imagePart.type === 'input_text') {
+            return { ...imagePart, type: 'text' };
+          }
           if (imagePart.type === 'input_audio') {
             const inputAudio = (part as { input_audio?: { data?: string; format?: string } })
               .input_audio;
