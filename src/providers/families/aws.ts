@@ -6,8 +6,8 @@ import type { ProviderFactory } from '../registryTypes';
 
 const NOVA_SONIC_MODEL_IDS = new Set(['amazon.nova-sonic-v1:0', 'amazon.nova-2-sonic-v1:0']);
 
-function isUnsupportedNova2SonicGeoId(modelName: string): boolean {
-  return /^[^.]+\.amazon\.nova-2-sonic-v1:0$/.test(modelName);
+function isUnsupportedNovaSonicGeoId(modelName: string): boolean {
+  return /^[^.]+\.amazon\.nova(?:-2)?-sonic-v1:0$/.test(modelName);
 }
 
 export const awsProviderFactories: ProviderFactory[] = [
@@ -25,10 +25,13 @@ export const awsProviderFactories: ProviderFactory[] = [
           ? 'amazon.nova-sonic-v1:0'
           : splits.length === 2 && modelType === 'nova-2-sonic'
             ? 'amazon.nova-2-sonic-v1:0'
-            : splits.length === 3 && NOVA_SONIC_MODEL_IDS.has(bareModelName)
+            : NOVA_SONIC_MODEL_IDS.has(bareModelName)
               ? bareModelName
-              : undefined;
-      if (isUnsupportedNova2SonicGeoId(bareModelName) || isUnsupportedNova2SonicGeoId(modelName)) {
+              : (modelType === 'nova-sonic' || modelType === 'nova-2-sonic') &&
+                  NOVA_SONIC_MODEL_IDS.has(modelName)
+                ? modelName
+                : undefined;
+      if (isUnsupportedNovaSonicGeoId(bareModelName) || isUnsupportedNovaSonicGeoId(modelName)) {
         throw new Error(
           `Amazon Bedrock model "${bareModelName}" does not support geo inference IDs. ` +
             'Use the bare "bedrock:amazon.nova-2-sonic-v1:0" model ID in a supported region.',

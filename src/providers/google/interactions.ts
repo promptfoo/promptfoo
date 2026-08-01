@@ -648,17 +648,22 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
 
+function getVertexInteractionsRegion(config: GoogleProviderConfig, env?: EnvOverrides): string {
+  return (
+    config.region ||
+    env?.VERTEX_REGION ||
+    getEnvString('VERTEX_REGION') ||
+    getEnvString('GOOGLE_CLOUD_LOCATION') ||
+    'global'
+  );
+}
+
 function getVertexInteractionsEndpoint(
   config: GoogleProviderConfig,
   projectId: string,
   env?: EnvOverrides,
 ): string {
-  const region =
-    config.region ||
-    env?.VERTEX_REGION ||
-    getEnvString('VERTEX_REGION') ||
-    getEnvString('GOOGLE_CLOUD_LOCATION') ||
-    'global';
+  const region = getVertexInteractionsRegion(config, env);
   const configuredHost =
     config.apiBaseUrl ||
     config.apiHost ||
@@ -1245,6 +1250,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           usage?.total_cached_tokens,
           cachedAudioTokens,
           cachedImageTokens,
+          config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
         );
 
     if (!isVideoModel) {

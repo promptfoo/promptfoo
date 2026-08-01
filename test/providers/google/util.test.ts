@@ -2745,6 +2745,38 @@ describe('util', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
+    it('should apply the Vertex premium from the resolved endpoint region', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'flex' },
+        1_000_000,
+        1_000_000,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+        undefined,
+        undefined,
+        'us-central1',
+      );
+
+      expect(cost).toBeCloseTo((0.015 + 1.25) * 1.1, 10);
+    });
+
+    it('should not apply the Vertex regional premium to explicit cost overrides', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { cost: 0.01, region: 'us-central1' },
+        100,
+        100,
+        true,
+      );
+
+      expect(cost).toBeCloseTo(2, 10);
+    });
+
     it('should calculate cost for gemini-omni-flash-preview', () => {
       const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.006, 10);

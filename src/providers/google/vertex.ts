@@ -976,6 +976,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionForCost,
           true,
           lastData.usageMetadata,
+          this.getRegion(),
         );
         const audio = normalizeGeminiAudio(output);
 

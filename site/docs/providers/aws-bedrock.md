@@ -658,7 +658,7 @@ providers:
 
 The same parameter constraints apply when using the Converse API.
 
-### Amazon Nova Sonic Models
+### Amazon Nova Sonic Model
 
 Amazon Nova Sonic models support real-time speech-to-speech conversations with text, audio, and tool use. Promptfoo routes them through Bedrock's `InvokeModelWithBidirectionalStream` API; they do not support the ordinary InvokeModel or Converse routes.
 

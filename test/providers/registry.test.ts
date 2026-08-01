@@ -1005,8 +1005,10 @@ describe('Provider Registry', () => {
     it.each([
       ['bedrock:nova-sonic', 'amazon.nova-sonic-v1:0'],
       ['bedrock:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
+      ['bedrock:nova-sonic:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
       ['bedrock:nova-2-sonic', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
+      ['bedrock:nova-2-sonic:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
     ])('should route %s through the Nova Sonic bidirectional provider', async (path, modelName) => {
       const factories = await getProviderFactories(path);
       const factory = factories.find((f) => f.test(path));
@@ -1020,6 +1022,7 @@ describe('Provider Registry', () => {
     it.each([
       ['bedrock:completion:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
       ['bedrock:converse:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:us.amazon.nova-sonic-v1:0', 'does not support geo inference IDs'],
       ['bedrock:us.amazon.nova-2-sonic-v1:0', 'does not support geo inference IDs'],
     ])('should reject unsupported Nova 2 Sonic route %s', async (path, error) => {
       const factories = await getProviderFactories(path);

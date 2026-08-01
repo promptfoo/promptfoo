@@ -317,6 +317,30 @@ function resolveGoogleServiceTierCosts(
   };
 }
 
+function applyGoogleRegionalPremium(
+  modelCost: GoogleModelCost,
+  multiplier: number,
+): GoogleModelCost {
+  const scale = (value: number | undefined) =>
+    value === undefined ? undefined : value * multiplier;
+  return {
+    ...modelCost,
+    input: modelCost.input * multiplier,
+    output: modelCost.output * multiplier,
+    cacheRead: scale(modelCost.cacheRead),
+    cacheReadAudio: scale(modelCost.cacheReadAudio),
+    audioInput: scale(modelCost.audioInput),
+    audioOutput: scale(modelCost.audioOutput),
+    imageInput: scale(modelCost.imageInput),
+    videoInputPerSecond: scale(modelCost.videoInputPerSecond),
+    videoOutput: scale(modelCost.videoOutput),
+    priorityCacheRead: scale(modelCost.priorityCacheRead),
+    priorityAudioInput: scale(modelCost.priorityAudioInput),
+    flexCacheRead: scale(modelCost.flexCacheRead),
+    flexAudioInput: scale(modelCost.flexAudioInput),
+  };
+}
+
 /**
  * Calculates the cost for a Google API call.
  *
@@ -351,6 +375,7 @@ export function calculateGoogleCost(
   cachedPromptTokens?: number,
   cachedAudioPromptTokens?: number,
   cachedImagePromptTokens?: number,
+  vertexRegion?: string,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
@@ -363,15 +388,28 @@ export function calculateGoogleCost(
     return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
   }
 
-  const modelCost =
+  const baseModelCost =
     model?.tieredCost && promptTokens > model.tieredCost.threshold
       ? model.tieredCost.above
       : isVertexMode && model?.vertexCost
         ? model.vertexCost
         : model?.cost;
-  if (!modelCost) {
+  if (!baseModelCost) {
     return undefined;
   }
+
+  const effectiveVertexRegion = vertexRegion ?? config.region;
+  const vertexRegionalMultiplier =
+    isVertexMode &&
+    model?.vertexRegionalPremium !== undefined &&
+    effectiveVertexRegion !== undefined &&
+    effectiveVertexRegion !== 'global'
+      ? model.vertexRegionalPremium
+      : 1;
+  const modelCost =
+    vertexRegionalMultiplier === 1
+      ? baseModelCost
+      : applyGoogleRegionalPremium(baseModelCost, vertexRegionalMultiplier);
 
   const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
   const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
@@ -465,14 +503,6 @@ export function calculateGoogleCost(
     audioInputCost,
   );
 
-  const vertexRegionalMultiplier =
-    isVertexMode &&
-    model?.vertexRegionalPremium !== undefined &&
-    config.region !== undefined &&
-    config.region !== 'global'
-      ? model.vertexRegionalPremium
-      : 1;
-
   return (
     ((textInputTokens - cachedTextTokens) * inputCost +
       cachedTextTokens * serviceTierCachedInputCost +
@@ -483,8 +513,7 @@ export function calculateGoogleCost(
       (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
       audioOutputTokens * audioOutputCost +
       videoOutputTokens * videoOutputCost) *
-    serviceTierMultiplier *
-    vertexRegionalMultiplier
+    serviceTierMultiplier
   );
 }
 
@@ -509,6 +538,7 @@ export function calculateGoogleCostFromUsage(
   completionTokens: number | undefined,
   isVertexMode: boolean,
   usageMetadata: any,
+  vertexRegion?: string,
 ): number | undefined {
   const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
   const toolPromptDetails =
@@ -547,6 +577,7 @@ export function calculateGoogleCostFromUsage(
     usageMetadata?.cachedContentTokenCount ?? usageMetadata?.cached_content_token_count,
     getGoogleModalityTokenCount(cacheDetails, ['AUDIO']),
     getGoogleModalityTokenCount(cacheDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']),
+    vertexRegion,
   );
 }
 
