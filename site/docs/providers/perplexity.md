@@ -127,6 +127,10 @@ providers:
       return_images: true
 ```
 
+Perplexity's citations and search results are preserved in `metadata.perplexity`. When requested,
+image results and follow-up questions are available at `metadata.perplexity.images` and
+`metadata.perplexity.related_questions`.
+
 ### Cost Tracking
 
 promptfoo uses Perplexity's returned `usage.cost.total_cost` when available, which includes request and specialized usage charges. It falls back to an estimate based on published input and output token prices for responses that do not include cost metadata.

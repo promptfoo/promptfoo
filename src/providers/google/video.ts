@@ -512,10 +512,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.video = {
-        inlineData: {
-          mimeType: 'video/mp4',
-          data: videoData,
-        },
+        encodedVideo: videoData,
+        encoding: 'video/mp4',
       };
     }
 

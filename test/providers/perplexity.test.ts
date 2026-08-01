@@ -383,6 +383,70 @@ describe('Perplexity Provider', () => {
       expect(result.cost).toBeUndefined();
     });
 
+    it('should preserve Perplexity search artifacts in response metadata', async () => {
+      disableCache();
+      const images = [
+        {
+          image_url: 'https://example.com/image.jpg',
+          origin_url: 'https://example.com/article',
+          title: 'Example image',
+          width: 640,
+          height: 480,
+        },
+      ];
+      const relatedQuestions = ['What happened next?'];
+      const citations = ['https://example.com/article'];
+      const searchResults = [
+        {
+          title: 'Example article',
+          url: 'https://example.com/article',
+          snippet: 'A concise result.',
+          source: 'web',
+        },
+      ];
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-with-search-artifacts',
+            model: 'sonar-pro',
+            choices: [
+              {
+                finish_reason: 'stop',
+                index: 0,
+                message: { role: 'assistant', content: 'Search-backed output' },
+              },
+            ],
+            citations,
+            search_results: searchResults,
+            images,
+            related_questions: relatedQuestions,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          apiKey: 'test-key',
+          return_images: true,
+          return_related_questions: true,
+        },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toMatchObject({
+        output: 'Search-backed output',
+        metadata: {
+          perplexity: {
+            citations,
+            search_results: searchResults,
+            images,
+            related_questions: relatedQuestions,
+          },
+        },
+      });
+    });
+
     it('should still calculate cost for fresh responses with cached input tokens', async () => {
       vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
         output: 'Fresh output',

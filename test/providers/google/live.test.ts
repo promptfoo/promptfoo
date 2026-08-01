@@ -712,6 +712,61 @@ describe('GoogleLiveProvider', () => {
     expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
   });
 
+  it('should finalize finite Live Translate output after meaningful output becomes quiet', async () => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 120,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            serverContent: { outputTranscription: { text: 'Dzien ' } },
+          });
+        }, 5);
+        setTimeout(() => {
+          simulateMessage(mockWs, {
+            usageMetadata: {
+              promptTokenCount: 2,
+              responseTokenCount: 3,
+              totalTokenCount: 5,
+            },
+            serverContent: { outputTranscription: { text: 'dobry.' } },
+          });
+        }, 35);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
+    expect(response.tokenUsage).toMatchObject({ prompt: 2, completion: 3, total: 5 });
+  });
+
   it('should serialize the English default when Live Translate omits a target language', async () => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {

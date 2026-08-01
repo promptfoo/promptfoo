@@ -212,6 +212,10 @@ function hasUnsupportedLiveTranslateServiceTier(config: CompletionOptions): bool
   return serviceTier !== undefined && serviceTier !== 'standard';
 }
 
+function hasNonSilentPcm(audio: Buffer): boolean {
+  return audio.some((byte) => byte !== 0);
+}
+
 function getUnsupportedLiveTranslateConfigurationError(
   config: CompletionOptions,
   systemInstruction: unknown,
@@ -630,10 +634,12 @@ export class GoogleLiveProvider implements ApiProvider {
         this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
         this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
+      let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
           isResolved = true;
+          clearTimeout(liveTranslateCompletionTimeout);
           resolve(response);
         }
       };
@@ -670,6 +676,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasPendingToolFollowup = false;
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
+      let liveTranslateInputEnded = false;
 
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities =
@@ -706,6 +713,12 @@ export class GoogleLiveProvider implements ApiProvider {
             lastVideoFrameSentAt = Date.now();
           }
           ws.send(JSON.stringify(contentMessage));
+          if (
+            this.modelName === GEMINI_LIVE_TRANSLATE_MODEL &&
+            contentMessage.realtimeInput?.audioStreamEnd
+          ) {
+            liveTranslateInputEnded = true;
+          }
         }
       };
 
@@ -733,6 +746,12 @@ export class GoogleLiveProvider implements ApiProvider {
       // stream that stalls — before or after partial output — still errors out. The frame
       // pacing allowance keeps the guard alive while outbound video frames are rate-limited.
       const effectiveTimeoutMs = (config.timeoutMs || 30000) + framePacingAllowanceMs;
+      // Google's finite-input Live Translate sample allows four seconds for trailing output.
+      // Keep that grace below the caller's idle timeout so a partial translation can still win.
+      const liveTranslateCompletionGraceMs = Math.min(
+        4_000,
+        Math.max(1, Math.floor(effectiveTimeoutMs / 2)),
+      );
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const armIdleTimeout = () => {
         clearTimeout(timeout);
@@ -755,6 +774,12 @@ export class GoogleLiveProvider implements ApiProvider {
           return;
         }
         hasFinalized = true;
+        clearTimeout(liveTranslateCompletionTimeout);
+
+        if (pendingUsageMetadata) {
+          usageMetadata.push(pendingUsageMetadata);
+          pendingUsageMetadata = undefined;
+        }
 
         if (ws.readyState === WebSocketCtor.OPEN) {
           ws.close();
@@ -1011,6 +1036,25 @@ export class GoogleLiveProvider implements ApiProvider {
         safeResolve(result);
       };
 
+      const armLiveTranslateCompletion = () => {
+        if (
+          this.modelName !== GEMINI_LIVE_TRANSLATE_MODEL ||
+          !liveTranslateInputEnded ||
+          hasFinalized ||
+          isResolved
+        ) {
+          return;
+        }
+        clearTimeout(liveTranslateCompletionTimeout);
+        liveTranslateCompletionTimeout = setTimeout(() => {
+          liveTranslateCompletionTimeout = undefined;
+          void finalizeResponse().catch((err) => {
+            logger.error(`Error finalizing Live Translate response: ${err}`);
+            safeResolve({ error: `Error finalizing Live Translate response: ${err}` });
+          });
+        }, liveTranslateCompletionGraceMs);
+      };
+
       ws.onopen = () => {
         logger.debug('WebSocket connection is opening...');
         const {
@@ -1130,6 +1174,9 @@ export class GoogleLiveProvider implements ApiProvider {
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
+            if (hasNonSilentPcm(audioBuffer)) {
+              armLiveTranslateCompletion();
+            }
             return;
           }
         } else if (typeof event.data === 'string') {
@@ -1194,6 +1241,7 @@ export class GoogleLiveProvider implements ApiProvider {
             await sendContentMessages(contentMessages);
           } else if (response.serverContent) {
             const { serverContent } = response;
+            let hasMeaningfulLiveTranslateOutput = false;
             const hasModelOutput =
               Boolean(serverContent.modelTurn?.parts?.length) ||
               Boolean(serverContent.outputTranscription?.text) ||
@@ -1210,10 +1258,15 @@ export class GoogleLiveProvider implements ApiProvider {
               for (const part of serverContent.modelTurn.parts) {
                 if (part.text) {
                   response_text_total += part.text;
+                  hasMeaningfulLiveTranslateOutput = true;
                 }
                 if (part.inlineData?.mimeType?.includes('audio')) {
                   hasAudioContent = true;
-                  responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
+                  const audioChunk = Buffer.from(part.inlineData.data, 'base64');
+                  responseAudioChunks.push(audioChunk);
+                  if (hasNonSilentPcm(audioChunk)) {
+                    hasMeaningfulLiveTranslateOutput = true;
+                  }
                   if (isAudioExpected) {
                     hasAudioStreamEnded = false;
                   }
@@ -1221,6 +1274,7 @@ export class GoogleLiveProvider implements ApiProvider {
               }
               if (serverContent.outputTranscription?.text) {
                 response_audio_transcript += serverContent.outputTranscription.text;
+                hasMeaningfulLiveTranslateOutput = true;
                 if (isAudioExpected) {
                   hasAudioContent = true;
                 }
@@ -1228,6 +1282,7 @@ export class GoogleLiveProvider implements ApiProvider {
             } else if (serverContent.outputTranscription?.text) {
               // Handle transcription-only messages when transcription arrives separately.
               response_audio_transcript += serverContent.outputTranscription.text;
+              hasMeaningfulLiveTranslateOutput = true;
               if (isAudioExpected) {
                 hasAudioContent = true;
               }
@@ -1244,6 +1299,10 @@ export class GoogleLiveProvider implements ApiProvider {
               if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
                 hasAudioStreamEnded = true;
               }
+            }
+
+            if (hasMeaningfulLiveTranslateOutput) {
+              armLiveTranslateCompletion();
             }
 
             if (serverContent.turnComplete && contentIndex < contents.length) {

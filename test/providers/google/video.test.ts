@@ -729,10 +729,8 @@ describe('GoogleVideoProvider', () => {
       expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain('"durationSeconds":8');
       const requestBody = JSON.parse(mockFetchWithTimeout.mock.calls[0]?.[1]?.body as string);
       expect(requestBody.instances[0].video).toEqual({
-        inlineData: {
-          mimeType: 'video/mp4',
-          data: sourceVideo,
-        },
+        encodedVideo: sourceVideo,
+        encoding: 'video/mp4',
       });
       expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
         2,

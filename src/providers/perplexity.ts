@@ -205,6 +205,22 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     );
   }
 
+  protected override getProviderResponseMetadata(data: unknown): Record<string, unknown> {
+    if (!data || typeof data !== 'object') {
+      return {};
+    }
+
+    const raw = data as Record<string, unknown>;
+    const perplexity: Record<string, unknown> = {};
+    for (const field of ['citations', 'search_results', 'images', 'related_questions'] as const) {
+      if (Array.isArray(raw[field])) {
+        perplexity[field] = raw[field];
+      }
+    }
+
+    return Object.keys(perplexity).length > 0 ? { perplexity } : {};
+  }
+
   /**
    * Override callApi to use our custom cost calculation
    */
