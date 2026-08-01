@@ -236,8 +236,10 @@ describe('package manifests', () => {
     expect(sdkRange).toBeDefined();
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
-    expect(packageJson.optionalDependencies?.[adapterName]).toBe('2.0.12');
-    expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
     expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
