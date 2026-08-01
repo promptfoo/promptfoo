@@ -289,7 +289,10 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'test prompt' } });
   });
 
-  it('should keep text output enabled for Gemini Robotics ER 2 Streaming', async () => {
+  it.each([
+    ['camel-case Google Search', { googleSearch: {} }],
+    ['snake-case Google Search', { google_search: {} }],
+  ])('should allow function declarations with %s for Gemini Robotics ER 2 Streaming', async (_case, googleSearchTool) => {
     provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
       config: {
         generationConfig: { response_modalities: ['text'] },
@@ -302,7 +305,7 @@ describe('GoogleLiveProvider', () => {
               },
             ],
           },
-          { googleSearch: {} },
+          googleSearchTool,
         ],
         timeoutMs: 500,
         apiKey: 'test-api-key',
@@ -376,6 +379,41 @@ describe('GoogleLiveProvider', () => {
   it.each([
     ['camel-case code execution', { tools: [{ codeExecution: {} }] }, 'code execution'],
     ['snake-case code execution', { tools: [{ code_execution: {} }] }, 'code execution'],
+    ['camel-case file search', { tools: [{ fileSearch: {} }] }, 'file search or computer use'],
+    ['snake-case file search', { tools: [{ file_search: {} }] }, 'file search or computer use'],
+    ['camel-case computer use', { tools: [{ computerUse: {} }] }, 'file search or computer use'],
+    ['snake-case computer use', { tools: [{ computer_use: {} }] }, 'file search or computer use'],
+    [
+      'camel-case Google Search retrieval',
+      { tools: [{ googleSearchRetrieval: { dynamicRetrievalConfig: {} } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'snake-case Google Search retrieval',
+      { tools: [{ google_search_retrieval: { dynamic_retrieval_config: {} } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'retrieval',
+      { tools: [{ retrieval: {} }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'camel-case MCP server',
+      { tools: [{ mcpServer: { name: 'robot-context' } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'snake-case MCP server',
+      { tools: [{ mcp_server: { name: 'robot-context' } }] },
+      'only supports function declarations and Google Search',
+    ],
+    [
+      'unknown tool',
+      { tools: [{ customRobotTool: {} }] },
+      'only supports function declarations and Google Search',
+    ],
+    ['empty tool', { tools: [{}] }, 'only supports function declarations and Google Search'],
     ['top-level responseSchema', { responseSchema: '{"type":"object"}' }, 'structured output'],
     [
       'generationConfig.response_schema',
@@ -892,7 +930,18 @@ describe('GoogleLiveProvider', () => {
           thinkingConfig: { thinkingBudget: 128 },
         },
       },
-      'does not support generationConfig.thinkingConfig; remove it',
+      'does not support generationConfig.thinkingConfig or generationConfig.thinking_config',
+    ],
+    [
+      'snake-case thinking configuration',
+      {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+          thinking_config: { thinking_budget: 128 },
+        },
+      },
+      'does not support generationConfig.thinkingConfig or generationConfig.thinking_config',
     ],
     [
       'a v1alpha API version override',
@@ -911,7 +960,15 @@ describe('GoogleLiveProvider', () => {
         ...config,
         timeoutMs: 500,
         apiKey: 'test-api-key',
-      },
+      } as any,
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
     });
 
     const response = await provider.callApi(

@@ -323,6 +323,34 @@ function normalizeInteractionThinkingLevel(value: unknown): unknown {
   return typeof value === 'string' ? value.toLowerCase() : value;
 }
 
+function hasInteractionThinkingLevel(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const config = value as Record<string, unknown>;
+  const hasNestedThinkingLevel = [config.thinkingConfig, config.thinking_config].some(
+    (thinkingConfig) => {
+      if (!thinkingConfig || typeof thinkingConfig !== 'object' || Array.isArray(thinkingConfig)) {
+        return false;
+      }
+      const nestedConfig = thinkingConfig as Record<string, unknown>;
+      return nestedConfig.thinkingLevel !== undefined || nestedConfig.thinking_level !== undefined;
+    },
+  );
+  return (
+    hasNestedThinkingLevel ||
+    config.thinkingLevel !== undefined ||
+    config.thinking_level !== undefined
+  );
+}
+
+function shouldRejectInteractionThinkingBudget(
+  value: unknown,
+  ignoreNumericThinkingBudget: boolean,
+): boolean {
+  return typeof value === 'number' && !ignoreNumericThinkingBudget;
+}
+
 function isSupportedInteractionGenerationField(
   field: string,
   allowSamplingControls: boolean,
@@ -336,6 +364,7 @@ function isSupportedInteractionGenerationField(
 function normalizeInteractionGenerationConfig(
   value: unknown,
   allowSamplingControls = false,
+  ignoreNumericThinkingBudget = false,
 ): NormalizedInteractionGenerationConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { config: {} };
@@ -349,7 +378,7 @@ function normalizeInteractionGenerationConfig(
       }
       const thinkingConfig = fieldValue as Record<string, unknown>;
       const thinkingBudget = thinkingConfig.thinkingBudget ?? thinkingConfig.thinking_budget;
-      if (typeof thinkingBudget === 'number') {
+      if (shouldRejectInteractionThinkingBudget(thinkingBudget, ignoreNumericThinkingBudget)) {
         return {
           config: {},
           error:
@@ -363,7 +392,7 @@ function normalizeInteractionGenerationConfig(
       continue;
     }
     if (field === 'thinkingBudget' || field === 'thinking_budget') {
-      if (typeof fieldValue === 'number') {
+      if (shouldRejectInteractionThinkingBudget(fieldValue, ignoreNumericThinkingBudget)) {
         return {
           config: {},
           error:
@@ -384,6 +413,32 @@ function normalizeInteractionGenerationConfig(
       normalizedField === 'thinking_level'
         ? normalizeInteractionThinkingLevel(fieldValue)
         : fieldValue;
+  }
+  return { config };
+}
+
+function normalizeInteractionGenerationLayers(
+  layers: unknown[],
+  allowSamplingControls = false,
+): NormalizedInteractionGenerationConfig {
+  const hasLaterThinkingLevel = new Array<boolean>(layers.length);
+  let laterThinkingLevelFound = false;
+  for (let index = layers.length - 1; index >= 0; index--) {
+    hasLaterThinkingLevel[index] = laterThinkingLevelFound;
+    laterThinkingLevelFound ||= hasInteractionThinkingLevel(layers[index]);
+  }
+
+  const config: Record<string, unknown> = {};
+  for (const [index, layer] of layers.entries()) {
+    const normalizedLayer = normalizeInteractionGenerationConfig(
+      layer,
+      allowSamplingControls,
+      hasLaterThinkingLevel[index] ?? false,
+    );
+    if (normalizedLayer.error) {
+      return normalizedLayer;
+    }
+    Object.assign(config, normalizedLayer.config);
   }
   return { config };
 }
@@ -707,86 +762,53 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const providerGenerationConfig = normalizeInteractionGenerationConfig(
-      {
-        ...(this.config.maxOutputTokens === undefined
-          ? {}
-          : { max_output_tokens: this.config.maxOutputTokens }),
-        ...(allowSamplingControls && this.config.temperature !== undefined
-          ? { temperature: this.config.temperature }
-          : {}),
-        ...(allowSamplingControls && this.config.topP !== undefined
-          ? { top_p: this.config.topP }
-          : {}),
-        ...(this.config.stopSequences === undefined
-          ? {}
-          : { stop_sequences: this.config.stopSequences }),
-        ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
-        ...(this.config.generationConfig || {}),
-      },
-      allowSamplingControls,
-    );
-    if (providerGenerationConfig.error) {
-      return { error: providerGenerationConfig.error };
-    }
-    const promptGenerationConfig = normalizeInteractionGenerationConfig(
-      {
-        ...(promptConfig?.maxOutputTokens === undefined
-          ? {}
-          : { max_output_tokens: promptConfig.maxOutputTokens }),
-        ...(allowSamplingControls && promptConfig?.temperature !== undefined
-          ? { temperature: promptConfig.temperature }
-          : {}),
-        ...(allowSamplingControls && promptConfig?.topP !== undefined
-          ? { top_p: promptConfig.topP }
-          : {}),
-        ...(promptConfig?.stopSequences === undefined
-          ? {}
-          : { stop_sequences: promptConfig.stopSequences }),
-        ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
-        ...(promptConfig?.generationConfig || {}),
-      },
-      allowSamplingControls,
-    );
-    if (promptGenerationConfig.error) {
-      return { error: promptGenerationConfig.error };
-    }
-    const providerPassthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
-      providerPassthrough.generationConfig,
-      allowSamplingControls,
-    );
-    if (providerPassthroughCamelGenerationConfig.error) {
-      return { error: providerPassthroughCamelGenerationConfig.error };
-    }
-    const providerPassthroughGenerationConfig = normalizeInteractionGenerationConfig(
-      providerPassthrough.generation_config,
-      allowSamplingControls,
-    );
-    if (providerPassthroughGenerationConfig.error) {
-      return { error: providerPassthroughGenerationConfig.error };
-    }
-    const promptPassthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
-      promptPassthrough.generationConfig,
-      allowSamplingControls,
-    );
-    if (promptPassthroughCamelGenerationConfig.error) {
-      return { error: promptPassthroughCamelGenerationConfig.error };
-    }
-    const promptPassthroughGenerationConfig = normalizeInteractionGenerationConfig(
-      promptPassthrough.generation_config,
-      allowSamplingControls,
-    );
-    if (promptPassthroughGenerationConfig.error) {
-      return { error: promptPassthroughGenerationConfig.error };
-    }
-    const generationConfig = {
-      ...providerGenerationConfig.config,
-      ...providerPassthroughCamelGenerationConfig.config,
-      ...providerPassthroughGenerationConfig.config,
-      ...promptGenerationConfig.config,
-      ...promptPassthroughCamelGenerationConfig.config,
-      ...promptPassthroughGenerationConfig.config,
+    const providerGenerationConfigValue = {
+      ...(this.config.maxOutputTokens === undefined
+        ? {}
+        : { max_output_tokens: this.config.maxOutputTokens }),
+      ...(allowSamplingControls && this.config.temperature !== undefined
+        ? { temperature: this.config.temperature }
+        : {}),
+      ...(allowSamplingControls && this.config.topP !== undefined
+        ? { top_p: this.config.topP }
+        : {}),
+      ...(this.config.stopSequences === undefined
+        ? {}
+        : { stop_sequences: this.config.stopSequences }),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
+      ...(this.config.generationConfig || {}),
     };
+    const promptGenerationConfigValue = {
+      ...(promptConfig?.maxOutputTokens === undefined
+        ? {}
+        : { max_output_tokens: promptConfig.maxOutputTokens }),
+      ...(allowSamplingControls && promptConfig?.temperature !== undefined
+        ? { temperature: promptConfig.temperature }
+        : {}),
+      ...(allowSamplingControls && promptConfig?.topP !== undefined
+        ? { top_p: promptConfig.topP }
+        : {}),
+      ...(promptConfig?.stopSequences === undefined
+        ? {}
+        : { stop_sequences: promptConfig.stopSequences }),
+      ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
+      ...(promptConfig?.generationConfig || {}),
+    };
+    const normalizedGenerationConfig = normalizeInteractionGenerationLayers(
+      [
+        providerGenerationConfigValue,
+        providerPassthrough.generationConfig,
+        providerPassthrough.generation_config,
+        promptGenerationConfigValue,
+        promptPassthrough.generationConfig,
+        promptPassthrough.generation_config,
+      ],
+      allowSamplingControls,
+    );
+    if (normalizedGenerationConfig.error) {
+      return { error: normalizedGenerationConfig.error };
+    }
+    const generationConfig = normalizedGenerationConfig.config;
     const providerServiceTier =
       providerPassthrough.service_tier ??
       providerPassthrough.serviceTier ??

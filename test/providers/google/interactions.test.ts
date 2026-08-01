@@ -1274,6 +1274,122 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('lets a prompt thinkingLevel override an inherited provider thinkingBudget', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          thinkingConfig: { thinkingBudget: 1_024 },
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          generationConfig: {
+            thinkingConfig: { thinkingLevel: 'MEDIUM' },
+          },
+        },
+      },
+    } as any);
+
+    expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      thinking_level: 'medium',
+    });
+  });
+
+  it('lets provider passthrough snake-case thinking_level override provider thinkingBudget', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          thinkingConfig: { thinkingBudget: 1_024 },
+        },
+        passthrough: {
+          generation_config: { thinking_level: 'HIGH' },
+        },
+      },
+    });
+
+    await provider.callApi('Plan the next movement.');
+
+    expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      thinking_level: 'high',
+    });
+  });
+
+  it('lets prompt passthrough snake-case thinking_level override prompt thinking_budget', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { status: 'completed', steps: [] },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('Plan the next movement.', {
+      prompt: {
+        config: {
+          generationConfig: {
+            thinking_config: { thinking_budget: 1_024 },
+          },
+          passthrough: {
+            generation_config: {
+              thinking_config: { thinking_level: 'MEDIUM' },
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual({
+      thinking_level: 'medium',
+    });
+  });
+
+  it('rejects a higher-precedence prompt thinking_budget after a provider level override', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          thinkingConfig: { thinkingBudget: 1_024 },
+        },
+        passthrough: {
+          generation_config: { thinking_level: 'HIGH' },
+        },
+      },
+    });
+
+    await expect(
+      provider.callApi('Plan the next movement.', {
+        prompt: {
+          config: {
+            generationConfig: { thinking_budget: 512 },
+          },
+        },
+      } as any),
+    ).resolves.toEqual({
+      error:
+        'Gemini Interactions generation_config does not support numeric thinkingBudget; use thinking_level instead.',
+    });
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('preserves prompt and passthrough precedence for supported generation fields', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },

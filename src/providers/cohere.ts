@@ -573,6 +573,9 @@ export class CohereChatCompletionProvider implements ApiProvider {
       citation_options: _citationOptions,
       showDocuments: _showDocuments,
       showSearchQueries: _showSearchQueries,
+      prefix: _prefix,
+      suffix: _suffix,
+      provider: _provider,
       ...v2Params
     } = params;
 

@@ -602,6 +602,37 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
+  it('does not forward prompt wrapper metadata to the v2 Chat API', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+      },
+    } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await provider.callApi('Respond with JSON', {
+      prompt: {
+        config: {
+          prefix: 'Evaluation prefix',
+          suffix: 'Evaluation suffix',
+          provider: { id: 'openai:gpt-5.6' },
+          response_format: { type: 'json_object' },
+        },
+      },
+    } as any);
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body).not.toHaveProperty('prefix');
+    expect(body).not.toHaveProperty('suffix');
+    expect(body).not.toHaveProperty('provider');
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
+
   it('returns v2 API error messages', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,

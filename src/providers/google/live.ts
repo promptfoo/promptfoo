@@ -40,10 +40,19 @@ const LIVE_TRANSLATE_AUDIO_MODALITY_ERROR =
   'Gemini 3.5 Live Translate only supports AUDIO response modality. Omit generationConfig.response_modalities/responseModalities to use the AUDIO default, or set it to ["AUDIO"].';
 const ROBOTICS_CODE_EXECUTION_ERROR =
   'Gemini Robotics ER 2 Streaming does not support code execution. Use function calling or Google Search instead.';
+const ROBOTICS_FILE_SEARCH_OR_COMPUTER_USE_ERROR =
+  'Gemini Robotics ER 2 Streaming does not support file search or computer use.';
 const ROBOTICS_GROUNDING_ERROR =
   'Gemini Robotics ER 2 Streaming does not support Google Maps or URL context grounding. Use Google Search instead.';
 const ROBOTICS_STRUCTURED_OUTPUT_ERROR =
   'Gemini Robotics ER 2 Streaming does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
+const ROBOTICS_UNSUPPORTED_TOOL_ERROR =
+  'Gemini Robotics ER 2 Streaming only supports function declarations and Google Search tools.';
+const ROBOTICS_SUPPORTED_TOOL_FIELDS = new Set([
+  'functionDeclarations',
+  'googleSearch',
+  'google_search',
+]);
 
 function getRoboticsResponseModalityError(
   isRoboticsStreamingModel: boolean,
@@ -115,6 +124,32 @@ function hasUnsupportedRoboticsGroundingTool(tools: Tool[]): boolean {
   });
 }
 
+function hasUnsupportedRoboticsFileSearchOrComputerUseTool(tools: Tool[]): boolean {
+  return tools.some((tool) => {
+    const unsupportedTool = tool as Tool & {
+      computerUse?: unknown;
+      computer_use?: unknown;
+      fileSearch?: unknown;
+      file_search?: unknown;
+    };
+    return (
+      unsupportedTool.computerUse !== undefined ||
+      unsupportedTool.computer_use !== undefined ||
+      unsupportedTool.fileSearch !== undefined ||
+      unsupportedTool.file_search !== undefined
+    );
+  });
+}
+
+function hasUnsupportedRoboticsTool(tools: Tool[]): boolean {
+  return tools.some((tool) => {
+    const fields = Object.keys(tool);
+    return (
+      fields.length === 0 || fields.some((field) => !ROBOTICS_SUPPORTED_TOOL_FIELDS.has(field))
+    );
+  });
+}
+
 function getRoboticsToolError(
   isRoboticsStreamingModel: boolean,
   tools: Tool[],
@@ -125,7 +160,13 @@ function getRoboticsToolError(
   if (hasCodeExecutionTool(tools)) {
     return ROBOTICS_CODE_EXECUTION_ERROR;
   }
-  return hasUnsupportedRoboticsGroundingTool(tools) ? ROBOTICS_GROUNDING_ERROR : undefined;
+  if (hasUnsupportedRoboticsFileSearchOrComputerUseTool(tools)) {
+    return ROBOTICS_FILE_SEARCH_OR_COMPUTER_USE_ERROR;
+  }
+  if (hasUnsupportedRoboticsGroundingTool(tools)) {
+    return ROBOTICS_GROUNDING_ERROR;
+  }
+  return hasUnsupportedRoboticsTool(tools) ? ROBOTICS_UNSUPPORTED_TOOL_ERROR : undefined;
 }
 
 function getRoboticsConfigError(
@@ -154,6 +195,16 @@ function hasUnsupportedLiveTranslateToolsOrInstructions(
     config.mcp?.enabled ||
     Boolean(config.functionToolStatefulApi?.file) ||
     Boolean(systemInstruction)
+  );
+}
+
+function hasUnsupportedLiveTranslateThinkingConfig(config: CompletionOptions): boolean {
+  const generationConfig = config.generationConfig as
+    | (NonNullable<CompletionOptions['generationConfig']> & { thinking_config?: unknown })
+    | undefined;
+  return (
+    generationConfig?.thinkingConfig !== undefined ||
+    generationConfig?.thinking_config !== undefined
   );
 }
 
@@ -432,10 +483,10 @@ export class GoogleLiveProvider implements ApiProvider {
             'Gemini 3.5 Live Translate requires generationConfig.translationConfig (targetLanguageCode defaults to en).',
         };
       }
-      if (config.generationConfig.thinkingConfig) {
+      if (hasUnsupportedLiveTranslateThinkingConfig(config)) {
         return {
           error:
-            'Gemini 3.5 Live Translate does not support generationConfig.thinkingConfig; remove it.',
+            'Gemini 3.5 Live Translate does not support generationConfig.thinkingConfig or generationConfig.thinking_config; remove the thinking configuration.',
         };
       }
       if (config.apiVersion && config.apiVersion !== 'v1beta') {
