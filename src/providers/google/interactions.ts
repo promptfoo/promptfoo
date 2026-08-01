@@ -236,6 +236,24 @@ function parseInteractionInput(
   }
 }
 
+const INTERACTION_INPUT_METADATA_FIELDS = new Set(['mime_type', 'mimeType', 'role', 'type']);
+
+function hasSemanticInteractionInput(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasSemanticInteractionInput);
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(
+      ([field, nestedValue]) =>
+        !INTERACTION_INPUT_METADATA_FIELDS.has(field) && hasSemanticInteractionInput(nestedValue),
+    );
+  }
+  return value !== null && value !== undefined;
+}
+
 const INTERACTION_GENERATION_FIELDS = new Set([
   'max_output_tokens',
   'seed',
@@ -525,10 +543,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (config.vertexai && typeof interactionInput === 'string'
         ? [{ type: 'text', text: interactionInput }]
         : interactionInput);
-    if (
-      (typeof requestInput === 'string' && !requestInput.trim()) ||
-      (Array.isArray(requestInput) && requestInput.length === 0)
-    ) {
+    if (!hasSemanticInteractionInput(requestInput)) {
       return { error: 'Gemini Interactions prompt must contain at least one input item.' };
     }
     const previousInteractionId =

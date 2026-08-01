@@ -326,18 +326,22 @@ export class GoogleLiveProvider implements ApiProvider {
             content.parts.length > 0 &&
             content.parts.every((part) => {
               const inlineData =
-                (part as { inlineData?: { mimeType?: string } }).inlineData ??
-                (part as { inline_data?: { mime_type?: string } }).inline_data;
+                (part as { inlineData?: { mimeType?: string; data?: string } }).inlineData ??
+                (part as { inline_data?: { mime_type?: string; data?: string } }).inline_data;
               const mimeType =
                 (inlineData as { mimeType?: string } | undefined)?.mimeType ??
                 (inlineData as { mime_type?: string } | undefined)?.mime_type;
-              return mimeType?.toLowerCase() === 'audio/pcm;rate=16000';
+              return (
+                mimeType?.toLowerCase() === 'audio/pcm;rate=16000' &&
+                typeof inlineData?.data === 'string' &&
+                inlineData.data.trim().length > 0
+              );
             }),
         );
       if (!hasOnlySupportedPcmAudio) {
         return {
           error:
-            'Gemini 3.5 Live Translate only supports raw PCM audio input with MIME type audio/pcm;rate=16000 (16-bit mono); text, image, video, missing sample rates, and other sample rates are not supported.',
+            'Gemini 3.5 Live Translate only supports raw PCM audio input with MIME type audio/pcm;rate=16000 (16-bit mono) and non-empty base64 data; text, image, video, missing sample rates, and other sample rates are not supported.',
         };
       }
     }
@@ -458,9 +462,11 @@ export class GoogleLiveProvider implements ApiProvider {
           ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')
           : configuredResponseModalities;
       const effectiveResponseModalities =
-        usesRealtimeTextInput && !supportsTextResponse && !responseModalities?.length
-          ? ['AUDIO']
-          : responseModalities;
+        supportsTextResponse && responseModalities === undefined
+          ? ['TEXT']
+          : usesRealtimeTextInput && !supportsTextResponse && !responseModalities?.length
+            ? ['AUDIO']
+            : responseModalities;
       if (requestedText && !effectiveResponseModalities?.includes('TEXT')) {
         logger.warn(
           `[Google Live] ${this.modelName} does not support TEXT response modality; requesting AUDIO with output transcription instead. Audio output is billed at audio rates.`,

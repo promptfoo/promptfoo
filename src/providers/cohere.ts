@@ -103,6 +103,24 @@ function parseV2Prompt(prompt: string): {
 }
 
 function getV2ConfigError(params: Record<string, any>): string | undefined {
+  const chatHistory = params.chat_history ?? params.chatHistory;
+  if (chatHistory !== undefined) {
+    if (!Array.isArray(chatHistory)) {
+      return 'Cohere v2 Chat API chat_history must be an array.';
+    }
+    for (const [index, historyMessage] of chatHistory.entries()) {
+      if (
+        typeof historyMessage !== 'object' ||
+        historyMessage === null ||
+        Array.isArray(historyMessage)
+      ) {
+        return `Cohere v2 Chat API chat_history[${index}] must be an object.`;
+      }
+      if (typeof historyMessage.role !== 'string' || historyMessage.role.trim().length === 0) {
+        return `Cohere v2 Chat API chat_history[${index}].role must be a non-empty string.`;
+      }
+    }
+  }
   if (params.connectors?.length) {
     return 'Cohere v2 Chat API does not support connectors. Use a v2 tool definition instead.';
   }

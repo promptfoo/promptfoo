@@ -476,12 +476,17 @@ describe('GoogleInteractionsProvider', () => {
     expect(body).not.toHaveProperty('system_instruction');
   });
 
-  it('rejects an interaction prompt with no semantic input', async () => {
+  it.each([
+    ['an empty array', []],
+    ['an item with empty parts', [{ role: 'user', parts: [] }]],
+    ['an item with whitespace-only content', [{ role: 'user', content: '   ' }]],
+    ['an empty object item', [{}]],
+  ])('rejects an interaction prompt with %s', async (_description, input) => {
     const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
       config: { apiKey: 'test-key' },
     });
 
-    const result = await provider.callApi('[]');
+    const result = await provider.callApi(JSON.stringify(input));
 
     expect(result.error).toContain('at least one input item');
     expect(mockFetchWithCache).not.toHaveBeenCalled();
@@ -490,6 +495,8 @@ describe('GoogleInteractionsProvider', () => {
   it.each([
     ['an empty array', []],
     ['blank text', '   '],
+    ['an empty object', {}],
+    ['an item with empty content', [{ type: 'user_input', content: [] }]],
   ])('rejects %s from provider passthrough before dispatch', async (_description, input) => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },

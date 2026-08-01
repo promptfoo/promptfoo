@@ -324,6 +324,36 @@ describe('GoogleLiveProvider', () => {
     expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
   });
 
+  it('should default Gemini Robotics ER 2 Streaming to text output', async () => {
+    provider = new GoogleLiveProvider('gemini-robotics-er-2-streaming-preview', {
+      config: {
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'Object centered at [500, 500].');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('Locate the object.');
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[0]).toMatchObject({
+      setup: {
+        model: 'models/gemini-robotics-er-2-streaming-preview',
+        generationConfig: { responseModalities: ['TEXT'] },
+      },
+    });
+    expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
+    expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });
+  });
+
   it('should serialize Gemini 3.5 Live Translate setup and raw PCM audio input', async () => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
@@ -441,6 +471,49 @@ describe('GoogleLiveProvider', () => {
     );
 
     expect(response.error).toContain('audio/pcm;rate=16000');
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['empty', ''],
+  ])('should reject Live Translate PCM input with %s data before opening a socket', async (_case, data) => {
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          translationConfig: { targetLanguageCode: 'es' },
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data,
+              },
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(response.error).toContain('non-empty base64 data');
     expect(WebSocket).not.toHaveBeenCalled();
   });
 

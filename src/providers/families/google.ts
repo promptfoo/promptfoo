@@ -1,5 +1,20 @@
 import type { ProviderFactory } from '../registryTypes';
 
+function isLiveOnlyModel(modelName: string): boolean {
+  return (
+    modelName === 'gemini-3.5-live-translate-preview' ||
+    modelName.startsWith('gemini-robotics-er-2-streaming-')
+  );
+}
+
+function rejectBareLiveOnlyModel(modelName: string): void {
+  if (isLiveOnlyModel(modelName)) {
+    throw new Error(
+      `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`,
+    );
+  }
+}
+
 // Every provider class is imported lazily inside its factory so that merely
 // loading this family module (which happens on any `vertex:`/`google:`/`palm:`
 // lookup) stays cheap: a given path pulls in only the provider it actually
@@ -12,6 +27,7 @@ export const googleProviderFactories: ProviderFactory[] = [
       const firstPart = splits[1];
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
+      rejectBareLiveOnlyModel(modelName);
       if (
         modelName === 'gemini-omni-flash-preview' ||
         modelName === 'gemini-robotics-er-2-preview'
@@ -94,6 +110,7 @@ export const googleProviderFactories: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
+      rejectBareLiveOnlyModel(modelName);
 
       if (
         modelName === 'gemini-omni-flash-preview' ||

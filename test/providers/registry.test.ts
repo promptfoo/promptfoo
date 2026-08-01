@@ -1630,6 +1630,21 @@ describe('Provider Registry', () => {
       expect(provider).toBeInstanceOf(ExpectedProvider);
     });
 
+    it.each([
+      'google:gemini-robotics-er-2-streaming-preview',
+      'google:gemini-3.5-live-translate-preview',
+      'vertex:gemini-robotics-er-2-streaming-preview',
+      'vertex:gemini-3.5-live-translate-preview',
+    ])('rejects bare Live-only model route %s with explicit routing guidance', async (providerPath) => {
+      const modelName = providerPath.slice(providerPath.indexOf(':') + 1);
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        `Use google:live:${modelName}`,
+      );
+    });
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

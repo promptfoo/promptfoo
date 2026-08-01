@@ -106,6 +106,34 @@ describe('CohereChatCompletionProvider', () => {
     expect(body).not.toHaveProperty('preamble_override');
   });
 
+  it.each([
+    [
+      'a non-array chat_history',
+      { role: 'USER', message: 'Provider history' },
+      'Cohere v2 Chat API chat_history must be an array.',
+    ],
+    [
+      'a chat_history entry without a role',
+      [{ message: 'Provider history' }],
+      'Cohere v2 Chat API chat_history[0].role must be a non-empty string.',
+    ],
+    [
+      'a non-object chat_history entry',
+      ['Provider history'],
+      'Cohere v2 Chat API chat_history[0] must be an object.',
+    ],
+  ])('returns a provider error for %s', async (_description, chatHistory, expectedError) => {
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: {
+        apiKey: 'test-key',
+        chat_history: chatHistory,
+      } as any,
+    });
+
+    await expect(provider.callApi('Continue')).resolves.toEqual({ error: expectedError });
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('prefers prompt-config aliases over provider canonical v2 message fields', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
