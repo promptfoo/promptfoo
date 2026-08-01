@@ -1413,11 +1413,15 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('40');
       });
 
-      it('lets explicit config.env override provider subagent limit options', async () => {
+      it('lets explicit subagent limit options override config.env and provider env', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
         const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+            CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '2',
+            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80',
+          } as EnvOverrides,
           config: {
             max_subagent_spawn_depth: 8,
             max_concurrent_subagents: 40,
@@ -1426,6 +1430,23 @@ describe('ClaudeCodeSDKProvider', () => {
               CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '60',
             },
           },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('8');
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('40');
+      });
+
+      it('preserves environment-configured subagent limits without explicit options', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+            CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '3',
+            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '60',
+          } as EnvOverrides,
         });
         await provider.callApi('prompt');
 

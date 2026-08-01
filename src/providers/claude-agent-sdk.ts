@@ -1080,6 +1080,24 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
+    if (config.env) {
+      for (const key of Object.keys(config.env).sort()) {
+        const value = config.env[key];
+        if (value !== undefined) {
+          env[key] = value;
+        }
+      }
+    }
+
+    if (this.env) {
+      for (const key of Object.keys(this.env).sort()) {
+        const value = this.env[key as keyof typeof this.env];
+        if (value !== undefined) {
+          env[key] = value;
+        }
+      }
+    }
+
     const subagentLimits = [
       ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],
       ['max_concurrent_subagents', 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS'],
@@ -1099,24 +1117,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Claude Agent SDK 0.3.217 lowered this default from five to one. Keep
     // existing nested-agent evals working unless an env override opts out.
     env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ??= '5';
-
-    if (config.env) {
-      for (const key of Object.keys(config.env).sort()) {
-        const value = config.env[key];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = this.env[key as keyof typeof this.env];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
 
     // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {

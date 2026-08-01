@@ -935,7 +935,7 @@ providers:
       max_concurrent_subagents: 40
 ```
 
-The options set `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` for the SDK subprocess. Explicit values in `config.env` or provider environment overrides take precedence.
+The options set `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` for the SDK subprocess. Explicit typed options take precedence over `config.env` and provider environment overrides; those environment values still apply when the typed options are omitted.
 
 ## Handling AskUserQuestion Tool
 
