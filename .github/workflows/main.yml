@@ -30,7 +30,6 @@ jobs:
         run: |
           # Shared entries: all Linux versions + one Windows Node version (sharded)
           base_entries='
-            {"node":"20.20","os":"ubuntu-latest","shard":""},
             {"node":"22.22","os":"ubuntu-latest","shard":""},
             {"node":"24.x","os":"ubuntu-latest","shard":""},
             {"node":"26.x","os":"ubuntu-latest","shard":""},
@@ -44,15 +43,12 @@ jobs:
             extra_entries='
               ,{"node":"22.22","os":"macOS-latest","shard":""}
             '
-            build_matrix='{"node":["20.20","24.x","26.x"]}'
+            build_matrix='{"node":["22.22","24.x","26.x"]}'
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
             extra_entries='
-              ,{"node":"20.20","os":"macOS-latest","shard":""},
-              {"node":"22.22","os":"macOS-latest","shard":""},
-              {"node":"20.20","os":"windows-2025-vs2026","shard":1},
-              {"node":"20.20","os":"windows-2025-vs2026","shard":2},
-              {"node":"20.20","os":"windows-2025-vs2026","shard":3},
+              ,{"node":"22.22","os":"macOS-latest","shard":""},
+              {"node":"24.x","os":"macOS-latest","shard":""},
               {"node":"24.x","os":"windows-2025-vs2026","shard":1},
               {"node":"24.x","os":"windows-2025-vs2026","shard":2},
               {"node":"24.x","os":"windows-2025-vs2026","shard":3},
@@ -60,7 +56,7 @@ jobs:
               {"node":"26.x","os":"windows-2025-vs2026","shard":2},
               {"node":"26.x","os":"windows-2025-vs2026","shard":3}
             '
-            build_matrix='{"node":["20.20","22.22","24.x","26.x"]}'
+            build_matrix='{"node":["22.22","24.x","26.x"]}'
           fi
 
           # Build the matrix JSON (shard:"" is falsy in GHA expressions, used to skip shard flags)
@@ -91,8 +87,7 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
+          node-version: ${{ matrix.node }}
           cache: 'npm'
 
       - name: Use Python 3.14
@@ -133,14 +128,14 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}
 
       - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
         run: npm run test:coverage:ratchet -- --report backend
 
       - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/coverage-final.json
@@ -172,8 +167,7 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
+          node-version: ${{ matrix.node }}
           cache: 'npm'
 
       - name: Install Dependencies
@@ -213,7 +207,7 @@ jobs:
           fi
 
       - name: Test Package Artifact
-        if: matrix.node == '20.20' || matrix.node == '26.x'
+        if: matrix.node == '22.22' || matrix.node == '26.x'
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact

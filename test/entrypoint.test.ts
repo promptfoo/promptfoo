@@ -112,12 +112,8 @@ function formatMalformedNodeVersionMessage(currentVersion: string, requiredRange
   ].join('\n');
 }
 
-const nodeEngineRange = '^20.20.0 || >=22.22.0';
+const nodeEngineRange = '>=22.22.0';
 const nodeEngineComparatorSets: NodeEngineComparator[][] = [
-  [
-    { operator: '>=', version: '20.20.0' },
-    { operator: '<', version: '21.0.0-0' },
-  ],
   [{ operator: '>=', version: '22.22.0' }],
 ];
 describe('entrypoint version check logic', () => {
@@ -144,15 +140,15 @@ describe('entrypoint version check logic', () => {
 
   describe('engine range matching', () => {
     it('rejects Node.js versions below the supported patch level', () => {
-      const unsupportedVersions = ['v20.9.0', 'v20.19.0'];
+      const unsupportedVersions = ['v22.13.0', 'v22.21.9'];
 
       for (const version of unsupportedVersions) {
         expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
       }
     });
 
-    it('rejects unsupported major versions between supported ranges', () => {
-      const unsupportedVersions = ['v21.0.0', 'v21.7.0', 'v22.13.0'];
+    it('rejects Node.js majors that are no longer supported', () => {
+      const unsupportedVersions = ['v20.9.0', 'v20.19.0', 'v20.20.0', 'v21.0.0', 'v21.7.0'];
 
       for (const version of unsupportedVersions) {
         expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
@@ -160,7 +156,7 @@ describe('entrypoint version check logic', () => {
     });
 
     it('accepts Node.js versions that satisfy the exact supported range', () => {
-      const supportedVersions = ['v20.20.0', 'v20.21.1', 'v22.22.0', 'v24.14.1'];
+      const supportedVersions = ['v22.22.0', 'v22.23.1', 'v24.14.1', 'v26.0.0'];
 
       for (const version of supportedVersions) {
         expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(true);
@@ -275,31 +271,31 @@ describe('entrypoint version check logic', () => {
 
       const fallbackRange =
         typeof __PROMPTFOO_NODE_ENGINE_RANGE__ === 'undefined'
-          ? '>=20.0.0'
+          ? '>=22.22.0'
           : __PROMPTFOO_NODE_ENGINE_RANGE__;
       const fallbackComparatorSets =
         typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
-          ? [[{ operator: '>=', version: '20.0.0' }]]
+          ? [[{ operator: '>=', version: '22.22.0' }]]
           : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
 
-      expect(fallbackRange).toBe('>=20.0.0');
-      expect(fallbackComparatorSets).toEqual([[{ operator: '>=', version: '20.0.0' }]]);
+      expect(fallbackRange).toBe('>=22.22.0');
+      expect(fallbackComparatorSets).toEqual([[{ operator: '>=', version: '22.22.0' }]]);
     });
 
     it('uses the injected engine range and comparator sets when provided', () => {
-      const __PROMPTFOO_NODE_ENGINE_RANGE__ = '^20.20.0 || >=22.22.0';
+      const __PROMPTFOO_NODE_ENGINE_RANGE__ = '>=22.22.0';
       const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ = nodeEngineComparatorSets;
 
       const injectedRange =
         typeof __PROMPTFOO_NODE_ENGINE_RANGE__ === 'undefined'
-          ? '>=20.0.0'
+          ? '>=22.22.0'
           : __PROMPTFOO_NODE_ENGINE_RANGE__;
       const injectedComparatorSets =
         typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
-          ? [[{ operator: '>=', version: '20.0.0' }]]
+          ? [[{ operator: '>=', version: '22.22.0' }]]
           : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
 
-      expect(injectedRange).toBe('^20.20.0 || >=22.22.0');
+      expect(injectedRange).toBe('>=22.22.0');
       expect(injectedComparatorSets).toEqual(nodeEngineComparatorSets);
     });
   });
