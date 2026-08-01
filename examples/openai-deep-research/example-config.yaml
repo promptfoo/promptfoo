@@ -12,6 +12,7 @@ providers:
     config:
       max_output_tokens: 5000
       max_tool_calls: 2
+      tool_choice: required
       tools:
         - type: web_search
 
@@ -21,6 +22,7 @@ providers:
     config:
       max_output_tokens: 10000
       max_tool_calls: 5
+      tool_choice: required
       tools:
         - type: web_search
 
