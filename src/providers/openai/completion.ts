@@ -71,6 +71,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     }
     const promptConfig = context?.prompt?.config;
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
+    const isFirstPartyCompletionApi = isOpenAiFirstPartyApiUrl(this.getApiUrl());
+    const requestServiceTier = isFirstPartyCompletionApi
+      ? undefined
+      : normalizeOpenAiServiceTierForWire(effectiveServiceTier);
     const body = {
       model: this.modelName,
       prompt,
@@ -85,12 +89,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
-      ...(effectiveServiceTier === undefined
-        ? {}
-        : { service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier) }),
+      ...(requestServiceTier === undefined ? {} : { service_tier: requestServiceTier }),
     };
     // OpenAI's legacy /v1/completions schema rejects service_tier. Custom gateways may support it.
-    if (isOpenAiFirstPartyApiUrl(this.getApiUrl())) {
+    if (isFirstPartyCompletionApi) {
       delete body.service_tier;
     }
     assertOpenAiApiModel(body.model, this.getApiUrl());
@@ -137,7 +139,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
-          serviceTier: data.service_tier ?? effectiveServiceTier,
+          serviceTier: data.service_tier ?? requestServiceTier,
         }),
       };
     } catch (err) {

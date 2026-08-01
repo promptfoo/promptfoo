@@ -209,12 +209,13 @@ describe('OpenAI Provider', () => {
         },
       });
 
-      await provider.callApi('Use the legacy endpoint', {
+      const result = await provider.callApi('Use the legacy endpoint', {
         prompt: { config: { service_tier: 'flex' } },
       } as any);
       const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
 
       expect(body).not.toHaveProperty('service_tier');
+      expect(result.cost).toBeCloseTo((5 * 0.4 + 5 * 0.4) / 1e6, 10);
     });
 
     it('should handle API errors', async () => {
