@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import path from 'node:path';
 
 import {
   Agent,
@@ -10,7 +9,6 @@ import {
   Runner,
   startTraceExportLoop,
 } from '@openai/agents';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
   loadAgentDefinition,
@@ -25,7 +23,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { AgentInputItem, Handoff, ModelSettings, Session, Tool } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -35,164 +33,38 @@ import type {
 } from '../../types/index';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
-const AGENT_TOOL_METADATA = Symbol.for('promptfoo.openaiAgents.agentToolMetadata');
-const AGENT_AS_TOOL_INSTRUMENTED = Symbol.for('promptfoo.openaiAgents.asToolInstrumented');
+type AgentExecutionOverrides = { model?: string; modelSettings?: ModelSettings };
+type GenericRunnerRun = (
+  agent: Agent<any, any>,
+  input: unknown,
+  options?: unknown,
+) => Promise<unknown>;
 
-type AgentToolMetadata = {
-  sourceAgent: Agent<any, any>;
-};
+const AGENT_RUNNER_INSTRUMENTED = Symbol.for('promptfoo.openaiAgents.runnerInstrumented');
+const agentExecutionOverrides = new AsyncLocalStorage<AgentExecutionOverrides>();
 
-type TrackedAgentTool = Extract<Tool<any>, { type: 'function' }> & {
-  [AGENT_TOOL_METADATA]?: AgentToolMetadata;
-  on?: (name: string, handler: (...args: any[]) => unknown) => TrackedAgentTool;
-};
-
-function instrumentAgentAsTool(): void {
-  const prototype = Agent.prototype as Agent<any, any> & {
-    asTool: Agent<any, any>['asTool'] & { [AGENT_AS_TOOL_INSTRUMENTED]?: boolean };
+function instrumentRunner(): void {
+  const prototype = Runner.prototype as unknown as {
+    run: GenericRunnerRun & { [AGENT_RUNNER_INSTRUMENTED]?: boolean };
   };
-  const currentAsTool = prototype.asTool;
-  if (currentAsTool[AGENT_AS_TOOL_INSTRUMENTED]) {
+  const currentRun = prototype.run;
+  if (currentRun[AGENT_RUNNER_INSTRUMENTED]) {
     return;
   }
 
-  const instrumentedAsTool = function (
-    this: Agent<any, any>,
-    options: Parameters<Agent<any, any>['asTool']>[0],
-  ): ReturnType<Agent<any, any>['asTool']> {
-    const tool = currentAsTool.call(this, options) as TrackedAgentTool;
-    const metadata: AgentToolMetadata = {
-      sourceAgent: this,
-    };
-    Object.defineProperty(tool, AGENT_TOOL_METADATA, { configurable: true, value: metadata });
-
-    return tool as ReturnType<Agent<any, any>['asTool']>;
+  // Agent.asTool() creates a new Runner but closes over the source Agent. Intercept every nested
+  // run while a promptfoo provider call is active so the Runner receives an isolated overridden
+  // clone. This preserves all tool options and event handlers without mutating shared agents.
+  const instrumentedRun: GenericRunnerRun = async function (this: Runner, agent, input, options) {
+    const overrides = agentExecutionOverrides.getStore();
+    const executableAgent = overrides ? applyExecutionOverrides(agent, overrides) : agent;
+    return currentRun.call(this, executableAgent, input, options);
   };
-  Object.defineProperty(instrumentedAsTool, AGENT_AS_TOOL_INSTRUMENTED, { value: true });
-  prototype.asTool = instrumentedAsTool as Agent<any, any>['asTool'];
+  Object.defineProperty(instrumentedRun, AGENT_RUNNER_INSTRUMENTED, { value: true });
+  prototype.run = instrumentedRun;
 }
 
-instrumentAgentAsTool();
-
-type AgentToolSourceRegistry = {
-  getAgentToolSourceAgent: (tool: Tool<any>) => Agent<any, any> | undefined;
-  registerAgentToolSourceAgent: (tool: Tool<any>, agent: Agent<any, any>) => void;
-};
-
-let agentToolSourceRegistriesPromise: Promise<AgentToolSourceRegistry[]> | undefined;
-
-async function loadAgentToolSourceRegistries(): Promise<AgentToolSourceRegistry[]> {
-  agentToolSourceRegistriesPromise ??= (async () => {
-    const entryPoint = resolvePackageEntryPoint('@openai/agents-core', getDirectory());
-    if (!entryPoint) {
-      return [];
-    }
-
-    // Agent.asTool() intentionally hides its source agent. The SDK keeps that relationship in an
-    // internal registry for run-state serialization, so load both module variants to match the
-    // ESM or CJS Agents build selected by the current promptfoo entrypoint.
-    const registryPaths = [
-      path.join(path.dirname(entryPoint), 'agentToolSourceRegistry.mjs'),
-      path.join(path.dirname(entryPoint), 'agentToolSourceRegistry.js'),
-    ];
-    const loaded = await Promise.allSettled(
-      registryPaths.map((registryPath) => importModule(registryPath)),
-    );
-
-    return loaded.flatMap((result) => {
-      if (result.status !== 'fulfilled') {
-        return [];
-      }
-      const registry = result.value as Partial<AgentToolSourceRegistry>;
-      return typeof registry.getAgentToolSourceAgent === 'function' &&
-        typeof registry.registerAgentToolSourceAgent === 'function'
-        ? [registry as AgentToolSourceRegistry]
-        : [];
-    });
-  })();
-
-  return agentToolSourceRegistriesPromise;
-}
-
-async function getAgentToolSourceAgent(
-  tool: TrackedAgentTool,
-): Promise<Agent<any, any> | undefined> {
-  const trackedSource = tool[AGENT_TOOL_METADATA]?.sourceAgent;
-  if (trackedSource) {
-    return trackedSource;
-  }
-
-  for (const registry of await loadAgentToolSourceRegistries()) {
-    const sourceAgent = registry.getAgentToolSourceAgent(tool);
-    if (sourceAgent) {
-      return sourceAgent;
-    }
-  }
-
-  return undefined;
-}
-
-async function registerAgentToolSourceAgent(
-  tool: TrackedAgentTool,
-  sourceAgent: Agent<any, any>,
-): Promise<void> {
-  Object.defineProperty(tool, AGENT_TOOL_METADATA, {
-    configurable: true,
-    value: { sourceAgent } satisfies AgentToolMetadata,
-  });
-  for (const registry of await loadAgentToolSourceRegistries()) {
-    registry.registerAgentToolSourceAgent(tool, sourceAgent);
-  }
-}
-
-const activeAgentToolOverrides = new AsyncLocalStorage<Set<Agent<any, any>>>();
-const agentToolOverrideQueues = new WeakMap<Agent<any, any>, Promise<void>>();
-
-async function withAgentToolOverrides<T>(
-  sourceAgent: Agent<any, any>,
-  overriddenAgent: Agent<any, any>,
-  callback: () => Promise<T>,
-): Promise<T> {
-  const activeOverrides = activeAgentToolOverrides.getStore();
-  if (activeOverrides?.has(sourceAgent)) {
-    return callback();
-  }
-
-  const previousRun = agentToolOverrideQueues.get(sourceAgent) ?? Promise.resolve();
-  let release: () => void = () => {};
-  const currentRun = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  agentToolOverrideQueues.set(sourceAgent, currentRun);
-  await previousRun;
-
-  const original = {
-    model: sourceAgent.model,
-    modelSettings: sourceAgent.modelSettings,
-    handoffs: sourceAgent.handoffs,
-    tools: sourceAgent.tools,
-  };
-  sourceAgent.model = overriddenAgent.model;
-  sourceAgent.modelSettings = overriddenAgent.modelSettings;
-  sourceAgent.handoffs = overriddenAgent.handoffs;
-  sourceAgent.tools = overriddenAgent.tools;
-
-  try {
-    return await activeAgentToolOverrides.run(
-      new Set([...(activeOverrides ?? []), sourceAgent]),
-      callback,
-    );
-  } finally {
-    sourceAgent.model = original.model;
-    sourceAgent.modelSettings = original.modelSettings;
-    sourceAgent.handoffs = original.handoffs;
-    sourceAgent.tools = original.tools;
-    release();
-    if (agentToolOverrideQueues.get(sourceAgent) === currentRun) {
-      agentToolOverrideQueues.delete(sourceAgent);
-    }
-  }
-}
+instrumentRunner();
 
 /**
  * OpenAI Agents Provider
@@ -293,7 +165,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       });
 
       this.executionModelSettings = resolveModelSettings(this.agentConfig.modelSettings);
-      const overriddenAgent = await applyExecutionOverrides(configuredAgent, {
+      const overriddenAgent = applyExecutionOverrides(configuredAgent, {
         model: this.agentConfig.model || undefined,
         modelSettings: this.executionModelSettings,
       });
@@ -380,14 +252,21 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       // Run the agent within the evaluator trace when Promptfoo supplied one so
       // nested agent spans stay attached to trajectory assertions and UI traces.
       const executeRun = () =>
-        getOrCreateTrace(
-          async () => {
-            return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
-          },
+        agentExecutionOverrides.run(
           {
-            ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
-            ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
+            model: this.agentConfig.model || undefined,
+            modelSettings: this.executionModelSettings,
           },
+          () =>
+            getOrCreateTrace(
+              async () => {
+                return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
+              },
+              {
+                ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
+                ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
+              },
+            ),
         );
       const result = runOptions.session
         ? await this.withSessionLock(runOptions.session, executeRun)
@@ -636,17 +515,17 @@ function cloneAgentPreservingHooks(
  * The Agents SDK treats Runner model configuration as a fallback: explicit settings on an agent
  * take precedence. Handoff agents therefore need the same overrides applied before execution.
  */
-async function applyExecutionOverrides(
+function applyExecutionOverrides(
   agent: Agent<any, any>,
-  overrides: { model?: string; modelSettings?: ModelSettings },
-): Promise<Agent<any, any>> {
+  overrides: AgentExecutionOverrides,
+): Agent<any, any> {
   if (overrides.model === undefined && overrides.modelSettings === undefined) {
     return agent;
   }
 
   const clonedAgents = new WeakMap<Agent<any, any>, Agent<any, any>>();
 
-  const cloneAgent = async (source: Agent<any, any>): Promise<Agent<any, any>> => {
+  const cloneAgent = (source: Agent<any, any>): Agent<any, any> => {
     const existing = clonedAgents.get(source);
     if (existing) {
       return existing;
@@ -656,54 +535,21 @@ async function applyExecutionOverrides(
       ...(overrides.model === undefined ? {} : { model: overrides.model }),
       ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
       handoffs: [],
-      tools: [],
+      tools: source.tools,
     });
     clonedAgents.set(source, cloned);
+    cloned.handoffs = source.handoffs.map((candidate) => {
+      if ('clone' in candidate && 'agent' in candidate) {
+        const handoff = candidate as Handoff<any, any>;
+        return handoff.clone({
+          agent: cloneAgent(handoff.agent),
+          onInvokeHandoff: async (context, args) =>
+            cloneAgent(await handoff.onInvokeHandoff(context, args)),
+        });
+      }
 
-    cloned.tools = await Promise.all(
-      source.tools.map(async (tool) => {
-        const trackedTool = tool as TrackedAgentTool;
-        const sourceAgent = await getAgentToolSourceAgent(trackedTool);
-        if (!sourceAgent) {
-          return tool;
-        }
-
-        const overriddenSourceAgent = await cloneAgent(sourceAgent);
-        // Agent.asTool() closes over its source Agent, and the public tool API exposes neither that
-        // source nor the original tool options. Wrap the existing invocation so every user option
-        // and event handler remains intact, while temporarily applying the cloned graph. The
-        // per-agent lock prevents concurrent providers from racing those temporary overrides.
-        const wrappedTool: TrackedAgentTool = {
-          ...trackedTool,
-          invoke: (...args: Parameters<TrackedAgentTool['invoke']>) =>
-            withAgentToolOverrides(sourceAgent, overriddenSourceAgent, () =>
-              trackedTool.invoke(...args),
-            ),
-        };
-        if (trackedTool.on) {
-          wrappedTool.on = (name, handler) => {
-            trackedTool.on?.(name, handler);
-            return wrappedTool;
-          };
-        }
-        await registerAgentToolSourceAgent(wrappedTool, sourceAgent);
-        return wrappedTool;
-      }),
-    );
-    cloned.handoffs = await Promise.all(
-      source.handoffs.map(async (candidate) => {
-        if ('clone' in candidate && 'agent' in candidate) {
-          const handoff = candidate as Handoff<any, any>;
-          return handoff.clone({
-            agent: await cloneAgent(handoff.agent),
-            onInvokeHandoff: async (context, args) =>
-              cloneAgent(await handoff.onInvokeHandoff(context, args)),
-          });
-        }
-
-        return cloneAgent(candidate as Agent<any, any>);
-      }),
-    );
+      return cloneAgent(candidate as Agent<any, any>);
+    });
 
     return cloned;
   };

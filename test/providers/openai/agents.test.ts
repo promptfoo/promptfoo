@@ -715,19 +715,20 @@ describe('OpenAiAgentsProvider', () => {
     ]);
   });
 
-  it('applies explicit model and model settings to nested agent tools', async () => {
+  it('preserves nested agent tools while applying overrides to the root agent', async () => {
     const childAgent = new Agent({
       name: 'Child Agent',
       instructions: 'Handle delegated work.',
       model: 'gpt-5.4-mini',
       modelSettings: { temperature: 0.9 },
     });
+    const childTool = childAgent.asTool({ toolName: 'delegate_to_child' });
     const provider = new OpenAiAgentsProvider('support-agent', {
       config: {
         agent: {
           name: 'Inline Support Agent',
           instructions: 'Help the user.',
-          tools: [childAgent.asTool({ toolName: 'delegate_to_child' })],
+          tools: [childTool],
         },
         model: 'gpt-5.6-terra',
         modelSettings: { temperature: 0.2 },
@@ -737,10 +738,11 @@ describe('OpenAiAgentsProvider', () => {
     await provider.callApi('Delegate this request.');
 
     const executedAgent = mockRun.mock.calls[0][0] as Agent<any, any>;
-    await expect((executedAgent.tools[0] as any).invoke()).resolves.toEqual({
+    expect(executedAgent).toMatchObject({
       model: 'gpt-5.6-terra',
       modelSettings: { temperature: 0.2 },
     });
+    expect(executedAgent.tools[0]).toBe(childTool);
   });
 
   it.each([
