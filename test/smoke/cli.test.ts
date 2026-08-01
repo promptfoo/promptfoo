@@ -45,9 +45,9 @@ function runCli(
  */
 function runEntrypoint(
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; nodeExecutable?: string } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync(process.execPath, [ENTRYPOINT_PATH, ...args], {
+  const result = spawnSync(options.nodeExecutable ?? process.execPath, [ENTRYPOINT_PATH, ...args], {
     cwd: options.cwd || ROOT_DIR,
     encoding: 'utf-8',
     env: { ...process.env, ...options.env, NO_COLOR: '1' },
@@ -61,7 +61,36 @@ function runEntrypoint(
   };
 }
 
-function runEntrypointWithNodeVersion(version: string) {
+function getCiNodeExecutable(
+  variable: 'PROMPTFOO_NODE20_BIN' | 'PROMPTFOO_MIN_NODE_BIN',
+): string | undefined {
+  const nodeExecutable = process.env[variable];
+
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    expect(
+      nodeExecutable,
+      `CI must provide an actual Node.js executable through ${variable}`,
+    ).toBeTruthy();
+  }
+
+  return nodeExecutable;
+}
+
+function runEntrypointWithNodeVersion(version: string, nodeExecutable?: string) {
+  if (nodeExecutable) {
+    const actualVersion = spawnSync(nodeExecutable, ['--version'], {
+      cwd: ROOT_DIR,
+      encoding: 'utf-8',
+      env: process.env,
+      timeout: 30000,
+    });
+
+    expect(actualVersion.status, actualVersion.error?.message || actualVersion.stderr).toBe(0);
+    expect(actualVersion.stdout.trim()).toBe(version);
+
+    return runEntrypoint(['--version'], { nodeExecutable });
+  }
+
   const preload = encodeURIComponent(
     `Object.defineProperty(process, "version", { value: ${JSON.stringify(version)} })`,
   );
@@ -316,7 +345,9 @@ describe('CLI Smoke Tests', () => {
       'v20.20.0',
       'v22.21.9',
     ])('1.7.5 - shipped runtime guard rejects unsupported Node.js %s', (version) => {
-      const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
+      const nodeExecutable =
+        version === 'v20.20.0' ? getCiNodeExecutable('PROMPTFOO_NODE20_BIN') : undefined;
+      const { stderr, exitCode } = runEntrypointWithNodeVersion(version, nodeExecutable);
 
       expect(exitCode).toBe(1);
       expect(stderr).toContain(`Detected: ${version}`);
@@ -325,7 +356,10 @@ describe('CLI Smoke Tests', () => {
     });
 
     it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
-      const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');
+      const { stdout, exitCode } = runEntrypointWithNodeVersion(
+        'v22.22.0',
+        getCiNodeExecutable('PROMPTFOO_MIN_NODE_BIN'),
+      );
 
       expect(exitCode).toBe(0);
       expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);

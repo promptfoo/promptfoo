@@ -367,6 +367,10 @@ function evaluatesPersistentMockSetter(
 }
 
 function hasSleepPromise(source: string) {
+  if ((!source.includes('Promise') || !source.includes('setTimeout')) && !source.includes('\\u')) {
+    return false;
+  }
+
   const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
   let found = false;
 
@@ -564,7 +568,18 @@ function isProcessEnvMutationCall(node: ts.CallExpression): boolean {
   );
 }
 
+function canReferenceProcessEnv(source: string): boolean {
+  return (
+    (source.includes('process') || source.includes('\\u')) &&
+    (source.includes('env') || source.includes('\\'))
+  );
+}
+
 function hasDirectProcessEnvMutation(source: string) {
+  if (!canReferenceProcessEnv(source)) {
+    return false;
+  }
+
   const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
   let found = false;
 
@@ -614,6 +629,10 @@ function hasDirectProcessEnvMutation(source: string) {
 }
 
 function hasProcessEnvReferenceSnapshot(source: string) {
+  if (!canReferenceProcessEnv(source)) {
+    return false;
+  }
+
   const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
   let found = false;
 
@@ -657,6 +676,39 @@ function findFilesMatchingPolicy(predicate: (source: string) => boolean): string
   return findRootTestFiles()
     .filter((file) => predicate(readFileSync(file, 'utf8')))
     .map(toPosixRelativePath)
+    .sort();
+}
+
+function findStalePolicyAllowlistFiles(
+  allowlist: ReadonlySet<string>,
+  predicate: (source: string) => boolean,
+): string[] {
+  return Array.from(allowlist)
+    .filter((file) => {
+      const filePath = path.join(testDir, file);
+
+      if (
+        filePath === thisFile ||
+        !testFilePattern.test(filePath) ||
+        toPosixRelativePath(filePath) !== file
+      ) {
+        return true;
+      }
+
+      try {
+        return !predicate(readFileSync(filePath, 'utf8'));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+        ) {
+          return true;
+        }
+
+        throw error;
+      }
+    })
     .sort();
 }
 
@@ -895,6 +947,9 @@ describe('root test hygiene', () => {
     'Reflect.defineProperty(process.env, "OPENAI_API_KEY", { value: "test-key" });',
     'Reflect.deleteProperty(process.env, "OPENAI_API_KEY");',
     'Reflect.set(process.env, "OPENAI_API_KEY", "test-key");',
+    'pr\\u006fcess.env.OPENAI_API_KEY = "test-key";',
+    'process.\\u0065nv.OPENAI_API_KEY = "test-key";',
+    'process["\\x65nv"].OPENAI_API_KEY = "test-key";',
   ])('detects direct process.env mutation in %s', (source) => {
     expect(hasDirectProcessEnvMutation(source)).toBe(true);
   });
@@ -918,6 +973,8 @@ describe('root test hygiene', () => {
     'const originalEnv = process["env"];',
     'originalEnv = process.env;',
     'const ORIGINAL_ENV = process.env;',
+    'const originalEnv = pr\\u006fcess.env;',
+    'const originalEnv = process["\\x65nv"];',
   ])('detects process.env reference snapshots in %s', (source) => {
     expect(hasProcessEnvReferenceSnapshot(source)).toBe(true);
   });
@@ -943,12 +1000,29 @@ describe('root test hygiene', () => {
   });
 
   it('keeps the legacy hoisted mock allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasHoistedPersistentMockWithoutReset));
-    const staleFiles = Array.from(legacyHoistedPersistentMockFiles)
-      .filter((file) => !activeFiles.has(file))
-      .sort();
+    const staleFiles = findStalePolicyAllowlistFiles(
+      legacyHoistedPersistentMockFiles,
+      hasHoistedPersistentMockWithoutReset,
+    );
 
     expect(staleFiles).toEqual([]);
+  });
+
+  it('checks only existing allowlisted test files for stale policy violations', () => {
+    const inspectedSources: string[] = [];
+    const staleFiles = findStalePolicyAllowlistFiles(
+      new Set(['database.test.ts', 'missing-policy-allowlist.test.ts']),
+      (source) => {
+        inspectedSources.push(source);
+        return true;
+      },
+    );
+
+    expect(staleFiles).toEqual(['missing-policy-allowlist.test.ts']);
+    expect(inspectedSources).toHaveLength(1);
+    expect(findStalePolicyAllowlistFiles(new Set(['database.test.ts']), () => false)).toEqual([
+      'database.test.ts',
+    ]);
   });
 
   it('keeps new root tests from adding direct process.env mutations', () => {
@@ -971,10 +1045,10 @@ describe('root test hygiene', () => {
   });
 
   it('keeps the legacy process.env mutation allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasDirectProcessEnvMutation));
-    const staleFiles = Array.from(legacyDirectProcessEnvMutationFiles)
-      .filter((file) => !activeFiles.has(file))
-      .sort();
+    const staleFiles = findStalePolicyAllowlistFiles(
+      legacyDirectProcessEnvMutationFiles,
+      hasDirectProcessEnvMutation,
+    );
 
     expect(staleFiles).toEqual([]);
   });
@@ -990,6 +1064,7 @@ describe('root test hygiene', () => {
     'await new Promise((r) => setTimeout(r, 250));',
     'await new Promise(function (resolve) { setTimeout(resolve, 1000); });',
     'await new Promise((resolve) => { setTimeout(resolve, 50); });',
+    'await new Pro\\u006dise((resolve) => setTi\\u006deout(resolve, 100));',
   ])('detects setTimeout-based sleep waits in %s', (source) => {
     expect(hasSleepPromise(source)).toBe(true);
   });
@@ -1024,10 +1099,7 @@ describe('root test hygiene', () => {
   });
 
   it('keeps the legacy sleep-wait allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasSleepPromise));
-    const staleFiles = Array.from(legacySleepPromiseFiles)
-      .filter((file) => !activeFiles.has(file))
-      .sort();
+    const staleFiles = findStalePolicyAllowlistFiles(legacySleepPromiseFiles, hasSleepPromise);
 
     expect(staleFiles).toEqual([]);
   });
@@ -1177,10 +1249,10 @@ describe('root test hygiene', () => {
   });
 
   it('keeps the legacy module-scope persistent mock allowlist scoped to active violations', () => {
-    const activeFiles = new Set(findFilesMatchingPolicy(hasModuleScopePersistentMockWithoutReset));
-    const staleFiles = Array.from(legacyModuleScopePersistentMockFiles)
-      .filter((file) => !activeFiles.has(file))
-      .sort();
+    const staleFiles = findStalePolicyAllowlistFiles(
+      legacyModuleScopePersistentMockFiles,
+      hasModuleScopePersistentMockWithoutReset,
+    );
 
     expect(staleFiles).toEqual([]);
   });
