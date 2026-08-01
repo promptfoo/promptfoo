@@ -127,8 +127,9 @@ providers:
       return_images: true
 ```
 
-Perplexity's citations and search results are preserved in `metadata.perplexity`. When requested,
-image results and follow-up questions are available at `metadata.perplexity.images` and
+Perplexity citations are exposed through the standard `metadata.citations` field, and all search
+artifacts are preserved in `metadata.perplexity`. When requested, image results and follow-up
+questions are available at `metadata.perplexity.images` and
 `metadata.perplexity.related_questions`.
 
 ### Cost Tracking

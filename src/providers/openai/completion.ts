@@ -69,7 +69,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
-    const promptConfig = context?.prompt?.config;
+    const promptConfig = context?.prompt?.config as Partial<OpenAiCompletionOptions> | undefined;
+    const promptReplacesPassthrough =
+      promptConfig && Object.prototype.hasOwnProperty.call(promptConfig, 'passthrough');
+    const effectivePassthrough = promptReplacesPassthrough
+      ? promptConfig.passthrough
+      : this.config.passthrough;
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
     const isFirstPartyCompletionApi = isOpenAiFirstPartyApiUrl(this.getApiUrl());
     const requestServiceTier = isFirstPartyCompletionApi
@@ -88,7 +93,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
-      ...(this.config.passthrough || {}),
+      ...(effectivePassthrough || {}),
       ...(requestServiceTier === undefined ? {} : { service_tier: requestServiceTier }),
     };
     // OpenAI's legacy /v1/completions schema rejects service_tier. Custom gateways may support it.
@@ -130,7 +135,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
     try {
-      const billingModelName = this.getBillingModelName(this.config);
+      const billingModelName = this.getBillingModelName({
+        ...this.config,
+        passthrough: effectivePassthrough,
+      });
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
       return {
         output: data.choices[0].text,

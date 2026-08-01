@@ -218,7 +218,10 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
       }
     }
 
-    return Object.keys(perplexity).length > 0 ? { perplexity } : {};
+    return {
+      ...(Array.isArray(raw.citations) ? { citations: raw.citations } : {}),
+      ...(Object.keys(perplexity).length > 0 ? { perplexity } : {}),
+    };
   }
 
   /**

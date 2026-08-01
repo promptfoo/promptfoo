@@ -204,11 +204,26 @@ function hasUnsupportedLiveTranslateThinkingConfig(config: CompletionOptions): b
   );
 }
 
-function hasUnsupportedLiveTranslateServiceTier(config: CompletionOptions): boolean {
-  const passthrough = config.passthrough as
+function getEffectiveLiveTranslateServiceTier(
+  providerConfig: CompletionOptions,
+  promptConfig?: Partial<CompletionOptions>,
+): unknown {
+  const providerPassthrough = providerConfig.passthrough as
     | { service_tier?: unknown; serviceTier?: unknown }
     | undefined;
-  const serviceTier = passthrough?.service_tier ?? passthrough?.serviceTier ?? config.service_tier;
+  const promptPassthrough = promptConfig?.passthrough as
+    | { service_tier?: unknown; serviceTier?: unknown }
+    | undefined;
+  const providerServiceTier =
+    providerPassthrough?.service_tier ??
+    providerPassthrough?.serviceTier ??
+    providerConfig.service_tier;
+  const promptServiceTier =
+    promptPassthrough?.service_tier ?? promptPassthrough?.serviceTier ?? promptConfig?.service_tier;
+  return promptServiceTier ?? providerServiceTier;
+}
+
+function hasUnsupportedLiveTranslateServiceTier(serviceTier: unknown): boolean {
   return serviceTier !== undefined && serviceTier !== 'standard';
 }
 
@@ -220,13 +235,14 @@ function getUnsupportedLiveTranslateConfigurationError(
   config: CompletionOptions,
   systemInstruction: unknown,
   responseModalities: string[] | undefined,
+  serviceTier: unknown,
 ): string | undefined {
   return (
     getLiveTranslateResponseModalityError(responseModalities) ??
     (hasUnsupportedLiveTranslateToolsOrInstructions(config, systemInstruction)
       ? 'Gemini 3.5 Live Translate does not support tools or instructions.'
       : undefined) ??
-    (hasUnsupportedLiveTranslateServiceTier(config)
+    (hasUnsupportedLiveTranslateServiceTier(serviceTier)
       ? 'Gemini 3.5 Live Translate does not support flex, priority, batch, or other non-standard inference tiers; remove service_tier/serviceTier or set it to standard.'
       : undefined)
   );
@@ -469,10 +485,8 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
 
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<CompletionOptions> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
     const supportsTextResponse = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
     const configuredResponseModalities = (
       config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
@@ -530,6 +544,7 @@ export class GoogleLiveProvider implements ApiProvider {
         config,
         systemInstruction,
         configuredResponseModalities,
+        getEffectiveLiveTranslateServiceTier(this.config, promptConfig),
       );
       if (unsupportedConfigurationError) {
         return { error: unsupportedConfigurationError };
@@ -701,6 +716,9 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasAudioStreamEnded = !isAudioExpected;
 
       const sendContentMessages = async (contentMessages: any[]) => {
+        if (this.modelName === GEMINI_LIVE_TRANSLATE_MODEL) {
+          liveTranslateInputEnded = false;
+        }
         for (const contentMessage of contentMessages) {
           if (contentMessage.realtimeInput?.video) {
             const delayMs = Math.max(lastVideoFrameSentAt + 1_000 - Date.now(), 0);
@@ -766,6 +784,25 @@ export class GoogleLiveProvider implements ApiProvider {
         }, effectiveTimeoutMs);
       };
       armIdleTimeout();
+
+      const sendNextContentMessages = async (isMultiTurn = false) => {
+        if (contentIndex >= contents.length) {
+          return;
+        }
+        clearTimeout(liveTranslateCompletionTimeout);
+        liveTranslateCompletionTimeout = undefined;
+        const contentMessages = formatContentMessages(
+          contents,
+          contentIndex,
+          usesRealtimeTextInput,
+        );
+        contentIndex += 1;
+        armIdleTimeout();
+        logger.debug(isMultiTurn ? 'WebSocket sent (multi-turn)' : 'WebSocket sent', {
+          messageCount: contentMessages.length,
+        });
+        await sendContentMessages(contentMessages);
+      };
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
@@ -1048,9 +1085,15 @@ export class GoogleLiveProvider implements ApiProvider {
         clearTimeout(liveTranslateCompletionTimeout);
         liveTranslateCompletionTimeout = setTimeout(() => {
           liveTranslateCompletionTimeout = undefined;
-          void finalizeResponse().catch((err) => {
-            logger.error(`Error finalizing Live Translate response: ${err}`);
-            safeResolve({ error: `Error finalizing Live Translate response: ${err}` });
+          void (async () => {
+            if (contentIndex < contents.length) {
+              await sendNextContentMessages(true);
+              return;
+            }
+            await finalizeResponse();
+          })().catch((err) => {
+            logger.error(`Error advancing Live Translate response: ${err}`);
+            safeResolve({ error: `Error advancing Live Translate response: ${err}` });
           });
         }, liveTranslateCompletionGraceMs);
       };
@@ -1231,14 +1274,7 @@ export class GoogleLiveProvider implements ApiProvider {
           );
 
           if (response.setupComplete) {
-            const contentMessages = formatContentMessages(
-              contents,
-              contentIndex,
-              usesRealtimeTextInput,
-            );
-            contentIndex += 1;
-            logger.debug('WebSocket sent', { messageCount: contentMessages.length });
-            await sendContentMessages(contentMessages);
+            await sendNextContentMessages();
           } else if (response.serverContent) {
             const { serverContent } = response;
             let hasMeaningfulLiveTranslateOutput = false;
@@ -1307,16 +1343,9 @@ export class GoogleLiveProvider implements ApiProvider {
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
               completedTurns += 1;
-              const contentMessages = formatContentMessages(
-                contents,
-                contentIndex,
-                usesRealtimeTextInput,
-              );
-              contentIndex += 1;
-              logger.debug('WebSocket sent (multi-turn)', { messageCount: contentMessages.length });
               hasTextStreamEnded = !isTextExpected;
               hasAudioStreamEnded = !isAudioExpected;
-              await sendContentMessages(contentMessages);
+              await sendNextContentMessages(true);
               return;
             }
 

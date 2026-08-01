@@ -175,6 +175,30 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
     });
 
+    it('should remove inherited passthrough when a prompt replaces it with an empty object', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Standard output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Use the prompt override', {
+        prompt: { config: { passthrough: {} } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body).not.toHaveProperty('service_tier');
+      expect(result.cost).toBeCloseTo((1_000 * 0.25 + 100 * 2) / 1e6, 10);
+    });
+
     it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         ...mockResponse,
