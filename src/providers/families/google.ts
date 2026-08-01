@@ -43,6 +43,13 @@ export const googleProviderFactories: ProviderFactory[] = [
           `Vertex AI does not support the Gemini Live API. Use google:live:${modelName}.`,
         );
       }
+      if (firstPart === 'image') {
+        const modelName = splits.slice(2).join(':');
+        validateGoogleModelRoute(modelName, firstPart);
+        throw new Error(
+          `Vertex AI image generation is not supported. Use google:image:${modelName}.`,
+        );
+      }
       const explicitServiceType = ['chat', 'video', 'embedding', 'embeddings'].includes(firstPart)
         ? firstPart
         : undefined;

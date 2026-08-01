@@ -1662,12 +1662,14 @@ describe('Provider Registry', () => {
       'google:video:gemini-robotics-er-2-streaming-preview',
       'google:embedding:gemini-robotics-er-2-streaming-preview',
       'google:embeddings:gemini-robotics-er-2-streaming-preview',
+      'vertex:image:gemini-robotics-er-2-streaming-preview',
       'vertex:video:gemini-robotics-er-2-streaming-preview',
       'vertex:embedding:gemini-robotics-er-2-streaming-preview',
       'vertex:embeddings:gemini-robotics-er-2-streaming-preview',
       'google:video:gemini-3.5-live-translate-preview',
       'google:embedding:gemini-3.5-live-translate-preview',
       'google:embeddings:gemini-3.5-live-translate-preview',
+      'vertex:image:gemini-3.5-live-translate-preview',
       'vertex:video:gemini-3.5-live-translate-preview',
       'vertex:embedding:gemini-3.5-live-translate-preview',
       'vertex:embeddings:gemini-3.5-live-translate-preview',
@@ -1687,6 +1689,7 @@ describe('Provider Registry', () => {
       'google:embedding:gemini-robotics-er-2-preview',
       'google:embeddings:gemini-robotics-er-2-preview',
       'vertex:live:gemini-robotics-er-2-preview',
+      'vertex:image:gemini-robotics-er-2-preview',
       'vertex:video:gemini-robotics-er-2-preview',
       'vertex:embedding:gemini-robotics-er-2-preview',
       'vertex:embeddings:gemini-robotics-er-2-preview',
@@ -1696,6 +1699,16 @@ describe('Provider Registry', () => {
 
       await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
         'Use google:gemini-robotics-er-2-preview',
+      );
+    });
+
+    it('rejects unsupported Vertex image generation with Google AI Studio guidance', async () => {
+      const providerPath = 'vertex:image:imagen-4.0-generate-001';
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        'Use google:image:imagen-4.0-generate-001',
       );
     });
 
