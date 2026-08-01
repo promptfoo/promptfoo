@@ -584,29 +584,27 @@ xAI supports the following Grok Imagine video IDs:
 
 | Model ID                            | Supported input modes                                    | Resolutions       |
 | ----------------------------------- | -------------------------------------------------------- | ----------------- |
-| `grok-imagine-video-1.5`            | Image-to-video                                           | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5`            | Text, image, and reference-to-video input                | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-preview`    | Alias for Grok Imagine Video 1.5                         | 480p, 720p, 1080p |
 | `grok-imagine-video-1.5-2026-05-30` | Dated Grok Imagine Video 1.5 snapshot                    | 480p, 720p, 1080p |
 | `grok-imagine-video`                | Text, image, video editing, and reference-to-video input | 480p, 720p        |
 
-[Grok Imagine Video 1.5](https://docs.x.ai/developers/models/grok-imagine-video-1.5) currently
-requires an image input and does not support text-to-video or
+[Grok Imagine Video 1.5](https://docs.x.ai/developers/models/grok-imagine-video-1.5) supports
+text-to-video, image-to-video, and
 [reference-to-video](https://docs.x.ai/developers/model-capabilities/video/reference-to-video).
-The legacy `grok-imagine-video` model remains the choice for those modes.
+Use the legacy `grok-imagine-video` model for video editing.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'Animate this image as: {{scene}}'
+  - 'Generate this scene: {{scene}}'
 
 providers:
   - id: xai:video:grok-imagine-video-1.5
     config:
-      image:
-        url: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/google-vertex/assets/red-panda.jpg'
       duration: 5 # 1-15 seconds
       aspect_ratio: '16:9'
-      resolution: '720p'
+      resolution: '1080p'
 
 tests:
   - vars:
@@ -618,14 +616,14 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Default | Description                                                         |
-| ------------------ | ------ | ------- | ------------------------------------------------------------------- |
-| `duration`         | number | 8       | Video length in seconds (1-15)                                      |
-| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                   |
-| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p            |
-| `reference_images` | array  | -       | Reference images for legacy `grok-imagine-video` reference-to-video |
-| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                    |
-| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                                      |
+| Option             | Type   | Default | Description                                              |
+| ------------------ | ------ | ------- | -------------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                           |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3        |
+| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p |
+| `reference_images` | array  | -       | Reference images for reference-to-video generation       |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                         |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                           |
 
 #### Image-to-Video
 
@@ -665,7 +663,7 @@ Guide generation with up to seven reference images:
 
 ```yaml
 providers:
-  - id: xai:video:grok-imagine-video
+  - id: xai:video:grok-imagine-video-1.5
     config:
       reference_images:
         - url: 'https://example.com/person.jpg'
@@ -674,7 +672,7 @@ providers:
 ```
 
 Reference-to-video requires a non-empty prompt, cannot be combined with `image` or `video`, and is
-limited to 10 seconds. Grok Imagine Video 1.5 does not support this mode.
+limited to 10 seconds.
 
 #### Pricing
 

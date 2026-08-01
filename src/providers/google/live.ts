@@ -48,11 +48,7 @@ const ROBOTICS_STRUCTURED_OUTPUT_ERROR =
   'Gemini Robotics ER 2 Streaming does not support structured output. Remove responseSchema and generationConfig response schema/MIME type options.';
 const ROBOTICS_UNSUPPORTED_TOOL_ERROR =
   'Gemini Robotics ER 2 Streaming only supports function declarations and Google Search tools.';
-const ROBOTICS_SUPPORTED_TOOL_FIELDS = new Set([
-  'functionDeclarations',
-  'googleSearch',
-  'google_search',
-]);
+const ROBOTICS_SUPPORTED_TOOL_FIELDS = new Set(['functionDeclarations', 'googleSearch']);
 
 function getRoboticsResponseModalityError(
   isRoboticsStreamingModel: boolean,

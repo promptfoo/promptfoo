@@ -1057,28 +1057,37 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
 
 /**
  * Normalizes and sanitizes tools configuration for Gemini API compatibility.
- * - Handles snake_case to camelCase conversion for backwards compatibility
+ * - Canonicalizes snake_case aliases to camelCase for backwards compatibility
  * - Sanitizes function declaration schemas to remove unsupported JSON Schema properties
  *   (e.g., additionalProperties, $schema, default) that Gemini doesn't support
  */
 export function normalizeTools(tools: Tool[]): Tool[] {
   return tools.map((tool) => {
-    const normalizedTool: Tool = { ...tool };
+    const {
+      code_execution: codeExecutionAlias,
+      google_search: googleSearchAlias,
+      google_search_retrieval: googleSearchRetrievalAlias,
+      ...canonicalTool
+    } = tool as Tool & {
+      code_execution?: Tool['codeExecution'];
+      google_search?: Tool['googleSearch'];
+      google_search_retrieval?: Tool['googleSearchRetrieval'];
+    };
+    const normalizedTool: Tool = { ...canonicalTool };
 
-    // Use index access with type assertion to avoid TypeScript errors
-    // Handle google_search -> googleSearch conversion
-    if ((tool as any).google_search && !normalizedTool.googleSearch) {
-      normalizedTool.googleSearch = (tool as any).google_search;
+    if (normalizedTool.googleSearch === undefined && googleSearchAlias !== undefined) {
+      normalizedTool.googleSearch = googleSearchAlias;
     }
 
-    // Handle code_execution -> codeExecution conversion
-    if ((tool as any).code_execution && !normalizedTool.codeExecution) {
-      normalizedTool.codeExecution = (tool as any).code_execution;
+    if (normalizedTool.codeExecution === undefined && codeExecutionAlias !== undefined) {
+      normalizedTool.codeExecution = codeExecutionAlias;
     }
 
-    // Handle google_search_retrieval -> googleSearchRetrieval conversion
-    if ((tool as any).google_search_retrieval && !normalizedTool.googleSearchRetrieval) {
-      normalizedTool.googleSearchRetrieval = (tool as any).google_search_retrieval;
+    if (
+      normalizedTool.googleSearchRetrieval === undefined &&
+      googleSearchRetrievalAlias !== undefined
+    ) {
+      normalizedTool.googleSearchRetrieval = googleSearchRetrievalAlias;
     }
 
     // Sanitize function declarations to remove unsupported schema properties

@@ -1937,7 +1937,7 @@ describe('util', () => {
   });
 
   describe('normalizeTools', () => {
-    it('should convert snake_case to camelCase for tool properties', () => {
+    it('should canonicalize snake_case tool properties to camelCase', () => {
       const tools = [
         {
           google_search: {},
@@ -1959,20 +1959,12 @@ describe('util', () => {
 
       expect(normalized).toEqual([
         {
-          google_search: {},
           googleSearch: {},
         },
         {
-          code_execution: {},
           codeExecution: {},
         },
         {
-          google_search_retrieval: {
-            dynamicRetrievalConfig: {
-              mode: 'MODE_DYNAMIC',
-              dynamicThreshold: 0,
-            },
-          },
           googleSearchRetrieval: {
             dynamicRetrievalConfig: {
               mode: 'MODE_DYNAMIC',
@@ -1995,7 +1987,6 @@ describe('util', () => {
 
       expect(normalized).toEqual([
         {
-          google_search: { property1: 'value1' },
           googleSearch: { property2: 'value2' },
         },
       ]);
@@ -2024,7 +2015,6 @@ describe('util', () => {
               description: 'A test function',
             },
           ],
-          google_search: {},
           googleSearch: {},
         },
       ]);

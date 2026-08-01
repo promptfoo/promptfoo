@@ -331,19 +331,19 @@ describe('GoogleLiveProvider', () => {
       setup: {
         model: 'models/gemini-robotics-er-2-streaming-preview',
         generationConfig: { responseModalities: ['TEXT'] },
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'locate_object',
-                description: 'Locate an object in the current scene.',
-              },
-            ],
-          },
-          { googleSearch: {} },
-        ],
       },
     });
+    expect(sentMessages[0].setup.tools).toEqual([
+      {
+        functionDeclarations: [
+          {
+            name: 'locate_object',
+            description: 'Locate an object in the current scene.',
+          },
+        ],
+      },
+      { googleSearch: {} },
+    ]);
     expect(sentMessages[0].setup).not.toHaveProperty('outputAudioTranscription');
     expect(sentMessages[1]).toEqual({ realtimeInput: { text: 'Locate the object.' } });
     expect(response.output).toMatchObject({ text: 'Object centered at [500, 500].' });

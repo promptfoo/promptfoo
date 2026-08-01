@@ -372,17 +372,8 @@ export class XAIVideoProvider implements ApiProvider {
     duration: number,
     isEdit: boolean,
   ): string | undefined {
-    if (isGrokImagineVideo15Model(this.modelName)) {
-      if (config.reference_images?.length) {
-        return 'Grok Imagine Video 1.5 does not support reference_images.';
-      }
-      if (isEdit) {
-        return 'Grok Imagine Video 1.5 supports only image-to-video generation.';
-      }
-      if (!config.image?.url) {
-        return 'Grok Imagine Video 1.5 requires image input.';
-      }
-      return undefined;
+    if (isGrokImagineVideo15Model(this.modelName) && isEdit) {
+      return 'Grok Imagine Video 1.5 does not support video editing.';
     }
 
     if (!config.reference_images?.length) {

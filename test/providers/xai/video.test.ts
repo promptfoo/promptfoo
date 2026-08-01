@@ -38,6 +38,11 @@ describe('XAI Video Provider', () => {
   const mockRequestId = 'test-request-id-123';
   const mockVideoUrl = 'https://vidgen.x.ai/test-video.mp4';
   const mockStorageKey = 'video/abc123.mp4';
+  const video15Models = [
+    'grok-imagine-video-1.5',
+    'grok-imagine-video-1.5-preview',
+    'grok-imagine-video-1.5-2026-05-30',
+  ] as const;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -229,13 +234,87 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Video generation flow', () => {
-    it('rejects text-to-video generation for Grok Imagine Video 1.5', async () => {
-      const provider = new XAIVideoProvider('grok-imagine-video-1.5');
+    it.each(video15Models)('generates a 1080p text-only video with %s', async (model) => {
+      const createResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+      };
+      const pendingResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ status: 'pending' }),
+      };
+      const completedResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          status: 'done',
+          video: { url: mockVideoUrl, duration: 4 },
+          model,
+        }),
+      };
+      const downloadResponse = {
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+      };
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce(createResponse as any)
+        .mockResolvedValueOnce(pendingResponse as any)
+        .mockResolvedValueOnce(completedResponse as any)
+        .mockResolvedValueOnce(downloadResponse as any);
+
+      const provider = new XAIVideoProvider(model, {
+        config: { duration: 4, resolution: '1080p' },
+      });
 
       const result = await provider.callApi(mockPrompt);
 
-      expect(result.error).toContain('requires image input');
-      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+      const calls = vi.mocked(fetch.fetchWithProxy).mock.calls;
+      expect(calls[0]).toEqual([
+        'https://api.x.ai/v1/videos/generations',
+        expect.objectContaining({ method: 'POST' }),
+      ]);
+      expect(JSON.parse(calls[0][1]?.body as string)).toEqual({
+        model,
+        prompt: mockPrompt,
+        duration: 4,
+        aspect_ratio: '16:9',
+        resolution: '1080p',
+      });
+      expect(calls[1]).toEqual([
+        `https://api.x.ai/v1/videos/${mockRequestId}`,
+        expect.objectContaining({ method: 'GET' }),
+      ]);
+      expect(calls[3]).toEqual([mockVideoUrl, expect.objectContaining({ method: 'GET' })]);
+      expect(sleep).toHaveBeenCalledWith(10_000);
+      expect(videoUtils.storeVideoContent).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        {
+          contentType: 'video/mp4',
+          mediaType: 'video',
+          evalId: undefined,
+          contentHash: 'test-cache-key',
+        },
+        'xAI Video',
+      );
+      expect(videoUtils.storeCacheMapping).toHaveBeenCalledWith(
+        'test-cache-key',
+        mockStorageKey,
+        undefined,
+        undefined,
+        'xAI Video',
+      );
+      expect(result.error).toBeUndefined();
+      expect(result).toMatchObject({
+        cached: false,
+        cost: 1,
+        video: {
+          id: mockRequestId,
+          storageRef: { key: mockStorageKey },
+          model,
+          duration: 4,
+          resolution: '1080p',
+        },
+        metadata: { hasReferenceImages: false, resolution: '1080p' },
+      });
     });
 
     it('generates video successfully', async () => {
@@ -513,17 +592,63 @@ describe('XAI Video Provider', () => {
   });
 
   describe('Reference-to-video generation', () => {
-    it('rejects reference images for Grok Imagine Video 1.5', async () => {
+    it('generates a Grok Imagine Video 1.5 video from reference images', async () => {
+      const referenceImages = [
+        { url: 'https://example.com/person.jpg' },
+        { url: 'https://example.com/shirt.jpg' },
+      ];
+      const createResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+      };
+      const completedResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          status: 'done',
+          video: { url: mockVideoUrl, duration: 4 },
+          model: 'grok-imagine-video-1.5',
+        }),
+      };
+      const downloadResponse = {
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+      };
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce(createResponse as any)
+        .mockResolvedValueOnce(completedResponse as any)
+        .mockResolvedValueOnce(downloadResponse as any);
+
       const provider = new XAIVideoProvider('grok-imagine-video-1.5', {
         config: {
-          reference_images: [{ url: 'https://example.com/reference.jpg' }],
+          reference_images: referenceImages,
+          duration: 10,
+          resolution: '1080p',
         },
       });
 
       const result = await provider.callApi(mockPrompt);
 
-      expect(result.error).toContain('does not support reference_images');
-      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      expect(createCall[0]).toBe('https://api.x.ai/v1/videos/generations');
+      expect(JSON.parse(createCall[1]?.body as string)).toEqual({
+        model: 'grok-imagine-video-1.5',
+        prompt: mockPrompt,
+        duration: 10,
+        aspect_ratio: '16:9',
+        resolution: '1080p',
+        reference_images: referenceImages,
+      });
+      expect(videoUtils.storeVideoContent).toHaveBeenCalledOnce();
+      expect(videoUtils.storeCacheMapping).toHaveBeenCalledOnce();
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(1.02, 5);
+      expect(result.video).toMatchObject({
+        storageRef: { key: mockStorageKey },
+        model: 'grok-imagine-video-1.5',
+        duration: 4,
+        resolution: '1080p',
+      });
+      expect(result.metadata?.hasReferenceImages).toBe(true);
     });
 
     it('includes reference images in the request', async () => {
@@ -616,7 +741,7 @@ describe('XAI Video Provider', () => {
 
       const result = await provider.callApi('Edit prompt');
 
-      expect(result.error).toContain('supports only image-to-video');
+      expect(result.error).toContain('does not support video editing');
       expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
     });
 
