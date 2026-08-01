@@ -1645,6 +1645,19 @@ describe('Provider Registry', () => {
       );
     });
 
+    it.each([
+      'vertex:live:gemini-robotics-er-2-streaming-preview',
+      'vertex:live:gemini-3.5-live-translate-preview',
+    ])('rejects unsupported Vertex Live route %s with Google Live guidance', async (providerPath) => {
+      const modelName = providerPath.split(':').slice(2).join(':');
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        `Use google:live:${modelName}`,
+      );
+    });
+
     it('applies vertexai config and provider id for vertex:video routes', async () => {
       const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));

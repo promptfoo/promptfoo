@@ -122,6 +122,21 @@ describe('CohereChatCompletionProvider', () => {
       ['Provider history'],
       'Cohere v2 Chat API chat_history[0] must be an object.',
     ],
+    [
+      'a chat_history entry without a message',
+      [{ role: 'USER' }],
+      'Cohere v2 Chat API chat_history[0].message must be a non-empty string.',
+    ],
+    [
+      'a chat_history entry with an empty message',
+      [{ role: 'USER', message: '   ' }],
+      'Cohere v2 Chat API chat_history[0].message must be a non-empty string.',
+    ],
+    [
+      'a chat_history entry with a non-string message',
+      [{ role: 'USER', message: { text: 'Provider history' } }],
+      'Cohere v2 Chat API chat_history[0].message must be a non-empty string.',
+    ],
   ])('returns a provider error for %s', async (_description, chatHistory, expectedError) => {
     const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
       config: {
@@ -567,6 +582,29 @@ describe('CohereChatCompletionProvider', () => {
 
     await expect(provider.callApi('Hello')).resolves.toEqual({
       error: 'invalid request: model is unavailable',
+    });
+  });
+
+  it('returns an HTTP error for unsuccessful v2 responses before parsing content', async () => {
+    const data = {
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'This unsuccessful response must not be accepted.' }],
+      },
+    };
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data,
+      status: 503,
+      statusText: 'Service Unavailable',
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('Hello')).resolves.toEqual({
+      error: `API error: 503 Service Unavailable\n${JSON.stringify(data)}`,
     });
   });
 });

@@ -270,10 +270,13 @@ const INTERACTION_GENERATION_ALIASES: Record<string, string> = {
   stopSequences: 'stop_sequences',
   thinkingLevel: 'thinking_level',
   thinkingSummaries: 'thinking_summaries',
+  topP: 'top_p',
   toolChoice: 'tool_choice',
   transcriptionConfig: 'transcription_config',
   videoConfig: 'video_config',
 };
+
+const INTERACTION_SAMPLING_FIELDS = new Set(['temperature', 'top_p']);
 
 const INTERACTION_TOP_LEVEL_GENERATION_FIELDS = new Set([
   ...INTERACTION_GENERATION_FIELDS,
@@ -304,8 +307,19 @@ function normalizeInteractionThinkingLevel(value: unknown): unknown {
   return typeof value === 'string' ? value.toLowerCase() : value;
 }
 
+function isSupportedInteractionGenerationField(
+  field: string,
+  allowSamplingControls: boolean,
+): boolean {
+  return (
+    INTERACTION_GENERATION_FIELDS.has(field) ||
+    (allowSamplingControls && INTERACTION_SAMPLING_FIELDS.has(field))
+  );
+}
+
 function normalizeInteractionGenerationConfig(
   value: unknown,
+  allowSamplingControls = false,
 ): NormalizedInteractionGenerationConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { config: {} };
@@ -344,7 +358,10 @@ function normalizeInteractionGenerationConfig(
     }
 
     const normalizedField = INTERACTION_GENERATION_ALIASES[field] || field;
-    if (!INTERACTION_GENERATION_FIELDS.has(normalizedField) || fieldValue === undefined) {
+    if (
+      !isSupportedInteractionGenerationField(normalizedField, allowSamplingControls) ||
+      fieldValue === undefined
+    ) {
       continue;
     }
     config[normalizedField] =
@@ -532,6 +549,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const passthroughModel = promptPassthrough.model ?? providerPassthrough.model;
     const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
     const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
+    const allowSamplingControls = config.vertexai && isVideoModel;
     const {
       input: interactionInput,
       systemInstruction: promptSystemInstruction,
@@ -672,52 +690,74 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const providerGenerationConfig = normalizeInteractionGenerationConfig({
-      ...(this.config.maxOutputTokens === undefined
-        ? {}
-        : { max_output_tokens: this.config.maxOutputTokens }),
-      ...(this.config.stopSequences === undefined
-        ? {}
-        : { stop_sequences: this.config.stopSequences }),
-      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
-      ...(this.config.generationConfig || {}),
-    });
+    const providerGenerationConfig = normalizeInteractionGenerationConfig(
+      {
+        ...(this.config.maxOutputTokens === undefined
+          ? {}
+          : { max_output_tokens: this.config.maxOutputTokens }),
+        ...(allowSamplingControls && this.config.temperature !== undefined
+          ? { temperature: this.config.temperature }
+          : {}),
+        ...(allowSamplingControls && this.config.topP !== undefined
+          ? { top_p: this.config.topP }
+          : {}),
+        ...(this.config.stopSequences === undefined
+          ? {}
+          : { stop_sequences: this.config.stopSequences }),
+        ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
+        ...(this.config.generationConfig || {}),
+      },
+      allowSamplingControls,
+    );
     if (providerGenerationConfig.error) {
       return { error: providerGenerationConfig.error };
     }
-    const promptGenerationConfig = normalizeInteractionGenerationConfig({
-      ...(promptConfig?.maxOutputTokens === undefined
-        ? {}
-        : { max_output_tokens: promptConfig.maxOutputTokens }),
-      ...(promptConfig?.stopSequences === undefined
-        ? {}
-        : { stop_sequences: promptConfig.stopSequences }),
-      ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
-      ...(promptConfig?.generationConfig || {}),
-    });
+    const promptGenerationConfig = normalizeInteractionGenerationConfig(
+      {
+        ...(promptConfig?.maxOutputTokens === undefined
+          ? {}
+          : { max_output_tokens: promptConfig.maxOutputTokens }),
+        ...(allowSamplingControls && promptConfig?.temperature !== undefined
+          ? { temperature: promptConfig.temperature }
+          : {}),
+        ...(allowSamplingControls && promptConfig?.topP !== undefined
+          ? { top_p: promptConfig.topP }
+          : {}),
+        ...(promptConfig?.stopSequences === undefined
+          ? {}
+          : { stop_sequences: promptConfig.stopSequences }),
+        ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
+        ...(promptConfig?.generationConfig || {}),
+      },
+      allowSamplingControls,
+    );
     if (promptGenerationConfig.error) {
       return { error: promptGenerationConfig.error };
     }
     const providerPassthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
       providerPassthrough.generationConfig,
+      allowSamplingControls,
     );
     if (providerPassthroughCamelGenerationConfig.error) {
       return { error: providerPassthroughCamelGenerationConfig.error };
     }
     const providerPassthroughGenerationConfig = normalizeInteractionGenerationConfig(
       providerPassthrough.generation_config,
+      allowSamplingControls,
     );
     if (providerPassthroughGenerationConfig.error) {
       return { error: providerPassthroughGenerationConfig.error };
     }
     const promptPassthroughCamelGenerationConfig = normalizeInteractionGenerationConfig(
       promptPassthrough.generationConfig,
+      allowSamplingControls,
     );
     if (promptPassthroughCamelGenerationConfig.error) {
       return { error: promptPassthroughCamelGenerationConfig.error };
     }
     const promptPassthroughGenerationConfig = normalizeInteractionGenerationConfig(
       promptPassthrough.generation_config,
+      allowSamplingControls,
     );
     if (promptPassthroughGenerationConfig.error) {
       return { error: promptPassthroughGenerationConfig.error };

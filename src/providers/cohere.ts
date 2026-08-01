@@ -119,6 +119,12 @@ function getV2ConfigError(params: Record<string, any>): string | undefined {
       if (typeof historyMessage.role !== 'string' || historyMessage.role.trim().length === 0) {
         return `Cohere v2 Chat API chat_history[${index}].role must be a non-empty string.`;
       }
+      if (
+        typeof historyMessage.message !== 'string' ||
+        historyMessage.message.trim().length === 0
+      ) {
+        return `Cohere v2 Chat API chat_history[${index}].message must be a non-empty string.`;
+      }
     }
   }
   if (params.connectors?.length) {
@@ -579,9 +585,11 @@ export class CohereChatCompletionProvider implements ApiProvider {
     }
 
     let data,
-      cached = false;
+      cached = false,
+      status: number | undefined,
+      statusText = '';
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached, status, statusText } = (await fetchWithCache(
         'https://api.cohere.ai/v2/chat',
         {
           method: 'POST',
@@ -603,7 +611,20 @@ export class CohereChatCompletionProvider implements ApiProvider {
         // The default key includes headers. Bypass persistence because the bearer
         // token has no safe, non-secret tenant identifier that can replace it.
         true,
-      )) as unknown as { data: any; cached: boolean });
+      )) as unknown as {
+        data: any;
+        cached: boolean;
+        status: number;
+        statusText: string;
+      });
+
+      if (status !== undefined && (status < 200 || status >= 300)) {
+        return {
+          error: `API error: ${status} ${statusText}\n${
+            typeof data === 'string' ? data : JSON.stringify(data)
+          }`,
+        };
+      }
 
       const errorMessage =
         typeof data?.message === 'string'

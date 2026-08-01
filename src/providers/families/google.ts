@@ -25,6 +25,12 @@ export const googleProviderFactories: ProviderFactory[] = [
     create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'live') {
+        const modelName = splits.slice(2).join(':');
+        throw new Error(
+          `Vertex AI does not support the Gemini Live API. Use google:live:${modelName}.`,
+        );
+      }
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
       rejectBareLiveOnlyModel(modelName);

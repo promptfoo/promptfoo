@@ -1881,6 +1881,7 @@ describe('GoogleInteractionsProvider', () => {
           model: 'gemini-omni-flash-preview',
           input: [{ type: 'text', text: 'A city at dusk' }],
           response_format: [{ type: 'video', aspect_ratio: '16:9' }],
+          generation_config: { temperature: 0.2, top_p: 0.9 },
           background: false,
           stream: false,
         }),
@@ -1892,6 +1893,58 @@ describe('GoogleInteractionsProvider', () => {
     expect(getRequestHeaders).toHaveBeenCalledWith(
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
     );
+  });
+
+  it.each([
+    [
+      'top-level provider options',
+      { temperature: 0.2, topP: 0.9 },
+      { temperature: 0.2, top_p: 0.9 },
+    ],
+    [
+      'camelCase generationConfig',
+      { generationConfig: { temperature: 0.3, topP: 0.8 } },
+      { temperature: 0.3, top_p: 0.8 },
+    ],
+    [
+      'snake_case passthrough generation_config',
+      { passthrough: { generation_config: { temperature: 0.4, top_p: 0.7 } } },
+      { temperature: 0.4, top_p: 0.7 },
+    ],
+  ])('preserves Vertex Omni sampling controls from %s', async (_description, options, expected) => {
+    const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(oauthHeaders),
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      id: 'vertex:gemini-omni-flash-preview',
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        ...options,
+      },
+    });
+
+    await provider.callApi('A city at dusk');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(request.body as string).generation_config).toEqual(expected);
   });
 
   it('allows Vertex Robotics follow-up interactions', async () => {
