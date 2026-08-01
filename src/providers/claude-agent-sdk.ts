@@ -199,6 +199,22 @@ function emitToolSpan(
   }
 }
 
+function isRawSubagentTranscript(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) {
+    return false;
+  }
+  if ('isRawTranscript' in result && result.isRawTranscript === true) {
+    return true;
+  }
+  return (
+    'task' in result &&
+    typeof result.task === 'object' &&
+    result.task !== null &&
+    'isRawTranscript' in result.task &&
+    result.task.isRawTranscript === true
+  );
+}
+
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
   return toolCalls
     .filter((toolCall) => toolCall.name === 'Skill')
@@ -480,6 +496,18 @@ export interface ClaudeCodeOptions {
    * Keys are agent names, values are agent definitions with description, tools, and prompt.
    */
   agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Maximum nesting depth for subagents. Defaults to five to preserve the
+   * behavior of Claude Agent SDK versions before 0.3.217.
+   */
+  max_subagent_spawn_depth?: number;
+
+  /**
+   * Maximum number of subagents that can run concurrently. When omitted, the
+   * Claude Agent SDK applies its own default (20 as of version 0.3.217).
+   */
+  max_concurrent_subagents?: number;
 
   /**
    * Output format specification for structured outputs.
@@ -1052,6 +1080,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
+    const subagentLimits = [
+      ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],
+      ['max_concurrent_subagents', 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS'],
+    ] as const;
+
+    for (const [option, environmentVariable] of subagentLimits) {
+      const value = config[option];
+      if (value === undefined) {
+        continue;
+      }
+      if (!Number.isSafeInteger(value) || value < 1) {
+        throw new Error(`${option} must be a positive safe integer`);
+      }
+      env[environmentVariable] = String(value);
+    }
+
+    // Claude Agent SDK 0.3.217 lowered this default from five to one. Keep
+    // existing nested-agent evals working unless an env override opts out.
+    env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ??= '5';
+
     if (config.env) {
       for (const key of Object.keys(config.env).sort()) {
         const value = config.env[key];
@@ -1536,7 +1584,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   if (block.type === 'tool_result') {
                     const entry = toolCallsMap.get(block.tool_use_id);
                     if (entry) {
-                      entry.output = block.content;
+                      entry.output =
+                        entry.name === 'TaskOutput' &&
+                        isRawSubagentTranscript(msg.tool_use_result) &&
+                        !config.forward_subagent_text
+                          ? '[Subagent transcript omitted; set forward_subagent_text: true to include it]'
+                          : block.content;
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {

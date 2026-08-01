@@ -1384,6 +1384,74 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      it('preserves the previous five-level subagent nesting default', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('5');
+      });
+
+      it('forwards configured subagent depth and concurrency limits', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            max_subagent_spawn_depth: 8,
+            max_concurrent_subagents: 40,
+          },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('8');
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('40');
+      });
+
+      it('lets explicit config.env override provider subagent limit options', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            max_subagent_spawn_depth: 8,
+            max_concurrent_subagents: 40,
+            env: {
+              CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '3',
+              CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '60',
+            },
+          },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('3');
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('60');
+      });
+
+      it.each([
+        ['max_subagent_spawn_depth', 0],
+        ['max_subagent_spawn_depth', -1],
+        ['max_subagent_spawn_depth', 1.5],
+        ['max_concurrent_subagents', 0],
+        ['max_concurrent_subagents', Number.POSITIVE_INFINITY],
+      ])('rejects invalid %s value %s', async (option, value) => {
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: { [option]: value },
+        });
+
+        await expect(provider.callApi('prompt')).rejects.toThrow(
+          `${option} must be a positive safe integer`,
+        );
+        expect(mockQuery).not.toHaveBeenCalled();
+      });
+
       it('should forward config.env entries to the SDK subprocess env', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
@@ -3804,6 +3872,109 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('tool call tracking', () => {
+      it.each([
+        false,
+        true,
+      ])('only forwards raw TaskOutput subagent transcripts when explicitly enabled: %s', async (forwardSubagentText) => {
+        const rawTranscript = 'SYSTEM SECRET and hidden subagent reasoning';
+        const taskOutput = `<output>${rawTranscript}</output>`;
+        const emittedToolSpans: Array<Record<string, unknown>> = [];
+        vi.spyOn(genaiTracer, 'getGenAITracer').mockReturnValue({
+          startSpan: vi.fn((name: string, options: { attributes?: Record<string, unknown> }) => {
+            if (name === 'tool TaskOutput') {
+              emittedToolSpans.push(options.attributes ?? {});
+            }
+            return { setStatus: vi.fn(), end: vi.fn() };
+          }),
+        } as any);
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'background-task-output',
+                  name: 'TaskOutput',
+                  input: { task_id: 'background-task-1' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              parent_tool_use_id: null,
+              tool_use_result: {
+                retrieval_status: 'success',
+                task: {
+                  task_id: 'background-task-1',
+                  task_type: 'local_agent',
+                  output: rawTranscript,
+                  isRawTranscript: true,
+                },
+              },
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'background-task-output',
+                    content: taskOutput,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'Background task completed',
+              usage: createMockUsage(100, 200),
+              total_cost_usd: 0.01,
+              duration_ms: 1000,
+              duration_api_ms: 800,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { forward_subagent_text: forwardSubagentText },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Collect background output');
+
+        expect(result.metadata?.toolCalls).toEqual([
+          expect.objectContaining({
+            name: 'TaskOutput',
+            output: forwardSubagentText
+              ? taskOutput
+              : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+          }),
+        ]);
+
+        expect(emittedToolSpans).toHaveLength(1);
+        expect(emittedToolSpans[0]?.['tool.output']).toBe(
+          forwardSubagentText
+            ? taskOutput
+            : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+        );
+
+        if (!forwardSubagentText) {
+          expect(JSON.stringify(result)).not.toContain(rawTranscript);
+
+          const cachedResult = await provider.callApi('Collect background output');
+          expect(JSON.stringify(cachedResult)).not.toContain(rawTranscript);
+          expect(mockQuery).toHaveBeenCalledTimes(1);
+        }
+      });
+
       it('should capture tool calls in response metadata', async () => {
         mockQuery.mockReturnValue(
           createMockQuery([
