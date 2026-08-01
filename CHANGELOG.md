@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.20](https://github.com/promptfoo/promptfoo/compare/0.121.19...0.121.20) (2026-07-30)
+
+### Features
+
+- **providers:** add Claude Opus 5 support ([#10210](https://github.com/promptfoo/promptfoo/issues/10210)) ([ff84f13](https://github.com/promptfoo/promptfoo/commit/ff84f13605c09cac0c3c591d9590622f864cc2f7))
+- **providers:** add current Azure, Claude, and Gemini models ([#10128](https://github.com/promptfoo/promptfoo/issues/10128)) ([5c216a1](https://github.com/promptfoo/promptfoo/commit/5c216a1bc33104bb507a9e57952b81a0fb27d06f))
+- **providers:** add Kimi K3 support to Moonshot provider ([#10132](https://github.com/promptfoo/promptfoo/issues/10132)) ([a1168b6](https://github.com/promptfoo/promptfoo/commit/a1168b62ef31a6c061f16ecdf2bfd76514e2a852))
+- **websocket:** support URL templating ([#10171](https://github.com/promptfoo/promptfoo/issues/10171)) ([a9aaced](https://github.com/promptfoo/promptfoo/commit/a9aacede5c3f84150d999bfbeadbbf39834370ea))
+
+### Bug Fixes
+
+- **assertions:** default conversation-relevance threshold to 0.5 ([#10142](https://github.com/promptfoo/promptfoo/issues/10142)) ([2812d76](https://github.com/promptfoo/promptfoo/commit/2812d7622b2e14f59753ac04e28b1ca63257263b))
+- **azure:** avoid crash on empty completion choices ([#10124](https://github.com/promptfoo/promptfoo/issues/10124)) ([17d8d03](https://github.com/promptfoo/promptfoo/commit/17d8d036420a63e4a9205084f096b82591b3b608))
+- **deps:** align Renovate npm registry ([#10115](https://github.com/promptfoo/promptfoo/issues/10115)) ([688a905](https://github.com/promptfoo/promptfoo/commit/688a90561180a6045ce3c8e8805d04bc23811bd7))
+- **deps:** update anthropic packages ([#10146](https://github.com/promptfoo/promptfoo/issues/10146)) ([cfa9bee](https://github.com/promptfoo/promptfoo/commit/cfa9bee146bd38fcabc1c4241ede8889fa95e302))
+- **deps:** update anthropic packages ([#10199](https://github.com/promptfoo/promptfoo/issues/10199)) ([2d3f3f1](https://github.com/promptfoo/promptfoo/commit/2d3f3f16154e04e3bbac8e672f90434fa85997ef))
+- **deps:** update anthropic packages ([#10229](https://github.com/promptfoo/promptfoo/issues/10229)) ([2834215](https://github.com/promptfoo/promptfoo/commit/28342153f2f5bdaaf30695f21ada70e311de421e))
+- **deps:** update dependency js-yaml to v5.2.2 [security] ([#10218](https://github.com/promptfoo/promptfoo/issues/10218)) ([18ea879](https://github.com/promptfoo/promptfoo/commit/18ea87909489b56e424513e5425ca13dcf702bd0))
+- **eval:** avoid prompt index collisions for duplicate providers ([#10208](https://github.com/promptfoo/promptfoo/issues/10208)) ([5aa0958](https://github.com/promptfoo/promptfoo/commit/5aa09586752c906763135ddb867b203b4ecd14e0))
+- **eval:** isolate conversation history by result column ([#10212](https://github.com/promptfoo/promptfoo/issues/10212)) ([a377bb7](https://github.com/promptfoo/promptfoo/commit/a377bb71d3e33b0e262a82a2eb3d36a05e371e29))
+- **integrations:** migrate Langfuse prompts to SDK v5 ([#10131](https://github.com/promptfoo/promptfoo/issues/10131)) ([08b3f50](https://github.com/promptfoo/promptfoo/commit/08b3f5084d5cd36e9187ac3c79e3fda03d6eefd7))
+- **providers:** align OpenAI models and capabilities ([#10125](https://github.com/promptfoo/promptfoo/issues/10125)) ([e17ce87](https://github.com/promptfoo/promptfoo/commit/e17ce87b380d7c5e807a622d86c859206e1e1ffb))
+- **providers:** preserve WebSocket retries for certificate-like URLs ([#10197](https://github.com/promptfoo/promptfoo/issues/10197)) ([85e0710](https://github.com/promptfoo/promptfoo/commit/85e07103ae7f47462d70e3e02154c1fafaeef2f1))
+- **providers:** reject Vertex Omni passthrough follow-ups ([#10135](https://github.com/promptfoo/promptfoo/issues/10135)) ([8482570](https://github.com/promptfoo/promptfoo/commit/84825702e935332e236426f29fb0dc99c3c162f8))
+- **providers:** restore secret-safe WebSocket retries ([#10176](https://github.com/promptfoo/promptfoo/issues/10176)) ([6d89cbb](https://github.com/promptfoo/promptfoo/commit/6d89cbbd609895fb31062a1fbbe94db8b08260f3))
+- **python:** keep worker control markers on their own line ([#10097](https://github.com/promptfoo/promptfoo/issues/10097)) ([6bc2b95](https://github.com/promptfoo/promptfoo/commit/6bc2b95da1c75ce81ff9047ae599af90222ac676))
+- **redteam:** harden risk reports and WebSocket timeout tests ([#10211](https://github.com/promptfoo/promptfoo/issues/10211)) ([9ab178e](https://github.com/promptfoo/promptfoo/commit/9ab178ec2772d72bacd533f2dc11ba66208606a5))
+- **redteam:** improve risk-category report row accessibility ([b163738](https://github.com/promptfoo/promptfoo/commit/b16373873b095ab5abb00dbd57fd10e864d3f6fe))
+- **redteam:** preserve generation provider selection ([#10133](https://github.com/promptfoo/promptfoo/issues/10133)) ([ac8971f](https://github.com/promptfoo/promptfoo/commit/ac8971fcfa961fa5fa96bcc4f527f5309b504997))
+- **site:** repair stale event pages, dead links, and hydration mismatches ([#10215](https://github.com/promptfoo/promptfoo/issues/10215)) ([b0e3c25](https://github.com/promptfoo/promptfoo/commit/b0e3c2567f504c30094b2d3863bcc51e916d0070))
+
 ## [0.121.19](https://github.com/promptfoo/promptfoo/compare/0.121.18...0.121.19) (2026-07-14)
 
 ### Features
