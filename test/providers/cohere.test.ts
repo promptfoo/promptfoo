@@ -368,6 +368,7 @@ describe('CohereChatCompletionProvider', () => {
         documents: [
           'A plain text document.',
           { data: 'A v2 document with string data.' },
+          { id: 'string-doc', data: 'A named v2 document with string data.' },
           {
             id: 'legacy-doc',
             title: 'Legacy document',
@@ -387,7 +388,8 @@ describe('CohereChatCompletionProvider', () => {
     const body = JSON.parse((request as RequestInit).body as string);
     expect(body.documents).toEqual([
       'A plain text document.',
-      { data: 'A v2 document with string data.' },
+      'A v2 document with string data.',
+      { id: 'string-doc', data: { text: 'A named v2 document with string data.' } },
       {
         id: 'legacy-doc',
         data: {
@@ -400,7 +402,7 @@ describe('CohereChatCompletionProvider', () => {
         data: { title: 'Already v2', snippet: 'Keep this payload.' },
       },
     ]);
-    expect(body.citation_options).toEqual({ mode: 'accurate' });
+    expect(body.citation_options).toEqual({ mode: 'ACCURATE' });
     expect(JSON.stringify(body.documents)).not.toContain('citation_quality');
   });
 
@@ -442,7 +444,7 @@ describe('CohereChatCompletionProvider', () => {
 
     const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
     const body = JSON.parse((request as RequestInit).body as string);
-    expect(body.citation_options).toEqual({ mode: 'fast' });
+    expect(body.citation_options).toEqual({ mode: 'FAST' });
     expect(body.documents).toEqual([{ id: 'prompt-doc', data: { text: 'Prompt payload' } }]);
   });
 

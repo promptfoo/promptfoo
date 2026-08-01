@@ -14,7 +14,8 @@ import type {
   TokenUsage,
 } from '../types/index';
 
-type CohereCitationMode = 'accurate' | 'fast';
+type CohereCitationMode = 'ACCURATE' | 'FAST' | 'ENABLED' | 'DISABLED' | 'OFF';
+type CohereLegacyCitationMode = 'accurate' | 'fast';
 
 interface CohereV2Document {
   data: string | Record<string, unknown>;
@@ -22,13 +23,13 @@ interface CohereV2Document {
 }
 
 interface CohereLegacyDocument {
-  citation_quality?: CohereCitationMode;
+  citation_quality?: CohereLegacyCitationMode;
   id?: string;
   [key: string]: unknown;
 }
 
 interface CohereCitationOptions {
-  mode?: CohereCitationMode;
+  mode?: CohereCitationMode | CohereLegacyCitationMode;
   [key: string]: unknown;
 }
 
@@ -147,7 +148,7 @@ function normalizeV2Documents(params: Record<string, any>): {
   documents: unknown;
 } {
   const documents = params.documents;
-  let legacyCitationMode: CohereCitationMode | undefined;
+  let legacyCitationMode: CohereLegacyCitationMode | undefined;
 
   const normalizedDocuments = Array.isArray(documents)
     ? documents.map((document: unknown) => {
@@ -169,6 +170,9 @@ function normalizeV2Documents(params: Record<string, any>): {
         }
 
         if ('data' in document) {
+          if (typeof data === 'string') {
+            return id === undefined ? data : { id, data: { text: data } };
+          }
           return {
             ...(id === undefined ? {} : { id }),
             data,
@@ -184,10 +188,39 @@ function normalizeV2Documents(params: Record<string, any>): {
 
   return {
     documents: normalizedDocuments,
-    citationOptions:
-      params.citation_options ??
-      (legacyCitationMode === undefined ? undefined : { mode: legacyCitationMode }),
+    citationOptions: normalizeV2CitationOptions(params.citation_options, legacyCitationMode),
   };
+}
+
+const COHERE_V2_CITATION_MODES = new Set<CohereCitationMode>([
+  'ACCURATE',
+  'FAST',
+  'ENABLED',
+  'DISABLED',
+  'OFF',
+]);
+
+function normalizeV2CitationMode(mode: unknown): unknown {
+  if (typeof mode !== 'string') {
+    return mode;
+  }
+  const normalizedMode = mode.toUpperCase() as CohereCitationMode;
+  return COHERE_V2_CITATION_MODES.has(normalizedMode) ? normalizedMode : mode;
+}
+
+function normalizeV2CitationOptions(
+  citationOptions: unknown,
+  legacyMode?: CohereLegacyCitationMode,
+): unknown {
+  const resolvedOptions =
+    citationOptions ?? (legacyMode === undefined ? undefined : { mode: legacyMode });
+  if (!resolvedOptions || typeof resolvedOptions !== 'object' || Array.isArray(resolvedOptions)) {
+    return resolvedOptions;
+  }
+  const mode = (resolvedOptions as { mode?: unknown }).mode;
+  return mode === undefined
+    ? resolvedOptions
+    : { ...resolvedOptions, mode: normalizeV2CitationMode(mode) };
 }
 
 function buildV2Messages(

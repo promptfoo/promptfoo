@@ -216,10 +216,10 @@ function hasUnsupportedLiveTranslateThinkingConfig(config: CompletionOptions): b
 }
 
 function getEffectiveLiveTranslateServiceTier(
-  providerConfig: CompletionOptions,
+  mergedConfig: CompletionOptions,
   promptConfig?: Partial<CompletionOptions>,
 ): unknown {
-  const providerPassthrough = providerConfig.passthrough as
+  const providerPassthrough = mergedConfig.passthrough as
     | { service_tier?: unknown; serviceTier?: unknown }
     | undefined;
   const promptPassthrough = promptConfig?.passthrough as
@@ -228,7 +228,7 @@ function getEffectiveLiveTranslateServiceTier(
   const providerServiceTier =
     providerPassthrough?.service_tier ??
     providerPassthrough?.serviceTier ??
-    providerConfig.service_tier;
+    mergedConfig.service_tier;
   const promptServiceTier =
     promptPassthrough?.service_tier ?? promptPassthrough?.serviceTier ?? promptConfig?.service_tier;
   return promptServiceTier ?? providerServiceTier;
@@ -565,7 +565,7 @@ export class GoogleLiveProvider implements ApiProvider {
         config,
         systemInstruction,
         configuredResponseModalities,
-        getEffectiveLiveTranslateServiceTier(this.config, promptConfig),
+        getEffectiveLiveTranslateServiceTier(config, promptConfig),
       );
       if (unsupportedConfigurationError) {
         return { error: unsupportedConfigurationError };

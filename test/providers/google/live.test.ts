@@ -1368,7 +1368,10 @@ describe('GoogleLiveProvider', () => {
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
-  it('should allow a prompt-level standard tier to override provider passthrough', async () => {
+  it.each([
+    ['a top-level standard tier', { service_tier: 'standard' }],
+    ['replacement passthrough without a tier', { passthrough: { request_id: 'prompt' } }],
+  ])('should allow %s to replace provider passthrough tier defaults', async (_case, promptConfig) => {
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         passthrough: { serviceTier: 'priority' },
@@ -1408,7 +1411,7 @@ describe('GoogleLiveProvider', () => {
           ],
         },
       ]),
-      { prompt: { config: { service_tier: 'standard' } } } as any,
+      { prompt: { config: promptConfig } } as any,
     );
 
     expect(response.error).toBeUndefined();
