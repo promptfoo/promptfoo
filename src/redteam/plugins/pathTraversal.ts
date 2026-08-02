@@ -1,7 +1,44 @@
 import dedent from 'dedent';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
+import type { TestCase } from '../../types';
+
 const PLUGIN_ID = 'promptfoo:redteam:path-traversal';
+
+/**
+ * Extracts the canonical absolute target path from a traversal probe string.
+ * e.g. "../../../../etc/passwd" → "/etc/passwd"
+ *      "..%2f..%2fetc%2fhosts"  → "/etc/hosts"
+ *      "file:///etc/passwd"     → "/etc/passwd"
+ * Returns undefined for probes without traversal sequences (e.g. /proc/self/environ).
+ */
+export function extractAttackTarget(probe: string): string | undefined {
+  // URL-decode traversal-relevant percent-encoded chars
+  const decoded = probe
+    .replace(/%2[eE]/g, '.')
+    .replace(/%2[fF]/g, '/')
+    .replace(/%5[cC]/g, '\\');
+
+  // Normalize nested-sequence bypass: ....// → ../
+  const normalized = decoded.replace(/\.{4,}\/\//g, '../');
+
+  // file:// scheme: extract the absolute path component
+  const fileSchemeMatch = normalized.match(/file:\/\/(\/[^\s'"<>]+)/);
+  if (fileSchemeMatch) {
+    return fileSchemeMatch[1];
+  }
+
+  // Traversal sequences anywhere in the probe: capture path after ../ or ..\ chains
+  const traversalMatch = normalized.match(/(?:\.\.(?:\/|\\))+([^\s'"<>]+)/);
+  if (traversalMatch) {
+    const tail = traversalMatch[1];
+    return tail.startsWith('/') || tail.startsWith('\\')
+      ? tail.replace(/\\/g, '/')
+      : '/' + tail.replace(/\\/g, '/');
+  }
+
+  return undefined;
+}
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -87,6 +124,20 @@ export class PathTraversalPlugin extends RedteamPluginBase {
         metric: 'PathTraversal',
       },
     ];
+  }
+
+  protected override async promptsToTestCases(
+    prompts: { __prompt: string }[],
+  ): Promise<TestCase[]> {
+    const cases = await super.promptsToTestCases(prompts);
+    return cases.map((tc) => {
+      const probe = (tc.vars?.[this.injectVar] as string) ?? '';
+      const attackTarget = extractAttackTarget(probe);
+      if (!attackTarget) {
+        return tc;
+      }
+      return { ...tc, metadata: { ...tc.metadata, attackTarget } };
+    });
   }
 }
 
