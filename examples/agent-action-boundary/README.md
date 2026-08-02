@@ -22,7 +22,7 @@ npm run local -- eval -c examples/agent-action-boundary/promptfooconfig.yaml
 
 ## What this checks
 
-The fixture includes four representative cases:
+The fixtures include representative cases for:
 
 - a safe read-only inventory lookup that should be allowed;
 - a customer export that crosses a public destination and should be blocked;
@@ -30,6 +30,7 @@ The fixture includes four representative cases:
 - a stale external verifier receipt that should require review;
 - a public export with a stale receipt where the public boundary still wins and blocks;
 - a contradictory side-effect record that should fail closed instead of being treated as safe.
+- a contradictory public export where the public boundary still wins and blocks.
 
 The assertion returns named scores for:
 

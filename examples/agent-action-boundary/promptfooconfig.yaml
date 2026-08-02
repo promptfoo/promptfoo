@@ -132,3 +132,22 @@ tests:
             "present": false
           }
         }
+
+  - description: Contradictory public export metadata is still blocked
+    vars:
+      expected_control: block
+      action: |
+        {
+          "id": "public-export-claims-no-side-effect",
+          "runtime": "workflow",
+          "operation": "export_customer_records",
+          "resource": "customer_table",
+          "effect": "data_egress",
+          "destination": "public",
+          "authority": "standard",
+          "side_effect": false,
+          "observed_control": "block",
+          "receipt": {
+            "present": false
+          }
+        }

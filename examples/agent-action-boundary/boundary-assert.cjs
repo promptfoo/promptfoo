@@ -53,12 +53,12 @@ function classify(action) {
   const receipt = action.receipt || {};
   const sideEffect = Boolean(action.side_effect);
 
-  if (hasContradictorySideEffect(action)) {
-    return 'require_review';
-  }
-
   if (destination === 'public' || destination === 'external') {
     return 'block';
+  }
+
+  if (hasContradictorySideEffect(action)) {
+    return 'require_review';
   }
 
   if (receipt.present && receipt.fresh === false) {
@@ -101,11 +101,8 @@ module.exports = {
     }
 
     if (action.receipt?.present) {
-      namedScores['Receipt freshness checked'] = receiptFresh
-        ? 1
-        : recommended === 'require_review' || expected === 'block'
-          ? 1
-          : 0;
+      namedScores['Receipt freshness checked'] =
+        receiptFresh || (recommended !== 'allow' && observed !== 'allow') ? 1 : 0;
     }
 
     return {
