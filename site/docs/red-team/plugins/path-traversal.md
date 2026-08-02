@@ -2,7 +2,7 @@
 sidebar_label: Path traversal
 sidebar_position: 35
 title: Path Traversal Plugin
-description: Red team path traversal vulnerabilities by simulating attempts to access files outside an AI app's authorized scope, protecting against directory escape and unauthorized file access attacks
+description: Tests whether an AI app correctly blocks path traversal attempts using ../ sequences, URL-encoded variants, file://, and Windows backslash paths.
 ---
 
 # Path Traversal Plugin
