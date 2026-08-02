@@ -1,8 +1,31 @@
 import type { Agent } from 'http';
 
 import { getEnvString } from '../../envars';
+import { isClaudeSonnet5Model, normalizeClaudeThinkingConfig } from '../anthropic/util';
+
+import type { ClaudeEffort } from '../anthropic/types';
 
 const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+
+/**
+ * Normalize Claude thinking for Bedrock-specific model constraints.
+ *
+ * Anthropic's direct API lets callers disable Sonnet 5 thinking, while the
+ * Bedrock model contract says adaptive thinking is always on. Keep that
+ * platform difference here instead of changing the shared Claude model family.
+ */
+export function normalizeBedrockClaudeThinkingConfig<
+  T extends { type: string; display?: 'summarized' | 'omitted' | null },
+>(
+  modelId: string,
+  thinking: T | undefined,
+  effort: ClaudeEffort | null | undefined,
+): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
+  if (isClaudeSonnet5Model(modelId) && thinking?.type === 'disabled') {
+    return undefined;
+  }
+  return normalizeClaudeThinkingConfig(modelId, thinking, effort);
+}
 
 export function hasProxyEnv(): boolean {
   return Boolean(getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY'));

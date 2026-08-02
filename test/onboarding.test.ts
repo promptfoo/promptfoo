@@ -257,6 +257,23 @@ describe('createDummyFiles', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
+  it('should offer current Cohere direct API models', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls[1][0];
+    const cohereChoice = providerPrompt.choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Cohere]'),
+    );
+    expect(cohereChoice).toEqual({
+      name: '[Cohere] Command A+, Command A, ...',
+      value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
+    });
+  });
+
   it('should prompt for confirmation when files exist', async () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 

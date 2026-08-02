@@ -332,6 +332,70 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(result.cost).toBeCloseTo(0.00011, 8);
   });
 
+  it('normalizes Mythos Preview manual thinking while preserving supported sampling controls', async () => {
+    disableCache();
+    const model = 'anthropic.claude-mythos-preview';
+    const provider = createBedrockAnthropicMessagesProvider(model, {
+      config: {
+        region: 'us-east-1',
+        apiKey: 'bedrock-key',
+        max_tokens: 4096,
+        temperature: 0.5,
+        top_k: 40,
+        thinking: { type: 'enabled', budget_tokens: 2048, display: 'summarized' },
+      },
+    });
+    const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      model,
+      id: 'msg-mythos-preview-manual-thinking',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 5, output_tokens: 1 },
+    } as Anthropic.Messages.Message);
+
+    await provider.callApi('hello');
+
+    expect(createSpy.mock.calls[0][0]).toMatchObject({
+      model,
+      max_tokens: 4096,
+      temperature: 0.5,
+      top_k: 40,
+      thinking: { type: 'adaptive', display: 'summarized' },
+    });
+  });
+
+  it('omits disabled thinking and reserves default output headroom for Mythos Preview', async () => {
+    disableCache();
+    const model = 'anthropic.claude-mythos-preview';
+    const provider = createBedrockAnthropicMessagesProvider(model, {
+      config: {
+        region: 'us-east-1',
+        apiKey: 'bedrock-key',
+        top_p: 0.7,
+        thinking: { type: 'disabled' },
+      },
+    });
+    const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      model,
+      id: 'msg-mythos-preview-disabled-thinking',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 5, output_tokens: 1 },
+    } as Anthropic.Messages.Message);
+
+    await provider.callApi('hello');
+
+    const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+    expect(params).toMatchObject({ model, max_tokens: 2048, top_p: 0.7 });
+    expect(params).not.toHaveProperty('thinking');
+  });
+
   it('sends a bare Opus 5 request through Bedrock Messages with usage and cost', async () => {
     disableCache();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(

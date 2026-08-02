@@ -19,7 +19,7 @@ import {
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS, type GoogleModelCost } from './shared';
+import { GOOGLE_MODELS, type GoogleModel, type GoogleModelCost } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -225,12 +225,17 @@ export function stripExecutableToolFileReferences(
 function getServiceTierCacheRead(
   modelCost: GoogleModelCost,
   serviceTier: unknown,
+  modality: 'default' | 'audio' = 'default',
 ): number | undefined {
   if (serviceTier === 'priority') {
-    return modelCost.priorityCacheRead;
+    return modality === 'audio'
+      ? (modelCost.priorityCacheReadAudio ?? modelCost.priorityCacheRead)
+      : modelCost.priorityCacheRead;
   }
   if (serviceTier === 'flex') {
-    return modelCost.flexCacheRead;
+    return modality === 'audio'
+      ? (modelCost.flexCacheReadAudio ?? modelCost.flexCacheRead)
+      : modelCost.flexCacheRead;
   }
   return undefined;
 }
@@ -273,6 +278,7 @@ function resolveGoogleServiceTierCosts(
     config.audioInputCost !== undefined || config.audioCost !== undefined || hasCachedInputOverride;
   const hasCachedImageInputOverride = config.imageInputCost !== undefined || hasCachedInputOverride;
   const tierCacheRead = getServiceTierCacheRead(modelCost, serviceTier);
+  const tierAudioCacheRead = getServiceTierCacheRead(modelCost, serviceTier, 'audio');
   const serviceTierCachedInputCost = resolveServiceTierCacheCost(
     cachedInputCost,
     tierCacheRead,
@@ -281,7 +287,7 @@ function resolveGoogleServiceTierCosts(
   );
   const serviceTierCachedAudioInputCost = resolveServiceTierCacheCost(
     cachedAudioInputCost,
-    tierCacheRead,
+    tierAudioCacheRead,
     serviceTierMultiplier,
     hasCachedAudioInputOverride,
   );
@@ -335,10 +341,30 @@ function applyGoogleRegionalPremium(
     videoInputPerSecond: scale(modelCost.videoInputPerSecond),
     videoOutput: scale(modelCost.videoOutput),
     priorityCacheRead: scale(modelCost.priorityCacheRead),
+    priorityCacheReadAudio: scale(modelCost.priorityCacheReadAudio),
     priorityAudioInput: scale(modelCost.priorityAudioInput),
     flexCacheRead: scale(modelCost.flexCacheRead),
+    flexCacheReadAudio: scale(modelCost.flexCacheReadAudio),
     flexAudioInput: scale(modelCost.flexAudioInput),
   };
+}
+
+function getGoogleCatalogCost(
+  model: GoogleModel | undefined,
+  promptTokens: number,
+  isVertexMode: boolean | undefined,
+  usesNonGlobalVertexEndpoint: boolean | undefined,
+): GoogleModelCost | undefined {
+  if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
+    return model.tieredCost.above;
+  }
+  if (usesNonGlobalVertexEndpoint && model?.vertexRegionalCost) {
+    return model.vertexRegionalCost;
+  }
+  if (isVertexMode && model?.vertexCost) {
+    return model.vertexCost;
+  }
+  return model?.cost;
 }
 
 /**
@@ -388,22 +414,23 @@ export function calculateGoogleCost(
     return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
   }
 
-  const baseModelCost =
-    model?.tieredCost && promptTokens > model.tieredCost.threshold
-      ? model.tieredCost.above
-      : isVertexMode && model?.vertexCost
-        ? model.vertexCost
-        : model?.cost;
+  const effectiveVertexRegion = vertexRegion ?? config.region;
+  const usesNonGlobalVertexEndpoint =
+    isVertexMode && effectiveVertexRegion !== undefined && effectiveVertexRegion !== 'global';
+  const baseModelCost = getGoogleCatalogCost(
+    model,
+    promptTokens,
+    isVertexMode,
+    usesNonGlobalVertexEndpoint,
+  );
   if (!baseModelCost) {
     return undefined;
   }
 
-  const effectiveVertexRegion = vertexRegion ?? config.region;
   const vertexRegionalMultiplier =
-    isVertexMode &&
-    model?.vertexRegionalPremium !== undefined &&
-    effectiveVertexRegion !== undefined &&
-    effectiveVertexRegion !== 'global'
+    usesNonGlobalVertexEndpoint &&
+    model?.vertexRegionalCost === undefined &&
+    model?.vertexRegionalPremium !== undefined
       ? model.vertexRegionalPremium
       : 1;
   const modelCost =
@@ -1455,10 +1482,10 @@ export function parseConfigSystemInstruction(
 
   // Load systemInstruction from file if it's a file path
   if (typeof configSystemInstruction === 'string') {
-    const instructionReference =
-      basePath && configSystemInstruction.startsWith('file://')
-        ? `file://${path.resolve(basePath, configSystemInstruction.slice('file://'.length))}`
-        : configSystemInstruction;
+    const instructionReference = resolveGoogleConfigFileReference(
+      configSystemInstruction,
+      basePath,
+    );
     configInstruction = loadFile(instructionReference, contextVars);
   }
 
@@ -1499,8 +1526,8 @@ export function parseConfigResponseSchema(
 ): unknown {
   const renderedSchema = renderVarsInObject(configResponseSchema, contextVars);
   const schemaReference =
-    basePath && typeof renderedSchema === 'string' && renderedSchema.startsWith('file://')
-      ? `file://${path.resolve(basePath, renderedSchema.slice('file://'.length))}`
+    typeof renderedSchema === 'string'
+      ? resolveGoogleConfigFileReference(renderedSchema, basePath)
       : renderedSchema;
   let responseSchema = maybeLoadFromExternalFile(schemaReference);
   if (typeof responseSchema === 'string') {
@@ -1513,11 +1540,45 @@ export function parseConfigResponseSchema(
   return renderVarsInObject(responseSchema, contextVars);
 }
 
+/** Resolve only relative Google config file references against their owning base path. */
+export function resolveGoogleConfigFileReference(reference: string, basePath?: string): string {
+  if (!basePath || !reference.startsWith('file://')) {
+    return reference;
+  }
+
+  const { filePath } = parseFileUrl(reference);
+  const isAbsolute = path.isAbsolute(filePath) || path.win32.isAbsolute(filePath);
+  return `file://${isAbsolute ? filePath : path.resolve(basePath, filePath)}`;
+}
+
+const GEMINI_MODELS_WITHOUT_SAMPLING_CONTROLS = new Set([
+  'gemini-3.6-flash',
+  'gemini-3.5-flash-lite',
+]);
+
+/** Remove sampling controls rejected by adaptive-only Gemini models. */
+export function omitUnsupportedGeminiSamplingControls<T extends Record<string, any>>(
+  modelName: string,
+  generationConfig: T,
+): T {
+  if (!GEMINI_MODELS_WITHOUT_SAMPLING_CONTROLS.has(modelName)) {
+    return generationConfig;
+  }
+
+  const compatibleConfig = { ...generationConfig } as T;
+  delete compatibleConfig.temperature;
+  delete compatibleConfig.topP;
+  delete compatibleConfig.topK;
+  delete compatibleConfig.top_p;
+  delete compatibleConfig.top_k;
+  return compatibleConfig;
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, VarValue>,
   configSystemInstruction?: Content | string,
-  options?: { useAssistantRole?: boolean },
+  options?: { basePath?: string; useAssistantRole?: boolean },
 ): {
   contents: GeminiFormat;
   systemInstruction: Content | { parts: [Part, ...Part[]] } | undefined;
@@ -1547,6 +1608,7 @@ export function geminiFormatAndSystemInstructions(
   const parsedConfigInstruction = parseConfigSystemInstruction(
     configSystemInstruction,
     contextVars,
+    options?.basePath,
   );
   if (parsedConfigInstruction) {
     systemInstruction = systemInstruction

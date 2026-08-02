@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -171,6 +173,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     global.setTimeout = originalSetTimeout;
     vi.clearAllMocks();
   });
@@ -182,6 +185,75 @@ describe('GoogleLiveProvider', () => {
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
+  });
+
+  it.each([
+    {
+      owner: 'provider',
+      promptConfig: (promptBasePath: string) => ({ basePath: promptBasePath }),
+      expectedInstruction: 'Provider instruction.',
+    },
+    {
+      owner: 'prompt',
+      promptConfig: (promptBasePath: string) => ({
+        basePath: promptBasePath,
+        systemInstruction: 'file://instruction.txt',
+      }),
+      expectedInstruction: 'Prompt instruction.',
+    },
+  ])('resolves $owner-owned systemInstruction against its Google Live basePath', async ({
+    promptConfig,
+    expectedInstruction,
+  }) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-live-instruction-'));
+    const providerBasePath = path.join(root, 'provider');
+    const promptBasePath = path.join(root, 'prompt');
+    const globalBasePath = path.join(root, 'global');
+    fs.mkdirSync(providerBasePath);
+    fs.mkdirSync(promptBasePath);
+    fs.mkdirSync(globalBasePath);
+    fs.writeFileSync(path.join(providerBasePath, 'instruction.txt'), 'Provider instruction.');
+    fs.writeFileSync(path.join(promptBasePath, 'instruction.txt'), 'Prompt instruction.');
+    fs.writeFileSync(path.join(globalBasePath, 'instruction.txt'), 'Global instruction.');
+    const originalBasePath = cliState.basePath;
+    cliState.basePath = globalBasePath;
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        apiKey: 'test-api-key',
+        basePath: providerBasePath,
+        generationConfig: { response_modalities: ['text'] },
+        systemInstruction: 'file://instruction.txt',
+        timeoutMs: 500,
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'test');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    try {
+      await provider.callApi('test prompt', {
+        prompt: {
+          raw: 'test prompt',
+          label: 'test',
+          config: promptConfig(promptBasePath),
+        },
+        vars: {},
+      });
+
+      const setup = JSON.parse(mockWs.send.mock.calls[0][0] as string).setup;
+      expect(setup.systemInstruction).toEqual({
+        parts: [{ text: expectedInstruction }],
+      });
+    } finally {
+      cliState.basePath = originalBasePath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('should send client_content for older Live models', async () => {
@@ -714,6 +786,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should finalize finite Live Translate output after meaningful output becomes quiet', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
@@ -751,7 +824,7 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi(
+    const responsePromise = provider.callApi(
       JSON.stringify([
         {
           role: 'user',
@@ -766,6 +839,12 @@ describe('GoogleLiveProvider', () => {
         },
       ]),
     );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(35);
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(60);
+    const response = await responsePromise;
 
     expect(response.error).toBeUndefined();
     expect(response.output).toMatchObject({ text: 'Dzien dobry.' });
@@ -773,6 +852,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should wait through initial Live Translate silence for delayed output', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
@@ -796,7 +876,7 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi(
+    const responsePromise = provider.callApi(
       JSON.stringify([
         {
           role: 'user',
@@ -811,12 +891,141 @@ describe('GoogleLiveProvider', () => {
         },
       ]),
     );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(440);
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(250);
+    const response = await responsePromise;
 
     expect(response.error).toBeUndefined();
     expect(response.output).toMatchObject({ text: 'Spóźnione.' });
   });
 
+  it('should enforce a hard deadline while Live Translate streams only silent PCM', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 60,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      mockWs.send.mockImplementation((raw) => {
+        const message = JSON.parse(raw as string);
+        if (!message.realtimeInput?.audioStreamEnd) {
+          return;
+        }
+        for (const delayMs of [15, 30, 45, 60, 75, 90]) {
+          setTimeout(() => {
+            mockWs.onmessage?.({
+              data: Buffer.from([0, 0, 0, 0]),
+            } as WebSocket.MessageEvent);
+          }, delayMs);
+        }
+      });
+      return mockWs;
+    });
+
+    let response: Awaited<ReturnType<GoogleLiveProvider['callApi']>> | undefined;
+    const responsePromise = provider
+      .callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            parts: [
+              {
+                inline_data: {
+                  mime_type: 'audio/pcm;rate=16000',
+                  data: 'YXVkaW8=',
+                },
+              },
+            ],
+          },
+        ]),
+      )
+      .then((result) => {
+        response = result;
+        return result;
+      });
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(100);
+    await flushAsyncEvents();
+
+    expect(response?.error).toBe(
+      'WebSocket request timed out after 90ms waiting for Live Translate output',
+    );
+    await responsePromise;
+  });
+
+  it('should allow active Live Translate output to continue beyond the initial hard deadline', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
+      config: {
+        generationConfig: {
+          outputAudioTranscription: {},
+          translationConfig: { targetLanguageCode: 'pl' },
+        },
+        timeoutMs: 60,
+        apiKey: 'test-api-key',
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+      });
+      mockWs.send.mockImplementation((raw) => {
+        const message = JSON.parse(raw as string);
+        if (!message.realtimeInput?.audioStreamEnd) {
+          return;
+        }
+        for (const delayMs of [15, 30, 45, 60, 75, 90, 105]) {
+          setTimeout(() => {
+            void mockWs.onmessage?.({
+              data: Buffer.from([0xff, 0x7f, 0, 0]),
+            } as WebSocket.MessageEvent);
+          }, delayMs);
+        }
+      });
+      return mockWs;
+    });
+
+    const responsePromise = provider.callApi(
+      JSON.stringify([
+        {
+          role: 'user',
+          parts: [
+            {
+              inline_data: {
+                mime_type: 'audio/pcm;rate=16000',
+                data: 'YXVkaW8=',
+              },
+            },
+          ],
+        },
+      ]),
+    );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(150);
+    const response = await responsePromise;
+
+    expect(response.error).toBeUndefined();
+    expect(response.audio?.data).toBeTruthy();
+  });
+
   it('should time out a silent Live Translate response instead of returning empty success', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
@@ -835,7 +1044,7 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi(
+    const responsePromise = provider.callApi(
       JSON.stringify([
         {
           role: 'user',
@@ -850,12 +1059,17 @@ describe('GoogleLiveProvider', () => {
         },
       ]),
     );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(80);
+    const response = await responsePromise;
 
     expect(response.error).toBe('WebSocket request timed out after 80ms of inactivity');
     expect(response.output).toBeUndefined();
   });
 
   it('should ignore low-amplitude PCM while waiting for Live Translate completion', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     provider = new GoogleLiveProvider('gemini-3.5-live-translate-preview', {
       config: {
         generationConfig: {
@@ -889,7 +1103,7 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const response = await provider.callApi(
+    const responsePromise = provider.callApi(
       JSON.stringify([
         {
           role: 'user',
@@ -904,6 +1118,10 @@ describe('GoogleLiveProvider', () => {
         },
       ]),
     );
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+    await vi.advanceTimersByTimeAsync(60);
+    const response = await responsePromise;
     for (const timer of lowAmplitudeTimers) {
       clearTimeout(timer);
     }

@@ -4,7 +4,9 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCacheMappingPath,
+  isVideoCacheReferenceUrlSafe,
   readCacheMapping,
+  sanitizeVideoSourceUri,
   storeCacheMapping,
 } from '../../../src/providers/video/utils';
 import { getConfigDirectoryPath } from '../../../src/util/config/manage';
@@ -96,6 +98,16 @@ describe('video cache utilities', () => {
       expectedMappingPath,
       expect.stringContaining('"videoKey": "video/abc.mp4"'),
       'utf8',
+    );
+  });
+
+  it('rejects JWT query credentials from cache identity and persisted source metadata', () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.signature';
+    const sourceUri = `https://generativelanguage.googleapis.com/v1beta/files/example?jwt=${jwt}&alt=media`;
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+    expect(sanitizeVideoSourceUri(sourceUri)).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/files/example?alt=media',
     );
   });
 });

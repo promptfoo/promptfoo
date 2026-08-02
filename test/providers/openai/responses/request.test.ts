@@ -235,7 +235,7 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(providerBody.service_tier).toBe('priority');
     expect(promptBody.service_tier).toBe('flex');
     expect(promptConfig.service_tier).toBe('flex');
-    expect(passthroughBody.service_tier).toBe('fast');
+    expect(passthroughBody.service_tier).toBe('priority');
     expect(passthroughConfig.service_tier).toBe('fast');
   });
 

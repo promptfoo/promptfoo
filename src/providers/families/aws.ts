@@ -19,18 +19,38 @@ export const awsProviderFactories: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const isLegacyType = modelType === 'converse' || modelType === 'completion';
       const bareModelName = splits.slice(1).join(':');
+      const novaSonicSubtype =
+        modelType === 'nova-sonic'
+          ? { expectedModel: 'amazon.nova-sonic-v1:0', name: 'nova-sonic' }
+          : modelType === 'nova-2-sonic'
+            ? { expectedModel: 'amazon.nova-2-sonic-v1:0', name: 'nova-2-sonic' }
+            : undefined;
+
+      if (novaSonicSubtype && modelName) {
+        if (!NOVA_SONIC_MODEL_IDS.has(modelName)) {
+          throw new Error(
+            `Amazon Bedrock model "${modelName}" is an unsupported Nova Sonic model ID. ` +
+              `Use "bedrock:${novaSonicSubtype.name}:${novaSonicSubtype.expectedModel}".`,
+          );
+        }
+        if (modelName !== novaSonicSubtype.expectedModel) {
+          throw new Error(
+            `Amazon Bedrock model "${modelName}" does not match provider subtype ` +
+              `"${novaSonicSubtype.name}". Use ` +
+              `"bedrock:${novaSonicSubtype.name}:${novaSonicSubtype.expectedModel}".`,
+          );
+        }
+      }
 
       const requestedNovaSonicModel =
-        splits.length === 2 && modelType === 'nova-sonic'
-          ? 'amazon.nova-sonic-v1:0'
-          : splits.length === 2 && modelType === 'nova-2-sonic'
-            ? 'amazon.nova-2-sonic-v1:0'
-            : NOVA_SONIC_MODEL_IDS.has(bareModelName)
-              ? bareModelName
-              : (modelType === 'nova-sonic' || modelType === 'nova-2-sonic') &&
-                  NOVA_SONIC_MODEL_IDS.has(modelName)
-                ? modelName
-                : undefined;
+        novaSonicSubtype && !modelName
+          ? novaSonicSubtype.expectedModel
+          : NOVA_SONIC_MODEL_IDS.has(bareModelName)
+            ? bareModelName
+            : (modelType === 'nova-sonic' || modelType === 'nova-2-sonic') &&
+                NOVA_SONIC_MODEL_IDS.has(modelName)
+              ? modelName
+              : undefined;
       if (isUnsupportedNovaSonicGeoId(bareModelName) || isUnsupportedNovaSonicGeoId(modelName)) {
         throw new Error(
           `Amazon Bedrock model "${bareModelName}" does not support geo inference IDs. ` +

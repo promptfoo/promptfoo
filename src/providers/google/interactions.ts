@@ -12,6 +12,7 @@ import {
   mergeGoogleCompletionOptions,
   parseConfigResponseSchema,
   parseConfigSystemInstruction,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -652,6 +653,7 @@ function getVertexInteractionsRegion(config: GoogleProviderConfig, env?: EnvOver
   return (
     config.region ||
     env?.VERTEX_REGION ||
+    env?.GOOGLE_CLOUD_LOCATION ||
     getEnvString('VERTEX_REGION') ||
     getEnvString('GOOGLE_CLOUD_LOCATION') ||
     'global'
@@ -674,6 +676,101 @@ function getVertexInteractionsEndpoint(
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
 }
 
+function getVertexExpressInteractionsEndpoint(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string {
+  const configuredHost =
+    config.apiBaseUrl ||
+    config.apiHost ||
+    env?.VERTEX_API_HOST ||
+    getEnvString('VERTEX_API_HOST') ||
+    'aiplatform.googleapis.com';
+  const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
+  return `${host.replace(/\/$/, '')}/v1beta1/interactions`;
+}
+
+function getVertexInteractionsApiKey(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string | undefined {
+  return (
+    config.apiKey ||
+    env?.VERTEX_API_KEY ||
+    env?.GOOGLE_API_KEY ||
+    GoogleAuthManager.getApiKey(config, undefined, true).apiKey
+  );
+}
+
+function usesVertexExpressInteractions(
+  config: GoogleProviderConfig,
+  env: EnvOverrides | undefined,
+  apiKey?: string,
+): boolean {
+  const hasOAuthConfig = Boolean(
+    config.credentials ||
+      config.keyFilename ||
+      config.googleAuthOptions?.keyFilename ||
+      config.googleAuthOptions?.credentials,
+  );
+  const explicitlyRequestedExpress =
+    config.expressMode === true ||
+    Boolean(config.apiKey) ||
+    (Boolean(env?.VERTEX_API_KEY) && !config.projectId);
+  const hasProjectScopedOAuthConfig = Boolean(
+    config.projectId ||
+      config.region ||
+      env?.VERTEX_PROJECT_ID ||
+      env?.GOOGLE_PROJECT_ID ||
+      env?.GOOGLE_CLOUD_PROJECT ||
+      env?.VERTEX_REGION ||
+      env?.GOOGLE_CLOUD_LOCATION ||
+      getEnvString('VERTEX_PROJECT_ID') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('VERTEX_REGION') ||
+      getEnvString('GOOGLE_CLOUD_LOCATION'),
+  );
+  return (
+    Boolean(apiKey) &&
+    config.expressMode !== false &&
+    !hasOAuthConfig &&
+    (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig)
+  );
+}
+
+function mergeGoogleInteractionsRequestConfig(
+  providerConfig: GoogleProviderConfig,
+  promptConfig?: Partial<GoogleProviderConfig>,
+): GoogleProviderConfig {
+  const mergedConfig = mergeGoogleCompletionOptions(
+    providerConfig,
+    promptConfig,
+  ) as GoogleProviderConfig;
+
+  // Prompt configuration may shape the request body, but it must not redirect an authenticated
+  // request, replace provider credentials, or switch authentication modes. Keep every endpoint,
+  // authentication, and transport option owned by the provider instance.
+  return {
+    ...mergedConfig,
+    apiKey: providerConfig.apiKey,
+    apiHost: providerConfig.apiHost,
+    apiBaseUrl: providerConfig.apiBaseUrl,
+    headers: providerConfig.headers,
+    projectId: providerConfig.projectId,
+    region: providerConfig.region,
+    publisher: providerConfig.publisher,
+    apiVersion: providerConfig.apiVersion,
+    credentials: providerConfig.credentials,
+    expressMode: providerConfig.expressMode,
+    googleAuthOptions: providerConfig.googleAuthOptions,
+    keyFilename: providerConfig.keyFilename,
+    scopes: providerConfig.scopes,
+    vertexai: providerConfig.vertexai,
+    strictMutualExclusivity: providerConfig.strictMutualExclusivity,
+  };
+}
+
 export class GoogleInteractionsProvider implements ApiProvider {
   modelName: string;
   config: GoogleProviderConfig;
@@ -688,6 +785,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     this.config = options.config || {};
     this.env = options.env;
     this.providerId = options.id;
+    GoogleAuthManager.validateAndWarn(this.config, this.env);
   }
 
   id(): string {
@@ -700,7 +798,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
-    const config = mergeGoogleCompletionOptions(this.config, promptConfig) as GoogleProviderConfig;
+    const config = mergeGoogleInteractionsRequestConfig(this.config, promptConfig);
+    const { toolsDisabled } = resolveGoogleToolConfig(config);
     const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const providerPassthrough = this.config.passthrough || {};
     const promptPassthrough = promptConfig?.passthrough || {};
@@ -750,14 +849,16 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (promptConfig?.systemInstruction === undefined && !hasPromptSystemInstruction
         ? providerPassthroughSystemInstruction
         : undefined);
-    const hasConfigTools = Array.isArray(config.tools)
-      ? config.tools.length > 0
-      : Boolean(config.tools);
-    const hasPassthroughTools = Array.isArray(mergedPassthrough.tools)
-      ? mergedPassthrough.tools.length > 0
-      : Boolean(mergedPassthrough.tools);
-    const hasClientExecutedTools = Array.isArray(mergedPassthrough.tools)
-      ? mergedPassthrough.tools.some(
+    const interactionConfigTools = toolsDisabled ? undefined : config.tools;
+    const hasConfigTools = Array.isArray(interactionConfigTools)
+      ? interactionConfigTools.length > 0
+      : Boolean(interactionConfigTools);
+    const interactionTools = toolsDisabled ? undefined : mergedPassthrough.tools;
+    const hasPassthroughTools = Array.isArray(interactionTools)
+      ? interactionTools.length > 0
+      : Boolean(interactionTools);
+    const hasClientExecutedTools = Array.isArray(interactionTools)
+      ? interactionTools.some(
           (tool) =>
             tool !== null &&
             typeof tool === 'object' &&
@@ -765,7 +866,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             ['function', 'computer_use'].includes(String((tool as { type?: unknown }).type)),
         )
       : false;
-    const hasMcpTools = config.mcp?.enabled === true;
+    const hasMcpTools = !toolsDisabled && config.mcp?.enabled === true;
     if (config.vertexai && isVideoModel && previousInteractionId) {
       return {
         error:
@@ -793,7 +894,32 @@ export class GoogleInteractionsProvider implements ApiProvider {
     let apiKey: string | undefined;
     let endpoint: string;
     let headers: Record<string, string>;
-    if (config.vertexai) {
+    const rawVertexApiKey = config.vertexai
+      ? getVertexInteractionsApiKey(config, this.env)
+      : undefined;
+    const vertexApiKey = rawVertexApiKey
+      ? getNunjucksEngine().renderString(rawVertexApiKey, {})
+      : undefined;
+    if (
+      config.vertexai &&
+      vertexApiKey &&
+      usesVertexExpressInteractions(config, this.env, vertexApiKey)
+    ) {
+      const region = getVertexInteractionsRegion(config, this.env);
+      if (region !== 'global') {
+        return {
+          error: `Vertex Express Interactions supports only the global endpoint, but region ${region} was configured. Set expressMode: false and use OAuth or Application Default Credentials for a regional endpoint.`,
+        };
+      }
+      apiKey = vertexApiKey;
+      endpoint = getVertexExpressInteractionsEndpoint(config, this.env);
+      headers = {
+        'Content-Type': 'application/json',
+        'Api-Revision': '2026-05-20',
+        'x-goog-api-key': apiKey,
+        ...config.headers,
+      };
+    } else if (config.vertexai) {
       try {
         const { client, projectId: authProjectId } = await GoogleAuthManager.getOAuthClient({
           credentials: config.credentials,
@@ -813,13 +939,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
         if (!projectId) {
           return {
             error:
-              'Gemini Omni on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
+              'Gemini Interactions on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
           };
         }
         const accessToken = await client.getAccessToken();
         const token = typeof accessToken === 'string' ? accessToken : accessToken?.token;
         if (!token) {
-          return { error: 'Gemini Omni on Vertex AI could not obtain an OAuth access token.' };
+          return {
+            error: 'Gemini Interactions on Vertex AI could not obtain an OAuth access token.',
+          };
         }
         endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
         const { authorization, ...authHeaders } =
@@ -834,7 +962,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           ...config.headers,
         };
       } catch (err) {
-        return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
+        return {
+          error: `Gemini Interactions on Vertex AI authentication error: ${String(err)}`,
+        };
       }
     } else {
       const rawApiKey =
@@ -902,7 +1032,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
     if (normalizedGenerationConfig.error) {
       return { error: normalizedGenerationConfig.error };
     }
-    const generationConfig = normalizedGenerationConfig.config;
+    const generationConfig = {
+      ...normalizedGenerationConfig.config,
+      ...(!isVideoModel && toolsDisabled ? { tool_choice: 'none' } : {}),
+    };
     const providerServiceTier =
       providerPassthrough.service_tier ??
       providerPassthrough.serviceTier ??
@@ -943,6 +1076,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             field !== 'input' &&
             field !== 'store' &&
             field !== 'safety_settings' &&
+            (!toolsDisabled || field !== 'tools') &&
             !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field),
         ),
       ),

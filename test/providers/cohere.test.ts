@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
-import { CohereChatCompletionProvider } from '../../src/providers/cohere';
+import { CohereChatCompletionProvider, CohereEmbeddingProvider } from '../../src/providers/cohere';
 import { loadApiProvider } from '../../src/providers/index';
 
 vi.mock('../../src/cache', () => ({
@@ -14,6 +14,7 @@ describe('CohereChatCompletionProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('recognizes the published Command A+ model ID', () => {
@@ -49,6 +50,213 @@ describe('CohereChatCompletionProvider', () => {
       output: 'Done',
       tokenUsage: { prompt: 3, completion: 1, total: 4 },
     });
+  });
+
+  it.each([
+    'command-a-plus-05-2026',
+    'north-mini-code-1-0',
+  ])('honors a configured v2 API base URL for %s', async (modelName) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        finish_reason: 'COMPLETE',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider(modelName, {
+      config: {
+        apiKey: 'test-key',
+        apiBaseUrl: 'https://vault.example.com/v2/',
+      },
+    });
+    await provider.callApi('Private request');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe('https://vault.example.com/v2/chat');
+  });
+
+  it.each([
+    ['v1', 'command-a-03-2025'],
+    ['v2', 'command-a-plus-05-2026'],
+  ])('prefers the provider-scoped client name for the %s Chat API', async (version, modelName) => {
+    vi.stubEnv('COHERE_CLIENT_NAME', 'process-client');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data:
+        version === 'v2'
+          ? {
+              message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+              usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+            }
+          : {
+              text: 'Done',
+              token_count: { prompt_tokens: 1, response_tokens: 1, total_tokens: 2 },
+            },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider(modelName, {
+      config: { apiKey: 'test-key' },
+      env: { COHERE_CLIENT_NAME: 'provider-client' },
+    });
+    await provider.callApi('Hello');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect((request as RequestInit).headers).toMatchObject({
+      'X-Client-Name': 'provider-client',
+    });
+  });
+
+  it('honors a configured v1 API base URL without forwarding credentials or transport config', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        text: 'Private response',
+        token_count: { prompt_tokens: 2, response_tokens: 1, total_tokens: 3 },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-03-2025', {
+      config: {
+        apiKey: 'private-test-key',
+        apiBaseUrl: 'https://vault.example.com/v1///',
+      },
+    });
+    await provider.callApi('Private request');
+
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(url).toBe('https://vault.example.com/v1/chat');
+    expect((request as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer private-test-key',
+    });
+    expect(body).toMatchObject({
+      message: 'Private request',
+      model: 'command-a-03-2025',
+    });
+    expect(body).not.toHaveProperty('apiKey');
+    expect(body).not.toHaveProperty('apiBaseUrl');
+    expect(JSON.stringify(body)).not.toContain('private-test-key');
+    expect(JSON.stringify(body)).not.toContain('vault.example.com');
+  });
+
+  it.each([
+    ['v1', 'command-a-03-2025'],
+    ['v2', 'command-a-plus-05-2026'],
+  ])('resolves configured, provider-scoped, and process API base URLs for the %s Chat API', async (version, modelName) => {
+    vi.stubEnv('COHERE_API_BASE_URL', 'https://process-vault.example.com/v2//');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data:
+        version === 'v2'
+          ? {
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'Private response' }],
+              },
+              usage: { tokens: { input_tokens: 2, output_tokens: 1 } },
+            }
+          : {
+              text: 'Private response',
+              token_count: { prompt_tokens: 2, response_tokens: 1, total_tokens: 3 },
+            },
+    } as any);
+
+    const providerEnvProvider = new CohereChatCompletionProvider(modelName, {
+      config: { apiKey: 'test-key' },
+      env: { COHERE_API_BASE_URL: 'https://provider-vault.example.com/v1/' },
+    });
+    await providerEnvProvider.callApi('Private request');
+
+    const processEnvProvider = new CohereChatCompletionProvider(modelName, {
+      config: { apiKey: 'test-key' },
+    });
+    await processEnvProvider.callApi('Private request');
+
+    const configuredProvider = new CohereChatCompletionProvider(modelName, {
+      config: {
+        apiKey: 'test-key',
+        apiBaseUrl: 'https://configured-vault.example.com/v2/',
+      },
+      env: { COHERE_API_BASE_URL: 'https://provider-vault.example.com/v1/' },
+    });
+    await configuredProvider.callApi('Private request');
+
+    expect(vi.mocked(fetchWithCache).mock.calls.map(([url]) => url)).toEqual([
+      `https://provider-vault.example.com/${version}/chat`,
+      `https://process-vault.example.com/${version}/chat`,
+      `https://configured-vault.example.com/${version}/chat`,
+    ]);
+  });
+
+  it.each([
+    ['v1', 'command-a-03-2025'],
+    ['v2', 'command-a-plus-05-2026'],
+  ])('keeps provider-level transport config trusted for the %s Chat API', async (version, modelName) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data:
+        version === 'v2'
+          ? {
+              message: {
+                role: 'assistant',
+                content: [{ type: 'text', text: 'Trusted response' }],
+              },
+              usage: { tokens: { input_tokens: 2, output_tokens: 1 } },
+            }
+          : {
+              text: 'Trusted response',
+              token_count: { prompt_tokens: 2, response_tokens: 1, total_tokens: 3 },
+            },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider(modelName, {
+      config: {
+        apiKey: 'provider-key',
+        apiBaseUrl: 'https://trusted.example.com',
+        temperature: 0.2,
+      },
+    });
+    await provider.callApi('Trusted request', {
+      prompt: {
+        config: {
+          apiKey: 'prompt-key',
+          apiBaseUrl: 'https://untrusted.example.com',
+          temperature: 0.9,
+        },
+      },
+    } as any);
+
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(url).toBe(`https://trusted.example.com/${version}/chat`);
+    expect((request as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer provider-key',
+    });
+    expect(body).toMatchObject({ temperature: 0.9 });
+    expect(body).not.toHaveProperty('apiKey');
+    expect(body).not.toHaveProperty('apiBaseUrl');
+  });
+
+  it('does not accept an API key from prompt config', async () => {
+    vi.stubEnv('COHERE_API_KEY', '');
+    const provider = new CohereChatCompletionProvider('command-a-03-2025', {
+      config: { apiBaseUrl: 'https://trusted.example.com' },
+    });
+
+    const result = await provider.callApi('Request', {
+      prompt: {
+        config: {
+          apiKey: 'prompt-key',
+          apiBaseUrl: 'https://untrusted.example.com',
+        },
+      },
+    } as any);
+
+    expect(result).toEqual({
+      error: 'Cohere API key is not set. Please provide a valid apiKey.',
+    });
+    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
   it('uses the v2 Chat API for Command A+ and parses its response', async () => {
@@ -257,6 +465,146 @@ describe('CohereChatCompletionProvider', () => {
 
     await expect(provider.callApi('Continue')).resolves.toEqual({ error: expectedError });
     expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    ['command-a-plus-05-2026', 'north-mini-code-1-0'].flatMap((modelName) => [
+      {
+        modelName,
+        configuration: 'safety_mode OFF',
+        config: { safety_mode: 'OFF' },
+        expectedError:
+          'Cohere v2 Chat API safety_mode "OFF" is not supported for command-a-plus-05-2026 or north-mini-code-1-0. Use "CONTEXTUAL" or "STRICT".',
+      },
+      {
+        modelName,
+        configuration: 'safety_mode STRICT with tools',
+        config: {
+          safety_mode: 'STRICT',
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'lookup_weather',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+          ],
+        },
+        expectedError:
+          'Cohere v2 Chat API safety_mode "STRICT" cannot be used with tools or documents because Cohere silently downgrades it to "CONTEXTUAL".',
+      },
+      {
+        modelName,
+        configuration: 'safety_mode STRICT with documents',
+        config: {
+          safety_mode: 'STRICT',
+          documents: [{ id: 'doc-1', data: { text: 'Grounding context' } }],
+        },
+        expectedError:
+          'Cohere v2 Chat API safety_mode "STRICT" cannot be used with tools or documents because Cohere silently downgrades it to "CONTEXTUAL".',
+      },
+    ]),
+  )('rejects $configuration for $modelName before dispatch', async ({
+    modelName,
+    config,
+    expectedError,
+  }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 1, output_tokens: 1 } },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider(modelName, {
+      config: { apiKey: 'test-key', ...config } as any,
+    });
+
+    await expect(provider.callApi('Hello')).resolves.toEqual({ error: expectedError });
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'provider STRICT mode without tools',
+      providerConfig: { safety_mode: 'STRICT' as const },
+      promptSafetyMode: 'CONTEXTUAL',
+      expectedTools: undefined,
+    },
+    {
+      name: 'provider-approved tools',
+      providerConfig: {
+        safety_mode: 'CONTEXTUAL' as const,
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'approved_lookup', parameters: { type: 'object', properties: {} } },
+          },
+        ],
+      },
+      promptSafetyMode: 'OFF',
+      expectedTools: [
+        {
+          type: 'function',
+          function: { name: 'approved_lookup', parameters: { type: 'object', properties: {} } },
+        },
+      ],
+    },
+  ])('keeps $name authoritative over adversarial JSON prompt controls', async ({
+    providerConfig,
+    promptSafetyMode,
+    expectedTools,
+  }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] },
+        usage: { tokens: { input_tokens: 5, output_tokens: 1 } },
+      },
+    } as any);
+    const provider = new CohereChatCompletionProvider('command-a-plus-05-2026', {
+      config: { apiKey: 'test-key', ...providerConfig },
+    });
+    const result = await provider.callApi(
+      JSON.stringify({
+        message: 'Use the supported prompt fields.',
+        preamble: 'Prompt-authored context.',
+        temperature: 0.9,
+        response_format: { type: 'json_object' },
+        safety_mode: promptSafetyMode,
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'exfiltrate_secrets', parameters: { type: 'object' } },
+          },
+        ],
+        tool_choice: 'REQUIRED',
+        strict_tools: true,
+      }),
+    );
+
+    expect(result.error).toBeUndefined();
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    const body = JSON.parse((request as RequestInit).body as string);
+    expect(body).toMatchObject({
+      safety_mode: providerConfig.safety_mode,
+      temperature: 0.9,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: 'Prompt-authored context.' },
+        { role: 'user', content: 'Use the supported prompt fields.' },
+      ],
+    });
+    if (expectedTools === undefined) {
+      expect(body).not.toHaveProperty('tools');
+    } else {
+      expect(body.tools).toEqual(expectedTools);
+    }
+    expect(body).not.toHaveProperty('tool_choice');
+    expect(body).not.toHaveProperty('strict_tools');
+    expect(JSON.stringify(body)).not.toContain('exfiltrate_secrets');
   });
 
   it('prefers prompt-config aliases over provider canonical v2 message fields', async () => {
@@ -674,6 +1022,32 @@ describe('CohereChatCompletionProvider', () => {
     );
   });
 
+  it('bypasses the persistent fetch cache for authenticated v1 Model Vault requests', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        text: 'Private response',
+        token_count: { prompt_tokens: 2, response_tokens: 1, total_tokens: 3 },
+      },
+    } as any);
+
+    const provider = new CohereChatCompletionProvider('command-a-03-2025', {
+      config: {
+        apiKey: 'secret-key-that-must-not-enter-a-cache-key',
+        apiBaseUrl: 'https://vault.example.com/v1',
+      },
+    });
+    await provider.callApi('Hello');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://vault.example.com/v1/chat',
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
   it('does not forward promptfoo loader metadata to the v2 Chat API', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
@@ -793,6 +1167,40 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
+  it.each([
+    {
+      name: 'non-2xx',
+      response: {
+        cached: false,
+        data: { text: 'This error response must not be accepted.' },
+        status: 401,
+        statusText: 'Unauthorized',
+      },
+      expectedError:
+        'API error: 401 Unauthorized\n{"text":"This error response must not be accepted."}',
+    },
+    {
+      name: 'nested error payload',
+      response: {
+        cached: false,
+        data: { error: { message: 'Model Vault rejected the request.' } },
+        status: 200,
+        statusText: 'OK',
+      },
+      expectedError: 'Model Vault rejected the request.',
+    },
+  ])('surfaces $name failures from v1 custom endpoints', async ({ response, expectedError }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue(response as any);
+    const provider = new CohereChatCompletionProvider('command-a-03-2025', {
+      config: {
+        apiKey: 'private-key',
+        apiBaseUrl: 'https://vault.example.com',
+      },
+    });
+
+    await expect(provider.callApi('Hello')).resolves.toEqual({ error: expectedError });
+  });
+
   it('returns an HTTP error for unsuccessful v2 responses before parsing content', async () => {
     const data = {
       message: {
@@ -813,6 +1221,304 @@ describe('CohereChatCompletionProvider', () => {
 
     await expect(provider.callApi('Hello')).resolves.toEqual({
       error: `API error: 503 Service Unavailable\n${JSON.stringify(data)}`,
+    });
+  });
+});
+
+describe('CohereEmbeddingProvider', () => {
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('parses float embeddings returned by the Cohere v2 API', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        embeddings: { float: [[0.1, 0.2]] },
+        meta: { billed_units: { input_tokens: 2 } },
+      },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-v4.0', {
+      apiKey: 'test-key',
+      apiBaseUrl: 'https://api.cohere.com/v2',
+    });
+
+    await expect(provider.callEmbeddingApi('Embed this')).resolves.toEqual({
+      embedding: [0.1, 0.2],
+      tokenUsage: { prompt: 2, total: 2, numRequests: 1 },
+    });
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(JSON.parse((request as RequestInit).body as string)).toMatchObject({
+      embedding_types: ['float'],
+    });
+  });
+
+  it('bypasses the persistent fetch cache for authenticated private embedding requests', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { embeddings: [[0.1, 0.2]] },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', {
+      apiKey: 'private-key-that-must-not-enter-a-cache-key',
+      apiBaseUrl: 'https://vault.example.com',
+    });
+
+    await provider.callEmbeddingApi('Embed this');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'https://vault.example.com/embed',
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it.each([
+    [
+      'custom proxy path',
+      'https://vault.example.com/cohere/',
+      'https://vault.example.com/cohere/embed',
+    ],
+    ['custom API version', 'https://vault.example.com/v3/', 'https://vault.example.com/v3/embed'],
+  ])('preserves an explicitly configured %s', async (_name, apiBaseUrl, expectedUrl) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { embeddings: [[0.1, 0.2]] },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', {
+      apiKey: 'test-key',
+      apiBaseUrl,
+    });
+
+    await provider.callEmbeddingApi('Embed this');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(expectedUrl);
+  });
+
+  it('uses the official v1 embedding endpoint by default', async () => {
+    vi.stubEnv('COHERE_API_BASE_URL', '');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { embeddings: [[0.1, 0.2]] },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', {
+      apiKey: 'test-key',
+    });
+
+    await provider.callEmbeddingApi('Embed this');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe('https://api.cohere.com/v1/embed');
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(JSON.parse((request as RequestInit).body as string)).not.toHaveProperty(
+      'embedding_types',
+    );
+  });
+
+  it.each([
+    ['config api.cohere.ai', 'config', 'https://api.cohere.ai/'],
+    ['config api.cohere.com', 'config', 'https://api.cohere.com///'],
+    ['COHERE_API_BASE_URL api.cohere.ai', 'env', 'https://api.cohere.ai'],
+    ['COHERE_API_BASE_URL api.cohere.com', 'env', 'https://api.cohere.com/'],
+  ])('adds v1 for a versionless official host from %s', async (_name, source, apiBaseUrl) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { embeddings: [[0.1, 0.2]] },
+    } as any);
+    if (source === 'env') {
+      vi.stubEnv('COHERE_API_BASE_URL', apiBaseUrl);
+    }
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', {
+      apiKey: 'test-key',
+      ...(source === 'config' ? { apiBaseUrl } : {}),
+    });
+
+    await provider.callEmbeddingApi('Embed this');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+      `${apiBaseUrl.replace(/\/+$/, '')}/v1/embed`,
+    );
+  });
+
+  it('prefers the provider-scoped client name for embedding requests', async () => {
+    vi.stubEnv('COHERE_CLIENT_NAME', 'process-client');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { embeddings: [[0.1, 0.2]] },
+    } as any);
+    const provider = new CohereEmbeddingProvider(
+      'embed-v4.0',
+      { apiKey: 'test-key' },
+      { COHERE_CLIENT_NAME: 'provider-client' },
+    );
+
+    await provider.callEmbeddingApi('Embed this');
+
+    const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect((request as RequestInit).headers).toMatchObject({
+      'X-Client-Name': 'provider-client',
+    });
+  });
+
+  it.each([
+    {
+      name: 'versionless explicit config',
+      config: { apiBaseUrl: 'https://explicit-versionless.example.com///' },
+      expectedUrl: 'https://explicit-versionless.example.com/embed',
+    },
+    {
+      name: 'v2 provider env',
+      providerEnv: { COHERE_API_BASE_URL: 'https://provider-v2.example.com/v2///' },
+      expectedUrl: 'https://provider-v2.example.com/v2/embed',
+    },
+    {
+      name: 'versionless loader context env',
+      contextEnv: { COHERE_API_BASE_URL: 'https://context-versionless.example.com/' },
+      expectedUrl: 'https://context-versionless.example.com/embed',
+    },
+    {
+      name: 'v2 process env',
+      processBaseUrl: 'https://process-v2.example.com/v2/',
+      expectedUrl: 'https://process-v2.example.com/v2/embed',
+    },
+  ])('preserves $name when building the embedding endpoint', async ({
+    config,
+    providerEnv,
+    contextEnv,
+    processBaseUrl,
+    expectedUrl,
+  }) => {
+    vi.stubEnv('COHERE_API_KEY', 'test-key');
+    vi.stubEnv(
+      'COHERE_API_BASE_URL',
+      processBaseUrl || 'https://unused-process-fallback.example.com',
+    );
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { embeddings: [[0.1, 0.2]] },
+    } as any);
+
+    const provider = (await loadApiProvider('cohere:embedding:embed-english-v3.0', {
+      env: contextEnv,
+      options: {
+        config,
+        env: providerEnv,
+      },
+    })) as CohereEmbeddingProvider;
+    await provider.callEmbeddingApi('Embed this');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(expectedUrl);
+  });
+
+  it.each([
+    {
+      name: 'flat explicit config',
+      config: {
+        apiKey: 'explicit-only-key',
+        apiBaseUrl: 'https://explicit-only.example.com/v1///',
+        truncate: 'END',
+      },
+      expectedUrl: 'https://explicit-only.example.com/v1/embed',
+      expectedKey: 'explicit-only-key',
+      expectedTruncate: 'END',
+    },
+    {
+      name: 'provider-scoped env',
+      providerEnv: {
+        COHERE_API_KEY: 'provider-key',
+        COHERE_API_BASE_URL: 'https://provider-env.example.com/v1/',
+      },
+      expectedUrl: 'https://provider-env.example.com/v1/embed',
+      expectedKey: 'provider-key',
+      expectedTruncate: 'NONE',
+    },
+    {
+      name: 'loader context env',
+      contextEnv: {
+        COHERE_API_KEY: 'context-key',
+        COHERE_API_BASE_URL: 'https://context-env.example.com/v1/',
+      },
+      expectedUrl: 'https://context-env.example.com/v1/embed',
+      expectedKey: 'context-key',
+      expectedTruncate: 'NONE',
+    },
+    {
+      name: 'process env',
+      expectedUrl: 'https://process-env.example.com/v1/embed',
+      expectedKey: 'process-key',
+      expectedTruncate: 'NONE',
+    },
+    {
+      name: 'explicit config precedence',
+      config: {
+        apiKey: 'highest-priority-key',
+        apiKeyEnvar: 'CUSTOM_COHERE_API_KEY',
+        apiBaseUrl: 'https://highest-priority.example.com/v1/',
+      },
+      providerEnv: {
+        COHERE_API_KEY: 'provider-key',
+        COHERE_API_BASE_URL: 'https://provider-env.example.com/v1/',
+        CUSTOM_COHERE_API_KEY: 'provider-custom-key',
+      },
+      contextEnv: {
+        COHERE_API_KEY: 'context-key',
+        COHERE_API_BASE_URL: 'https://context-env.example.com/v1/',
+      },
+      expectedUrl: 'https://highest-priority.example.com/v1/embed',
+      expectedKey: 'highest-priority-key',
+      expectedTruncate: 'NONE',
+    },
+    {
+      name: 'configured apiKeyEnvar',
+      config: { apiKeyEnvar: 'CUSTOM_COHERE_API_KEY' },
+      providerEnv: {
+        COHERE_API_BASE_URL: 'https://provider-env.example.com/v1/',
+        CUSTOM_COHERE_API_KEY: 'provider-custom-key',
+      },
+      expectedUrl: 'https://provider-env.example.com/v1/embed',
+      expectedKey: 'provider-custom-key',
+      expectedTruncate: 'NONE',
+    },
+  ])('loads Cohere embedding routing and credentials through $name', async ({
+    config,
+    providerEnv,
+    contextEnv,
+    expectedUrl,
+    expectedKey,
+    expectedTruncate,
+  }) => {
+    vi.stubEnv('COHERE_API_KEY', 'process-key');
+    vi.stubEnv('COHERE_API_BASE_URL', 'https://process-env.example.com/v1///');
+    vi.stubEnv('CUSTOM_COHERE_API_KEY', 'process-custom-key');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: {
+        embeddings: [[0.1, 0.2]],
+        meta: { billed_units: { input_tokens: 2 } },
+      },
+    } as any);
+
+    const provider = (await loadApiProvider('cohere:embedding:embed-english-v3.0', {
+      env: contextEnv,
+      options: { config, env: providerEnv },
+    })) as CohereEmbeddingProvider;
+    await provider.callEmbeddingApi('Embed this');
+
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe(expectedUrl);
+    expect((request as RequestInit).headers).toMatchObject({
+      Authorization: `Bearer ${expectedKey}`,
+    });
+    expect(JSON.parse((request as RequestInit).body as string)).toMatchObject({
+      model: 'embed-english-v3.0',
+      texts: ['Embed this'],
+      truncate: expectedTruncate,
     });
   });
 });

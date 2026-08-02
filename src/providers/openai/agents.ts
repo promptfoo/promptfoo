@@ -34,6 +34,7 @@ import type {
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
 type AgentExecutionOverrides = { model?: string; modelSettings?: ModelSettings };
+type AgentExecutionScope = AgentExecutionOverrides & { active: boolean };
 type GenericRunnerRun = (
   agent: Agent<any, any>,
   input: unknown,
@@ -41,13 +42,31 @@ type GenericRunnerRun = (
 ) => Promise<unknown>;
 
 const AGENT_RUNNER_INSTRUMENTED = Symbol.for('promptfoo.openaiAgents.runnerInstrumented');
-const agentExecutionOverrides = new AsyncLocalStorage<AgentExecutionOverrides>();
+const AGENT_EXECUTION_OVERRIDES = Symbol.for('promptfoo.openaiAgents.executionOverrides');
+type InstrumentedRunnerPrototype = {
+  run: GenericRunnerRun & { [AGENT_RUNNER_INSTRUMENTED]?: boolean };
+  [AGENT_EXECUTION_OVERRIDES]?: AsyncLocalStorage<AgentExecutionScope>;
+};
+
+const runnerPrototype = Runner.prototype as unknown as InstrumentedRunnerPrototype;
+// Duplicate module evaluations share this Runner, so they must also share its execution context.
+const agentExecutionOverrides = getOrCreateAgentExecutionOverrides(runnerPrototype);
+
+function getOrCreateAgentExecutionOverrides(
+  prototype: InstrumentedRunnerPrototype,
+): AsyncLocalStorage<AgentExecutionScope> {
+  const existingStorage = prototype[AGENT_EXECUTION_OVERRIDES];
+  if (existingStorage) {
+    return existingStorage;
+  }
+
+  const storage = new AsyncLocalStorage<AgentExecutionScope>();
+  Object.defineProperty(prototype, AGENT_EXECUTION_OVERRIDES, { value: storage });
+  return storage;
+}
 
 function instrumentRunner(): void {
-  const prototype = Runner.prototype as unknown as {
-    run: GenericRunnerRun & { [AGENT_RUNNER_INSTRUMENTED]?: boolean };
-  };
-  const currentRun = prototype.run;
+  const currentRun = runnerPrototype.run;
   if (currentRun[AGENT_RUNNER_INSTRUMENTED]) {
     return;
   }
@@ -56,12 +75,12 @@ function instrumentRunner(): void {
   // run while a promptfoo provider call is active so the Runner receives an isolated overridden
   // clone. This preserves all tool options and event handlers without mutating shared agents.
   const instrumentedRun: GenericRunnerRun = async function (this: Runner, agent, input, options) {
-    const overrides = agentExecutionOverrides.getStore();
-    const executableAgent = overrides ? applyExecutionOverrides(agent, overrides) : agent;
+    const scope = agentExecutionOverrides.getStore();
+    const executableAgent = scope?.active ? applyExecutionOverrides(agent, scope) : agent;
     return currentRun.call(this, executableAgent, input, options);
   };
   Object.defineProperty(instrumentedRun, AGENT_RUNNER_INSTRUMENTED, { value: true });
-  prototype.run = instrumentedRun;
+  runnerPrototype.run = instrumentedRun;
 }
 
 instrumentRunner();
@@ -251,13 +270,15 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       // Run the agent within the evaluator trace when Promptfoo supplied one so
       // nested agent spans stay attached to trajectory assertions and UI traces.
-      const executeRun = () =>
-        agentExecutionOverrides.run(
-          {
-            model: this.agentConfig.model || undefined,
-            modelSettings: this.executionModelSettings,
-          },
-          () =>
+      const executeRun = async () => {
+        const executionScope: AgentExecutionScope = {
+          active: true,
+          model: this.agentConfig.model || undefined,
+          modelSettings: this.executionModelSettings,
+        };
+
+        try {
+          return await agentExecutionOverrides.run(executionScope, () =>
             getOrCreateTrace(
               async () => {
                 return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
@@ -267,7 +288,14 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
                 ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
               },
             ),
-        );
+          );
+        } finally {
+          // AsyncLocalStorage contexts outlive the awaited call when code starts detached work.
+          // Mark this shared scope inactive so a later Runner.run() from that detached task uses
+          // its own Agent settings, while nested agent-as-tool runs awaited above remain overridden.
+          executionScope.active = false;
+        }
+      };
       const result = runOptions.session
         ? await this.withSessionLock(runOptions.session, executeRun)
         : await executeRun();

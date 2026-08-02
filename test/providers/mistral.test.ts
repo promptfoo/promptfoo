@@ -369,6 +369,10 @@ describe('Mistral', () => {
       ['mistral-medium-3-5', 0.0051],
       ['mistral-medium-3.5', 0.0051],
       ['mistral-medium-2604', 0.0051],
+      // Leanstral 1.5 is free during its public preview.
+      ['labs-leanstral-1-5', 0],
+      // Voxtral Small token pricing excludes its separate per-audio-minute charge.
+      ['voxtral-small-2507', 0.00022],
       // Mistral Code product aliases resolve to Codestral: $0.30/$0.90
       ['mistral-code-latest', 0.00066],
       // Devstral 2 agent alias: $0.40/$2.00

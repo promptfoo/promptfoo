@@ -536,7 +536,7 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeUndefined();
     });
 
-    it('should send the configured fast tier while retaining fast billing', async () => {
+    it('should send the configured fast tier as priority while retaining fast billing', async () => {
       mockFetchWithCache.mockResolvedValueOnce({
         data: {
           choices: [{ message: { content: 'Fast answer' }, finish_reason: 'stop' }],
@@ -553,7 +553,7 @@ describe('OpenAI Provider', () => {
       const result = await provider.callApi('Answer quickly');
       const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
 
-      expect(body.service_tier).toBe('fast');
+      expect(body.service_tier).toBe('priority');
       expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
     });
 

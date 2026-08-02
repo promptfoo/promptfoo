@@ -9,6 +9,7 @@ import type {
   BedrockRuntimeClient,
   InvokeModelWithBidirectionalStreamInput,
 } from '@aws-sdk/client-bedrock-runtime';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
@@ -122,7 +123,26 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
 
   constructor(modelName: string = 'amazon.nova-sonic-v1:0', options: ProviderOptions = {}) {
     super(modelName, options);
-    this.config = options.config;
+    this.config = options.config ?? {};
+  }
+
+  private async getSigV4Credentials(): Promise<
+    AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined
+  > {
+    if (this.config.accessKeyId && this.config.secretAccessKey) {
+      return {
+        accessKeyId: this.config.accessKeyId,
+        secretAccessKey: this.config.secretAccessKey,
+        sessionToken: this.config.sessionToken,
+      };
+    }
+
+    if (this.config.profile) {
+      const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
+      return fromSSO({ profile: this.config.profile });
+    }
+
+    return undefined;
   }
 
   private async getBedrockClient(): Promise<BedrockRuntimeClient> {
@@ -133,6 +153,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     const region = this.getRegion();
     if (
       this.modelName === 'amazon.nova-2-sonic-v1:0' &&
+      !this.config.endpoint &&
       !NOVA_2_SONIC_REGIONS.includes(region as (typeof NOVA_2_SONIC_REGIONS)[number])
     ) {
       throw new Error(
@@ -144,19 +165,24 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     // Use configurable timeouts (defaults: session=300000ms, request=300000ms)
     const sessionTimeout = this.config?.sessionTimeout ?? 300000;
     const requestTimeout = this.config?.requestTimeout ?? 300000;
+    const credentials = await this.getSigV4Credentials();
 
     try {
       const { BedrockRuntimeClient } = await import('@aws-sdk/client-bedrock-runtime');
       const { NodeHttp2Handler } = await import('@smithy/node-http-handler');
+      const requestHandler = new NodeHttp2Handler({
+        requestTimeout,
+        sessionTimeout,
+        disableConcurrentStreams: false,
+        maxConcurrentStreams: 20,
+      });
 
       this.bedrockClient = new BedrockRuntimeClient({
         region,
-        requestHandler: new NodeHttp2Handler({
-          requestTimeout,
-          sessionTimeout,
-          disableConcurrentStreams: false,
-          maxConcurrentStreams: 20,
-        }),
+        authSchemePreference: ['sigv4'],
+        requestHandler,
+        ...(credentials ? { credentials } : {}),
+        ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
       });
 
       return this.bedrockClient;
@@ -286,7 +312,18 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     return this.sendTextMessage(sessionId, role, prompt);
   }
 
+  private validateModelConfig(): void {
+    if (this.modelName === 'amazon.nova-sonic-v1:0' && this.config.turnDetectionConfiguration) {
+      throw new Error(
+        'turnDetectionConfiguration is only supported by amazon.nova-2-sonic-v1:0; ' +
+          'it is not supported by amazon.nova-sonic-v1:0.',
+      );
+    }
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    this.validateModelConfig();
+
     const sessionId = crypto.randomUUID();
     const session = this.createSession(sessionId);
 

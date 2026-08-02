@@ -514,6 +514,23 @@ describe('Provider Registry', () => {
         expect(shorthandModelProvider.id()).toBe(`anthropic:${model}`);
       }
 
+      for (const model of [
+        'claude-opus-4-6-latest',
+        'claude-sonnet-4-6-latest',
+        'claude-opus-4-5-latest',
+        'claude-sonnet-4-5-latest',
+        'claude-haiku-4-5-latest',
+        'claude-opus-4-latest',
+        'claude-sonnet-4-latest',
+      ]) {
+        const compatibilityProvider = await factory!.create(
+          `anthropic:${model}`,
+          anthropicOptions,
+          mockContext,
+        );
+        expect(compatibilityProvider.id()).toBe(`anthropic:${model}`);
+      }
+
       // Test error case with invalid model type
       await expect(
         factory!.create('anthropic:invalid:model', mockProviderOptions, mockContext),
@@ -1004,9 +1021,11 @@ describe('Provider Registry', () => {
 
     it.each([
       ['bedrock:nova-sonic', 'amazon.nova-sonic-v1:0'],
+      ['bedrock:nova-sonic:', 'amazon.nova-sonic-v1:0'],
       ['bedrock:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
       ['bedrock:nova-sonic:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
       ['bedrock:nova-2-sonic', 'amazon.nova-2-sonic-v1:0'],
+      ['bedrock:nova-2-sonic:', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:nova-2-sonic:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
     ])('should route %s through the Nova Sonic bidirectional provider', async (path, modelName) => {
@@ -1024,6 +1043,10 @@ describe('Provider Registry', () => {
       ['bedrock:converse:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
       ['bedrock:us.amazon.nova-sonic-v1:0', 'does not support geo inference IDs'],
       ['bedrock:us.amazon.nova-2-sonic-v1:0', 'does not support geo inference IDs'],
+      ['bedrock:nova-sonic:amazon.nova-2-sonic-v1:0', 'does not match provider subtype'],
+      ['bedrock:nova-2-sonic:amazon.nova-sonic-v1:0', 'does not match provider subtype'],
+      ['bedrock:nova-sonic:amazon.nova-sonic-v2:0', 'unsupported Nova Sonic model ID'],
+      ['bedrock:nova-2-sonic:amazon.nova-2-sonic-v2:0', 'unsupported Nova Sonic model ID'],
     ])('should reject unsupported Nova 2 Sonic route %s', async (path, error) => {
       const factories = await getProviderFactories(path);
       const factory = factories.find((f) => f.test(path));
@@ -1773,6 +1796,20 @@ describe('Provider Registry', () => {
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
       expect((provider as any).config?.vertexai).toBe(true);
       expect(provider.id()).toBe(providerPath);
+
+      const expressOptions: ProviderOptions = {
+        config: { apiKey: 'vertex-express-key', expressMode: true },
+      };
+      const expressProvider = await factory!.create(providerPath, expressOptions, {
+        ...bareContext,
+        options: expressOptions,
+      });
+      expect((expressProvider as any).config).toMatchObject({
+        vertexai: true,
+        apiKey: 'vertex-express-key',
+        expressMode: true,
+      });
+      expect(expressProvider.id()).toBe(providerPath);
     });
 
     it.each([

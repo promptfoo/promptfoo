@@ -12,7 +12,7 @@ import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS } from './anthropic/util';
+import { ANTHROPIC_SHORTHAND_MODEL_IDS } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -348,8 +348,7 @@ export const providerMap: ProviderFactory[] = [
 
       // Check if the second part is a valid Anthropic model name
       // If it is, assume it's a messages model
-      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (modelIds.includes(modelType)) {
+      if (ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType)) {
         return new AnthropicMessagesProvider(modelType, providerOptions);
       }
 
@@ -558,14 +557,17 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions);
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, {
+          ...context.env,
+          ...providerOptions.env,
+        });
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);

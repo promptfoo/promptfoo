@@ -93,6 +93,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // GPT-5 series (reasoning by default)
       lowerName.startsWith('gpt-5') ||
       lowerName.includes('-gpt-5') ||
+      lowerName === 'gpt-chat-latest' ||
+      lowerName.startsWith('gpt-chat-latest-') ||
       // DeepSeek reasoning models
       lowerName.includes('deepseek-r1') ||
       lowerName.includes('deepseek_r1') ||

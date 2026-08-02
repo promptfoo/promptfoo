@@ -27,9 +27,8 @@ import {
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
-  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
   isSamplingParamsDeprecatedClaudeModel,
-  normalizeClaudeThinkingConfig,
 } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
@@ -43,6 +42,7 @@ import {
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
+import { normalizeBedrockClaudeThinkingConfig } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
   ContentBlock,
@@ -1048,7 +1048,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
     const dropForcedToolChoice =
-      isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName) &&
+      isClaudeFableOrMythos5Model(this.modelName) &&
       requestedToolChoice !== undefined &&
       ('any' in requestedToolChoice || 'tool' in requestedToolChoice);
     if (dropForcedToolChoice && !this.forcedToolChoiceRemovalWarned) {
@@ -1098,8 +1098,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
     // Raw additional fields must not bypass the model's sampling/thinking constraints. Every
     // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
-    // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
-    // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
+    // temperature/top_p/top_k, so strip them from the raw fields too; the Bedrock normalizer
+    // then converts enabled -> adaptive and drops disabled on always-on adaptive models.
     if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
       delete fields.temperature;
       delete fields.top_p;
@@ -1112,7 +1112,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // normalizer, otherwise the effort-capped rule (disabled + xhigh/max is a 400)
       // cannot fire on this path.
       const effort = (fields.output_config as { effort?: ClaudeEffort } | undefined)?.effort;
-      const normalizedThinking = normalizeClaudeThinkingConfig(
+      const normalizedThinking = normalizeBedrockClaudeThinkingConfig(
         this.modelName,
         additionalThinking,
         effort,
@@ -1126,7 +1126,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
-      const normalizedThinking = normalizeClaudeThinkingConfig(
+      const normalizedThinking = normalizeBedrockClaudeThinkingConfig(
         this.modelName,
         this.config.thinking,
         // Converse takes effort only via additionalModelRequestFields, which this path

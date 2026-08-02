@@ -94,13 +94,19 @@ Cerebras currently supports these models on its public endpoints:
 
 - `gpt-oss-120b` - Production model
 - `gemma-4-31b` - Preview model
-- `zai-glm-4.7` - Preview model scheduled for retirement on August 17, 2026
+- `zai-glm-4.7` - Preview model scheduled for deprecation on August 17, 2026
 
 The preview lineup can change on short notice. Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for the current list.
 
 ## Pricing & Usage
 
-Cerebras Inference API usage is billed based on input and output tokens. Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for current pricing links.
+Cerebras Inference API usage is billed based on input and output tokens:
+
+- `gpt-oss-120b`: $0.35 input / $0.75 output per 1M tokens
+- `gemma-4-31b`: $0.99 input / $1.49 output per 1M tokens
+- `zai-glm-4.7`: $2.25 input / $2.75 output per 1M tokens
+
+Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for current pricing.
 
 ## Learn More
 

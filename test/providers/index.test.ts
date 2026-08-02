@@ -54,6 +54,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { ProviderSchemas } from '../../src/types/api/providers';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
@@ -1402,6 +1403,28 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('preserves and renders the Cohere Model Vault URL through provider-test schemas', async () => {
+    const providerOptions = {
+      id: 'cohere:chat:command-a-03-2025',
+      env: {
+        COHERE_API_BASE_URL: 'https://vault.example.com',
+      },
+      config: {
+        apiBaseUrl: '{{ env.COHERE_API_BASE_URL }}',
+      },
+    };
+    const parsedOptions = [
+      ProviderSchemas.Test.Request.parse({ providerOptions }).providerOptions,
+      ProviderSchemas.TestSession.Request.parse({ provider: providerOptions }).provider,
+    ];
+
+    for (const options of parsedOptions) {
+      expect.soft(options.env?.COHERE_API_BASE_URL).toBe('https://vault.example.com');
+      const provider = await loadApiProvider(options.id, { options });
+      expect.soft(provider.config.apiBaseUrl).toBe('https://vault.example.com');
+    }
   });
 
   it('passes provider env overrides to provider instances', async () => {

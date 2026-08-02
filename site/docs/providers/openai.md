@@ -127,7 +127,7 @@ Supported parameters include:
 | `reasoning`              | Reasoning configuration object for reasoning-capable models. In practice, use this with the Responses API (`openai:responses:*`) for o-series and GPT-5 family models. `effort` supports `none`, `low`, `medium`, `high`, and model-specific values such as `minimal`, `xhigh`, or `max`, with optional `summary`, persisted `context`, and GPT-5.6 `mode`. |
 | `response_format`        | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                                                                                       |
 | `seed`                   | Seed used for deterministic output.                                                                                                                                                                                                                                                                                                                         |
-| `service_tier`           | Processing tier for supported models. Use `fast` for Fast mode; legacy `priority` remains accepted as an alias. GPT-5.6 and earlier responses may report the effective tier as `priority` even when the request uses `fast`.                                                                                                                                |
+| `service_tier`           | Processing tier for supported models. Use `fast` for Fast mode; Promptfoo sends it to OpenAI as the canonical `priority` API value. You can also configure `priority` directly.                                                                                                                                                                             |
 | `stop`                   | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                                                                                 |
 | `store`                  | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                                                                           |
 | `temperature`            | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `gpt-5-codex-mini`, and GPT-5 family) because it is unsupported by many of those models.                                                                                                                                    |
@@ -140,6 +140,10 @@ Supported parameters include:
 Use `inputCost` and `outputCost` when a model has different prompt and completion rates.
 The legacy `cost` option remains a shared fallback. For audio-capable models,
 `audioInputCost` and `audioOutputCost` take precedence over `audioCost`.
+
+Promptfoo recognizes OpenAI's current first-party regional hosts (`us`, `eu`, `au`, `ca`, `jp`,
+`in`, `sg`, `kr`, `gb`, and `ae` under `*.api.openai.com`). They receive the same model lifecycle,
+endpoint compatibility, and `fast`-to-`priority` service-tier handling as `api.openai.com`.
 
 Here are the type declarations of `config` parameters:
 
@@ -636,7 +640,7 @@ GPT-5.5 is a high-capability GPT-5 family model for professional work and agenti
 - **Reasoning effort**: `gpt-5.5` supports `none`, `low`, `medium`, `high`, and `xhigh`. In Chat Completions, set `reasoning_effort`; in Responses API, set `reasoning.effort`.
 - **Endpoint support**: `gpt-5.5` supports Chat Completions and Responses API. `gpt-5.5-pro` is Responses API only and supports Batch API.
 - **Cached input**: `gpt-5.5` cached input tokens are $0.50 per 1M. `gpt-5.5-pro` has no cached-input discount.
-- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and applies published Batch, Flex, or Fast rates when the API response or configured `service_tier` identifies that tier. OpenAI has not published GPT-5.5 Pro Batch or Flex rates above 272,000 input tokens, so Promptfoo leaves those requests unpriced rather than assuming a discount; published standard long-context pricing remains available. OpenAI also accepts the legacy `priority` value as an alias for Fast mode.
+- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and applies published Batch, Flex, or Fast rates when the API response or configured `service_tier` identifies that tier. OpenAI has not published GPT-5.5 Pro Batch or Flex rates above 272,000 input tokens, so Promptfoo leaves those requests unpriced rather than assuming a discount; published standard long-context pricing remains available. Promptfoo treats configured `fast` and OpenAI's returned `priority` tier as the same Fast mode for billing.
 - **Long-running requests**: `gpt-5.5-pro` automatically receives the same 10-minute timeout as other GPT-5 pro models.
 
 #### Usage Examples

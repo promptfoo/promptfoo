@@ -1061,6 +1061,255 @@ describe('XAI Video Provider', () => {
       );
     });
 
+    it('bypasses persistent caching for Video 1.5 signed image URLs', async () => {
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(null);
+      vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
+        if (url === 'https://api.x.ai/v1/videos/generations') {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+          } as any;
+        }
+        if (url === `https://api.x.ai/v1/videos/${mockRequestId}`) {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({
+              video: { url: mockVideoUrl, duration: 5 },
+              model: 'grok-imagine-video-1.5',
+            }),
+          } as any;
+        }
+        if (url === mockVideoUrl) {
+          return {
+            ok: true,
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+          } as any;
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+
+      const firstSignedUrl =
+        'https://bucket.s3.amazonaws.com/source.png?version=1&X-Amz-Credential=credential-one&X-Amz-Date=20260803T000000Z&X-Amz-Expires=900&X-Amz-Signature=signature-one';
+      const rotatedSignedUrl =
+        'https://bucket.s3.amazonaws.com/source.png?version=1&X-Amz-Credential=credential-two&X-Amz-Date=20260803T010000Z&X-Amz-Expires=900&X-Amz-Signature=signature-two';
+      const differentResourceUrl =
+        'https://bucket.s3.amazonaws.com/other.png?version=1&X-Amz-Credential=credential-three&X-Amz-Date=20260803T020000Z&X-Amz-Expires=900&X-Amz-Signature=signature-three';
+
+      for (const url of [firstSignedUrl, rotatedSignedUrl, differentResourceUrl]) {
+        await new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: { image: { url } },
+        }).callApi(mockPrompt);
+      }
+
+      expect(videoUtils.generateVideoCacheKey).not.toHaveBeenCalled();
+      expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+      expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+
+      const submittedImageUrls = vi
+        .mocked(fetch.fetchWithProxy)
+        .mock.calls.filter(([url]) => url === 'https://api.x.ai/v1/videos/generations')
+        .map(([, init]) => JSON.parse(init?.body as string).image.url);
+      expect(submittedImageUrls).toEqual([firstSignedUrl, rotatedSignedUrl, differentResourceUrl]);
+    });
+
+    it('bypasses persistent caching for colliding Video 1.5 access_token image URLs', async () => {
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
+        if (url === 'https://api.x.ai/v1/videos/generations') {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+          } as any;
+        }
+        if (url === `https://api.x.ai/v1/videos/${mockRequestId}`) {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({
+              video: { url: mockVideoUrl, duration: 5 },
+              model: 'grok-imagine-video-1.5',
+            }),
+          } as any;
+        }
+        if (url === mockVideoUrl) {
+          return {
+            ok: true,
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+          } as any;
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+      const firstUrl = 'https://media.example.com/source.png?version=1&access_token=secret-one';
+      const secondUrl = 'https://media.example.com/source.png?version=1&access_token=secret-two';
+
+      for (const url of [firstUrl, secondUrl]) {
+        await new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: { image: { url } },
+        }).callApi(mockPrompt);
+      }
+
+      expect(videoUtils.generateVideoCacheKey).not.toHaveBeenCalled();
+      expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+      expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+      const submittedImageUrls = vi
+        .mocked(fetch.fetchWithProxy)
+        .mock.calls.filter(([url]) => url === 'https://api.x.ai/v1/videos/generations')
+        .map(([, init]) => JSON.parse(init?.body as string).image.url);
+      expect(submittedImageUrls).toEqual([firstUrl, secondUrl]);
+    });
+
+    it('reuses the legacy persistent key for Grok Imagine Video reference images', async () => {
+      const referenceImages = [
+        { url: 'https://example.com/first.jpg' },
+        { url: 'https://example.com/second.jpg' },
+      ];
+      const legacyInputReference = `reference_images:${referenceImages
+        .map(({ url }) => url)
+        .join('|')}`;
+      vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(({ inputReference }) =>
+        inputReference === legacyInputReference ? 'legacy-cache-key' : 'new-cache-key',
+      );
+      vi.mocked(videoUtils.checkVideoCache).mockImplementation(async (cacheKey) =>
+        cacheKey === 'legacy-cache-key' ? mockStorageKey : null,
+      );
+
+      const result = await new XAIVideoProvider('grok-imagine-video', {
+        config: { reference_images: referenceImages },
+      }).callApi(mockPrompt);
+
+      expect(videoUtils.checkVideoCache).toHaveBeenCalledWith('legacy-cache-key', 'xAI Video');
+      expect(result.cached).toBe(true);
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('bypasses persistent caching for signed Video 1.5 reference-image URLs', async () => {
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
+        if (url === 'https://api.x.ai/v1/videos/generations') {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+          } as any;
+        }
+        if (url === `https://api.x.ai/v1/videos/${mockRequestId}`) {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({
+              video: { url: mockVideoUrl, duration: 12 },
+              model: 'grok-imagine-video-1.5',
+            }),
+          } as any;
+        }
+        if (url === mockVideoUrl) {
+          return {
+            ok: true,
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+          } as any;
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+      const firstSignedUrl =
+        'https://bucket.s3.amazonaws.com/reference.png?version=1&X-Amz-Credential=credential-one&X-Amz-Date=20260803T000000Z&X-Amz-Expires=900&X-Amz-Signature=signature-one';
+      const rotatedSignedUrl =
+        'https://bucket.s3.amazonaws.com/reference.png?version=1&X-Amz-Credential=credential-two&X-Amz-Date=20260803T010000Z&X-Amz-Expires=900&X-Amz-Signature=signature-two';
+
+      for (const url of [firstSignedUrl, rotatedSignedUrl]) {
+        await new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: { duration: 12, reference_images: [{ url }] },
+        }).callApi(mockPrompt);
+      }
+
+      expect(videoUtils.generateVideoCacheKey).not.toHaveBeenCalled();
+      expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+      expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+      const submittedReferenceUrls = vi
+        .mocked(fetch.fetchWithProxy)
+        .mock.calls.filter(([url]) => url === 'https://api.x.ai/v1/videos/generations')
+        .map(([, init]) => JSON.parse(init?.body as string).reference_images[0].url);
+      expect(submittedReferenceUrls).toEqual([firstSignedUrl, rotatedSignedUrl]);
+    });
+
+    it('bypasses persistent caching for colliding credential path reference-image URLs', async () => {
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
+        if (url === 'https://api.x.ai/v1/videos/generations') {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+          } as any;
+        }
+        if (url === `https://api.x.ai/v1/videos/${mockRequestId}`) {
+          return {
+            ok: true,
+            json: vi.fn().mockResolvedValue({
+              video: { url: mockVideoUrl, duration: 12 },
+              model: 'grok-imagine-video-1.5',
+            }),
+          } as any;
+        }
+        if (url === mockVideoUrl) {
+          return {
+            ok: true,
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+          } as any;
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      });
+      const firstCredentialUrl =
+        'https://media.example.com/token-credential-one-123456789/reference.png?version=1';
+      const rotatedCredentialUrl =
+        'https://media.example.com/token-credential-two-987654321/reference.png?version=1';
+
+      for (const url of [firstCredentialUrl, rotatedCredentialUrl]) {
+        await new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: { duration: 12, reference_images: [{ url }] },
+        }).callApi(mockPrompt);
+      }
+
+      expect(videoUtils.generateVideoCacheKey).not.toHaveBeenCalled();
+      expect(videoUtils.checkVideoCache).not.toHaveBeenCalled();
+      expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+      const submittedReferenceUrls = vi
+        .mocked(fetch.fetchWithProxy)
+        .mock.calls.filter(([url]) => url === 'https://api.x.ai/v1/videos/generations')
+        .map(([, init]) => JSON.parse(init?.body as string).reference_images[0].url);
+      expect(submittedReferenceUrls).toEqual([firstCredentialUrl, rotatedCredentialUrl]);
+    });
+
+    it('preserves benign UUID resource identity in Video 1.5 reference-image cache keys', async () => {
+      const actualVideoUtils = await vi.importActual<typeof videoUtils>(
+        '../../../src/providers/video/utils',
+      );
+      vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
+        actualVideoUtils.generateVideoCacheKey,
+      );
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      const firstResourceUrl =
+        'https://media.example.com/123e4567-e89b-12d3-a456-426614174000/reference.png';
+      const secondResourceUrl =
+        'https://media.example.com/123e4567-e89b-12d3-a456-426614174001/reference.png';
+
+      for (const url of [firstResourceUrl, secondResourceUrl]) {
+        await new XAIVideoProvider('grok-imagine-video-1.5', {
+          config: { duration: 12, reference_images: [{ url }] },
+        }).callApi(mockPrompt);
+      }
+
+      const cacheKeys = vi
+        .mocked(videoUtils.checkVideoCache)
+        .mock.calls.map(([cacheKey]) => cacheKey);
+      const inputReferences = vi
+        .mocked(videoUtils.generateVideoCacheKey)
+        .mock.calls.map(([params]) => params.inputReference as string);
+      expect(cacheKeys[0]).not.toBe(cacheKeys[1]);
+      expect(inputReferences).toEqual([
+        expect.stringContaining('123e4567-e89b-12d3-a456-426614174000'),
+        expect.stringContaining('123e4567-e89b-12d3-a456-426614174001'),
+      ]);
+      expect(videoUtils.checkVideoCache).toHaveBeenCalledTimes(2);
+      expect(videoUtils.storeCacheMapping).not.toHaveBeenCalled();
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('uses distinct cache references for image and reference-image modes', async () => {
       const sharedUrl = 'https://example.com/shared.jpg';
 
@@ -1082,11 +1331,7 @@ describe('XAI Video Provider', () => {
       expect(videoUtils.generateVideoCacheKey).toHaveBeenNthCalledWith(
         2,
         expect.objectContaining({
-          inputReference: JSON.stringify({
-            type: 'xai-reference-media',
-            reference_images: [sharedUrl],
-            reference_audios: [],
-          }),
+          inputReference: `reference_images:${sharedUrl}`,
         }),
       );
     });
@@ -1127,6 +1372,20 @@ describe('XAI Video Provider', () => {
         .inputReference;
       const secondReference = vi.mocked(videoUtils.generateVideoCacheKey).mock.calls[1][0]
         .inputReference;
+      expect(firstReference).toBe(
+        JSON.stringify({
+          type: 'xai-reference-media',
+          reference_images: [`${baseUrl};reference_audios:eve`],
+          reference_audios: [],
+        }),
+      );
+      expect(secondReference).toBe(
+        JSON.stringify({
+          type: 'xai-reference-media',
+          reference_images: [baseUrl],
+          reference_audios: ['eve'],
+        }),
+      );
       expect(firstReference).not.toBe(secondReference);
     });
   });

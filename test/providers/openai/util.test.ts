@@ -7,6 +7,7 @@ import {
   formatOpenAiError,
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   OPENAI_CODEX_ONLY_MODELS,
   OPENAI_COMPLETION_MODELS,
@@ -40,6 +41,32 @@ describe('getOpenAiEffectiveServiceTier', () => {
         passthrough: { model: 'gpt-5.6-luna' },
       }),
     ).toBe('default');
+  });
+});
+
+describe('normalizeOpenAiServiceTierForWire', () => {
+  it('maps semantic fast only for first-party OpenAI endpoints', () => {
+    expect(normalizeOpenAiServiceTierForWire('fast')).toBe('priority');
+    for (const hostname of [
+      'api.openai.com',
+      'us.api.openai.com',
+      'eu.api.openai.com',
+      'au.api.openai.com',
+      'ca.api.openai.com',
+      'jp.api.openai.com',
+      'in.api.openai.com',
+      'sg.api.openai.com',
+      'kr.api.openai.com',
+      'gb.api.openai.com',
+      'ae.api.openai.com',
+    ]) {
+      expect(normalizeOpenAiServiceTierForWire('fast', `https://${hostname}/v1`)).toBe('priority');
+    }
+    expect(normalizeOpenAiServiceTierForWire('fast', 'https://gateway.example/v1')).toBe('fast');
+    expect(normalizeOpenAiServiceTierForWire('priority')).toBe('priority');
+    expect(normalizeOpenAiServiceTierForWire('flex')).toBe('flex');
+    expect(normalizeOpenAiServiceTierForWire(null)).toBeNull();
+    expect(normalizeOpenAiServiceTierForWire(undefined)).toBeUndefined();
   });
 });
 
@@ -756,6 +783,14 @@ describe('calculateOpenAICost', () => {
   it.each([
     'https://us.api.openai.com/v1',
     'https://eu.api.openai.com/v1',
+    'https://au.api.openai.com/v1',
+    'https://ca.api.openai.com/v1',
+    'https://jp.api.openai.com/v1',
+    'https://in.api.openai.com/v1',
+    'https://sg.api.openai.com/v1',
+    'https://kr.api.openai.com/v1',
+    'https://gb.api.openai.com/v1',
+    'https://ae.api.openai.com/v1',
   ])('rejects retired models on the regional first-party endpoint %s', (apiUrl) => {
     expect(() => assertOpenAiApiModel('gpt-5-chat-latest', apiUrl)).toThrow(
       'gpt-5-chat-latest has been retired',

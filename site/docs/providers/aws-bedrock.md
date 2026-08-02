@@ -9,6 +9,34 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Bedrock model IDs directly, including regional IDs and inference profile IDs. Because AWS changes the Bedrock catalog over time, use the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` as the source of truth for current model IDs and regional availability.
 
+:::warning Current Bedrock Legacy models
+
+AWS currently marks these model IDs as Legacy in one or more regions. New customers cannot start
+using Legacy models, existing customers may lose access after 15 days of inactivity, and requests
+fail after the region-specific EOL date unless AWS has made a private extended-access arrangement.
+
+| Model ID                                  | EOL date           |
+| ----------------------------------------- | ------------------ |
+| `ai21.jamba-1-5-large-v1:0`               | November 26, 2026  |
+| `ai21.jamba-1-5-mini-v1:0`                | November 26, 2026  |
+| `amazon.nova-canvas-v1:0`                 | September 30, 2026 |
+| `amazon.nova-reel-v1:0`                   | September 30, 2026 |
+| `amazon.nova-reel-v1:1`                   | September 30, 2026 |
+| `amazon.nova-premier-v1:0`                | September 14, 2026 |
+| `amazon.nova-sonic-v1:0`                  | September 14, 2026 |
+| `anthropic.claude-opus-4-1-20250805-v1:0` | January 8, 2027    |
+| `anthropic.claude-sonnet-4-20250514-v1:0` | October 14, 2026   |
+| `anthropic.claude-3-haiku-20240307-v1:0`  | September 10, 2026 |
+| `cohere.command-r-v1:0`                   | August 19, 2026    |
+| `cohere.command-r-plus-v1:0`              | August 19, 2026    |
+| `twelvelabs.marengo-embed-2-7-v1:0`       | November 30, 2026  |
+
+Lifecycle state and dates are region-specific. Check the
+[Amazon Bedrock model lifecycle table](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html)
+before adopting or reusing any model ID. The table above was checked on August 2, 2026.
+
+:::
+
 ## Setup
 
 1. **Model Access**: Access rules vary by provider and can change over time.
@@ -853,7 +881,8 @@ endpoints cost $2.20/$11 after the 10% regional premium. Standard $3/$15 global 
 September 1, 2026. Global prompt-cache reads, 5-minute writes, and 1-hour writes cost
 $0.20/$2.50/$4.00 per million cached tokens during the promotion and
 $0.30/$3.75/$6.00 afterward. In-region and geo endpoints apply the same 10% premium to
-each cache tier.
+each cache tier. Adaptive thinking is always on and cannot be disabled; promptfoo converts manual
+thinking budgets to adaptive thinking and omits `thinking: { type: 'disabled' }`.
 
 :::warning Region-specific Claude end-of-life
 

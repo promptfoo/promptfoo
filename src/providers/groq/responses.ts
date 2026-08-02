@@ -1,6 +1,11 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
-import { groqSupportsTemperature, isGroqReasoningModel } from './util';
+import {
+  assertGroqResponsesServiceTier,
+  groqSupportsTemperature,
+  isGroqReasoningModel,
+} from './util';
 
+import type { OpenAiCompletionOptions } from '../openai/types';
 import type { GroqResponsesProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
@@ -54,8 +59,14 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
         ...providerOptions.config,
         apiKeyEnvar: 'GROQ_API_KEY',
         apiBaseUrl: GROQ_API_BASE_URL,
-      },
+      } as unknown as OpenAiCompletionOptions,
     });
+  }
+
+  override async getOpenAiBody(...args: Parameters<OpenAiResponsesProvider['getOpenAiBody']>) {
+    const result = await super.getOpenAiBody(...args);
+    assertGroqResponsesServiceTier(result.body.service_tier);
+    return result;
   }
 
   id(): string {

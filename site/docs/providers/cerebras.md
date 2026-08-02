@@ -36,11 +36,13 @@ The Cerebras provider uses a simple format:
 
 The Cerebras public Inference API currently supports these models:
 
-| Model          | ID             | Availability                     |
-| -------------- | -------------- | -------------------------------- |
-| OpenAI GPT OSS | `gpt-oss-120b` | Production                       |
-| Gemma 4 31B    | `gemma-4-31b`  | Preview                          |
-| Z.ai GLM 4.7   | `zai-glm-4.7`  | Preview; retires August 17, 2026 |
+| Model          | ID             | Availability | Input / 1M tokens | Output / 1M tokens |
+| -------------- | -------------- | ------------ | ----------------- | ------------------ |
+| OpenAI GPT OSS | `gpt-oss-120b` | Production   | $0.35             | $0.75              |
+| Gemma 4 31B    | `gemma-4-31b`  | Production   | $0.99             | $1.49              |
+| Z.ai GLM 4.7   | `zai-glm-4.7`  | Preview      | $2.25             | $2.75              |
+
+`zai-glm-4.7` is scheduled for deprecation on August 17, 2026.
 
 The preview lineup can change on short notice. To get the current public model catalog:
 

@@ -22,18 +22,24 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 **Gemini 3.5:**
 
-- `vertex:gemini-3.5-flash` - Frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `vertex:gemini-3.5-flash` - Frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output on the global endpoint; non-global endpoints add 10%)
 - `vertex:gemini-3.5-flash-lite` - GA model for low-latency, high-volume automation ($0.30/1M input, $2.50/1M output on the global endpoint; regional and multi-regional endpoints add 10%)
 
 **Gemini 3.1:**
 
 - `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `vertex:gemini-3.1-pro-preview-customtools` - Custom-tools variant with the same pricing as Gemini 3.1 Pro
-- `vertex:gemini-3.1-flash-lite` - GA cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output)
+- `vertex:gemini-3.1-flash-lite` - GA cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output on the global endpoint; non-global endpoints add 10%)
 
 **Gemini 3.0 (Preview):**
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
+
+Promptfoo defaults the Gemini 3 models above to the `global` endpoint. An explicit `config.region`,
+`GOOGLE_CLOUD_LOCATION`, or `VERTEX_REGION` still takes precedence. Check each model's
+[supported regions](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models)
+before selecting a non-global endpoint. For current GA Gemini 3 models, see Google's
+[global and non-global pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
 
 **Gemini 2.5:**
 
@@ -136,16 +142,6 @@ Meta's Llama models are available through Vertex AI with the following versions:
 
 - `vertex:llama-3.3-70b-instruct-maas` - Llama 3.3 70B for text applications
 
-**Llama 3.2:**
-
-- `vertex:llama-3.2-90b-vision-instruct-maas` - Llama 3.2 90B with vision capabilities
-
-**Llama 3.1:**
-
-- `vertex:llama-3.1-405b-instruct-maas` - Llama 3.1 405B
-- `vertex:llama-3.1-70b-instruct-maas` - Llama 3.1 70B
-- `vertex:llama-3.1-8b-instruct-maas` - Llama 3.1 8B
-
 Llama 3 models support built-in safety features through Llama Guard. Llama 4 models are natively multimodal but do not support Llama Guard.
 
 See [Google's Llama model documentation](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama/use-llama) for current model IDs, regions, and quotas.
@@ -213,7 +209,11 @@ Use the `vertex:video:` prefix for Veo on Vertex AI:
 
 - `vertex:video:veo-3.1-generate-001`
 - `vertex:video:veo-3.1-fast-generate-001`
-- `vertex:video:veo-3.1-lite-generate-001`
+- `vertex:video:veo-3.1-lite-generate-001` (Preview)
+
+Promptfoo reports successful Veo 3.1 generations using Google's video-with-audio price for the
+generated duration and resolution. See the [Veo pricing table](/docs/providers/google#video-generation-models-veo)
+for the current per-second rates.
 
 ```yaml
 providers:
@@ -379,7 +379,7 @@ Promptfoo automatically loads environment variables from your shell or a `.env` 
 ```bash
 # .env
 GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_CLOUD_LOCATION=global # Use a location supported by your selected model
 GOOGLE_API_KEY=your-api-key  # For express mode
 ```
 
@@ -434,15 +434,15 @@ providers:
 
 The following environment variables can be used to configure the Vertex AI provider:
 
-| Variable                         | Description                         | Default        | Required |
-| -------------------------------- | ----------------------------------- | -------------- | -------- |
-| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID             | None           | Yes\*    |
-| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `us-central1`  | No       |
-| `GOOGLE_API_KEY`                 | API key for express mode            | None           | No\*     |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials | None           | No\*     |
-| `VERTEX_PUBLISHER`               | Model publisher                     | `google`       | No       |
-| `VERTEX_API_HOST`                | Override API host (e.g., for proxy) | Auto-generated | No       |
-| `VERTEX_API_VERSION`             | API version                         | `v1`           | No       |
+| Variable                         | Description                          | Default        | Required |
+| -------------------------------- | ------------------------------------ | -------------- | -------- |
+| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID              | None           | Yes\*    |
+| `GOOGLE_CLOUD_LOCATION`          | Region or multi-region for Vertex AI | Model-specific | No       |
+| `GOOGLE_API_KEY`                 | API key for express mode             | None           | No\*     |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials  | None           | No\*     |
+| `VERTEX_PUBLISHER`               | Model publisher                      | `google`       | No       |
+| `VERTEX_API_HOST`                | Override API host (e.g., for proxy)  | Auto-generated | No       |
+| `VERTEX_API_VERSION`             | API version                          | `v1`           | No       |
 
 \*At least one authentication method is required (ADC, service account, or API key)
 
@@ -450,7 +450,8 @@ The following environment variables can be used to configure the Vertex AI provi
 
 Different models are available in different regions. Common regions include:
 
-- `us-central1` - Default, most models available
+- `global` - Default for the Gemini 3 models listed above
+- `us-central1` - Common for older Gemini models and Llama 3
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -636,7 +637,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 ### Llama Model Features
 
-- Support for text and vision tasks (Llama 3.2 and all Llama 4 models)
+- Support for text tasks with Llama 3.3 and text and vision tasks with all Llama 4 models
 - Built-in safety with Llama Guard for supported Llama 3 models (enabled by default)
 - Llama 4 models are available in `us-east5`; Llama 3 models are available in `us-central1`
 - Quota limits vary by model version
@@ -649,7 +650,7 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 - **Guard Integration**: Supported Llama 3 models use Llama Guard for content safety by default; Llama 4 models do not support it
 - **Specific Endpoint**: Uses a different API endpoint than other Vertex models
 - **Model Status**: Llama 4 Scout and Maverick are Generally Available (GA). Google [deprecated `llama-3.3-70b-instruct-maas`](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/open-models) on July 21, 2026 and schedules its retirement for October 21, 2026
-- **Vision Support**: Llama 3.2 90B and all Llama 4 models support image input
+- **Vision Support**: All current Llama 4 models support image input
 
 ### Claude Model Features
 
@@ -690,7 +691,7 @@ defaultTest:
 | `apiVersion`                       | API version                                                        | `v1`                                 |
 | `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
 | `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
-| `region`                           | GCloud region                                                      | `us-central1`                        |
+| `region`                           | GCloud region or multi-region                                      | Model/auth-specific                  |
 | `publisher`                        | Model publisher                                                    | `google`                             |
 | `context`                          | Model context                                                      | None                                 |
 | `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |

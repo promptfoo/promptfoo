@@ -148,6 +148,15 @@ describe('GoogleProvider', () => {
       expect((provider as any).isVertexMode).toBe(true);
     });
 
+    it('should detect Vertex mode from provider-scoped GOOGLE_CLOUD_PROJECT', () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      });
+
+      expect(provider.id()).toBe('vertex:gemini-pro');
+      expect((provider as any).isVertexMode).toBe(true);
+    });
+
     it('should detect Vertex mode from credentials presence', () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {
@@ -1108,7 +1117,7 @@ describe('GoogleProvider', () => {
 
       expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
       expect(result.cost).toBeCloseTo(
-        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
       const requestBody = JSON.parse(

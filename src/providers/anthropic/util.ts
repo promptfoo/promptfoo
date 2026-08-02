@@ -198,6 +198,39 @@ export const ANTHROPIC_MODELS = [
   })),
 ];
 
+// These aliases were previously accepted by promptfoo, but Anthropic does not publish them as
+// first-party model IDs. Keep them out of ANTHROPIC_MODELS so they are not presented as current
+// catalog entries or priced by default. They remain available for shorthand routing through
+// compatible gateways, and their former rates provide the missing half of a partial explicit
+// pricing override.
+const ANTHROPIC_COMPATIBILITY_ALIAS_MODELS = [
+  ...['claude-opus-4-6-latest', 'claude-opus-4-5-latest'].map((id) => ({
+    id,
+    cost: { input: 5 / 1e6, output: 25 / 1e6 },
+  })),
+  ...['claude-sonnet-4-6-latest', 'claude-sonnet-4-5-latest'].map((id) => ({
+    id,
+    cost: { input: 3 / 1e6, output: 15 / 1e6 },
+  })),
+  {
+    id: 'claude-haiku-4-5-latest',
+    cost: { input: 1 / 1e6, output: 5 / 1e6 },
+  },
+  {
+    id: 'claude-opus-4-latest',
+    cost: { input: 15 / 1e6, output: 75 / 1e6 },
+  },
+  {
+    id: 'claude-sonnet-4-latest',
+    cost: { input: 3 / 1e6, output: 15 / 1e6 },
+  },
+];
+
+export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
+  ...ANTHROPIC_MODELS.map((model) => model.id),
+  ...ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.map((model) => model.id),
+]);
+
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
 // `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure deployment
 // names. The leading `(^|[^a-z0-9])` boundary and a trailing lookahead guard (`(?![0-9])`,
@@ -205,6 +238,7 @@ export const ANTHROPIC_MODELS = [
 // neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and `claude-sonnet-4-5` is not Sonnet 5)
 // while still matching dated snapshots like `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
+const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
@@ -245,6 +279,11 @@ interface ClaudeModelFamily {
  * every later model); Opus 4.1 and earlier retain base pricing on all endpoints.
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
+  {
+    match: CLAUDE_MYTHOS_PREVIEW_RE,
+    warningName: 'Claude Mythos Preview',
+    alwaysOnAdaptiveThinking: true,
+  },
   {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
@@ -398,10 +437,10 @@ export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean 
 }
 
 /**
- * Normalize a Claude thinking config for models that deprecate manual
- * budget-based thinking: an `enabled` budget converts to adaptive thinking
- * (preserving `display`), and `disabled` is omitted on always-on adaptive
- * thinking models (Fable 5 / Mythos 5), which reject it. `disabled` is also
+ * Normalize a Claude thinking config for models that require adaptive thinking:
+ * an `enabled` budget converts to adaptive thinking (preserving `display`), and
+ * `disabled` is omitted on always-on adaptive thinking models, which reject it.
+ * `disabled` is also
  * omitted on effort-capped models (Opus 5) when `effort` is high enough that
  * the combination would 400. The Anthropic, Bedrock InvokeModel/Converse, and
  * Vertex paths all share this transform; user-facing warnings stay at the call
@@ -414,7 +453,11 @@ export function normalizeClaudeThinkingConfig<
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
-  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+  if (
+    thinking?.type === 'enabled' &&
+    (isSamplingParamsDeprecatedClaudeModel(modelId) ||
+      isAlwaysOnAdaptiveThinkingClaudeModel(modelId))
+  ) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
   if (
@@ -626,7 +669,13 @@ export function calculateAnthropicCost(
   reportedInferenceGeo?: string | null,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
-  const registeredModel = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  const hasExplicitPricing =
+    config.cost != null || config.inputCost != null || config.outputCost != null;
+  const registeredModel =
+    ANTHROPIC_MODELS.find((model) => model.id === pricingModelName) ??
+    (hasExplicitPricing
+      ? ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.find((model) => model.id === pricingModelName)
+      : undefined);
   const sonnet5Pricing =
     pricingModelName === 'claude-sonnet-5' ? getClaudeSonnet5PricingPerMillion() : undefined;
   const modelInfo =

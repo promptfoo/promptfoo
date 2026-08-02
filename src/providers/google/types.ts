@@ -154,6 +154,7 @@ export interface CompletionOptions {
   /** Additional top-level Gemini request fields. */
   passthrough?: Record<string, unknown>;
   projectId?: string;
+  /** Vertex location. Current Gemini 3 models default to `global`; explicit values take precedence. */
   region?: string;
   publisher?: string;
   apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
@@ -530,12 +531,16 @@ export interface ClaudeResponse {
 // =============================================================================
 
 /**
- * Supported Veo video models
+ * Recognized Veo model IDs. Retired IDs remain for configuration compatibility.
  */
 export type GoogleVideoModel =
   | 'veo-3.1-generate-preview'
   | 'veo-3.1-fast-generate-preview'
   | 'veo-3.1-lite-generate-preview'
+  | 'veo-3.1-fast-preview'
+  | 'veo-3-generate'
+  | 'veo-3-fast'
+  | 'veo-2-generate'
   | 'veo-3.1-generate-001'
   | 'veo-3.1-fast-generate-001'
   | 'veo-3.1-lite-generate-001'
@@ -610,8 +615,8 @@ export interface GoogleVideoOptions {
   referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Prior Veo generation URI for AI Studio, or operation ID in Vertex flows
+  extendVideoId?: string; // Deprecated alias for sourceVideo
+  sourceVideo?: string; // Prior Gemini URI for AI Studio, or gs:// URI for Vertex AI
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;
@@ -627,6 +632,7 @@ export interface GoogleVideoOptions {
   projectId?: string; // Google Cloud project ID
   region?: string; // Vertex AI region (default: us-central1)
   credentials?: string; // Path to credentials file or JSON string
+  storageUri?: string; // Vertex-only Cloud Storage output destination (gs://bucket/prefix/)
 }
 
 /**
@@ -640,9 +646,11 @@ export interface GoogleVideoOperation {
   };
   response?: {
     '@type'?: string;
-    // New format: videos array with base64 encoded video
+    // New format: inline video bytes or a Vertex Cloud Storage output
     videos?: Array<{
-      bytesBase64Encoded: string;
+      bytesBase64Encoded?: string;
+      gcsUri?: string;
+      mimeType?: string;
     }>;
     // Legacy format with URI
     generateVideoResponse?: {

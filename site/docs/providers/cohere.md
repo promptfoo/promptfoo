@@ -33,8 +33,9 @@ The following models are confirmed supported. For the complete list of supported
 - `c4ai-aya-expanse-32b`
 - `c4ai-aya-vision-32b`
 
-Legacy aliases such as `command`, `command-r`, and `command-r-plus` remain accepted for
-existing configs, but new configurations should use the IDs above.
+Legacy aliases such as `command`, `command-r`, and `command-r-plus` are deprecated. Cohere may
+still serve them only to eligible existing users who used the model within 90 days before the
+September 15, 2025 deprecation announcement; new configurations should use the dated IDs above.
 
 `command-a-plus-05-2026` supports a 128K-token input context and up to 64K output tokens. Cohere's
 hosted API offers the model without token charges until the account's rate limit; production use is
@@ -43,6 +44,24 @@ available through Cohere Model Vault, so Promptfoo does not assign a speculative
 `north-mini-code-1-0` is Cohere's agentic coding model. It supports a 256K-token context and up to
 64K output tokens through the v2 Chat API. Cohere also offers it without token charges until the
 account's rate limit, with production deployment available through Model Vault.
+
+### Model Vault
+
+For a [Cohere Model Vault](https://docs.cohere.com/v2/docs/model-vault) deployment, copy the Vault
+endpoint and model name from the model card in the Cohere dashboard. Use that model name in the
+provider ID and set the endpoint as the provider-level `apiBaseUrl`:
+
+```yaml
+providers:
+  - id: cohere:command-a-plus-05-2026
+    config:
+      apiBaseUrl: '{{env.COHERE_API_BASE_URL}}'
+```
+
+Set `COHERE_API_BASE_URL` to the Vault endpoint shown in the dashboard. Promptfoo selects the v1 or
+v2 Chat API path for the configured model, including when the supplied base URL ends in `/v1` or
+`/v2`. Configure the applicable Cohere credential through `COHERE_API_KEY` or the provider-level
+`apiKey`. Prompt config cannot override either `apiBaseUrl` or `apiKey`.
 
 Here's an example configuration:
 
@@ -167,22 +186,23 @@ When the Cohere API is called, the provider can optionally include the search qu
 
 Cohere parameters
 
-| Parameter             | Description                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------- |
-| `apiKey`              | Your Cohere API key if not using an environment variable.                                          |
-| `chatHistory`         | An array of chat history objects with role, message, and optionally user_name and conversation_id. |
-| `connectors`          | An array of connector objects for integrating with external systems.                               |
-| `documents`           | An array of document objects for providing reference material to the model.                        |
-| `frequency_penalty`   | Penalizes new tokens based on their frequency in the text so far.                                  |
-| `k`                   | Controls the diversity of the output via top-k sampling.                                           |
-| `max_tokens`          | The maximum length of the generated text.                                                          |
-| `modelName`           | The model name to use for the chat completion.                                                     |
-| `p`                   | Controls the diversity of the output via nucleus (top-p) sampling.                                 |
-| `preamble_override`   | A string to override the default preamble used by the model.                                       |
-| `presence_penalty`    | Penalizes new tokens based on their presence in the text so far.                                   |
-| `prompt_truncation`   | Controls how prompts are truncated ('AUTO' or 'OFF').                                              |
-| `search_queries_only` | If true, only search queries are processed.                                                        |
-| `temperature`         | Controls the randomness of the output.                                                             |
+| Parameter             | Description                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
+| `apiKey`              | Provider-level Cohere API key if not using the `COHERE_API_KEY` environment variable.                |
+| `apiBaseUrl`          | Provider-level Cohere API base URL. For Model Vault, use the endpoint shown in the Cohere dashboard. |
+| `chatHistory`         | An array of chat history objects with role, message, and optionally user_name and conversation_id.   |
+| `connectors`          | An array of connector objects for integrating with external systems.                                 |
+| `documents`           | An array of document objects for providing reference material to the model.                          |
+| `frequency_penalty`   | Penalizes new tokens based on their frequency in the text so far.                                    |
+| `k`                   | Controls the diversity of the output via top-k sampling.                                             |
+| `max_tokens`          | The maximum length of the generated text.                                                            |
+| `modelName`           | The model name to use for the chat completion.                                                       |
+| `p`                   | Controls the diversity of the output via nucleus (top-p) sampling.                                   |
+| `preamble_override`   | A string to override the default preamble used by the model.                                         |
+| `presence_penalty`    | Penalizes new tokens based on their presence in the text so far.                                     |
+| `prompt_truncation`   | Controls how prompts are truncated ('AUTO' or 'OFF').                                                |
+| `search_queries_only` | If true, only search queries are processed.                                                          |
+| `temperature`         | Controls the randomness of the output.                                                               |
 
 Special parameters
 

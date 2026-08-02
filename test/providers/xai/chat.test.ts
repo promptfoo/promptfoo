@@ -174,6 +174,22 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Provider methods', () => {
+    it('accepts xAI priority processing and rejects non-xAI service tiers', async () => {
+      const priorityProvider = createXAIProvider('xai:grok-4.5', {
+        config: { service_tier: 'priority' },
+      } as any) as any;
+      expect((await priorityProvider.getOpenAiBody('test prompt')).body.service_tier).toBe(
+        'priority',
+      );
+
+      const invalidProvider = createXAIProvider('xai:grok-4.5', {
+        config: { service_tier: 'flex' },
+      } as any) as any;
+      await expect(invalidProvider.getOpenAiBody('test prompt')).rejects.toThrow(
+        'Invalid xAI service_tier "flex"',
+      );
+    });
+
     it('generates correct id() for the provider', () => {
       const provider = createXAIProvider('xai:grok-3-beta');
       expect(provider.id()).toBe('xai:grok-3-beta');
@@ -1600,6 +1616,31 @@ describe('xAI Chat Provider', () => {
 
       // (91 uncached * $2/M) + (128 cached * $0.30/M) + (51 output * $6/M).
       expect(result.cost).toBeCloseTo(0.0005264, 12);
+    });
+
+    it('applies the confirmed priority premium to chat fallback pricing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'priority response' } }],
+          service_tier: 'priority',
+          usage: {
+            prompt_tokens: 100_000,
+            completion_tokens: 100_000,
+            total_tokens: 200_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key', service_tier: 'priority' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(1.6, 10);
     });
 
     it('prefers xAI exact billed ticks over catalog estimates for chat completions', async () => {

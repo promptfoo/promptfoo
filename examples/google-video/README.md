@@ -35,11 +35,11 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Available Models
 
-| Model                           | Description                                        | Duration |
-| ------------------------------- | -------------------------------------------------- | -------- |
-| `veo-3.1-generate-preview`      | Veo 3.1 with extension, references, and 4k         | 4, 6, 8s |
-| `veo-3.1-fast-generate-preview` | Faster Veo 3.1 with extension, references, and 4k  | 4, 6, 8s |
-| `veo-3.1-lite-generate-preview` | Veo 3.1 Lite without extension or reference images | 4, 6, 8s |
+| Model                           | Description                                          | Duration |
+| ------------------------------- | ---------------------------------------------------- | -------- |
+| `veo-3.1-generate-preview`      | Veo 3.1 with extension, references, and 4k           | 4, 6, 8s |
+| `veo-3.1-fast-generate-preview` | Faster Veo 3.1 with extension, references, and 4k    | 4, 6, 8s |
+| `veo-3.1-lite-generate-preview` | Veo 3.1 Lite Preview without extension or references | 4, 6, 8s |
 
 ## Running the Example
 
@@ -49,18 +49,19 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option             | Type   | Description                                                         |
-| ------------------ | ------ | ------------------------------------------------------------------- |
-| `aspectRatio`      | string | `16:9` (default) or `9:16`                                          |
-| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k requires Veo 3.1 or 3.1 Fast |
-| `durationSeconds`  | number | 4, 6, or 8; use 8 for extension, references, or 1080p/4k output     |
-| `personGeneration` | string | `allow_adult` or `dont_allow`                                       |
-| `negativePrompt`   | string | Concepts to avoid                                                   |
-| `image`            | string | Source image for image-to-video                                     |
-| `lastImage`        | string | End frame for interpolation                                         |
-| `extendVideoId`    | string | Legacy Vertex operation-ID input                                    |
-| `sourceVideo`      | string | Gemini URI returned by the prior Veo generation                     |
-| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)              |
+| Option             | Type   | Description                                                                                                                     |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `aspectRatio`      | string | `16:9` (default) or `9:16`                                                                                                      |
+| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k requires Veo 3.1 or 3.1 Fast                                                             |
+| `durationSeconds`  | number | 4, 6, or 8; use 8 for extension, references, or 1080p/4k output                                                                 |
+| `personGeneration` | string | Veo 3.1: `allow_all` for text, `allow_adult` for image-based modes; EU, UK, Switzerland, and MENA support only `allow_adult`    |
+| `negativePrompt`   | string | Concepts to avoid                                                                                                               |
+| `image`            | string | Source image for image-to-video                                                                                                 |
+| `lastImage`        | string | End frame for interpolation                                                                                                     |
+| `extendVideoId`    | string | Deprecated alias for `sourceVideo`                                                                                              |
+| `sourceVideo`      | string | Prior Gemini URI, or `gs://` URI when using Vertex AI                                                                           |
+| `storageUri`       | string | Vertex-only output destination such as `gs://bucket/veo-output/`; the returned `gcsUri` is exposed as `metadata.sourceVideoUri` |
+| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)                                                                          |
 
 ## Features
 
@@ -78,6 +79,10 @@ Extend a previously generated Veo video by passing its original Gemini URI to th
 (see `promptfooconfig-extension.yaml`). This configuration requires `GOOGLE_API_KEY` or
 `GEMINI_API_KEY`; use the prior response's `metadata.sourceVideoUri` within two days of the
 original generation. Downloaded files and base64 bytes cannot be used for Gemini extension.
+
+For Vertex AI, configure `storageUri: gs://bucket/prefix/` on the source generation. Promptfoo
+downloads the output to its blob store and preserves the returned `gs://` object URI in
+`metadata.sourceVideoUri`; pass that value as `sourceVideo` in the next Vertex generation.
 
 ## Notes
 

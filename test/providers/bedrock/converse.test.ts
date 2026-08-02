@@ -2367,10 +2367,9 @@ Third line`;
       );
     });
 
-    it('strips raw sampling fields for Claude Sonnet 5 and preserves disabled thinking', async () => {
-      // Sonnet 5 is sampling-deprecated (rejects temperature/top_p/top_k) but NOT always-on,
-      // so raw additionalModelRequestFields must have those stripped and manual thinking
-      // converted to adaptive — while `thinking: { type: 'disabled' }` is preserved (unlike Fable).
+    it('strips unsupported raw fields for always-on Claude Sonnet 5 thinking', async () => {
+      // Sonnet 5 rejects sampling controls and always uses adaptive thinking. Manual thinking
+      // converts to adaptive, while an invalid disabled request is omitted.
       const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
         config: {
           region: 'us-east-1',
@@ -2406,9 +2405,7 @@ Third line`;
       await disabledProvider.callApi('Test');
 
       expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          additionalModelRequestFields: { thinking: { type: 'disabled' } },
-        }),
+        expect.not.objectContaining({ additionalModelRequestFields: expect.anything() }),
       );
     });
 

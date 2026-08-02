@@ -72,17 +72,17 @@ Anthropic-operated endpoints have a separate lifecycle from Amazon Bedrock and G
 Promptfoo still accepts historical IDs for compatible gateways and cached-result cost scoring,
 but Anthropic's API will reject retired models:
 
-| Model ID                                  | Anthropic API state | Migration                                   |
-| ----------------------------------------- | ------------------- | ------------------------------------------- |
-| `claude-mythos-preview`                   | Deprecated          | Use `claude-mythos-5`                       |
-| `claude-opus-4-1-20250805`                | Deprecated          | Retires August 5, 2026; use `claude-opus-5` |
-| `claude-opus-4-20250514`                  | Retired             | Use `claude-opus-5`                         |
-| `claude-sonnet-4-20250514`                | Retired             | Use `claude-sonnet-4-6`                     |
-| `claude-3-7-sonnet-20250219`              | Retired             | Use `claude-sonnet-4-6`                     |
-| `claude-3-5-sonnet-20241022` / `20240620` | Retired             | Use `claude-sonnet-4-6`                     |
-| `claude-3-5-haiku-20241022`               | Retired             | Use `claude-haiku-4-5-20251001`             |
-| `claude-3-opus-20240229`                  | Retired             | Use `claude-opus-5`                         |
-| `claude-3-haiku-20240307`                 | Retired             | Use `claude-haiku-4-5-20251001`             |
+| Model ID                                  | Anthropic API state | Migration                                     |
+| ----------------------------------------- | ------------------- | --------------------------------------------- |
+| `claude-mythos-preview`                   | Deprecated          | Use `claude-mythos-5`                         |
+| `claude-opus-4-1-20250805`                | Deprecated          | Retires August 5, 2026; use `claude-opus-4-8` |
+| `claude-opus-4-20250514`                  | Retired             | Use `claude-opus-4-8`                         |
+| `claude-sonnet-4-20250514`                | Retired             | Use `claude-sonnet-4-6`                       |
+| `claude-3-7-sonnet-20250219`              | Retired             | Use `claude-sonnet-4-6`                       |
+| `claude-3-5-sonnet-20241022` / `20240620` | Retired             | Use `claude-sonnet-4-6`                       |
+| `claude-3-5-haiku-20241022`               | Retired             | Use `claude-haiku-4-5-20251001`               |
+| `claude-3-opus-20240229`                  | Retired             | Use `claude-opus-4-8`                         |
+| `claude-3-haiku-20240307`                 | Retired             | Use `claude-haiku-4-5-20251001`               |
 
 Check [Anthropic's model deprecations](https://platform.claude.com/docs/en/about-claude/model-deprecations)
 for current dates and replacements.
@@ -98,7 +98,7 @@ lifecycle dates.
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
 | Claude Fable 5    | claude-fable-5                                        | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
-| Claude Mythos 5   | claude-mythos-5                                       | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
+| Claude Mythos 5   | claude-mythos-5                                       | claude-mythos-5 (gated research Preview; Entra only)                  | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
 | Claude Opus 5     | claude-opus-5                                         | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
 | Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |

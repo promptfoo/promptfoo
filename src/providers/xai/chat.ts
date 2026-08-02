@@ -102,14 +102,24 @@ type XAIModel = {
   aliases?: string[];
 };
 
-type XAIConfig = {
+export type XAIServiceTier = 'default' | 'priority';
+
+export function assertXAIServiceTier(serviceTier: unknown): void {
+  if (serviceTier !== undefined && serviceTier !== 'default' && serviceTier !== 'priority') {
+    throw new Error(
+      `Invalid xAI service_tier ${JSON.stringify(serviceTier)}. Use "default" or "priority".`,
+    );
+  }
+}
+
+type XAIConfig = Omit<OpenAiCompletionOptions, 'service_tier'> & {
   region?: string;
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
+  service_tier?: XAIServiceTier;
   search_parameters?: Record<string, any>;
   /** xAI Agent Tools - server-side tools for agentic workflows */
   agent_tools?: XAIAgentTool[];
-} & OpenAiCompletionOptions &
-  XAICostConfig;
+} & XAICostConfig;
 
 type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: {
@@ -580,6 +590,8 @@ export function calculateXAICost(
      * reasoning), so it must NOT set this flag or reasoning is double-counted.
      */
     reasoningBilledSeparately?: boolean;
+    /** The response-confirmed processing tier. Priority processing doubles all token rates. */
+    serviceTier?: XAIServiceTier;
   },
 ): number | undefined {
   const completion = completionTokens ?? 0;
@@ -632,7 +644,8 @@ export function calculateXAICost(
       `inputCost=${inputCostTotal}, outputCost=${outputCostTotal}`,
   );
 
-  return inputCostTotal + outputCostTotal;
+  const serviceTierMultiplier = options?.serviceTier === 'priority' ? 2 : 1;
+  return serviceTierMultiplier * (inputCostTotal + outputCostTotal);
 }
 
 export function getXAICostInUsd(usage?: { cost_in_usd_ticks?: number }): number | undefined {
@@ -685,6 +698,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     if (!result || !result.body) {
       return result;
     }
+
+    assertXAIServiceTier(result.body.service_tier);
 
     type GrokRequestConfig = {
       max_tokens?: number;
@@ -804,7 +819,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         apiBaseUrl: xaiConfig?.region
           ? `https://${xaiConfig.region}.api.x.ai/v1`
           : 'https://api.x.ai/v1',
-      },
+      } as unknown as OpenAiCompletionOptions,
     });
 
     // Store the original config for later use
@@ -856,7 +871,10 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         usage?.completion_tokens,
         usage?.completion_tokens_details?.reasoning_tokens,
         usage?.prompt_tokens_details?.cached_tokens,
-        { reasoningBilledSeparately: true },
+        {
+          reasoningBilledSeparately: true,
+          serviceTier: data.service_tier === 'priority' ? 'priority' : undefined,
+        },
       )
     );
   }

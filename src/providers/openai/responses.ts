@@ -41,6 +41,7 @@ import {
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
   normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -1083,7 +1084,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
-      ...(effectiveServiceTier === undefined ? {} : { service_tier: effectiveServiceTier }),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
 

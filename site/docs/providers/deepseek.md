@@ -43,19 +43,22 @@ providers:
 - `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`)
+- `showThinking` - Control whether returned reasoning content is included in promptfoo's output (default: `true`); this does not select the API's thinking mode
+- `passthrough.thinking` - Select the API mode with `{ type: enabled }` or `{ type: disabled }`
 
 ## Available Models
 
 :::note
 
-The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepSeek retired the legacy `deepseek-chat` and `deepseek-reasoner` aliases on July 24, 2026. Promptfoo still recognizes both IDs for backward-compatible configuration, but upstream requests using them are rejected. The bare `deepseek:` provider defaults to `deepseek-v4-flash`.
+The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepSeek retired the legacy `deepseek-chat` and `deepseek-reasoner` aliases on July 24, 2026. Promptfoo still recognizes both IDs for backward-compatible configuration, but upstream requests using them are rejected. The bare `deepseek:` provider defaults to `deepseek-v4-flash` and explicitly disables thinking to preserve the old bare-provider behavior. Explicit V4 model IDs use DeepSeek's upstream thinking-enabled default unless you override `passthrough.thinking`.
 
 :::
 
 ### deepseek-v4-flash
 
 - General purpose V4 model for conversations and reasoning
+- Currently resolves to DeepSeek-V4-Flash-0731; available in public beta
+- Supports thinking and non-thinking modes and the Responses API
 - 1M context window, up to 384K output tokens
 - Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
 - Output: $0.28/1M
@@ -63,6 +66,7 @@ The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepS
 ### deepseek-v4-pro
 
 - Higher-capability V4 model with thinking and non-thinking modes
+- Preview model awaiting its official release; the Responses API is not yet supported
 - 1M context window, up to 384K output tokens
 - Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
 - Output: $0.87/1M
@@ -81,7 +85,7 @@ The current API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. DeepS
 
 :::warning
 
-Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, or `top_logprobs` parameters. Setting these parameters will not trigger an error but will have no effect.
+Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, or `frequency_penalty` parameters. Setting these parameters will not trigger an error but will have no effect.
 
 :::
 

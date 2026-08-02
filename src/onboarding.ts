@@ -557,8 +557,8 @@ export async function createDummyFiles(
         value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
       },
       {
-        name: '[Cohere] Command R, Command R+, ...',
-        value: ['cohere:command-r', 'cohere:command-r-plus'],
+        name: '[Cohere] Command A+, Command A, ...',
+        value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
       },
       {
         name: '[Ollama] Llama, Qwen, Phi, ...',

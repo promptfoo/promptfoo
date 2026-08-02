@@ -269,6 +269,9 @@
         "COMETAPI_KEY": {
           "type": "string"
         },
+        "COHERE_API_BASE_URL": {
+          "type": "string"
+        },
         "COHERE_API_KEY": {
           "type": "string"
         },
@@ -309,6 +312,12 @@
           "type": "string"
         },
         "GOOGLE_API_KEY": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_LOCATION": {
+          "type": "string"
+        },
+        "GOOGLE_CLOUD_PROJECT": {
           "type": "string"
         },
         "GOOGLE_PROJECT_ID": {
@@ -1743,6 +1752,9 @@
                     "COMETAPI_KEY": {
                       "type": "string"
                     },
+                    "COHERE_API_BASE_URL": {
+                      "type": "string"
+                    },
                     "COHERE_API_KEY": {
                       "type": "string"
                     },
@@ -1783,6 +1795,12 @@
                       "type": "string"
                     },
                     "GOOGLE_API_KEY": {
+                      "type": "string"
+                    },
+                    "GOOGLE_CLOUD_LOCATION": {
+                      "type": "string"
+                    },
+                    "GOOGLE_CLOUD_PROJECT": {
                       "type": "string"
                     },
                     "GOOGLE_PROJECT_ID": {

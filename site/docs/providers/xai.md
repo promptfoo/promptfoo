@@ -109,7 +109,7 @@ Promptfoo recognizes older `grok-2`, `grok-beta`, and vision IDs for existing co
 
 The provider uses [OpenAI-compatible configuration options](/docs/providers/openai) plus Grok-specific options, subject to the model restrictions below. Example usage:
 
-When xAI returns [`usage.cost_in_usd_ticks`](https://docs.x.ai/developers/cost-tracking), Promptfoo uses that exact billed amount, including cache discounts and request-level pricing adjustments. If ticks are unavailable, Promptfoo falls back to the model's catalog rates. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates); explicit overrides take precedence over reported ticks.
+When xAI returns [`usage.cost_in_usd_ticks`](https://docs.x.ai/developers/cost-tracking), Promptfoo uses that exact billed amount, including cache discounts and request-level pricing adjustments. If ticks are unavailable, Promptfoo falls back to the model's catalog rates and applies the documented 2x premium when the response confirms `service_tier: priority`. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates); explicit overrides take precedence over reported ticks.
 
 ```yaml
 providers:
@@ -117,8 +117,15 @@ providers:
     config:
       temperature: 0.7
       reasoning_effort: 'high' # low, medium, or high (grok-4.3 also accepts none)
+      service_tier: priority # optional; default or priority
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
+
+Both `xai:<model>` Chat Completions and `xai:responses:<model>` support xAI
+[Priority Processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing).
+Set `service_tier` to `priority` for higher scheduling priority or `default` for standard
+processing; omitting it also uses the default tier. Other OpenAI-compatible tier names are not
+valid on xAI.
 
 ### Reasoning Support
 
@@ -369,6 +376,7 @@ tests:
 | `instructions`         | string  | System-level instructions                                             |
 | `previous_response_id` | string  | For multi-turn conversations                                          |
 | `store`                | boolean | Store response for later retrieval                                    |
+| `service_tier`         | string  | Processing tier: `default` or `priority`                              |
 | `include`              | array   | Additional response data to return                                    |
 | `reasoning`            | object  | Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models |
 | `response_format`      | object  | JSON schema for structured output                                     |

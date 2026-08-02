@@ -30,7 +30,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions, FunctionCall, Tool } from './types';
+import type { CompletionOptions, FunctionCall, GoogleProviderConfig, Tool } from './types';
 import type { GeminiFormat } from './util';
 
 const GEMINI_LIVE_TRANSLATE_MODEL = 'gemini-3.5-live-translate-preview';
@@ -415,7 +415,7 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 };
 
 export class GoogleLiveProvider implements ApiProvider {
-  config: CompletionOptions;
+  config: GoogleProviderConfig;
   modelName: string;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
@@ -506,8 +506,9 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
 
-    const promptConfig = context?.prompt?.config as Partial<CompletionOptions> | undefined;
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const supportsTextResponse = this.modelName.startsWith('gemini-robotics-er-2-streaming-');
     const configuredResponseModalities = (
       config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
@@ -518,7 +519,11 @@ export class GoogleLiveProvider implements ApiProvider {
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
     let contentIndex = 0;
 
@@ -671,12 +676,15 @@ export class GoogleLiveProvider implements ApiProvider {
         this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
       let liveTranslateCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
+      let liveTranslateHardTimeout: ReturnType<typeof setTimeout> | undefined;
       let armLiveTranslateCompletion = () => {};
+      let armLiveTranslateHardTimeout = () => {};
 
       const safeResolve = (response: ProviderResponse) => {
         if (!isResolved) {
           isResolved = true;
           clearTimeout(liveTranslateCompletionTimeout);
+          clearTimeout(liveTranslateHardTimeout);
           resolve(response);
         }
       };
@@ -740,6 +748,8 @@ export class GoogleLiveProvider implements ApiProvider {
       const sendContentMessages = async (contentMessages: any[]) => {
         if (this.modelName === GEMINI_LIVE_TRANSLATE_MODEL) {
           liveTranslateInputEnded = false;
+          clearTimeout(liveTranslateHardTimeout);
+          liveTranslateHardTimeout = undefined;
         }
         for (const contentMessage of contentMessages) {
           if (contentMessage.realtimeInput?.video) {
@@ -758,6 +768,7 @@ export class GoogleLiveProvider implements ApiProvider {
             contentMessage.realtimeInput?.audioStreamEnd
           ) {
             liveTranslateInputEnded = true;
+            armLiveTranslateHardTimeout();
           }
         }
       };
@@ -792,6 +803,10 @@ export class GoogleLiveProvider implements ApiProvider {
         4_000,
         Math.max(1, Math.floor(effectiveTimeoutMs / 2)),
       );
+      // The idle timeout can be extended indefinitely by incoming silent audio. Bound the whole
+      // finite-input translation while still leaving enough room for a response that begins near
+      // the idle limit to finish its trailing-output grace period.
+      const liveTranslateHardDeadlineMs = effectiveTimeoutMs + liveTranslateCompletionGraceMs;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const armIdleTimeout = () => {
         clearTimeout(timeout);
@@ -806,6 +821,20 @@ export class GoogleLiveProvider implements ApiProvider {
         }, effectiveTimeoutMs);
       };
       armIdleTimeout();
+
+      armLiveTranslateHardTimeout = () => {
+        clearTimeout(liveTranslateHardTimeout);
+        liveTranslateHardTimeout = setTimeout(() => {
+          liveTranslateHardTimeout = undefined;
+          logger.error(
+            `WebSocket request timed out after ${liveTranslateHardDeadlineMs}ms waiting for Live Translate output`,
+          );
+          ws.close();
+          safeResolve({
+            error: `WebSocket request timed out after ${liveTranslateHardDeadlineMs}ms waiting for Live Translate output`,
+          });
+        }, liveTranslateHardDeadlineMs);
+      };
 
       const sendNextContentMessages = async (isMultiTurn = false) => {
         if (contentIndex >= contents.length) {
@@ -834,6 +863,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
         hasFinalized = true;
         clearTimeout(liveTranslateCompletionTimeout);
+        clearTimeout(liveTranslateHardTimeout);
 
         if (pendingUsageMetadata) {
           usageMetadata.push(pendingUsageMetadata);
@@ -1127,6 +1157,11 @@ export class GoogleLiveProvider implements ApiProvider {
         ) {
           return;
         }
+        // Once output has started, the inactivity timeout and trailing-output grace timer
+        // provide the bounds. Keeping the no-output deadline armed would cut off a healthy
+        // translation that streams longer than the initial response window.
+        clearTimeout(liveTranslateHardTimeout);
+        liveTranslateHardTimeout = undefined;
         clearTimeout(liveTranslateCompletionTimeout);
         liveTranslateCompletionTimeout = setTimeout(() => {
           liveTranslateCompletionTimeout = undefined;

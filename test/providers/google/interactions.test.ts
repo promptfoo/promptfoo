@@ -18,6 +18,38 @@ describe('GoogleInteractionsProvider', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
   const mockStoreBlob = vi.mocked(storeBlob);
   const mockFetchWithTimeout = vi.mocked(fetchWithTimeout);
+  const disabledToolPolicies = [
+    { name: 'tool_choice', config: { tool_choice: 'none' as const } },
+    {
+      name: 'toolConfig',
+      config: { toolConfig: { functionCallingConfig: { mode: 'NONE' as const } } },
+    },
+    {
+      name: 'tool_config',
+      config: { tool_config: { function_calling_config: { mode: 'none' as const } } },
+    },
+  ];
+  const inheritedToolSources = [
+    { name: 'config.tools', config: { tools: [{ googleSearch: {} }] } },
+    { name: 'MCP', config: { mcp: { enabled: true } } },
+  ];
+  const interactionModels = [
+    {
+      name: 'Robotics',
+      id: 'gemini-robotics-er-2-preview',
+      responseContent: { type: 'text', text: 'no tools' },
+    },
+    {
+      name: 'Omni',
+      id: 'gemini-omni-flash-preview',
+      responseContent: { type: 'video', data: 'dmlkZW8=' },
+    },
+  ];
+  const disabledInheritedToolCases = interactionModels.flatMap((model) =>
+    inheritedToolSources.flatMap((source) =>
+      disabledToolPolicies.map((policy) => ({ model, source, policy })),
+    ),
+  );
 
   beforeEach(() => {
     // resetAllMocks (not clearAllMocks) so per-test persistent setters like
@@ -288,6 +320,144 @@ describe('GoogleInteractionsProvider', () => {
       metadata: { interactionId: 'interaction-robotics-1', status: 'completed' },
     });
     expect(result.video).toBeUndefined();
+  });
+
+  it.each([
+    ['provider tool_choice', { tool_choice: 'none' as const }, undefined],
+    [
+      'provider toolConfig',
+      { toolConfig: { functionCallingConfig: { mode: 'NONE' as const } } },
+      undefined,
+    ],
+    [
+      'provider tool_config',
+      { tool_config: { function_calling_config: { mode: 'none' as const } } },
+      undefined,
+    ],
+    ['prompt tool_choice', {}, { tool_choice: 'none' as const }],
+    ['prompt toolConfig', {}, { toolConfig: { functionCallingConfig: { mode: 'NONE' as const } } }],
+    [
+      'prompt tool_config',
+      {},
+      { tool_config: { function_calling_config: { mode: 'none' as const } } },
+    ],
+  ])('disables inherited Interactions managed tools for %s', async (_, providerPolicy, promptPolicy) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-tools-disabled',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'no tools' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        passthrough: { tools: [{ type: 'google_search' }] },
+        ...providerPolicy,
+      },
+    });
+
+    await provider.callApi(
+      'Do not search.',
+      promptPolicy ? ({ prompt: { config: promptPolicy } } as any) : undefined,
+    );
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body).not.toHaveProperty('tools');
+    expect(body.generation_config).toMatchObject({ tool_choice: 'none' });
+  });
+
+  it('lets a prompt-level auto policy re-enable inherited Interactions tools', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-tools-reenabled',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'searched' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        apiKey: 'test-key',
+        tool_choice: 'none',
+        passthrough: { tools: [{ type: 'google_search' }] },
+      },
+    });
+
+    await provider.callApi('Search if needed.', {
+      prompt: { config: { tool_choice: 'auto' } },
+    } as any);
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.tools).toEqual([{ type: 'google_search' }]);
+    expect(body.generation_config?.tool_choice).not.toBe('none');
+  });
+
+  it('removes disabled inherited tools before Omni unsupported-tool validation', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-omni-tools-disabled',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'video', data: 'dmlkZW8=' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        apiKey: 'test-key',
+        tool_choice: 'none',
+        passthrough: { tools: [{ type: 'google_search' }] },
+      },
+    });
+
+    const result = await provider.callApi('Create a video without tools.');
+
+    expect(result.error).toBeUndefined();
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body).not.toHaveProperty('tools');
+    expect(body.generation_config?.tool_choice).toBeUndefined();
+  });
+
+  it.each(
+    disabledInheritedToolCases,
+  )('ignores inherited $source.name for $model.name when prompt uses $policy.name', async ({
+    model,
+    source,
+    policy,
+  }) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-inherited-tools-disabled',
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [model.responseContent] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider(model.id, {
+      config: {
+        apiKey: 'test-key',
+        ...source.config,
+      } as any,
+    });
+
+    const result = await provider.callApi('Do not use tools.', {
+      prompt: { config: policy.config },
+    } as any);
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledOnce();
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body).not.toHaveProperty('tools');
+    if (model.name === 'Robotics') {
+      expect(body.generation_config).toMatchObject({ tool_choice: 'none' });
+    } else {
+      expect(body.generation_config?.tool_choice).toBeUndefined();
+    }
   });
 
   it('preserves Interactions grounding annotations and Google Search steps', async () => {
@@ -2509,6 +2679,383 @@ describe('GoogleInteractionsProvider', () => {
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      name: 'an explicit API key',
+      config: { apiKey: 'vertex-express-key' },
+      env: undefined,
+    },
+    {
+      name: 'expressMode with VERTEX_API_KEY',
+      config: { expressMode: true },
+      env: { VERTEX_API_KEY: 'vertex-express-key' },
+    },
+    {
+      name: 'expressMode overriding projectId with VERTEX_API_KEY',
+      config: { expressMode: true, projectId: 'configured-project' },
+      env: { VERTEX_API_KEY: 'vertex-express-key' },
+    },
+  ])('uses Vertex Express authentication for Robotics with $name', async ({ config, env }) => {
+    const oauthSpy = vi
+      .spyOn(GoogleAuthManager, 'getOAuthClient')
+      .mockRejectedValue(new Error('OAuth must not run for Vertex Express'));
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'Move forward.' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: { vertexai: true, ...config },
+      env,
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(oauthSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/interactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'Api-Revision': '2026-05-20',
+          'x-goog-api-key': 'vertex-express-key',
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it('prefers provider-scoped GOOGLE_API_KEY over process VERTEX_API_KEY for Vertex Express', async () => {
+    vi.stubEnv('VERTEX_API_KEY', 'ambient-vertex-key');
+    const oauthSpy = vi
+      .spyOn(GoogleAuthManager, 'getOAuthClient')
+      .mockRejectedValue(new Error('OAuth must not run for Vertex Express'));
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: { vertexai: true },
+      env: { GOOGLE_API_KEY: 'provider-google-key' },
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(oauthSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/interactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'provider-google-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it('rejects regional Vertex Express Interactions before network I/O', async () => {
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: {
+        vertexai: true,
+        apiKey: 'vertex-express-key',
+        region: 'europe-west1',
+      },
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toContain('Vertex Express');
+    expect(result.error).toContain('global');
+    expect(result.error).toContain('expressMode: false');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('accepts provider-scoped global for Vertex Express over process VERTEX_REGION', async () => {
+    vi.stubEnv('VERTEX_REGION', 'europe-west1');
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: { vertexai: true, apiKey: 'vertex-express-key' },
+      env: { GOOGLE_CLOUD_LOCATION: 'global' },
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/interactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'vertex-express-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it('uses provider-scoped VERTEX_API_KEY with global region for Vertex Express', async () => {
+    const oauthSpy = vi
+      .spyOn(GoogleAuthManager, 'getOAuthClient')
+      .mockRejectedValue(new Error('OAuth must not run for Vertex Express'));
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: { vertexai: true, region: 'global' },
+      env: { VERTEX_API_KEY: 'provider-vertex-key' },
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(oauthSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/interactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'provider-vertex-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it('keeps an explicit project on Vertex OAuth despite provider-scoped VERTEX_API_KEY', async () => {
+    const endpoint =
+      'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions';
+    const getRequestHeaders = vi
+      .fn()
+      .mockResolvedValue(new Headers({ Authorization: 'Bearer vertex-token' }));
+    const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: { vertexai: true, projectId: 'configured-project' },
+      env: { VERTEX_API_KEY: 'provider-vertex-key' },
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(getOAuthClient).toHaveBeenCalledTimes(1);
+    expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(request.headers).not.toHaveProperty('x-goog-api-key');
+  });
+
+  for (const { conflictingField, conflictingValue } of [
+    { conflictingField: 'projectId', conflictingValue: 'configured-project' },
+    { conflictingField: 'region', conflictingValue: 'global' },
+  ]) {
+    it(`rejects strict explicit apiKey with ${conflictingField}`, () => {
+      expect(
+        () =>
+          new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+            config: {
+              vertexai: true,
+              apiKey: 'vertex-express-key',
+              [conflictingField]: conflictingValue,
+              strictMutualExclusivity: true,
+            },
+          }),
+      ).toThrow('Project/location and API key are mutually exclusive');
+    });
+  }
+
+  it.each([
+    { name: 'provider-scoped', env: { GOOGLE_API_KEY: 'unrelated-key' } },
+    { name: 'process-scoped', env: undefined },
+  ])('keeps project and regional Vertex OAuth when an unrelated $name GOOGLE_API_KEY exists', async ({
+    name,
+    env,
+  }) => {
+    if (name === 'process-scoped') {
+      vi.stubEnv('GOOGLE_API_KEY', 'unrelated-key');
+    }
+    const endpoint =
+      'https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/europe-west1/interactions';
+    const oauthHeaders = new Headers({
+      Authorization: 'Bearer vertex-token',
+      'x-goog-user-project': 'quota-project',
+    });
+    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
+    const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        region: 'europe-west1',
+      },
+      env,
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(getOAuthClient).toHaveBeenCalledTimes(1);
+    expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer vertex-token',
+          'x-goog-user-project': 'quota-project',
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(request.headers).not.toHaveProperty('x-goog-api-key');
+  });
+
+  it.each([
+    {
+      name: 'provider-scoped GOOGLE_CLOUD_PROJECT',
+      env: { GOOGLE_API_KEY: 'unrelated-key', GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      processEnv: {},
+      endpoint:
+        'https://aiplatform.googleapis.com/v1beta1/projects/provider-project/locations/global/interactions',
+    },
+    {
+      name: 'process-scoped GOOGLE_CLOUD_PROJECT',
+      env: undefined,
+      processEnv: {
+        GOOGLE_API_KEY: 'unrelated-key',
+        GOOGLE_CLOUD_PROJECT: 'process-project',
+      },
+      endpoint:
+        'https://aiplatform.googleapis.com/v1beta1/projects/process-project/locations/global/interactions',
+    },
+    {
+      name: 'provider-scoped GOOGLE_CLOUD_LOCATION',
+      env: { GOOGLE_API_KEY: 'unrelated-key', GOOGLE_CLOUD_LOCATION: 'europe-west1' },
+      processEnv: {},
+      endpoint:
+        'https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/detected-project/locations/europe-west1/interactions',
+    },
+    {
+      name: 'process-scoped GOOGLE_CLOUD_LOCATION',
+      env: undefined,
+      processEnv: {
+        GOOGLE_API_KEY: 'unrelated-key',
+        GOOGLE_CLOUD_LOCATION: 'europe-west1',
+      },
+      endpoint:
+        'https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/detected-project/locations/europe-west1/interactions',
+    },
+  ])('treats $name as Vertex OAuth intent despite an unrelated API key', async ({
+    env,
+    processEnv,
+    endpoint,
+  }) => {
+    vi.stubEnv('VERTEX_API_KEY', '');
+    for (const [name, value] of Object.entries(processEnv)) {
+      vi.stubEnv(name, value);
+    }
+    const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
+    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
+    const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      id: 'vertex:gemini-robotics-er-2-preview',
+      config: { vertexai: true },
+      env,
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    expect(result.error).toBeUndefined();
+    expect(getOAuthClient).toHaveBeenCalledTimes(1);
+    expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    expect(request.headers).not.toHaveProperty('x-goog-api-key');
+  });
+
   it('routes Vertex Omni through the global Interactions endpoint with OAuth authentication', async () => {
     const oauthHeaders = new Headers();
     oauthHeaders.set('Authorization', 'Bearer vertex-token');
@@ -2573,6 +3120,51 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
+  it('uses a provider-scoped GOOGLE_CLOUD_LOCATION for Vertex Interactions', async () => {
+    vi.stubEnv('VERTEX_REGION', 'europe-west1');
+    const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
+    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'Move forward.' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { vertexai: true, projectId: 'configured-project' },
+      env: { GOOGLE_CLOUD_LOCATION: 'us-central1' },
+    });
+
+    const result = await provider.callApi('Move the block.');
+
+    const endpoint =
+      'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/us-central1/interactions';
+    expect(result.error).toBeUndefined();
+    expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
   it.each([
     [
       'top-level provider options',
@@ -2628,10 +3220,11 @@ describe('GoogleInteractionsProvider', () => {
   it('allows Vertex Robotics follow-up interactions', async () => {
     const oauthHeaders = new Headers();
     oauthHeaders.set('Authorization', 'Bearer vertex-token');
-    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
+    const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
       client: {
         getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-        getRequestHeaders: vi.fn().mockResolvedValue(oauthHeaders),
+        getRequestHeaders,
       },
       projectId: 'detected-project',
     });
@@ -2659,10 +3252,69 @@ describe('GoogleInteractionsProvider', () => {
     const result = await provider.callApi('Continue the movement plan.');
 
     expect(result.error).toBeUndefined();
+    expect(getOAuthClient).toHaveBeenCalledTimes(1);
+    expect(getRequestHeaders).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
+    );
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
     const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(request.body as string)).toMatchObject({
       model: 'gemini-robotics-er-2-preview',
       previous_interaction_id: 'interaction-0',
+    });
+  });
+
+  it('uses a model-neutral error for Vertex Interactions authentication failures', async () => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockRejectedValueOnce(
+      new Error('credential lookup failed'),
+    );
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { vertexai: true },
+    });
+
+    await expect(provider.callApi('Move the block.')).resolves.toEqual({
+      error:
+        'Gemini Interactions on Vertex AI authentication error: Error: credential lookup failed',
+    });
+  });
+
+  it('uses a model-neutral error when Vertex Interactions cannot resolve a project', async () => {
+    vi.stubEnv('VERTEX_PROJECT_ID', '');
+    vi.stubEnv('GOOGLE_PROJECT_ID', '');
+    vi.stubEnv('GOOGLE_CLOUD_PROJECT', '');
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: { getAccessToken: vi.fn() },
+      projectId: undefined,
+    });
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { vertexai: true },
+    });
+
+    await expect(provider.callApi('Move the block.')).resolves.toEqual({
+      error:
+        'Gemini Interactions on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
+    });
+  });
+
+  it('uses a model-neutral error when Vertex Interactions cannot obtain an access token', async () => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: { getAccessToken: vi.fn().mockResolvedValue(undefined) },
+      projectId: 'configured-project',
+    });
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { vertexai: true, projectId: 'configured-project' },
+    });
+
+    await expect(provider.callApi('Move the block.')).resolves.toEqual({
+      error: 'Gemini Interactions on Vertex AI could not obtain an OAuth access token.',
     });
   });
 
@@ -2924,6 +3576,184 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it.each([
+    ['apiHost', { apiHost: 'https://prompt-host.example' }],
+    ['apiBaseUrl', { apiBaseUrl: 'https://prompt-base.example/google' }],
+  ])('keeps AI Studio authentication and transport provider-scoped when the prompt supplies %s', async (_field, endpointOverride) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'safe' }] }],
+      },
+      cached: false,
+    } as any);
+    const oauthSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        vertexai: false,
+        apiKey: 'provider-key',
+        apiBaseUrl: 'https://provider-base.example/google',
+        headers: { 'x-provider-header': 'provider-value' },
+      },
+    });
+
+    const result = await provider.callApi('move the block', {
+      prompt: {
+        config: {
+          ...endpointOverride,
+          apiKey: 'prompt-key',
+          headers: {
+            Authorization: 'Bearer prompt-token',
+            'x-goog-api-key': 'prompt-header-key',
+          },
+        },
+      },
+    } as any);
+
+    expect(result.error).toBeUndefined();
+    expect(oauthSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'https://provider-base.example/google/v1beta/interactions',
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'application/json',
+          'Api-Revision': '2026-05-20',
+          'x-goog-api-key': 'provider-key',
+          'x-provider-header': 'provider-value',
+        },
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it.each([
+    ['apiHost', { apiHost: 'https://prompt-vertex-host.example' }],
+    ['apiBaseUrl', { apiBaseUrl: 'https://prompt-vertex-base.example' }],
+  ])('keeps Vertex authentication and transport provider-scoped when the prompt supplies %s', async (_field, endpointOverride) => {
+    const oauthHeaders = new Headers({ Authorization: 'Bearer provider-token' });
+    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
+    const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'provider-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'safe' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: {
+        vertexai: true,
+        apiBaseUrl: 'https://provider-vertex.example',
+        projectId: 'provider-project',
+        region: 'provider-region',
+        credentials: 'provider-credentials',
+        googleAuthOptions: { universeDomain: 'provider.example' },
+        keyFilename: '/provider/key.json',
+        scopes: ['provider-scope'],
+        headers: { 'x-provider-header': 'provider-value' },
+      },
+    });
+
+    const result = await provider.callApi('move the block', {
+      prompt: {
+        config: {
+          ...endpointOverride,
+          projectId: 'prompt-project',
+          region: 'prompt-region',
+          credentials: 'prompt-credentials',
+          googleAuthOptions: { universeDomain: 'prompt.example' },
+          keyFilename: '/prompt/key.json',
+          scopes: ['prompt-scope'],
+          headers: { Authorization: 'Bearer prompt-token' },
+        },
+      },
+    } as any);
+
+    const providerEndpoint =
+      'https://provider-vertex.example/v1beta1/projects/provider-project/locations/provider-region/interactions';
+    expect(result.error).toBeUndefined();
+    expect(getOAuthClient).toHaveBeenCalledWith({
+      credentials: 'provider-credentials',
+      googleAuthOptions: { universeDomain: 'provider.example' },
+      keyFilename: '/provider/key.json',
+      scopes: ['provider-scope'],
+    });
+    expect(getRequestHeaders).toHaveBeenCalledWith(providerEndpoint);
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      providerEndpoint,
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'application/json',
+          'Api-Revision': '2026-05-20',
+          Authorization: 'Bearer provider-token',
+          'x-provider-header': 'provider-value',
+        },
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it.each([
+    {
+      name: 'AI Studio',
+      providerConfig: { vertexai: false, apiKey: 'provider-key' },
+      promptConfig: { vertexai: true },
+      endpoint: 'https://generativelanguage.googleapis.com/v1beta/interactions',
+      usesOAuth: false,
+    },
+    {
+      name: 'Vertex',
+      providerConfig: { vertexai: true, projectId: 'provider-project' },
+      promptConfig: { vertexai: false, apiKey: 'prompt-key' },
+      endpoint:
+        'https://aiplatform.googleapis.com/v1beta1/projects/provider-project/locations/global/interactions',
+      usesOAuth: true,
+    },
+  ])('does not let a prompt switch the provider-scoped $name authentication mode', async (testCase) => {
+    const oauthHeaders = new Headers({ Authorization: 'Bearer provider-token' });
+    const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'provider-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(oauthHeaders),
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'safe' }] }],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: testCase.providerConfig,
+    });
+
+    const result = await provider.callApi('move the block', {
+      prompt: { config: testCase.promptConfig },
+    } as any);
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      testCase.endpoint,
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+    expect(getOAuthClient).toHaveBeenCalledTimes(testCase.usesOAuth ? 1 : 0);
+  });
+
+  it.each([
     [
       { apiHost: 'http://127.0.0.1:15500/proxy' },
       { GOOGLE_API_HOST: 'wrong.example' },
@@ -2975,6 +3805,52 @@ describe('GoogleInteractionsProvider', () => {
     await expect(provider.callApi('make it rainy')).resolves.toMatchObject({
       error: 'Gemini interaction timed out after 0ms (status: in_progress)',
     });
+  });
+
+  it('uses a prompt timeout of zero instead of the provider polling timeout', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: { id: 'interaction-prompt-timeout', status: 'in_progress' },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 30 },
+    });
+
+    await expect(
+      provider.callApi('make it rainy', {
+        prompt: { config: { timeoutMs: 0 } },
+      } as any),
+    ).resolves.toMatchObject({
+      error: 'Gemini interaction timed out after 0ms (status: in_progress)',
+    });
+  });
+
+  it('falls back to the provider polling timeout when the prompt omits it', async () => {
+    mockFetchWithCache
+      .mockResolvedValueOnce({
+        data: { id: 'interaction-provider-timeout', status: 'in_progress' },
+        cached: false,
+      } as any)
+      .mockResolvedValueOnce({
+        data: {
+          id: 'interaction-provider-timeout',
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'done' }] }],
+        },
+        cached: false,
+      } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 30 },
+    });
+
+    const result = await provider.callApi('move the block', {
+      prompt: { config: {} },
+    } as any);
+
+    const pollTimeoutMs = mockFetchWithCache.mock.calls[1][2] as number;
+    expect(result.error).toBeUndefined();
+    expect(pollTimeoutMs).toBeGreaterThan(0);
+    expect(pollTimeoutMs).toBeLessThanOrEqual(30);
   });
 
   it('surfaces a terminal non-completed interaction status', async () => {

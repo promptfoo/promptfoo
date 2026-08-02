@@ -199,6 +199,22 @@ const MISTRAL_CHAT_MODELS = [
       output: 0.2 / 1000000,
     },
   })),
+  // Leanstral 1.5 public preview (retires 2026-09-30).
+  {
+    id: 'labs-leanstral-1-5',
+    cost: {
+      input: 0,
+      output: 0,
+    },
+  },
+  // Voxtral Small token pricing. Mistral bills audio input separately per minute.
+  {
+    id: 'voxtral-small-2507',
+    cost: {
+      input: 0.1 / 1000000,
+      output: 0.3 / 1000000,
+    },
+  },
   // Devstral 2 (deprecated 2026-05-22) — retained for historical cost scoring.
   ...[
     'devstral-2512',

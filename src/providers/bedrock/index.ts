@@ -6,10 +6,10 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
-  isAlwaysOnAdaptiveThinkingClaudeModel,
+  isClaudeFableOrMythos5Model,
+  isClaudeSonnet5Model,
   isSamplingParamsDeprecatedClaudeModel,
   isThinkingOnByDefaultClaudeModel,
-  normalizeClaudeThinkingConfig,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -17,7 +17,11 @@ import { parseChatPrompt } from '../shared';
 import { requiresBedrockAnthropicMessagesModel } from './anthropicMessages';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockInvokeModelCost } from './pricing';
-import { novaOutputFromMessage, novaParseMessages } from './util';
+import {
+  normalizeBedrockClaudeThinkingConfig,
+  novaOutputFromMessage,
+  novaParseMessages,
+} from './util';
 
 import type {
   ApiEmbeddingProvider,
@@ -1626,7 +1630,8 @@ export const BEDROCK_MODEL = {
       // default ones. That may well be the right default here too, but it is a behavior
       // change for existing configs and belongs in its own change.
       const thinksByDefault = modelName
-        ? isThinkingOnByDefaultClaudeModel(modelName) && config?.thinking?.type !== 'disabled'
+        ? isClaudeSonnet5Model(modelName) ||
+          (isThinkingOnByDefaultClaudeModel(modelName) && config?.thinking?.type !== 'disabled')
         : false;
       addConfigParam(
         params,
@@ -1658,18 +1663,18 @@ export const BEDROCK_MODEL = {
       // Like the sampling-param drop above, the forced-tool-choice and
       // disabled-thinking drops below normalize silently — the Converse and
       // Anthropic Messages providers surface the one-time warnings.
-      const alwaysOnAdaptiveThinking = modelName
-        ? isAlwaysOnAdaptiveThinkingClaudeModel(modelName)
+      const forcedToolChoiceIncompatible = modelName
+        ? isClaudeFableOrMythos5Model(modelName)
         : false;
       const toolChoice =
-        alwaysOnAdaptiveThinking &&
+        forcedToolChoiceIncompatible &&
         (config?.tool_choice?.type === 'any' || config?.tool_choice?.type === 'tool')
           ? undefined
           : config?.tool_choice;
       addConfigParam(params, 'tool_choice', toolChoice, undefined, undefined);
       const thinking = modelName
         ? // InvokeModel exposes no effort field, so the effort-capped rules cannot apply here.
-          normalizeClaudeThinkingConfig(modelName, config?.thinking, undefined)
+          normalizeBedrockClaudeThinkingConfig(modelName, config?.thinking, undefined)
         : config?.thinking;
       addConfigParam(params, 'thinking', thinking, undefined, undefined);
       if (systemPrompt) {

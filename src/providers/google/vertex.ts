@@ -10,8 +10,6 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import { loadYaml } from '../../util/yamlLoad';
 import {
@@ -25,6 +23,7 @@ import {
   parseMessages,
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCostFromUsage,
@@ -38,6 +37,8 @@ import {
   mergeParts,
   normalizeGeminiAudio,
   normalizeSafetySettings,
+  omitUnsupportedGeminiSamplingControls,
+  parseConfigResponseSchema,
   parseConfigSystemInstruction,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -57,7 +58,6 @@ import type {
   ClaudeRequest,
   ClaudeResponse,
   ClaudeThinkingConfig,
-  CompletionOptions,
   GoogleProviderConfig,
 } from './types';
 import type {
@@ -403,9 +403,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
     let mergedSystem = system;
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const effectiveConfig = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const parsedConfigInstruction = parseConfigSystemInstruction(
-      this.config.systemInstruction,
+      effectiveConfig.systemInstruction,
       context?.vars,
+      promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
     );
     if (parsedConfigInstruction) {
       const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
@@ -635,17 +639,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -722,6 +729,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    body.generationConfig = omitUnsupportedGeminiSamplingControls(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -730,23 +741,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
         );
       }
 
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = parseConfigResponseSchema(
+        config.responseSchema,
+        context?.vars,
+        promptConfig?.responseSchema === undefined ? this.config.basePath : promptBasePath,
       );
 
-      // Parse JSON string if it's a string (not loaded from file)
-      if (typeof schema === 'string') {
-        try {
-          schema = JSON.parse(schema);
-        } catch (error) {
-          throw new Error(`Invalid JSON in responseSchema: ${error}`);
-        }
-      }
-
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
-
-      body.generationConfig.response_schema = schema;
+      body.generationConfig.response_schema = schema as any;
       body.generationConfig.response_mime_type = 'application/json';
     }
 
@@ -1348,7 +1349,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getRegion(): string {
-    return this.config.region || 'us-central1';
+    return GoogleAuthManager.resolveRegion(this.config, this.env);
   }
 
   getApiVersion(): string {

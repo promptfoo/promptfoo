@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createCerebrasProvider } from '../../src/providers/cerebras';
+import { calculateCerebrasCost, createCerebrasProvider } from '../../src/providers/cerebras';
 import { loadApiProvider } from '../../src/providers/index';
 import { mockProcessEnv } from '../util/utils';
 import type { z } from 'zod';
@@ -180,6 +180,51 @@ describe('Cerebras provider', () => {
       );
       expect(body.max_tokens).toBe(1024);
       expect(body.max_completion_tokens).toBeUndefined();
+    });
+  });
+
+  describe('calculateCerebrasCost', () => {
+    it.each([
+      ['gpt-oss-120b', 1.1],
+      ['gemma-4-31b', 2.48],
+      ['zai-glm-4.7', 5],
+    ])('calculates the published cost for %s', (model, expectedCost) => {
+      expect(calculateCerebrasCost(model, {}, 1_000_000, 1_000_000)).toBeCloseTo(expectedCost, 10);
+    });
+
+    it('returns undefined for unknown models or incomplete usage', () => {
+      expect(calculateCerebrasCost('unknown-model', {}, 1_000_000, 1_000_000)).toBeUndefined();
+      expect(calculateCerebrasCost('gpt-oss-120b', {}, undefined, 1_000_000)).toBeUndefined();
+      expect(calculateCerebrasCost('gpt-oss-120b', {}, 1_000_000, undefined)).toBeUndefined();
+    });
+
+    it('honors explicit input and output cost overrides', () => {
+      expect(
+        calculateCerebrasCost(
+          'gpt-oss-120b',
+          { inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBeCloseTo(3, 10);
+    });
+
+    it('reports the published model cost through the provider response hook', () => {
+      const provider = createCerebrasProvider('cerebras:gpt-oss-120b') as unknown as {
+        calculateResponseCost(
+          data: Record<string, unknown>,
+          config: Record<string, unknown>,
+          cached: boolean,
+        ): number | undefined;
+      };
+
+      const cost = provider.calculateResponseCost(
+        { usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 } },
+        {},
+        false,
+      );
+
+      expect(cost).toBeCloseTo(1.1, 10);
     });
   });
 

@@ -318,6 +318,14 @@ describe('GoogleAuthManager', () => {
       expect(GoogleAuthManager.determineVertexMode({})).toBe(true);
     });
 
+    it('should auto-detect vertex mode from provider-scoped GOOGLE_CLOUD_PROJECT', () => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      expect(
+        GoogleAuthManager.determineVertexMode({}, { GOOGLE_CLOUD_PROJECT: 'provider-project' }),
+      ).toBe(true);
+    });
+
     it('should auto-detect vertex mode from credentials config', () => {
       vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
@@ -370,6 +378,41 @@ describe('GoogleAuthManager', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('Both GOOGLE_CLOUD_PROJECT and config.projectId are set'),
+      );
+    });
+
+    it('should use provider-scoped GOOGLE_CLOUD_PROJECT for conflict checks', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'GOOGLE_CLOUD_PROJECT') {
+          return 'process-project';
+        }
+        return defaultValue as string;
+      });
+
+      GoogleAuthManager.validateAndWarn(
+        { projectId: 'provider-project' },
+        { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      );
+
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Both GOOGLE_CLOUD_PROJECT and config.projectId are set'),
+      );
+    });
+
+    it.each([
+      'VERTEX_PROJECT_ID',
+      'GOOGLE_PROJECT_ID',
+      'GOOGLE_CLOUD_PROJECT',
+    ] as const)('should recognize provider-scoped %s as a Vertex project', (projectEnvName) => {
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+
+      GoogleAuthManager.validateAndWarn(
+        { vertexai: true },
+        { [projectEnvName]: 'provider-project' },
+      );
+
+      expect(logger.debug).not.toHaveBeenCalledWith(
+        expect.stringContaining('Vertex AI mode enabled but no projectId'),
       );
     });
 
@@ -456,6 +499,34 @@ describe('GoogleAuthManager', () => {
     });
   });
 
+  describe('resolveProjectId', () => {
+    it('should prefer provider-scoped GOOGLE_CLOUD_PROJECT over process aliases and ADC', async () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'VERTEX_PROJECT_ID') {
+          return 'process-vertex-project';
+        }
+        if (key === 'GOOGLE_PROJECT_ID') {
+          return 'process-google-project';
+        }
+        if (key === 'GOOGLE_CLOUD_PROJECT') {
+          return 'process-cloud-project';
+        }
+        return defaultValue as string;
+      });
+      const oauthSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValue({
+        client: {},
+        projectId: 'adc-project',
+      });
+
+      await expect(
+        GoogleAuthManager.resolveProjectId({}, { GOOGLE_CLOUD_PROJECT: 'provider-cloud-project' }),
+      ).resolves.toBe('provider-cloud-project');
+      expect(oauthSpy).not.toHaveBeenCalled();
+
+      oauthSpy.mockRestore();
+    });
+  });
+
   describe('resolveRegion', () => {
     it('should prioritize config.region', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
@@ -488,6 +559,32 @@ describe('GoogleAuthManager', () => {
       });
 
       expect(GoogleAuthManager.resolveRegion({})).toBe('cloud-location');
+    });
+
+    it('should prefer a provider-scoped GOOGLE_CLOUD_LOCATION override', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'GOOGLE_CLOUD_LOCATION') {
+          return 'process-location';
+        }
+        return defaultValue as string;
+      });
+
+      expect(
+        GoogleAuthManager.resolveRegion({}, { GOOGLE_CLOUD_LOCATION: 'provider-location' }),
+      ).toBe('provider-location');
+    });
+
+    it('should prefer provider-scoped GOOGLE_CLOUD_LOCATION over process VERTEX_REGION', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'VERTEX_REGION') {
+          return 'process-vertex-region';
+        }
+        return defaultValue as string;
+      });
+
+      expect(
+        GoogleAuthManager.resolveRegion({}, { GOOGLE_CLOUD_LOCATION: 'provider-location' }),
+      ).toBe('provider-location');
     });
 
     it('should default to us-central1 when hasApiKey is undefined', () => {

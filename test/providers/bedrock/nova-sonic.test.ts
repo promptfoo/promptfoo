@@ -1,17 +1,29 @@
 import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
+import { fromSSO } from '@aws-sdk/credential-provider-sso';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { categorizeError, NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
+import { mockProcessEnv } from '../../util/utils';
+
+const nodeHttp2HandlerFactory = vi.hoisted(() => ({
+  handle: vi.fn(),
+}));
 
 vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    NodeHttp2Handler: vi.fn(),
+    NodeHttp2Handler: vi.fn().mockImplementation(function () {
+      return { handle: nodeHttp2HandlerFactory.handle };
+    }),
   };
 });
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: vi.fn(),
+}));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
   return {
@@ -162,6 +174,7 @@ describe('NovaSonic Provider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    nodeHttp2HandlerFactory.handle.mockReset();
     disableCache();
 
     mockSend = vi.fn().mockResolvedValue(createMockStreamResponse(standardTextResponse));
@@ -267,6 +280,124 @@ describe('NovaSonic Provider', () => {
       });
     });
 
+    it('should force SigV4 while preserving IAM credentials, profiles, endpoints, and the default chain', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'unsupported-bedrock-api-key',
+      });
+      const profileCredentials = vi.fn();
+      vi.mocked(fromSSO).mockReturnValue(profileCredentials);
+
+      try {
+        const explicitCredentialsProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+          config: {
+            accessKeyId: 'test-access-key',
+            secretAccessKey: 'test-secret-key',
+            sessionToken: 'test-session-token',
+            endpoint: 'https://bedrock.example.com',
+          },
+        });
+        await (explicitCredentialsProvider as any).getBedrockClient();
+
+        const explicitClientConfig = vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0];
+        expect(explicitClientConfig).toMatchObject({
+          authSchemePreference: ['sigv4'],
+          credentials: {
+            accessKeyId: 'test-access-key',
+            secretAccessKey: 'test-secret-key',
+            sessionToken: 'test-session-token',
+          },
+          endpoint: 'https://bedrock.example.com',
+        });
+
+        const profileProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+          config: { profile: 'test-profile' },
+        });
+        await (profileProvider as any).getBedrockClient();
+
+        expect(fromSSO).toHaveBeenCalledWith({ profile: 'test-profile' });
+        expect(vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0]).toMatchObject({
+          authSchemePreference: ['sigv4'],
+          credentials: profileCredentials,
+        });
+
+        const defaultChainProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0');
+        await (defaultChainProvider as any).getBedrockClient();
+
+        const defaultClientConfig = vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0];
+        expect(defaultClientConfig).toBeDefined();
+        expect(defaultClientConfig).toMatchObject({ authSchemePreference: ['sigv4'] });
+        expect(defaultClientConfig).not.toHaveProperty('credentials');
+        if (!defaultClientConfig) {
+          throw new Error('Expected the Nova Sonic provider to construct a Bedrock client');
+        }
+
+        const { BedrockRuntimeClient: ActualBedrockRuntimeClient } = await vi.importActual<
+          typeof import('@aws-sdk/client-bedrock-runtime')
+        >('@aws-sdk/client-bedrock-runtime');
+        const actualClient = new ActualBedrockRuntimeClient(defaultClientConfig);
+        expect(await actualClient.config.authSchemePreference()).toEqual(['sigv4']);
+        expect(actualClient.config.credentials).toEqual(expect.any(Function));
+        actualClient.destroy();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should ignore an inherited Bedrock API key and use the SigV4 default credential chain', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const apiKeyProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: { apiKey: 'inherited-unused-api-key' },
+      });
+
+      const result = await apiKeyProvider.callApi('Test prompt');
+
+      const clientConfig = vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0];
+      expect(clientConfig).toMatchObject({ authSchemePreference: ['sigv4'] });
+      expect(clientConfig).not.toHaveProperty('credentials');
+      expect(clientConfig).not.toHaveProperty('token');
+      expect(mockSend).toHaveBeenCalled();
+      expect(result.output).toContain('This is a test response');
+    });
+
+    it.each([
+      {
+        name: 'explicit credentials',
+        config: {
+          accessKeyId: 'test-access-key',
+          secretAccessKey: 'test-secret-key',
+          apiKey: 'unused-api-key',
+        },
+        expectedCredentials: {
+          accessKeyId: 'test-access-key',
+          secretAccessKey: 'test-secret-key',
+        },
+      },
+      {
+        name: 'an AWS profile',
+        config: { profile: 'test-profile', apiKey: 'unused-api-key' },
+        expectedCredentials: expect.any(Function),
+      },
+    ])('should preserve $name when an API key is also configured', async ({
+      config,
+      expectedCredentials,
+    }) => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const profileCredentials = vi.fn();
+      vi.mocked(fromSSO).mockReturnValue(profileCredentials);
+      const mixedCredentialsProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config,
+      });
+
+      await mixedCredentialsProvider.callApi('Test prompt');
+
+      expect(vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0]).toMatchObject({
+        authSchemePreference: ['sigv4'],
+        credentials: config.profile === undefined ? expectedCredentials : profileCredentials,
+      });
+      expect(mockSend).toHaveBeenCalled();
+    });
+
     it('should reject Nova 2 Sonic outside its published in-region endpoints', async () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
       const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
@@ -278,9 +409,57 @@ describe('NovaSonic Provider', () => {
       );
       expect(BedrockRuntimeClient).not.toHaveBeenCalled();
     });
+
+    it('should allow Nova 2 Sonic custom endpoints outside published regions and retain the signing region', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const testProvider = new NovaSonicProvider('amazon.nova-2-sonic-v1:0', {
+        config: {
+          region: 'eu-west-1',
+          endpoint: 'https://bedrock.internal.example',
+        },
+      });
+
+      await (testProvider as any).getBedrockClient();
+
+      expect(BedrockRuntimeClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          region: 'eu-west-1',
+          endpoint: 'https://bedrock.internal.example',
+          authSchemePreference: ['sigv4'],
+        }),
+      );
+    });
   });
 
   describe('API Interactions', () => {
+    it('should reach the stream client when constructed without options', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const defaultProvider = new NovaSonicProvider();
+
+      const result = await defaultProvider.callApi('Test prompt');
+
+      expect(BedrockRuntimeClient).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalledWith(
+        expect.objectContaining({ modelId: 'amazon.nova-sonic-v1:0' }),
+      );
+      expect(result).toMatchObject({ output: 'This is a test response\n' });
+    });
+
+    it('should reject turn detection for Nova Sonic v1 before opening a stream', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+      const configuredProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: {
+          turnDetectionConfiguration: { endpointingSensitivity: 'MEDIUM' },
+        },
+      });
+
+      await expect(configuredProvider.callApi('Test prompt')).rejects.toThrow(
+        'turnDetectionConfiguration is only supported by amazon.nova-2-sonic-v1:0',
+      );
+      expect(BedrockRuntimeClient).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
     it('should successfully call API and handle text response', async () => {
       const result = await provider.callApi('Test prompt');
 

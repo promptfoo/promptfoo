@@ -410,6 +410,17 @@ describe('calculateAzureCost', () => {
         500,
       ),
     ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+    for (const modelName of ['gpt-5.2-chat-2026-02-10', 'gpt-5.3-chat-2026-03-03']) {
+      expect(
+        calculateAzureCost(
+          modelName,
+          { passthrough: { service_tier: 'priority' } },
+          2_000,
+          1_000,
+          500,
+        ),
+      ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+    }
   });
 
   it.each([

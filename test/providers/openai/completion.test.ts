@@ -224,10 +224,23 @@ describe('OpenAI Provider', () => {
       expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
     });
 
-    it('should omit service tiers from first-party legacy Completion requests', async () => {
+    it.each([
+      undefined,
+      'https://us.api.openai.com/v1',
+      'https://eu.api.openai.com/v1',
+      'https://au.api.openai.com/v1',
+      'https://ca.api.openai.com/v1',
+      'https://jp.api.openai.com/v1',
+      'https://in.api.openai.com/v1',
+      'https://sg.api.openai.com/v1',
+      'https://kr.api.openai.com/v1',
+      'https://gb.api.openai.com/v1',
+      'https://ae.api.openai.com/v1',
+    ])('should omit service tiers from first-party legacy Completion requests at %s', async (apiBaseUrl) => {
       mockFetchWithCache.mockResolvedValueOnce(mockResponse);
       const provider = new OpenAiCompletionProvider('babbage-002', {
         config: {
+          apiBaseUrl,
           service_tier: 'default',
           passthrough: { service_tier: 'priority' },
         },

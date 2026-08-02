@@ -8,6 +8,30 @@
  */
 const GROQ_REASONING_MODEL_PATTERNS = ['gpt-oss', 'qwen'] as const;
 
+const GROQ_CHAT_SERVICE_TIERS = new Set(['auto', 'on_demand', 'flex', 'performance', null]);
+const GROQ_RESPONSES_SERVICE_TIERS = new Set(['auto', 'default', 'flex']);
+
+function assertGroqServiceTier(
+  serviceTier: unknown,
+  endpoint: 'Chat Completions' | 'Responses',
+  supportedTiers: ReadonlySet<unknown>,
+): void {
+  if (serviceTier !== undefined && !supportedTiers.has(serviceTier)) {
+    throw new Error(
+      `Invalid Groq ${endpoint} service_tier ${JSON.stringify(serviceTier)}. ` +
+        `Use one of: ${[...supportedTiers].map((tier) => JSON.stringify(tier)).join(', ')}.`,
+    );
+  }
+}
+
+export function assertGroqChatServiceTier(serviceTier: unknown): void {
+  assertGroqServiceTier(serviceTier, 'Chat Completions', GROQ_CHAT_SERVICE_TIERS);
+}
+
+export function assertGroqResponsesServiceTier(serviceTier: unknown): void {
+  assertGroqServiceTier(serviceTier, 'Responses', GROQ_RESPONSES_SERVICE_TIERS);
+}
+
 /**
  * Check if a model name corresponds to a Groq reasoning model.
  * Groq's reasoning models include GPT-OSS and current Qwen variants.

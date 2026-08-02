@@ -75,6 +75,7 @@ Key configuration options:
 - `seed`: For deterministic sampling (best effort)
 - `frequency_penalty`: Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far
 - `parallel_tool_calls`: Whether to enable parallel function calling during tool use (default: true)
+- `service_tier`: Groq Chat Completions accepts `auto`, `on_demand` (the default), `flex`, or `performance`. `null` also uses Groq's default selection.
 - `reasoning_format`: For reasoning models, controls how reasoning is presented. Options: `'parsed'` (separate field), `'raw'` (with think tags), `'hidden'` (no reasoning shown). Note: `parsed` or `hidden` required when using JSON mode or tool calls.
 - `include_reasoning`: For GPT-OSS models, set to `false` to hide reasoning output (default: `true`)
 - `reasoning_effort`: For reasoning models, controls the level of reasoning effort. Options: `'low'`, `'medium'`, `'high'` for GPT-OSS models; `'none'`, `'default'` for Qwen models
@@ -383,6 +384,10 @@ prompts:
       {"role": "user", "content": "What is the capital of France?"}
     ]
 ```
+
+Responses has a different service-tier contract from Chat Completions: set `service_tier` to
+`auto` (the default), `default`, or `flex`. Promptfoo validates the endpoint-specific values before
+sending the request. See [Groq service tiers](https://console.groq.com/docs/service-tiers).
 
 ### Key Differences from Chat Completions API
 

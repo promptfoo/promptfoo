@@ -3,11 +3,11 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - cohere:command
+  - cohere:command-a-03-2025
 
 defaultTest:
   provider:
-    embedding: cohere:embedding:embed-english-v3:0
+    embedding: cohere:embedding:embed-v4.0
 
 tests:
   - vars:

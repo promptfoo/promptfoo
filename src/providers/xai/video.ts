@@ -21,6 +21,8 @@ import {
   DEFAULT_POLL_INTERVAL_MS,
   formatVideoOutput,
   generateVideoCacheKey,
+  isVideoCacheReferenceUrlSafe,
+  sanitizeVideoCacheReferenceUrl,
   storeCacheMapping,
   storeVideoContent,
 } from '../video';
@@ -215,22 +217,45 @@ function normalizeReferenceAudioVoiceId(voiceId: string): string {
   return voiceId.trim().toLowerCase();
 }
 
-function buildVideoInputReference(config: XaiVideoOptions): string | null {
+function buildVideoInputReference(
+  modelName: XaiVideoModel,
+  config: XaiVideoOptions,
+): string | null {
   if (config.image?.url) {
-    return `image:${config.image.url}`;
+    const imageUrl = isGrokImagineVideo15Model(modelName)
+      ? sanitizeVideoCacheReferenceUrl(config.image.url)
+      : config.image.url;
+    return `image:${imageUrl}`;
   }
 
-  if (!config.reference_images?.length && !config.reference_audios?.length) {
+  const referenceImages = config.reference_images?.map(({ url }) => url) ?? [];
+  const referenceAudios =
+    config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
+  if (!referenceImages.length && !referenceAudios.length) {
     return null;
+  }
+
+  if (modelName === DEFAULT_MODEL && referenceImages.length && !referenceAudios.length) {
+    return `reference_images:${referenceImages.join('|')}`;
   }
 
   return JSON.stringify({
     type: 'xai-reference-media',
-    reference_images: config.reference_images?.map(({ url }) => url) ?? [],
-    reference_audios:
-      config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ??
-      [],
+    reference_images: referenceImages.map(sanitizeVideoCacheReferenceUrl),
+    reference_audios: referenceAudios,
   });
+}
+
+function canUsePersistentCache(modelName: XaiVideoModel, config: XaiVideoOptions): boolean {
+  if (!isGrokImagineVideo15Model(modelName)) {
+    return true;
+  }
+
+  const inputUrls = [
+    ...(config.image?.url ? [config.image.url] : []),
+    ...(config.reference_images?.map(({ url }) => url) ?? []),
+  ];
+  return inputUrls.every(isVideoCacheReferenceUrlSafe);
 }
 
 /**
@@ -568,7 +593,7 @@ export class XAIVideoProvider implements ApiProvider {
    */
   private async downloadAndStoreVideo(
     videoUrl: string,
-    cacheKey: string,
+    cacheKey: string | undefined,
     evalId?: string,
   ): Promise<{ storageKey?: string; error?: string }> {
     try {
@@ -591,7 +616,7 @@ export class XAIVideoProvider implements ApiProvider {
           contentType: 'video/mp4',
           mediaType: 'video',
           evalId,
-          contentHash: cacheKey,
+          ...(cacheKey ? { contentHash: cacheKey } : {}),
         },
         PROVIDER_NAME,
       );
@@ -655,18 +680,24 @@ export class XAIVideoProvider implements ApiProvider {
       return { error: generationParameterError };
     }
 
-    // Generate cache key (skip caching for edits)
-    const cacheKey = generateVideoCacheKey({
-      provider: 'xai',
-      prompt,
-      model: this.modelName,
-      size: `${aspectRatio}:${resolution}`,
-      seconds: duration,
-      inputReference: buildVideoInputReference(config),
-    });
+    const persistentCacheAllowed = canUsePersistentCache(this.modelName, config);
+    const cacheKey = persistentCacheAllowed
+      ? generateVideoCacheKey({
+          provider: 'xai',
+          prompt,
+          model: this.modelName,
+          size: `${aspectRatio}:${resolution}`,
+          seconds: duration,
+          inputReference: buildVideoInputReference(this.modelName, config),
+        })
+      : undefined;
+
+    if (!persistentCacheAllowed) {
+      logger.debug(`[${PROVIDER_NAME}] Skipping persistent cache for credential-bearing input URL`);
+    }
 
     // Check cache (skip for edits)
-    if (!isEdit) {
+    if (!isEdit && cacheKey) {
       const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
       if (cachedVideoKey) {
         logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
@@ -766,7 +797,7 @@ export class XAIVideoProvider implements ApiProvider {
     const cost = reportedCost ?? estimatedCost;
 
     // Store cache mapping (skip for edits)
-    if (!isEdit) {
+    if (!isEdit && cacheKey) {
       await storeCacheMapping(cacheKey, storageKey, undefined, undefined, PROVIDER_NAME);
     }
 
@@ -791,7 +822,7 @@ export class XAIVideoProvider implements ApiProvider {
       },
       metadata: {
         requestId,
-        cacheKey,
+        ...(cacheKey ? { cacheKey } : {}),
         model: this.modelName,
         aspectRatio,
         ...(outputResolution ? { resolution: outputResolution } : {}),

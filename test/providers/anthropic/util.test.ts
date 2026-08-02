@@ -234,6 +234,21 @@ describe('Anthropic utilities', () => {
       expect(calculateAnthropicCost(model, {}, 100, 200)).toBeUndefined();
     });
 
+    it.each([
+      'claude-opus-4-6-latest',
+      'claude-sonnet-4-6-latest',
+      'claude-opus-4-5-latest',
+      'claude-sonnet-4-5-latest',
+      'claude-haiku-4-5-latest',
+      'claude-opus-4-latest',
+      'claude-sonnet-4-latest',
+    ])('should honor explicit pricing for compatibility alias %s', (model) => {
+      expect(calculateAnthropicCost(model, { cost: 0.02 }, 100, 200)).toBe(6);
+      expect(calculateAnthropicCost(model, { inputCost: 0.01, outputCost: 0.03 }, 100, 200)).toBe(
+        7,
+      );
+    });
+
     it('bills Claude Sonnet 4.5 at the standard rate below 200k tokens', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-5-20250929', {}, 150_000, 10_000);
       expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6

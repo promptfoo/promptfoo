@@ -36,6 +36,7 @@ import {
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
   normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -365,7 +366,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
-      ...(effectiveServiceTier === undefined ? {} : { service_tier: effectiveServiceTier }),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
       ...(capabilityModelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],

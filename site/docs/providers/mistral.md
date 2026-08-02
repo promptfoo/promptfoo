@@ -173,17 +173,23 @@ source of truth for availability and pricing.
 
 #### Current Models
 
-| Model                   | Context | Input Price | Output Price | Capabilities             | Best For                               |
-| ----------------------- | ------- | ----------- | ------------ | ------------------------ | -------------------------------------- |
-| `mistral-medium-latest` | 256k    | $1.50/1M    | $7.50/1M     | Text, vision, reasoning¹ | Agentic and coding-heavy workloads     |
-| `mistral-large-latest`  | 256k    | $0.50/1M    | $1.50/1M     | Text, vision             | General-purpose multimodal tasks       |
-| `mistral-small-latest`  | 256k    | $0.15/1M    | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding |
-| `codestral-latest`      | 128k    | $0.30/1M    | $0.90/1M     | Code, FIM                | Code generation and completion         |
-| `ministral-14b-latest`  | 256k    | $0.20/1M    | $0.20/1M     | Text, vision             | Compact multimodal deployments         |
-| `ministral-8b-latest`   | 256k    | $0.15/1M    | $0.15/1M     | Text, vision             | Efficient on-prem/edge deployments     |
-| `ministral-3b-latest`   | 256k    | $0.10/1M    | $0.10/1M     | Text, vision             | Smallest multimodal deployments        |
+| Model                   | Context | Input Price                    | Output Price | Capabilities             | Best For                               |
+| ----------------------- | ------- | ------------------------------ | ------------ | ------------------------ | -------------------------------------- |
+| `mistral-medium-latest` | 256k    | $1.50/1M                       | $7.50/1M     | Text, vision, reasoning¹ | Agentic and coding-heavy workloads     |
+| `mistral-large-latest`  | 256k    | $0.50/1M                       | $1.50/1M     | Text, vision             | General-purpose multimodal tasks       |
+| `mistral-small-latest`  | 256k    | $0.15/1M                       | $0.60/1M     | Text, vision, reasoning¹ | Hybrid instruct, reasoning, and coding |
+| `codestral-latest`      | 128k    | $0.30/1M                       | $0.90/1M     | Code, FIM                | Code generation and completion         |
+| `labs-leanstral-1-5`    | 256k    | $0 (Public Preview)            | $0           | Text, tools              | Lean 4 proof engineering               |
+| `voxtral-small-2507`    | 32k     | $0.10/1M + $0.004/audio minute | $0.30/1M     | Text, audio              | Audio-aware chat                       |
+| `ministral-14b-latest`  | 256k    | $0.20/1M                       | $0.20/1M     | Text, vision             | Compact multimodal deployments         |
+| `ministral-8b-latest`   | 256k    | $0.15/1M                       | $0.15/1M     | Text, vision             | Efficient on-prem/edge deployments     |
+| `ministral-3b-latest`   | 256k    | $0.10/1M                       | $0.10/1M     | Text, vision             | Smallest multimodal deployments        |
 
 ¹ Enable adjustable reasoning with `reasoning_effort: high`.
+
+Leanstral 1.5 is scheduled to retire September 30, 2026. Promptfoo's Voxtral Small cost estimate
+uses the reported text token counts; Mistral's separate audio-minute charge is not included unless
+the API reports that usage separately.
 
 :::note Aliases move — pin a snapshot for stability
 
@@ -224,6 +230,7 @@ promptfoo keeps these IDs so it can cost-score cached results. **Retired** IDs r
 11. `magistral-medium-2506`, `magistral-medium-2507` (retired); `magistral-medium-2509` and `magistral-medium-latest` (deprecated May 22, 2026 — use Mistral Medium 3.5)
 12. `devstral-2512`, `devstral-latest`, `devstral-medium-latest`, `mistral-code-agent-latest` (deprecated May 22, 2026 — use Mistral Medium 3.5)
 13. `open-mistral-nemo-2407`, `open-mistral-nemo`, `mistral-tiny-2407`, `mistral-tiny-latest` (deprecated May 22, 2026 — use Ministral 3 8B)
+14. `voxtral-mini-2507` (deprecated February 27, 2026 — use `voxtral-mini-2602` or `voxtral-mini-latest` for transcription; those replacements use Mistral's transcription endpoint rather than this chat provider)
 
 ### Embedding Models
 

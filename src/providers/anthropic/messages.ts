@@ -592,7 +592,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    * Three model-level rules apply, each verified against the live API:
    * - Manual budget thinking (`type: 'enabled'`) is rejected on adaptive-only models and is
    *   converted to `type: 'adaptive'`.
-   * - `type: 'disabled'` is rejected outright on always-on models (Fable 5 / Mythos 5), and on
+   * - `type: 'disabled'` is rejected outright on always-on models, and on
    *   Opus 5 when `effort` is `xhigh`/`max`. In both cases it is dropped rather than sent.
    * - On Opus 5 and Sonnet 5 an *omitted* thinking config still runs adaptive thinking, so it
    *   consumes output tokens — callers size the default `max_tokens` off this, and treating it
@@ -611,9 +611,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   ): {
     thinking: Anthropic.Messages.ThinkingConfigParam | undefined;
     /**
-     * Thinking was explicitly turned on (or is always on). Gates the legacy
-     * extended-thinking incompatibilities — forced `tool_choice`, `top_p` clamping,
-     * `top_k`/`temperature` omission.
+     * Thinking was explicitly turned on (or is always on). Callers combine this with
+     * model sampling capabilities before applying legacy extended-thinking restrictions.
      */
     thinkingEnabled: boolean;
     /**
@@ -625,11 +624,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   } {
     const { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
 
-    if (samplingParamsDeprecated && requested?.type === 'enabled') {
+    if ((samplingParamsDeprecated || alwaysOnAdaptiveThinking) && requested?.type === 'enabled') {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
-            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+            ? `Adaptive thinking is always on for ${modelWarningName}. Manual thinking budgets have been removed; use effort to control reasoning depth.`
             : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
         );
         this.manualThinkingConversionWarned = true;
@@ -637,7 +636,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
-          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+          `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
         );
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
@@ -755,12 +754,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       config.effort,
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
+    // Mythos Preview is always-on adaptive but, unlike the Claude 5 adaptive-sampling
+    // families, still accepts explicit sampling controls. Keep the legacy extended-thinking
+    // restrictions for every other family while preserving those supported controls here.
+    const thinkingConstrainsSamplingParams =
+      thinkingEnabled && !(alwaysOnAdaptiveThinking && !samplingParamsDeprecated);
 
     // Validate and warn about thinking-incompatible params. Skip when the model
     // deprecates sampling params entirely — the deduped model-level warning
     // below already covers the omission, and the "disable thinking" advice is
     // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
-    if (thinkingEnabled && !samplingParamsDeprecated) {
+    if (thinkingConstrainsSamplingParams && !samplingParamsDeprecated) {
       if (config.top_k != null) {
         logger.warn(
           'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
@@ -805,11 +809,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
     let resolvedTopP: number | undefined;
     if (config.top_p != null) {
-      resolvedTopP = thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
+      resolvedTopP = thinkingConstrainsSamplingParams
+        ? Math.max(0.95, Math.min(1.0, config.top_p))
+        : config.top_p;
     }
 
     // Warn when temperature is silently omitted due to top_p (even without thinking)
-    if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
+    if (config.temperature != null && resolvedTopP != null && !thinkingConstrainsSamplingParams) {
       logger.warn(
         'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
       );
@@ -855,7 +861,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
     // and on adaptive-sampling Claude models.
     // Collapse those cases into one predicate so the params spread stays readable.
-    const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
+    const omitTemperature =
+      resolvedTopP != null || thinkingConstrainsSamplingParams || samplingParamsDeprecated;
 
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
@@ -888,7 +895,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
       // Anthropic docs: top_k is incompatible with extended thinking, and Opus
       // adaptive-sampling models reject it along with the other sampling controls.
-      ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
+      ...(config.top_k == null || thinkingConstrainsSamplingParams || samplingParamsDeprecated
         ? {}
         : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),

@@ -528,6 +528,14 @@ const OPENAI_FIRST_PARTY_API_HOSTNAMES = new Set([
   'api.openai.com',
   'us.api.openai.com',
   'eu.api.openai.com',
+  'au.api.openai.com',
+  'ca.api.openai.com',
+  'jp.api.openai.com',
+  'in.api.openai.com',
+  'sg.api.openai.com',
+  'kr.api.openai.com',
+  'gb.api.openai.com',
+  'ae.api.openai.com',
 ]);
 
 export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
@@ -574,6 +582,13 @@ export function getOpenAiEffectiveServiceTier<TServiceTier extends string | null
   return providerPassthroughServiceTier === undefined
     ? providerConfig.service_tier
     : providerPassthroughServiceTier;
+}
+
+export function normalizeOpenAiServiceTierForWire(
+  serviceTier: string | null | undefined,
+  apiUrl?: string,
+): string | null | undefined {
+  return serviceTier === 'fast' && isOpenAiFirstPartyApiUrl(apiUrl) ? 'priority' : serviceTier;
 }
 
 export function assertOpenAiModelEndpointCompatibility(

@@ -35,6 +35,7 @@ interface CohereCitationOptions {
 
 interface CohereChatOptions {
   apiKey?: string;
+  apiBaseUrl?: string;
   modelName?: string;
   chatHistory?: Array<{
     role: string;
@@ -90,6 +91,41 @@ interface CohereV2Message {
 }
 
 const COHERE_V2_CHAT_MODELS = new Set(['command-a-plus-05-2026', 'north-mini-code-1-0']);
+const DEFAULT_COHERE_API_BASE_URL = 'https://api.cohere.ai';
+const DEFAULT_COHERE_EMBEDDING_API_BASE_URL = 'https://api.cohere.com/v1';
+
+function getCohereChatApiUrl(apiBaseUrl: string, version: 'v1' | 'v2'): string {
+  const normalizedApiBaseUrl = apiBaseUrl.replace(/\/+$/, '').replace(/\/v[12]$/, '');
+  return `${normalizedApiBaseUrl}/${version}/chat`;
+}
+
+function getCohereEmbeddingApiUrl(apiBaseUrl: string): string {
+  const normalizedApiBaseUrl = apiBaseUrl.replace(/\/+$/, '');
+  try {
+    const url = new URL(normalizedApiBaseUrl);
+    const isOfficialHost = url.hostname === 'api.cohere.ai' || url.hostname === 'api.cohere.com';
+    const isVersionlessRoot =
+      url.protocol === 'https:' &&
+      url.port === '' &&
+      (url.pathname === '' || url.pathname === '/') &&
+      url.search === '' &&
+      url.hash === '';
+    if (isOfficialHost && isVersionlessRoot) {
+      return `${url.origin}/v1/embed`;
+    }
+  } catch {
+    // Preserve non-URL proxy base paths exactly as the embedding provider did before.
+  }
+  return `${normalizedApiBaseUrl}/embed`;
+}
+
+function isCohereV2EmbeddingApiUrl(apiUrl: string): boolean {
+  try {
+    return new URL(apiUrl).pathname.replace(/\/+$/, '').endsWith('/v2/embed');
+  } catch {
+    return apiUrl.split(/[?#]/, 1)[0].replace(/\/+$/, '').endsWith('/v2/embed');
+  }
+}
 
 const COHERE_V2_REQUEST_FIELDS = [
   'tools',
@@ -140,6 +176,10 @@ function parseV2Prompt(prompt: string): {
   return { parsedPrompt: false, promptParams: {} };
 }
 
+function hasV2RequestValue(value: unknown): boolean {
+  return value != null && (!Array.isArray(value) || value.length > 0);
+}
+
 function getV2ConfigError(params: Record<string, any>): string | undefined {
   const chatHistory = params.chat_history ?? params.chatHistory;
   if (chatHistory !== undefined) {
@@ -164,6 +204,14 @@ function getV2ConfigError(params: Record<string, any>): string | undefined {
         return `Cohere v2 Chat API chat_history[${index}].message must be a non-empty string.`;
       }
     }
+  }
+  if (params.safety_mode === 'OFF') {
+    return 'Cohere v2 Chat API safety_mode "OFF" is not supported for command-a-plus-05-2026 or north-mini-code-1-0. Use "CONTEXTUAL" or "STRICT".';
+  }
+  const hasTools = hasV2RequestValue(params.tools);
+  const hasDocuments = hasV2RequestValue(params.documents);
+  if (params.safety_mode === 'STRICT' && (hasTools || hasDocuments)) {
+    return 'Cohere v2 Chat API safety_mode "STRICT" cannot be used with tools or documents because Cohere silently downgrades it to "CONTEXTUAL".';
   }
   if (params.connectors?.length) {
     return 'Cohere v2 Chat API does not support connectors. Use a v2 tool definition instead.';
@@ -491,7 +539,9 @@ export class CohereChatCompletionProvider implements ApiProvider {
 
   config: CohereChatOptions;
 
+  private apiBaseUrl: string;
   private apiKey: string;
+  private env?: EnvOverrides;
   private modelName: string;
 
   constructor(
@@ -499,7 +549,13 @@ export class CohereChatCompletionProvider implements ApiProvider {
     options: { config?: CohereChatOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
+    this.apiBaseUrl =
+      config?.apiBaseUrl ||
+      env?.COHERE_API_BASE_URL ||
+      getEnvString('COHERE_API_BASE_URL') ||
+      DEFAULT_COHERE_API_BASE_URL;
     this.apiKey = config?.apiKey || env?.COHERE_API_KEY || getEnvString('COHERE_API_KEY') || '';
+    this.env = env;
     this.modelName = modelName;
     if (!CohereChatCompletionProvider.COHERE_CHAT_MODELS.includes(this.modelName)) {
       logger.warn(`Using unknown Cohere chat model: ${this.modelName}`);
@@ -521,11 +577,15 @@ export class CohereChatCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Merge configs from the provider and the prompt
+    // Authentication and transport settings are provider-level only. Prompt config can override
+    // request options, but it must not redirect provider credentials to another endpoint.
     const promptConfig = context?.prompt?.config as CohereChatOptions | undefined;
+    const promptRequestConfig = { ...promptConfig };
+    delete promptRequestConfig.apiKey;
+    delete promptRequestConfig.apiBaseUrl;
     const config: CohereChatOptions = {
       ...this.config,
-      ...promptConfig,
+      ...promptRequestConfig,
     };
     if (COHERE_V2_CHAT_MODELS.has(this.modelName)) {
       config.preamble =
@@ -617,26 +677,54 @@ export class CohereChatCompletionProvider implements ApiProvider {
         model: this.modelName,
       };
     }
+    delete body.apiKey;
+    delete body.apiBaseUrl;
 
     let data,
-      cached = false;
+      cached = false,
+      status: number | undefined,
+      statusText = '';
     try {
-      ({ data, cached } = (await fetchWithCache(
-        'https://api.cohere.ai/v1/chat',
+      ({ data, cached, status, statusText } = (await fetchWithCache(
+        getCohereChatApiUrl(this.apiBaseUrl, 'v1'),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+            'X-Client-Name':
+              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-      )) as unknown as { data: any; cached: boolean });
+        'json',
+        // The default cache key includes request headers. Avoid persisting a cache identity
+        // derived from the bearer token because Cohere does not expose a safe tenant ID.
+        true,
+      )) as unknown as {
+        data: any;
+        cached: boolean;
+        status: number;
+        statusText: string;
+      });
 
-      if (data.message) {
-        return { error: data.message };
+      if (status !== undefined && (status < 200 || status >= 300)) {
+        return {
+          error: `API error: ${status} ${statusText}\n${
+            typeof data === 'string' ? data : JSON.stringify(data)
+          }`,
+        };
+      }
+
+      const errorMessage =
+        typeof data?.message === 'string'
+          ? data.message
+          : typeof data?.error === 'string'
+            ? data.error
+            : data?.error?.message;
+      if (errorMessage) {
+        return { error: errorMessage };
       }
 
       const tokenUsage: TokenUsage = {
@@ -691,6 +779,12 @@ export class CohereChatCompletionProvider implements ApiProvider {
       ...defaultParams,
       ...config,
       ...promptParams,
+      // JSON prompt objects are model input, not trusted provider configuration. Keep tool and
+      // safety controls on the provider/prompt-config path so prompt content cannot weaken them.
+      tools: config.tools,
+      tool_choice: config.tool_choice,
+      strict_tools: config.strict_tools,
+      safety_mode: config.safety_mode,
       preamble:
         promptParams.preamble ??
         promptParams.preamble_override ??
@@ -723,13 +817,14 @@ export class CohereChatCompletionProvider implements ApiProvider {
       statusText = '';
     try {
       ({ data, cached, status, statusText } = (await fetchWithCache(
-        'https://api.cohere.ai/v2/chat',
+        getCohereChatApiUrl(this.apiBaseUrl, 'v2'),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.apiKey}`,
-            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+            'X-Client-Name':
+              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify({
             ...v2Params,
@@ -822,8 +917,8 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
     return (
       this.config.apiKey ||
       (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        ? this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides] ||
+          getEnvString(this.config.apiKeyEnvar)
         : undefined) ||
       this.env?.COHERE_API_KEY ||
       getEnvString('COHERE_API_KEY')
@@ -831,7 +926,12 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiUrl(): string {
-    return this.config.apiBaseUrl || 'https://api.cohere.com/v1';
+    return (
+      this.config.apiBaseUrl ||
+      this.env?.COHERE_API_BASE_URL ||
+      getEnvString('COHERE_API_BASE_URL') ||
+      DEFAULT_COHERE_EMBEDDING_API_BASE_URL
+    ).replace(/\/+$/, '');
   }
 
   async callApi(): Promise<ProviderResponse> {
@@ -843,34 +943,43 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       throw new Error('Cohere API key must be set for embedding');
     }
 
+    const apiUrl = getCohereEmbeddingApiUrl(this.getApiUrl());
     const body = {
       model: this.modelName,
       texts: [input],
       input_type: 'classification',
       truncate: this.config.truncate || 'NONE',
+      ...(isCohereV2EmbeddingApiUrl(apiUrl) && { embedding_types: ['float'] }),
     };
 
     let data;
     try {
       ({ data } = (await fetchWithCache(
-        `${this.getApiUrl()}/embed`,
+        apiUrl,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${this.getApiKey()}`,
-            'X-Client-Name': getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
+            'X-Client-Name':
+              this.env?.COHERE_CLIENT_NAME || getEnvString('COHERE_CLIENT_NAME') || 'promptfoo',
           },
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
+        'json',
+        // The default cache key includes request headers. Avoid persisting a cache identity
+        // derived from the bearer token because Cohere does not expose a safe tenant ID.
+        true,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${err}`);
       throw err;
     }
 
-    const embedding = data?.embeddings?.[0];
+    const embedding = Array.isArray(data?.embeddings)
+      ? data.embeddings[0]
+      : data?.embeddings?.float?.[0];
     if (!embedding) {
       throw new Error('No embedding found in Cohere embeddings API response');
     }
