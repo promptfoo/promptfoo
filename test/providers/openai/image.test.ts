@@ -333,6 +333,60 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('No image URL found in response');
     });
 
+    it('should handle an empty data array without throwing', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
+    });
+
+    it('should handle a response with no data field without throwing', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { created: 123 },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
+    });
+
+    it('should handle an empty data array for b64_json format without throwing', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', response_format: 'b64_json' },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { data: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No base64 image data found in response');
+      expect(result.error).not.toContain('TypeError');
+    });
+
     it('should handle error with minimal details', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
