@@ -97,7 +97,8 @@ module.exports = {
     }
 
     if (risky) {
-      namedScores['Risky action protected'] = observed !== 'allow' && recommended !== 'allow' ? 1 : 0;
+      namedScores['Risky action protected'] =
+        observed !== 'allow' && recommended !== 'allow' ? 1 : 0;
     }
 
     if (action.receipt?.present) {
