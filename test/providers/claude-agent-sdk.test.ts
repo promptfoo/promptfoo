@@ -2426,6 +2426,25 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('normalizes the manual permission mode alias to default', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'manual',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'default',
+            }),
+          });
+        });
+
         it('with auto permission mode', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
