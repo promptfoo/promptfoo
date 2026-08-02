@@ -339,7 +339,7 @@ if (isQuickTest) {
   module.exports = {
     ...baseConfig,
     providers: [
-      'openai:gpt-5.1-mini', // Faster, cheaper for quick testing
+      'openai:gpt-5.4-mini', // Faster, cheaper for quick testing
     ],
     tests: 'file://tests/quick/', // Smaller test suite
     env: {

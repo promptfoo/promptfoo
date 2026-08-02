@@ -104,6 +104,9 @@ assert:
     value: 'The expected substring'
 ```
 
+Both assertions accept string or number values. Numbers are converted to strings, so `value: 0`
+matches output containing `0`.
+
 ### Contains-All
 
 The `contains-all` assertion checks if the LLM output contains all of the specified values.
@@ -795,7 +798,7 @@ With the configuration above:
 | `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
 | `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
 
-`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped. A `defaults` entry always requires the observed value to equal the declared default — even a default of `"*"` is matched literally. To tolerate an argument regardless of its value, such as a pagination cursor or other agent-generated token, list it under [`ignore`](#trajectory-tool-args-match-ignore) instead.
 
 :::note
 
@@ -805,7 +808,7 @@ Stripping runs before matching in both modes, but `partial` mode already ignores
 
 #### Ignoring arguments {#trajectory-tool-args-match-ignore}
 
-Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a volatile `request_id` or `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
+Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a pagination `cursor`, a volatile `request_id`, or an `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
 
 ```yaml
 tests:
@@ -833,6 +836,32 @@ With the configuration above:
 `ignore` accepts a single string or a list of strings, applies only to top-level keys, and composes with `defaults`. Because the key is removed from both sides, it does not matter whether the agent emits the argument or omits it.
 
 An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
+
+Combine `defaults` with `ignore` when a tool mixes arguments that should be pinned to a known default with arguments the agent chooses freely:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
+          ignore:
+            - cursor
+```
+
+| Observed tool arguments                  | Outcome | Reason                                                       |
+| ---------------------------------------- | ------- | ------------------------------------------------------------ |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                     |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both values equal their declared defaults                    |
+| `{ status: 'Q', cursor: 'abc123' }`      | pass    | `cursor` is ignored regardless of value                      |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1)            |
+| `{ status: 'Q', delete_database: true }` | fail    | hallucinated extra is not in `args`, `defaults`, or `ignore` |
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 

@@ -1,21 +1,16 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
-import { redteamProviderManager } from '../providers/shared';
-import {
-  getRemoteGenerationHeaders,
-  getRemoteGenerationUrl,
-  shouldGenerateRemote,
-} from '../remoteGeneration';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { canGenerateRemoteWithSelection, getStrategyGenerationProvider } from './types';
 
 import type { TestCase } from '../../types/index';
+import type { StrategyRuntimeContext } from './types';
 
 export const DEFAULT_MATH_CONCEPTS = ['set theory', 'group theory', 'abstract algebra'];
 
@@ -60,24 +55,17 @@ export async function generateMathPrompt(
         task: 'math-prompt',
         testCases: batch,
         injectVar,
-        config,
+        config: {
+          ...(config.mathConcepts !== undefined && { mathConcepts: config.mathConcepts }),
+        },
         ...remoteGenerationContextPayload(config.targetId),
-        email: getUserEmail(),
       };
 
       interface MathPromptGenerationResponse {
         result?: TestCase[];
       }
 
-      const { data } = await fetchWithCache<MathPromptGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: getRemoteGenerationHeaders(),
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-      );
+      const { data } = await postRemoteGenerationTask<MathPromptGenerationResponse>(payload);
 
       logger.debug(
         `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,
@@ -103,8 +91,13 @@ export async function generateMathPrompt(
   }
 }
 
-export async function encodeMathPrompt(text: string, concept: string): Promise<string> {
-  const redteamProvider = await redteamProviderManager.getProvider({
+export async function encodeMathPrompt(
+  text: string,
+  concept: string,
+  runtimeContext?: StrategyRuntimeContext,
+): Promise<string> {
+  const redteamProvider = await getStrategyGenerationProvider({
+    runtimeContext,
     jsonOnly: true,
     preferSmallModel: true,
   });
@@ -148,8 +141,12 @@ export async function addMathPrompt(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
-  if (shouldGenerateRemote()) {
+  // Remote task handlers only know how to use their built-in default provider.
+  // Keep every request-, cache-, or route-selected provider local so this phase
+  // cannot silently switch backends.
+  if (shouldGenerateRemote() && canGenerateRemoteWithSelection(runtimeContext)) {
     const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);
     if (mathPromptTestCases.length > 0) {
       return mathPromptTestCases;
@@ -182,13 +179,13 @@ export async function addMathPrompt(
     const originalText = String(testCase.vars![injectVar]);
 
     for (const concept of mathConcepts) {
-      const encodedText = await encodeMathPrompt(originalText, concept);
+      const encodedText = await encodeMathPrompt(originalText, concept, runtimeContext);
 
       encodedTestCases.push({
         ...testCase,
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/MathPrompt`,
+          metric: assertion.metric ? `${assertion.metric}/MathPrompt` : assertion.metric,
         })),
         vars: {
           ...testCase.vars,

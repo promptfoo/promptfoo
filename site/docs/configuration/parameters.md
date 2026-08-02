@@ -171,7 +171,7 @@ prompts:
 
 providers:
   - openai:gpt-5-mini
-  - anthropic:claude-3-haiku
+  - anthropic:claude-haiku-4-5
 
 tests:
   # Inline test cases

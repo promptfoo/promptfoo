@@ -781,14 +781,14 @@ describe('OpenClaw Provider', () => {
     it('should set OpenClaw context headers from typed config', () => {
       const provider = new OpenClawChatProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.4',
+          backend_model: 'openai/gpt-5.6-terra',
           message_channel: 'slack',
           account_id: 'work',
           scopes: ['operator.read', 'operator.write'],
         },
       });
 
-      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.6-terra');
       expect(provider.config.headers?.['x-openclaw-message-channel']).toBe('slack');
       expect(provider.config.headers?.['x-openclaw-account-id']).toBe('work');
       expect(provider.config.headers?.['x-openclaw-scopes']).toBe('operator.read,operator.write');
@@ -797,12 +797,12 @@ describe('OpenClaw Provider', () => {
     it('should prefer typed OpenClaw context config over custom header values', () => {
       const provider = new OpenClawChatProvider('main', {
         config: {
-          backend_model: 'openai/gpt-5.4',
+          backend_model: 'openai/gpt-5.6-terra',
           headers: { 'x-openclaw-model': 'stale-model' },
         },
       });
 
-      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.6-terra');
     });
 
     it('should price usage from an explicit OpenAI backend model override', async () => {
@@ -827,6 +827,30 @@ describe('OpenClaw Provider', () => {
       const result = await provider.callApi('price me');
 
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'priced' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawChatProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.6-terra',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('price me');
+
+      expect(result.cost).toBeUndefined();
     });
   });
 
@@ -984,6 +1008,36 @@ describe('OpenClaw Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.6-terra',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).not.toHaveProperty('cost');
     });
 
     it('should infer hidden cached input from OpenClaw Responses totals', async () => {

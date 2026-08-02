@@ -30,7 +30,6 @@ type EnvVars = {
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
-  PROMPTFOO_DISABLE_RUNTIME_WARNINGS?: boolean;
   /**
    * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
    * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
@@ -245,6 +244,9 @@ type EnvVars = {
 
   // Anthropic
   ANTHROPIC_API_KEY?: string;
+  // Extra headers the Anthropic SDK attaches to every request
+  // (newline-separated `Name: value` lines).
+  ANTHROPIC_CUSTOM_HEADERS?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
@@ -341,6 +343,9 @@ type EnvVars = {
   // Local AI
   LOCALAI_BASE_URL?: string;
   LOCALAI_TEMPERATURE?: number;
+
+  // Meta Model API (Muse); MODEL_API_KEY is Meta's official env var
+  MODEL_API_KEY?: string;
 
   // Mistral
   MISTRAL_MAX_TOKENS?: string;

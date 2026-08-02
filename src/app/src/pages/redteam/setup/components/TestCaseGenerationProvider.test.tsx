@@ -292,6 +292,34 @@ describe('TestCaseGenerationProvider', () => {
       expect(requestBody.plugin.config.language).toBe('Japanese');
     });
 
+    it('should send the current generation provider for preview requests', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              provider: 'openai:chat:gpt-4.1',
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.provider).toBe('openai:chat:gpt-4.1');
+    });
+
     it('should preserve plugin-specific language when review language is configured', async () => {
       const user = userEvent.setup();
       render(

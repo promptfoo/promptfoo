@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'OpenAI frontier models (GPT-5.5 / GPT-5.4) via AWS Bedrock'
+description: 'OpenAI GPT-5.6 Sol, Terra, and Luna via Amazon Bedrock'
 
 # Frontier models are served through Bedrock's OpenAI-compatible Responses API and
 # authenticate with an Amazon Bedrock API key. Export it before running (promptfoo reads it
@@ -8,27 +8,60 @@ description: 'OpenAI frontier models (GPT-5.5 / GPT-5.4) via AWS Bedrock'
 
 prompts:
   - |
-    Answer the following question concisely and accurately.
-
-    Question: {{question}}
+    [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Answer the user's question concisely and accurately.",
+            "prompt_cache_breakpoint": { "mode": "explicit" }
+          }
+        ]
+      },
+      { "role": "user", "content": [{ "type": "input_text", "text": "{{question}}" }] }
+    ]
 
 providers:
-  # GPT-5.5 is available in us-east-2 (Ohio). promptfoo routes bedrock:openai.gpt-5.x to
-  # the OpenAI-compatible Responses API on the regional Bedrock mantle endpoint.
-  - id: bedrock:openai.gpt-5.5
-    label: GPT-5.5 (high reasoning)
+  # Sol is available in us-east-1 and us-east-2. Promptfoo routes the bare Bedrock ID to
+  # https://bedrock-mantle.<region>.api.aws/openai/v1/responses.
+  - id: bedrock:openai.gpt-5.6-sol
+    label: GPT-5.6 Sol (max reasoning)
     config:
       region: us-east-2
-      reasoning_effort: high
+      reasoning_effort: max
+      verbosity: low
       max_output_tokens: 2048
-  # GPT-5.4 is available in us-east-2 (Ohio) and us-west-2 (Oregon).
-  - id: bedrock:openai.gpt-5.4
-    label: GPT-5.4 (low reasoning)
+      store: false
+      prompt_cache_key: bedrock-frontier-example-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+  # Terra is available in us-east-1, us-east-2, and us-west-2.
+  - id: bedrock:openai.gpt-5.6-terra
+    label: GPT-5.6 Terra (medium reasoning)
     config:
-      region: us-east-2
-      # Valid: none | low | medium | high | xhigh (minimal is NOT supported)
+      region: us-west-2
+      reasoning_effort: medium
+      max_output_tokens: 1024
+      store: false
+      prompt_cache_key: bedrock-frontier-example-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
+  # Luna is available in us-east-1, us-east-2, and us-west-2.
+  - id: bedrock:openai.gpt-5.6-luna
+    label: GPT-5.6 Luna (low reasoning, streaming)
+    config:
+      region: us-east-1
       reasoning_effort: low
       max_output_tokens: 1024
+      store: false
+      stream: true
+      prompt_cache_key: bedrock-frontier-example-v1
+      prompt_cache_options:
+        mode: explicit
+        ttl: 30m
 
 tests:
   - vars:

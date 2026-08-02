@@ -114,8 +114,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.6-sol: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
- * - gpt-5.6-terra / gpt-5.6-luna: runtime-dependent preview levels
+ * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
@@ -130,11 +130,11 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default)
+ * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
  * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
- * - 'max': Deepest single-agent reasoning for GPT-5.6 Sol
- * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol
+ * - 'max': Deepest single-agent reasoning for GPT-5.6
+ * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
@@ -271,14 +271,14 @@ export interface OpenAICodexSDKConfig {
   /**
    * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
-   * provider's model id instead (e.g., 'openai.gpt-5.5' for Amazon Bedrock).
+   * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
   model?: string;
 
   /**
    * Codex model provider to route through, mapped to the CLI's `model_provider` config.
    * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
-   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.5'` and AWS credentials in `cli_env`).
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.6-sol'` and AWS credentials in `cli_env`).
    * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
    *
    * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
@@ -610,7 +610,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js ^20.20.0 or >=22.22.0.
+      Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -627,7 +627,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -640,7 +640,7 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
-    // GPT-5.6 limited-preview models
+    // GPT-5.6 models (requires Codex 0.144.0 or later)
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
@@ -2003,6 +2003,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =

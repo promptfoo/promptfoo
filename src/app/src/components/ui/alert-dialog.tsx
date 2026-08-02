@@ -6,8 +6,6 @@ import { buttonVariants } from './button';
 
 const AlertDialog = AlertDialogPrimitive.Root;
 
-const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
-
 const AlertDialogPortal = AlertDialogPrimitive.Portal;
 
 function AlertDialogOverlay({
@@ -127,5 +125,4 @@ export {
   AlertDialogOverlay,
   AlertDialogPortal,
   AlertDialogTitle,
-  AlertDialogTrigger,
 };

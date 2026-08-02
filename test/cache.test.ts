@@ -12,6 +12,7 @@ import {
   vi,
 } from 'vitest';
 import {
+  claimCacheKeyOnce,
   clearCache,
   disableCache,
   enableCache,
@@ -22,6 +23,7 @@ import {
   withCacheNamespace,
 } from '../src/cache';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -255,6 +257,54 @@ describe('cache configuration', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
 
+  it('should fall back to a process-local one-time claim when the disk cache is read-only', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    mkdirSyncMock.mockImplementationOnce(() => {
+      throw Object.assign(new Error('Permission denied'), { code: 'EACCES' });
+    });
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-read-only:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+  });
+
+  it('should memoize an existing disk-backed one-time claim', async () => {
+    mockProcessEnv({ NODE_ENV: 'production' });
+    const openSync = vi.spyOn(fs, 'openSync').mockImplementation(() => {
+      throw Object.assign(new Error('Already claimed'), { code: 'EEXIST' });
+    });
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-existing:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(false);
+    expect(openSync).toHaveBeenCalledOnce();
+
+    openSync.mockRestore();
+  });
+
+  it('should clear persistent one-time claims with the disk cache', async () => {
+    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+    const key = `background-billing-clear:${Date.now()}`;
+
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+    await cacheModule.clearCache();
+    expect(rmSync).toHaveBeenCalledWith(path.join('/custom/cache/path', 'claims'), {
+      force: true,
+      recursive: true,
+    });
+    expect(cacheModule.claimCacheKeyOnce(key)).toBe(true);
+
+    openSync.mockRestore();
+    closeSync.mockRestore();
+    rmSync.mockRestore();
+  });
+
   it('should respect custom cache path', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
     mockProcessEnv({ NODE_ENV: 'production' });
@@ -448,6 +498,30 @@ describe('fetchWithCache', () => {
         cached: true,
       });
       expect(cachedResult.deleteFromCache).toBeInstanceOf(Function);
+    });
+
+    it('should replace a cached response without making another upstream request', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, { status: 'queued', output: [] });
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      const result = await fetchWithCache<{ status: string; output: string[] }>(url, {}, 1000);
+
+      await result.updateCache?.({ status: 'completed', output: ['done'] }, 200, 'OK', {
+        'x-completed': 'true',
+      });
+      const cachedResult = await fetchWithCache<{ status: string; output: string[] }>(
+        url,
+        {},
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(cachedResult).toMatchObject({
+        cached: true,
+        data: { status: 'completed', output: ['done'] },
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-completed': 'true' },
+      });
     });
 
     it('should return cached false to all concurrent callers on a cache miss', async () => {
@@ -899,6 +973,24 @@ describe('fetchWithCache', () => {
         expect(cacheKey).not.toContain('secret-header-token');
         expect(cacheKey).not.toContain('secret-body-token');
       }
+    });
+
+    it('should redact query credentials from cache-hit and cache-write debug logs', async () => {
+      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'cached response' }),
+      );
+      const secretUrl = 'https://api.example.com/data?api_key=SUPER_SECRET_TOKEN';
+
+      await fetchWithCache(secretUrl, {}, 1000);
+      await fetchWithCache(secretUrl, {}, 1000);
+
+      const messages = debug.mock.calls.map(([message]) => String(message)).join('\n');
+      expect(messages).toContain('Storing https://api.example.com/data?api_key=%5BREDACTED%5D');
+      expect(messages).toContain(
+        'Returning cached response for https://api.example.com/data?api_key=%5BREDACTED%5D',
+      );
+      expect(messages).not.toContain('SUPER_SECRET_TOKEN');
     });
 
     it('produces a stable secret-bearing cache key across module loads (cacheable across processes)', async () => {
@@ -1424,6 +1516,43 @@ describe('fetchWithCache', () => {
       expect((error as Error).cause).toBeInstanceOf(TypeError);
     });
 
+    it('should sanitize credential-bearing URLs in response-parse failure messages', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: () => Promise.resolve('not-json'),
+        headers: new Headers({ 'content-type': 'application/json' }),
+      } as unknown as Response);
+      const secretUrl = 'https://api.example.com/task?api_key=SUPER_SECRET_TOKEN';
+
+      const error = await fetchWithCache(secretUrl, {}, 1000).catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('Error parsing response from');
+      expect((error as Error).message).not.toContain('SUPER_SECRET_TOKEN');
+    });
+
+    it('should sanitize opaque gateway path credentials in response-parse failure messages', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        statusText: 'Bad Gateway',
+        text: () => Promise.resolve('<html>upstream error</html>'),
+        headers: new Headers({ 'content-type': 'text/html' }),
+      } as unknown as Response);
+      const credential = 'token_privateTenantCredential123';
+      const secretUrl = `https://gateway.example/v1/${credential}/responses`;
+
+      const error = await fetchWithCache(secretUrl, { method: 'POST', body: '{}' }, 1000).catch(
+        (err: unknown) => err,
+      );
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain('Error parsing response from');
+      expect((error as Error).message).not.toContain(credential);
+    });
+
     it('should not catch fetchWithRetries errors in body retry loop', async () => {
       // fetchWithRetries itself throws — should propagate directly, not retry
       mockFetchWithRetries.mockRejectedValueOnce(new Error('ECONNRESET from fetch'));
@@ -1452,6 +1581,15 @@ describe('fetchWithCache', () => {
   });
 
   describe('cache utility functions', () => {
+    it('should claim a cache-scoped one-time action only once per namespace', async () => {
+      const key = `background-billing:${Date.now()}`;
+
+      expect(claimCacheKeyOnce(key)).toBe(true);
+      expect(claimCacheKeyOnce(key)).toBe(false);
+      expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(true);
+      expect(await withCacheNamespace('repeat:1', async () => claimCacheKeyOnce(key))).toBe(false);
+    });
+
     it('should track cache enabled state', () => {
       expect(isCacheEnabled()).toBe(true);
       disableCache();
@@ -1475,6 +1613,130 @@ describe('fetchWithCache', () => {
   });
 
   describe('per-repeat caching', () => {
+    it('should reuse an explicit safe cache key across credential rotations', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      const first = await fetchWithCache(
+        url,
+        { headers: { Authorization: 'Bearer project-key-a' } },
+        1000,
+        'json',
+        { cacheKey: 'project-a:response-hash' },
+      );
+      const second = await fetchWithCache(
+        url,
+        { headers: { Authorization: 'Bearer project-key-b' } },
+        1000,
+        'json',
+        { cacheKey: 'project-a:response-hash' },
+      );
+
+      expect(first.cached).toBe(false);
+      expect(second.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
+      expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe('fetch:v3:project-a:response-hash');
+    });
+
+    it('should isolate different explicit cache keys from each other', async () => {
+      // Positive control for the cacheKey escape hatch: distinct keys must MISS
+      // even when the underlying request is byte-identical. A regression that
+      // ignores the provided key (or disables caching outright) fails here.
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'project b data' }),
+      );
+
+      const first = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      const second = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-b:response-hash',
+      });
+
+      expect(first.cached).toBe(false);
+      expect(second.cached).toBe(false);
+      expect(second.data).toEqual({ data: 'project b data' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+      // Each explicit key still caches positively on repeat.
+      const firstAgain = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      expect(firstAgain.cached).toBe(true);
+      expect(firstAgain.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should scope explicit cache keys to the active cache namespace', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await withCacheNamespace('repeat:1', async () => {
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: 'project-a:response-hash',
+        });
+        expect(result.cached).toBe(false);
+      });
+
+      // The stored key must carry the namespace prefix.
+      expect(vi.mocked(getCache().set).mock.calls[0]?.[0]).toBe(
+        'repeat:1:fetch:v3:project-a:response-hash',
+      );
+
+      // The same explicit key under a different namespace is a MISS...
+      await withCacheNamespace('repeat:2', async () => {
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: 'project-a:response-hash',
+        });
+        expect(result.cached).toBe(false);
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+      // ...while the original namespace still HITs.
+      await withCacheNamespace('repeat:1', async () => {
+        const result = await fetchWithCache(url, {}, 1000, 'json', {
+          cacheKey: 'project-a:response-hash',
+        });
+        expect(result.cached).toBe(true);
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should refetch on bust without evicting or overwriting an explicit cache entry', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+
+      const first = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      expect(first.cached).toBe(false);
+      expect(vi.mocked(getCache().set)).toHaveBeenCalledTimes(1);
+
+      // bust: true forces a fresh fetch even though the key is cached...
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'fresh data' }),
+      );
+      const busted = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+        bust: true,
+      });
+      expect(busted.cached).toBe(false);
+      expect(busted.data).toEqual({ data: 'fresh data' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+      // ...but bust bypasses the cache entirely (cacheKey resolves to null): it
+      // neither overwrites nor evicts the entry, so a later non-bust call still
+      // HITs the ORIGINAL response, not the busted refetch.
+      expect(vi.mocked(getCache().set)).toHaveBeenCalledTimes(1);
+      const after = await fetchWithCache(url, {}, 1000, 'json', {
+        cacheKey: 'project-a:response-hash',
+      });
+      expect(after.cached).toBe(true);
+      expect(after.data).toEqual(response);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
     it('should use same cache key for repeatIndex 0 and no repeatIndex', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);

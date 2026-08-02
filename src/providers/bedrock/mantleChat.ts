@@ -30,7 +30,7 @@ type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['
  *
  * This is the Chat Completions counterpart to {@link createBedrockOpenAiResponsesProvider} (the
  * `/openai/v1/responses` path used by the OpenAI frontier and xAI Grok models). Use the bare
- * `bedrock:openai.gpt-5.5` / `bedrock:xai.grok-4.3` forms for those (Responses API, with
+ * `bedrock:openai.gpt-5.6-sol` / `bedrock:xai.grok-4.3` forms for those (Responses API, with
  * reasoning tokens); use `bedrock:mantle:<id>` to talk to the Chat Completions endpoint directly.
  *
  * Default region used when none is configured. The mantle model catalog is regional (see

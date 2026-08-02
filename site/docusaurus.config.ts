@@ -2,11 +2,28 @@ import { promises as fsPromises } from 'fs';
 import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
+import webpack from 'webpack';
+import {
+  EVERGREEN_ANNOUNCEMENT_BAR_ID,
+  isVegasBannerLive,
+  VEGAS_ANNOUNCEMENT_BAR_ID,
+} from './src/data/announcementBar';
 import type * as Preset from '@docusaurus/preset-classic';
 import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
+
+/**
+ * One instant for the whole build, frozen when this config module is evaluated.
+ *
+ * Anything time-dependent on a statically generated site has to be pinned to a build-time
+ * value, otherwise the prerendered HTML and the hydrated client disagree. This constant is
+ * the single source of "now" for the site: it is handed to the client bundle via
+ * DefinePlugin below (consumed by `src/data/events.ts`) and used to pick the announcement
+ * bar. Everything derived from it rolls over on rebuild, not on the wire.
+ */
+const BUILD_TIMESTAMP = new Date().toISOString();
 
 function webpackProgressCompatibilityPlugin(): Plugin {
   return {
@@ -19,6 +36,64 @@ function webpackProgressCompatibilityPlugin(): Plugin {
     },
   };
 }
+
+/**
+ * Bakes `BUILD_TIMESTAMP` into both the server and the client bundle as the same string
+ * literal, so modules that need a stable "now" (event statuses) cannot produce a different
+ * answer during hydration than they did during prerendering.
+ */
+function buildTimestampPlugin(): Plugin {
+  return {
+    name: 'build-timestamp-plugin',
+    configureWebpack() {
+      return {
+        plugins: [
+          new webpack.DefinePlugin({
+            __SITE_BUILD_TIMESTAMP__: JSON.stringify(BUILD_TIMESTAMP),
+          }),
+        ],
+      };
+    },
+  };
+}
+
+/**
+ * Which bar gets prerendered is a build-time decision, like every other date-dependent
+ * thing here: it is made when this config is evaluated, so a rebuild (any deploy will do)
+ * is what swaps the evergreen bar into the static HTML once the conferences are over.
+ *
+ * That is not sufficient on its own. Nothing rebuilds this site on a schedule — CI builds
+ * on pull requests, pushes and manual dispatch — so if the last deploy before the expiry
+ * stays live, the prerendered HTML would advertise two finished conferences forever.
+ * `src/theme/AnnouncementBar` closes that gap by re-checking the same expiry against the
+ * visitor's clock after hydration and dropping the bar. The shared constant lives in
+ * `src/data/announcementBar.ts` so the date is written down exactly once.
+ */
+const showVegasBanner = isVegasBannerLive(Date.parse(BUILD_TIMESTAMP));
+
+// Near-black rather than Promptfoo red: the bar sits above both the red Black Hat page and
+// the green DEF CON page, and has to belong to neither. `src/css/custom.css` forces
+// announcement-bar links to #ffffff at 0.85 opacity, which clears AA against this
+// background by a wide margin.
+const ANNOUNCEMENT_BAR_BACKGROUND = '#111113';
+const ANNOUNCEMENT_BAR_TEXT = '#ffffff';
+
+const vegasAnnouncementBar = {
+  id: VEGAS_ANNOUNCEMENT_BAR_ID,
+  content:
+    '<strong>Meet Promptfoo at the OpenAI booths:</strong> <a href="/events/blackhat-2026/">Black Hat #2967, Aug 4-6</a> &middot; <a href="/events/defcon-2026/">DEF CON 34 #1412, Aug 7-9</a>',
+  backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
+  textColor: ANNOUNCEMENT_BAR_TEXT,
+  isCloseable: true,
+};
+
+const evergreenAnnouncementBar = {
+  id: EVERGREEN_ANNOUNCEMENT_BAR_ID,
+  content: 'Promptfoo is part of OpenAI. <a href="/events/">See where the team will be next</a>.',
+  backgroundColor: ANNOUNCEMENT_BAR_BACKGROUND,
+  textColor: ANNOUNCEMENT_BAR_TEXT,
+  isCloseable: true,
+};
 
 const config: Config = {
   title: 'Promptfoo',
@@ -73,6 +148,8 @@ const config: Config = {
           ],
         },
         blog: {
+          blogDescription:
+            'Learn how to test and secure AI applications with practical guides on LLM red teaming, evaluations, real-world vulnerabilities, and updates from Promptfoo.',
           showReadingTime: false,
           blogSidebarCount: 0,
           postsPerPage: 20,
@@ -90,14 +167,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    announcementBar: {
-      id: 'joined-openai',
-      content:
-        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai/">Read the update →</a>',
-      backgroundColor: '#dc2626',
-      textColor: '#ffffff',
-      isCloseable: false,
-    },
+    announcementBar: showVegasBanner ? vegasAnnouncementBar : evergreenAnnouncementBar,
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
@@ -442,6 +512,7 @@ const config: Config = {
 
   plugins: [
     webpackProgressCompatibilityPlugin,
+    buildTimestampPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     // GA/analytics loaded conditionally via consent.js (GDPR)

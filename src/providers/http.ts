@@ -890,8 +890,6 @@ export const SessionEndpointConfigSchema = z.object({
   responseParser: z.union([z.string(), z.function()]),
 });
 
-export type SessionEndpointConfig = z.infer<typeof SessionEndpointConfigSchema>;
-
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string(), z.string()).optional(),
