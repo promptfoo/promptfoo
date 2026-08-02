@@ -17,8 +17,7 @@ promptfoo eval
 You can also run it directly from the repository:
 
 ```bash
-cd examples/agent-action-boundary
-promptfoo eval
+npm run local -- eval -c examples/agent-action-boundary/promptfooconfig.yaml
 ```
 
 ## What this checks
@@ -28,7 +27,9 @@ The fixture includes four representative cases:
 - a safe read-only inventory lookup that should be allowed;
 - a customer export that crosses a public destination and should be blocked;
 - a refund action that needs dual approval because it creates a financial side effect;
-- a stale external verifier receipt that should require review.
+- a stale external verifier receipt that should require review;
+- a public export with a stale receipt where the public boundary still wins and blocks;
+- a contradictory side-effect record that should fail closed instead of being treated as safe.
 
 The assertion returns named scores for:
 
@@ -38,3 +39,9 @@ The assertion returns named scores for:
 - approval/receipt freshness.
 
 This pattern can be adapted to real agent traces by replacing the YAML fixtures with exported tool-call records from an agent runtime.
+
+Each trace should include both the action fields and the runtime's observed
+control decision. The assertion derives a recommended control from the action
+boundary, then compares it with `observed_control`; this catches cases where a
+runtime executed an action that the boundary policy says should have been
+blocked or escalated.
