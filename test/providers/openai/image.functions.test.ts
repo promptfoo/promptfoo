@@ -585,8 +585,8 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
 
@@ -608,7 +608,8 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error:');
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
   });
