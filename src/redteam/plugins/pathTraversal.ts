@@ -106,16 +106,17 @@ export function checkPathTraversalEvidence(
   }
 
   // Canonical-form path comparison.
-  // If attackTarget appears in the response, check whether the probe already contained
-  // it as a standalone absolute path.  If the probe only contained it as part of a
-  // traversal sequence (e.g. "../../../../etc/passwd" embeds "/etc/passwd" as a suffix
-  // with no preceding space/quote), the canonical form in the response is new information.
+  // We only flag the canonical target as new information when it appears as a standalone
+  // absolute path in the response (preceded by whitespace/quote/start-of-string) AND was
+  // NOT already standalone in the probe.  This prevents the traversal form
+  // "../../../../etc/passwd" from matching: "/etc/passwd" is a substring but is preceded
+  // by "." (not a separator), so it does NOT count as standalone in either string.
   let hasNewCanonicalPath = false;
-  if (attackTarget && response.includes(attackTarget)) {
-    const standaloneInProbe = new RegExp(`(?:^|[\\s"'<>|])${escapeRegex(attackTarget)}`).test(
-      probe,
-    );
-    if (!standaloneInProbe) {
+  if (attackTarget) {
+    const standalonePattern = new RegExp(`(?:^|[\\s"'<>([])${escapeRegex(attackTarget)}`);
+    const standaloneInResponse = standalonePattern.test(response);
+    const standaloneInProbe = standalonePattern.test(probe);
+    if (standaloneInResponse && !standaloneInProbe) {
       hasNewCanonicalPath = true;
     }
   }
