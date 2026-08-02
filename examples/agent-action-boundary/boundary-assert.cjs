@@ -57,16 +57,16 @@ function classify(action) {
     return 'block';
   }
 
+  if (effect === 'financial' || authority === 'privileged' || action.dual_approval_required) {
+    return 'require_dual_approval';
+  }
+
   if (hasContradictorySideEffect(action)) {
     return 'require_review';
   }
 
   if (receipt.present && receipt.fresh === false) {
     return 'require_review';
-  }
-
-  if (effect === 'financial' || authority === 'privileged' || action.dual_approval_required) {
-    return 'require_dual_approval';
   }
 
   if (sideEffect) {

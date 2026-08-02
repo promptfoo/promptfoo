@@ -31,6 +31,7 @@ The fixtures include representative cases for:
 - a public export with a stale receipt where the public boundary still wins and blocks;
 - a contradictory side-effect record that should fail closed instead of being treated as safe.
 - a contradictory public export where the public boundary still wins and blocks.
+- a financial action with a stale receipt where dual approval still wins over weaker review.
 
 The assertion returns named scores for:
 
