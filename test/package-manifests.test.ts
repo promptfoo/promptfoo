@@ -269,6 +269,21 @@ describe('package manifests', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('keeps the supported Node.js range aligned across workspace manifests', () => {
+    // These three drifted apart before (root allowed Node 20.20 while site and
+    // code-scan-action pinned >=20.20.1), so an engine bump that misses one is a real
+    // failure mode. Assert they agree rather than restating the value.
+    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
+      ?.node;
+
+    expect(validRange(rootEngines ?? '')).toBeTruthy();
+
+    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
+      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
+      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
+    }
+  });
+
   it('keeps sharp optional for the docs workspace', () => {
     const sitePackageJson = readPackageJson<{
       devDependencies?: Record<string, string>;
