@@ -26,8 +26,9 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
+import { accumulateNamedMetric } from './namedMetrics';
 
-import type { PromptMetrics } from '../types/index';
+import type { GradingResult, PromptMetrics, Vars } from '../types/index';
 
 export interface FilteredMetricsOptions {
   evalId: string;
@@ -220,23 +221,12 @@ async function aggregateNamedScores(
     SELECT
       prompt_idx,
       score_entries.key as metric_name,
-      SUM(
-        CASE
-          WHEN weight_entries.value IS NOT NULL THEN
-            CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)
-          ELSE CAST(score_entries.value AS REAL)
-        END
-      ) as metric_sum,
+      SUM(CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)) as metric_sum,
       COUNT(*) as metric_count,
-      SUM(
-        CASE
-          WHEN weight_entries.value IS NOT NULL THEN CAST(weight_entries.value AS REAL)
-          ELSE 1
-        END
-      ) as metric_weight_total
+      SUM(CAST(weight_entries.value AS REAL)) as metric_weight_total
     FROM eval_results
     JOIN json_each(eval_results.named_scores) as score_entries
-    LEFT JOIN json_each(
+    JOIN json_each(
       CASE
         WHEN grading_result IS NOT NULL
           AND json_valid(grading_result)
@@ -268,6 +258,106 @@ async function aggregateNamedScores(
       metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
       metrics[idx].namedScoreWeights ||= {};
       metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
+    }
+  }
+
+  await aggregateNamedScoresWithoutStoredWeights(metrics, whereSql);
+}
+
+function parseJsonField<T>(value: unknown, fallback: T): T {
+  if (value == null) {
+    return fallback;
+  }
+
+  if (typeof value !== 'string') {
+    return value as T;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function hasStoredNamedScoreWeight(
+  gradingResult: GradingResult | null,
+  metricName: string,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(gradingResult?.namedScoreWeights ?? {}, metricName);
+}
+
+/**
+ * Legacy/imported rows may have per-row named scores without stored
+ * grading_result.namedScoreWeights. Route those rows through the canonical
+ * accumulator so assertion-count and templated-metric fallback behavior matches
+ * unfiltered prompt metrics.
+ */
+async function aggregateNamedScoresWithoutStoredWeights(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+): Promise<void> {
+  const db = await getDb();
+
+  const query = sql`
+    SELECT
+      prompt_idx,
+      named_scores,
+      grading_result,
+      json_extract(test_case, '$.vars') as test_vars
+    FROM eval_results
+    WHERE ${whereSql}
+      AND named_scores IS NOT NULL
+      AND json_valid(named_scores)
+      AND EXISTS (
+        SELECT 1
+        FROM json_each(eval_results.named_scores) as score_entries
+        LEFT JOIN json_each(
+          CASE
+            WHEN grading_result IS NOT NULL
+              AND json_valid(grading_result)
+              AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
+            THEN json_extract(grading_result, '$.namedScoreWeights')
+            ELSE json('{}')
+          END
+        ) as weight_entries
+          ON weight_entries.key = score_entries.key
+        WHERE weight_entries.key IS NULL
+      )
+  `;
+
+  const results = (await db.all(query)) as Array<{
+    prompt_idx: number;
+    named_scores: unknown;
+    grading_result: unknown;
+    test_vars: unknown;
+  }>;
+
+  for (const row of results) {
+    const idx = row.prompt_idx;
+    if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
+      continue;
+    }
+
+    const namedScores = parseJsonField<Record<string, number>>(row.named_scores, {});
+    const gradingResult = parseJsonField<GradingResult | null>(row.grading_result, null);
+    const testVars = parseJsonField<Vars>(row.test_vars, {});
+
+    for (const [metricName, metricValue] of Object.entries(namedScores)) {
+      if (hasStoredNamedScoreWeight(gradingResult, metricName)) {
+        continue;
+      }
+
+      if (typeof metricValue !== 'number') {
+        continue;
+      }
+
+      accumulateNamedMetric(metrics[idx], {
+        metricName,
+        metricValue,
+        gradingResult,
+        testVars,
+      });
     }
   }
 }
