@@ -350,6 +350,11 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual([{ quote: 'say "}" now' }]);
     });
 
+    it('should not treat a bare quote inside a plain scalar as opening a string', () => {
+      const input = '{reason: mentions "admin, score: 1}';
+      expect(extractJsonObjects(input)).toEqual([{ reason: 'mentions "admin', score: 1 }]);
+    });
+
     describe('convertSlashCommentsToHash', () => {
       it('should convert basic // comments to # comments', () => {
         const input = 'some text // this is a comment';
