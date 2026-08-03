@@ -128,6 +128,15 @@ export class GeminiImageProvider implements ApiProvider {
     );
   }
 
+  private getVertexApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      this.env?.VERTEX_API_KEY ||
+      this.env?.GOOGLE_API_KEY ||
+      GoogleAuthManager.getApiKey(this.config, undefined, true).apiKey
+    );
+  }
+
   /**
    * Gemini 3.x image models use the global Vertex endpoint.
    * Older models (e.g. gemini-2.5) use regional endpoints.
@@ -169,10 +178,7 @@ export class GeminiImageProvider implements ApiProvider {
           getEnvString('GOOGLE_PROJECT_ID') ||
           getEnvString('GOOGLE_CLOUD_PROJECT');
 
-    const vertexApiKey =
-      this.config.vertexai === true
-        ? GoogleAuthManager.getApiKey(this.config, this.env, true).apiKey
-        : undefined;
+    const vertexApiKey = this.config.vertexai === true ? this.getVertexApiKey() : undefined;
     const hasOAuthConfig = Boolean(
       this.config.credentials ||
         this.config.keyFilename ||
@@ -182,7 +188,7 @@ export class GeminiImageProvider implements ApiProvider {
     const explicitlyRequestedExpress =
       this.config.expressMode === true ||
       Boolean(this.config.apiKey) ||
-      (Boolean(this.env?.VERTEX_API_KEY) && !this.config.projectId);
+      (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) && !this.config.projectId);
     const usesVertexExpress =
       this.config.vertexai === true &&
       Boolean(vertexApiKey) &&
@@ -344,7 +350,12 @@ export class GeminiImageProvider implements ApiProvider {
 
     try {
       const credentials = loadCredentials(this.config.credentials);
-      const { client } = await getGoogleClient({ credentials });
+      const { client } = await getGoogleClient({
+        credentials,
+        googleAuthOptions: this.config.googleAuthOptions,
+        scopes: this.config.scopes,
+        keyFilename: this.config.keyFilename,
+      });
       const projectId = await resolveProjectId(this.config, this.env);
 
       if (!projectId) {

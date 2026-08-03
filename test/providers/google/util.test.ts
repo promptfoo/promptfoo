@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,6 +27,7 @@ import {
   mergeParts,
   normalizeSafetySettings,
   normalizeTools,
+  parseConfigSystemInstruction,
   parseStringObject,
   removeGoogleFunctionDeclarations,
   resolveGoogleConfigFileReference,
@@ -186,6 +188,20 @@ describe('util', () => {
           configurable: true,
         });
       }
+    });
+
+    it('renders an absolute system instruction file path before basePath resolution', () => {
+      const instructionPath = path.resolve('/absolute', 'system-instruction.txt');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('Instruction from the rendered path.');
+
+      const result = parseConfigSystemInstruction(
+        'file://{{ instructionPath }}',
+        { instructionPath },
+        path.resolve('/provider', 'base'),
+      );
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(instructionPath, 'utf8');
+      expect(result).toEqual({ parts: [{ text: 'Instruction from the rendered path.' }] });
     });
   });
 

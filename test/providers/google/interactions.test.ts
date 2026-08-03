@@ -519,6 +519,59 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
+  it('normalizes File Search and Google Maps grounding citations', async () => {
+    const annotations = [
+      {
+        type: 'file_citation',
+        document_uri: 'gs://example-bucket/guide.pdf',
+        file_name: 'Guide',
+        page_number: 7,
+        start_index: 0,
+        end_index: 5,
+      },
+      {
+        type: 'place_citation',
+        place_id: 'places/example-bistro',
+        name: 'Example Bistro',
+        url: 'https://maps.google.com/?cid=123',
+        start_index: 10,
+        end_index: 16,
+      },
+    ];
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'interaction-mixed-grounding',
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'text', text: 'Guide and Bistro.', annotations }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(provider.callApi('Find the cited guide and restaurant.')).resolves.toMatchObject({
+      metadata: {
+        annotations,
+        citations: [
+          {
+            source: 'gs://example-bucket/guide.pdf',
+            content: 'Guide (page 7): Guide',
+          },
+          {
+            url: 'https://maps.google.com/?cid=123',
+            content: 'Example Bistro: Bistro',
+          },
+        ],
+      },
+    });
+  });
+
   it('normalizes standard multimodal input_text parts for Robotics ER 2', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },

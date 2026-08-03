@@ -168,6 +168,11 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     const promptPassthrough = promptConfig?.passthrough as Record<string, any> | undefined;
 
     for (const field of PERPLEXITY_PASSTHROUGH_FIELDS) {
+      if (promptPassthrough && Object.prototype.hasOwnProperty.call(promptPassthrough, field)) {
+        result.body[field] = promptPassthrough[field];
+        continue;
+      }
+
       const value =
         promptPassthrough?.[field] ??
         promptConfig?.[field] ??

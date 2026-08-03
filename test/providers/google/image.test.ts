@@ -234,6 +234,35 @@ describe('GoogleImageProvider', async () => {
       ]);
     });
 
+    it('should forward all configured OAuth options for Vertex AI', async () => {
+      const provider = new GoogleImageProvider('imagen-3.0-generate-001', {
+        config: {
+          projectId: 'test-project',
+          keyFilename: '/keys/provider.json',
+          scopes: ['scope-a', 'scope-b'],
+          googleAuthOptions: { universeDomain: 'provider.example' },
+        },
+      });
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
+          },
+        }),
+      };
+      mockGetGoogleClient.mockResolvedValue({ client: mockClient, projectId: 'test-project' });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(mockGetGoogleClient).toHaveBeenCalledWith({
+        credentials: undefined,
+        googleAuthOptions: { universeDomain: 'provider.example' },
+        scopes: ['scope-a', 'scope-b'],
+        keyFilename: '/keys/provider.json',
+      });
+    });
+
     it('should handle OAuth errors', async () => {
       const provider = new GoogleImageProvider('imagen-3.0-generate-001', {
         config: {

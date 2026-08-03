@@ -214,6 +214,34 @@ describe('Perplexity Provider', () => {
       expect(body).not.toHaveProperty('web_search_options');
     });
 
+    it('preserves null search options from prompt passthrough over inherited values', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          search_domain_filter: ['provider.example'],
+          web_search_options: {
+            search_context_size: 'high',
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            passthrough: {
+              search_domain_filter: null,
+              web_search_options: null,
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body).toHaveProperty('search_domain_filter', null);
+      expect(body).toHaveProperty('web_search_options', null);
+    });
+
     it('should set the correct usage tier', () => {
       const tiers = ['high', 'medium', 'low'] as const;
 

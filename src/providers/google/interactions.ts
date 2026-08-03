@@ -567,6 +567,81 @@ function getInteractionAnnotationExcerpt(
     .trim();
 }
 
+interface InteractionCitationAnnotation {
+  type?: unknown;
+  url?: unknown;
+  title?: unknown;
+  document_uri?: unknown;
+  file_name?: unknown;
+  source?: unknown;
+  page_number?: unknown;
+  media_id?: unknown;
+  place_id?: unknown;
+  name?: unknown;
+  start_index?: unknown;
+  end_index?: unknown;
+  startIndex?: unknown;
+  endIndex?: unknown;
+}
+
+function getTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeInteractionCitation(
+  annotation: unknown,
+  text: string | undefined,
+): Array<{ url?: string; source?: string; content: string }> {
+  if (!annotation || typeof annotation !== 'object') {
+    return [];
+  }
+
+  const record = annotation as InteractionCitationAnnotation;
+  const startIndex = record.start_index ?? record.startIndex;
+  const endIndex = record.end_index ?? record.endIndex;
+  const excerpt = getInteractionAnnotationExcerpt(text, startIndex, endIndex);
+
+  if (record.type === 'url_citation') {
+    const url = getTrimmedString(record.url);
+    if (!/^https?:\/\//i.test(url)) {
+      return [];
+    }
+    const title = getTrimmedString(record.title);
+    return [{ url, content: [title, excerpt].filter(Boolean).join(': ') || url }];
+  }
+
+  if (record.type === 'file_citation') {
+    const source = [record.document_uri, record.source, record.file_name, record.media_id]
+      .map(getTrimmedString)
+      .find(Boolean);
+    if (!source) {
+      return [];
+    }
+    const fileName = getTrimmedString(record.file_name);
+    const page = Number.isInteger(record.page_number) ? ` (page ${record.page_number})` : '';
+    const label = `${fileName || source}${page}`;
+    return [{ source, content: [label, excerpt].filter(Boolean).join(': ') || source }];
+  }
+
+  if (record.type === 'place_citation') {
+    const url = getTrimmedString(record.url);
+    const name = getTrimmedString(record.name);
+    const placeId = getTrimmedString(record.place_id);
+    const source = url || placeId || name;
+    if (!source) {
+      return [];
+    }
+    return [
+      {
+        ...(url ? { url } : { source }),
+        content: [name, excerpt].filter(Boolean).join(': ') || source,
+      },
+    ];
+  }
+
+  return [];
+}
+
 function getInteractionGroundingMetadata(
   data: InteractionResponse,
   outputContent: InteractionContent[],
@@ -578,37 +653,9 @@ function getInteractionGroundingMetadata(
     if (!Array.isArray(part.annotations)) {
       return [];
     }
-    return part.annotations.flatMap((annotation) => {
-      if (!annotation || typeof annotation !== 'object') {
-        return [];
-      }
-      const record = annotation as {
-        type?: unknown;
-        url?: unknown;
-        title?: unknown;
-        start_index?: unknown;
-        end_index?: unknown;
-        startIndex?: unknown;
-        endIndex?: unknown;
-      };
-      if (
-        record.type !== 'url_citation' ||
-        typeof record.url !== 'string' ||
-        !/^https?:\/\//i.test(record.url)
-      ) {
-        return [];
-      }
-      const startIndex = record.start_index ?? record.startIndex;
-      const endIndex = record.end_index ?? record.endIndex;
-      const excerpt = getInteractionAnnotationExcerpt(part.text, startIndex, endIndex);
-      const title = typeof record.title === 'string' ? record.title.trim() : '';
-      return [
-        {
-          url: record.url,
-          content: [title, excerpt].filter(Boolean).join(': ') || record.url,
-        },
-      ];
-    });
+    return part.annotations.flatMap((annotation) =>
+      normalizeInteractionCitation(annotation, part.text),
+    );
   });
 
   const steps = data.steps || [];

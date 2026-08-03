@@ -1482,10 +1482,8 @@ export function parseConfigSystemInstruction(
 
   // Load systemInstruction from file if it's a file path
   if (typeof configSystemInstruction === 'string') {
-    const instructionReference = resolveGoogleConfigFileReference(
-      configSystemInstruction,
-      basePath,
-    );
+    const renderedInstruction = renderVarsInObject(configSystemInstruction, contextVars);
+    const instructionReference = resolveGoogleConfigFileReference(renderedInstruction, basePath);
     configInstruction = loadFile(instructionReference, contextVars);
   }
 

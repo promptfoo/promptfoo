@@ -96,7 +96,12 @@ export class GoogleImageProvider implements ApiProvider {
    */
   private async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      googleAuthOptions: this.config.googleAuthOptions,
+      scopes: this.config.scopes,
+      keyFilename: this.config.keyFilename,
+    });
     return client;
   }
 
