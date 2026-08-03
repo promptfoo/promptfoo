@@ -72,9 +72,7 @@ describe('handleCorrectover', () => {
 
   describe('basic scanning', () => {
     it('should pass when CCS reports no findings', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -88,9 +86,7 @@ describe('handleCorrectover', () => {
 
     it('should fail when CCS reports findings', async () => {
       const findings = JSON.stringify([{ rule: 'RCE', detail: 'Detected subprocess call' }]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -104,9 +100,7 @@ describe('handleCorrectover', () => {
     });
 
     it('should pass rules path as argument (not shell-interpolated)', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
 
       await handleCorrectover(
         makeParams({
@@ -123,9 +117,7 @@ describe('handleCorrectover', () => {
     });
 
     it('should use renderedValue over raw value for rules path', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
 
       await handleCorrectover(
         makeParams({
@@ -149,9 +141,7 @@ describe('handleCorrectover', () => {
   describe('tool-call metadata scanning', () => {
     it('should scan metadata.toolCalls from agent providers (OpenAI format)', async () => {
       const findings = JSON.stringify([{ rule: 'SSRF', detail: 'Internal IP detected' }]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -175,19 +165,17 @@ describe('handleCorrectover', () => {
     });
 
     it('should scan metadata.tool_calls (n8n snake_case format)', async () => {
-      const findings = JSON.stringify([{ rule: 'CMD_INJECTION', detail: 'Shell injection detected' }]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      const findings = JSON.stringify([
+        { rule: 'CMD_INJECTION', detail: 'Shell injection detected' },
+      ]);
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
           providerResponse: {
             output: 'Done',
             metadata: {
-              tool_calls: [
-                { name: 'execute', arguments: { cmd: 'rm -rf /' } },
-              ],
+              tool_calls: [{ name: 'execute', arguments: { cmd: 'rm -rf /' } }],
             },
           } as any,
         }),
@@ -198,9 +186,7 @@ describe('handleCorrectover', () => {
 
     it('should scan metadata.actions array', async () => {
       const findings = JSON.stringify([{ rule: 'RCE', detail: 'Dangerous action' }]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -218,9 +204,7 @@ describe('handleCorrectover', () => {
 
     it('should scan MCP direct metadata fields (toolArgs)', async () => {
       const findings = JSON.stringify([{ rule: 'SSRF', detail: 'Internal IP detected' }]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -240,15 +224,13 @@ describe('handleCorrectover', () => {
 
   describe('post-transform output scanning', () => {
     it('should scan transformed output when different from raw', async () => {
-      const findings = JSON.stringify([{ rule: 'PATH_TRAVERSAL', detail: 'Dot-dot-slash detected' }]);
+      const findings = JSON.stringify([
+        { rule: 'PATH_TRAVERSAL', detail: 'Dot-dot-slash detected' },
+      ]);
       // First call: raw output 'encoded_data' -> clean
-      mockSpawn.mockReturnValueOnce(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValueOnce(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
       // Second call: transformed '../../../etc/passwd' -> findings
-      mockSpawn.mockReturnValueOnce(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValueOnce(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -261,9 +243,7 @@ describe('handleCorrectover', () => {
     });
 
     it('should not double-scan when transformed equals raw', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
 
       await handleCorrectover(
         makeParams({
@@ -291,9 +271,7 @@ describe('handleCorrectover', () => {
     });
 
     it('should fail when CCS scanner produces empty output', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [''], exitCode: 1 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [''], exitCode: 1 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -345,9 +323,7 @@ describe('handleCorrectover', () => {
   describe('inverse (not-correctover) mode', () => {
     it('should pass when inverse=true and findings exist', async () => {
       const findings = JSON.stringify([{ rule: 'RCE', detail: 'dangerous' }]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -360,9 +336,7 @@ describe('handleCorrectover', () => {
     });
 
     it('should fail when inverse=true and no findings', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({
@@ -396,9 +370,7 @@ describe('handleCorrectover', () => {
       const findings = JSON.stringify([
         { rule: 'CREDENTIAL_LEAK', detail: 'Found key ghp_abc123def456ghi789jkl0 in tool input' },
       ]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({ providerResponse: { output: 'test' } as any }),
@@ -411,9 +383,7 @@ describe('handleCorrectover', () => {
       const findings = JSON.stringify([
         { rule: 'CREDENTIAL_LEAK', detail: 'Found sk-abc123def456ghi789jkl0mnop in output' },
       ]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({ providerResponse: { output: 'test' } as any }),
@@ -426,9 +396,7 @@ describe('handleCorrectover', () => {
       const findings = JSON.stringify([
         { rule: 'CREDENTIAL_LEAK', detail: 'Found password=supersecret123 in config' },
       ]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({ providerResponse: { output: 'test' } as any }),
@@ -440,9 +408,7 @@ describe('handleCorrectover', () => {
       const findings = JSON.stringify([
         { rule: 'CREDENTIAL_LEAK', detail: 'Found AWS key AKIAIOSFODNN7EXAMPLE in output' },
       ]);
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: [findings], exitCode: 0 }));
 
       const result = await handleCorrectover(
         makeParams({ providerResponse: { output: 'test' } as any }),
@@ -454,13 +420,9 @@ describe('handleCorrectover', () => {
 
   describe('stdin piping', () => {
     it('should write payload to child process stdin', async () => {
-      mockSpawn.mockReturnValue(
-        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
-      );
+      mockSpawn.mockReturnValue(createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }));
 
-      await handleCorrectover(
-        makeParams({ providerResponse: { output: 'test payload' } as any }),
-      );
+      await handleCorrectover(makeParams({ providerResponse: { output: 'test payload' } as any }));
 
       expect(mockSpawn).toHaveBeenCalledWith(
         'ccs',

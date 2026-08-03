@@ -1,6 +1,8 @@
 import { spawn } from 'child_process';
+
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
@@ -81,7 +83,7 @@ function extractToolCalls(providerResponse: Record<string, unknown> | undefined)
           payloads.push(
             typeof fn.arguments === 'string'
               ? fn.arguments
-              : serializeForScan(fn.arguments) ?? '',
+              : (serializeForScan(fn.arguments) ?? ''),
           );
         }
       }
@@ -242,7 +244,13 @@ async function runCcsScanner(
 }
 
 export const handleCorrectover = async (params: AssertionParams): Promise<GradingResult> => {
-  const { assertion, inverse = false, providerResponse, output: transformedOutput, renderedValue } = params;
+  const {
+    assertion,
+    inverse = false,
+    providerResponse,
+    output: transformedOutput,
+    renderedValue,
+  } = params;
   const payloads: string[] = [];
 
   // 1. Raw provider output
