@@ -483,8 +483,9 @@ describe('handleCorrectover', () => {
       const result = await handleCorrectover(
         makeParams({ providerResponse: { output: 'test' } as any }),
       );
-      // resolve(null) means no findings -> pass
-      expect(result.pass).toBe(true);
+      // resolve(null) -> handler returns CCS_CLI_NOT_FOUND -> pass: false
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('not found');
     });
 
     it('should return no-output message when provider has no output and no metadata', async () => {
