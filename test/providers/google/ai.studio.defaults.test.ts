@@ -7,11 +7,11 @@ import {
 describe('Google AI Studio Default Providers', () => {
   it('should create providers with correct model names', () => {
     const providers = getGoogleAiStudioProviders();
-    expect(providers.gradingProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.gradingJsonProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.llmRubricProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.suggestionsProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.synthesizeProvider.id()).toBe('google:gemini-2.5-pro');
+    expect(providers.gradingProvider.id()).toBe('google:gemini-3.6-flash');
+    expect(providers.gradingJsonProvider.id()).toBe('google:gemini-3.6-flash');
+    expect(providers.llmRubricProvider.id()).toBe('google:gemini-3.6-flash');
+    expect(providers.suggestionsProvider.id()).toBe('google:gemini-3.6-flash');
+    expect(providers.synthesizeProvider.id()).toBe('google:gemini-3.6-flash');
   });
 
   it('should create AIStudioChatProvider instances', () => {

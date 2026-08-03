@@ -344,23 +344,38 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-haiku-4-5',
       },
       {
-        name: 'Google Vertex Gemini 2.5 Pro',
-        value: 'vertex:gemini-2.5-pro',
+        name: 'Google Vertex Gemini 3.6 Flash',
+        value: {
+          id: 'vertex:gemini-3.6-flash',
+          config: { region: 'global' },
+        },
+      },
+      {
+        name: 'Google Vertex Gemini 3.5 Flash-Lite',
+        value: {
+          id: 'vertex:gemini-3.5-flash-lite',
+          config: { region: 'global' },
+        },
       },
     ];
 
-    const selectedProvider = await select({
+    const selectedProvider = await select<string | ProviderOptions>({
       message: 'Choose a model to target:',
       choices: providerChoices,
       pageSize: process.stdout.rows - 6,
     });
 
-    recordOnboardingStep('choose provider', { value: selectedProvider });
+    recordOnboardingStep('choose provider', {
+      value:
+        typeof selectedProvider === 'string' ? selectedProvider : JSON.stringify(selectedProvider),
+    });
 
     if (selectedProvider === 'Other') {
       providers = [{ id: 'openai:gpt-5-mini', label }];
-    } else {
+    } else if (typeof selectedProvider === 'string') {
       providers = [{ id: selectedProvider, label }];
+    } else {
+      providers = [{ ...selectedProvider, label }];
     }
   }
 

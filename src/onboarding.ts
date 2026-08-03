@@ -390,7 +390,7 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | object)[] = [];
+  const providers: (string | ProviderOptions)[] = [];
   let action: string;
   let language: string;
 
@@ -514,8 +514,11 @@ export async function createDummyFiles(
         ],
       },
       {
-        name: '[Google] Gemini 3.1 Pro, ...',
-        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+        name: '[Google] Gemini 3.6 Flash, Gemini 3.5 Flash-Lite, ...',
+        value: [
+          { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+          { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+        ],
       },
       {
         name: '[HuggingFace] Llama, Phi, Gemma, ...',
@@ -710,7 +713,10 @@ export async function createDummyFiles(
 
   return {
     numPrompts: prompts.length,
-    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
+    providerPrefixes: providers.map((provider) => {
+      const providerId = typeof provider === 'string' ? provider : provider.id;
+      return providerId?.split(':')[0] ?? 'unknown';
+    }),
     action,
     language,
     outDirectory,

@@ -859,9 +859,9 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with vertex:video:modelname', async () => {
-    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-001');
     expect(provider).toBeInstanceOf(GoogleVideoProvider);
-    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
 
   it('loadApiProvider with replicate:modelname', async () => {

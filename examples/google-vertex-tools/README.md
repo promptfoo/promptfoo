@@ -13,8 +13,8 @@ cd google-vertex-tools
 
 This example demonstrates how to use [Vertex AI models](https://www.promptfoo.dev/docs/providers/vertex/) with:
 
-- Function calling and tool declarations
-- Function callback execution with local implementations
+- Function calling and tool declarations with Gemini 3.6 Flash
+- Streamed function-call arguments and callback execution with local implementations
 - Different configuration approaches (YAML vs JavaScript)
 
 ## Prerequisites
@@ -60,12 +60,14 @@ Uses external tool definitions and validates function calls without execution:
 - `promptfooconfig.yaml` - YAML configuration with external tools
 - `tools.json` - Function definitions for weather lookup
 
-### Function Callbacks (`promptfooconfig-callback.js`)
+### Function Callbacks (`promptfooconfig-callback.mjs`)
 
-Demonstrates actual function execution with local callbacks:
+Demonstrates streamed function-call arguments and actual function execution with local callbacks:
 
-- `promptfooconfig-callback.js` - JavaScript configuration with inline tools and callbacks
+- `promptfooconfig-callback.mjs` - Portable ESM configuration with inline tools and callbacks
 - Includes local function implementation for adding numbers
+
+Callbacks execute as trusted, unsandboxed local code. Isolate runs that use untrusted models or eval content.
 
 ## Running the Examples
 
@@ -78,7 +80,7 @@ Demonstrates actual function execution with local callbacks:
 2. **Function callback example:**
 
    ```sh
-   promptfoo eval -c promptfooconfig-callback.js
+   promptfoo eval -c promptfooconfig-callback.mjs
    ```
 
 3. **View results:**
@@ -90,7 +92,7 @@ Demonstrates actual function execution with local callbacks:
 ## Expected Results
 
 - **Basic example**: Validates that the model correctly calls the weather function with proper parameters
-- **Callback example**: Actually executes the addition function and validates the computed results
+- **Callback example**: Assembles streamed arguments, executes the addition function, and validates the computed results
 
 ## Learn More
 

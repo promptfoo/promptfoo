@@ -8,7 +8,19 @@ prompts:
     Compare the two images.
 
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.6-flash
+    config:
+      generationConfig:
+        maxOutputTokens: 1024
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+
+  - id: google:gemini-3.5-flash-lite
+    config:
+      generationConfig:
+        maxOutputTokens: 1024
+        thinkingConfig:
+          thinkingLevel: MINIMAL
 
 tests:
   - vars:

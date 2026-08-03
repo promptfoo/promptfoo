@@ -6,26 +6,24 @@ prompts:
   - '{{query}}'
 
 providers:
-  # Google Search as a tool (using Gemini 2.5 Flash)
-  - id: google:gemini-2.5-flash
+  # Google Search as a tool using the latest frontier Flash model
+  - id: google:gemini-3.6-flash
     config:
-      temperature: 0.2
       maxOutputTokens: 1024
       tools:
         - googleSearch: {}
 
-  # Alternate version with thinking capabilities
-  - id: google:gemini-2.5-pro
+  # Flash-Lite with thinking enabled for more complex grounded queries
+  - id: google:gemini-3.5-flash-lite
     config:
-      temperature: 0.2
       maxOutputTokens: 1024
       generationConfig:
         thinkingConfig:
-          thinkingBudget: 1024
+          thinkingLevel: MEDIUM
       tools:
         - googleSearch: {}
 
-  # Google Search grounding on the cost-efficient Flash-Lite model
+  # Google Search grounding on a stable Gemini 2.5 model
   - id: google:gemini-2.5-flash-lite
     config:
       temperature: 0.2
@@ -38,8 +36,8 @@ tests:
   - vars:
       query: What is the current Google stock price?
     assert:
-      - type: contains
-        value: stock
+      - type: icontains-any
+        value: [Alphabet, Google, GOOG, GOOGL]
       - type: contains
         value: '$'
 
@@ -47,16 +45,16 @@ tests:
   - vars:
       query: What are the latest features in TypeScript?
     assert:
-      - type: contains
+      - type: icontains
         value: TypeScript
-      - type: contains
-        value: feature
+      - type: icontains-any
+        value: [feature, support, release, version]
 
   # Test a factual question
   - vars:
       query: Who won the most recent Super Bowl?
     assert:
-      - type: contains
+      - type: icontains
         value: Super Bowl
-      - type: contains
-        value: won
+      - type: icontains-any
+        value: [won, winner, champions, victory, defeated, beat]

@@ -29,14 +29,19 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
   { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
   { value: 'claude-haiku-4-5', label: 'Anthropic Claude 4.5 Haiku' },
-  { value: 'vertex:gemini-3.1-pro-preview', label: 'Google Vertex AI Gemini 3.1 Pro' },
-  { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
+  { value: 'vertex:gemini-3.6-flash', label: 'Google Vertex AI Gemini 3.6 Flash' },
+  { value: 'vertex:gemini-3.5-flash-lite', label: 'Google Vertex AI Gemini 3.5 Flash-Lite' },
 ];
 
 const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5', label: 'OpenAI GPT-5' },
   { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
+  {
+    value: 'vertex:gemini-3.1-pro-preview',
+    label: 'Google Vertex AI Gemini 3.1 Pro Preview',
+  },
+  { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
 
 export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };
