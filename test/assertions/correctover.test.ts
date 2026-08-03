@@ -1,21 +1,54 @@
-import { handleCorrectover } from './correctover';
-import type { AssertionParams } from '../types/index';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AssertionParams } from '../../src/types/index';
+import { handleCorrectover } from '../../src/assertions/correctover';
 
-// Mock child_process — implementation uses `exec`, not `execFile`
-jest.mock('child_process', () => ({
-  exec: jest.fn(),
+vi.mock('child_process', () => {
+  return {
+    spawn: vi.fn(),
+  };
+});
+
+vi.mock('../../src/logger', () => ({
+  default: { warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-jest.mock('util', () => ({
-  promisify: (fn: any) => fn,
-}));
+const { spawn } = await import('child_process');
+const mockSpawn = spawn as ReturnType<typeof vi.fn>;
 
-jest.mock('../logger', () => ({
-  default: { warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
-}));
+function createMockChild(opts: {
+  stdoutChunks?: string[];
+  stderrChunks?: string[];
+  exitCode?: number | null;
+  errorEvent?: { code?: string; message?: string } | null;
+}) {
+  const EventEmitter = require('events');
+  const child = new EventEmitter();
+  child.stdin = {
+    write: vi.fn(),
+    end: vi.fn(),
+  };
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = vi.fn();
 
-const { exec } = require('child_process');
-const mockExec = exec as jest.MockedFunction<typeof exec>;
+  process.nextTick(() => {
+    if (opts.errorEvent) {
+      const err = new Error(opts.errorEvent.message || 'spawn error');
+      (err as Error & { code?: string }).code = opts.errorEvent.code;
+      child.emit('error', err);
+    } else {
+      for (const chunk of opts.stdoutChunks || []) {
+        child.stdout.emit('data', Buffer.from(chunk));
+      }
+      for (const chunk of opts.stderrChunks || []) {
+        child.stderr.emit('data', Buffer.from(chunk));
+      }
+      child.emit('close', opts.exitCode ?? 0);
+    }
+  });
+
+  return child;
+}
 
 function makeParams(overrides: Partial<AssertionParams> = {}): AssertionParams {
   return {
@@ -30,79 +63,172 @@ function makeParams(overrides: Partial<AssertionParams> = {}): AssertionParams {
 
 describe('handleCorrectover', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('basic scanning', () => {
     it('should pass when CCS reports no findings', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: '[]', stderr: '' });
-      }) as any);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'safe output' } as any,
-        output: 'safe output',
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'safe output' } as any,
+          output: 'safe output',
+        }),
+      );
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
     });
 
     it('should fail when CCS reports findings', async () => {
-      const findings = JSON.stringify([
-        { rule: 'RCE', detail: 'Detected subprocess call' },
-      ]);
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: findings, stderr: '' });
-      }) as any);
+      const findings = JSON.stringify([{ rule: 'RCE', detail: 'Detected subprocess call' }]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'os.system("rm -rf /")' } as any,
-        output: 'os.system("rm -rf /")',
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'os.system("rm -rf /")' } as any,
+          output: 'os.system("rm -rf /")',
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toContain('RCE');
     });
+
+    it('should pass rules path as argument (not shell-interpolated)', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
+
+      await handleCorrectover(
+        makeParams({
+          assertion: { type: 'correctover' as any, value: '/path/to/rules.yaml' },
+          providerResponse: { output: 'test' } as any,
+        }),
+      );
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'ccs',
+        expect.arrayContaining(['--rules', '/path/to/rules.yaml']),
+        expect.any(Object),
+      );
+    });
+
+    it('should use renderedValue over raw value for rules path', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
+
+      await handleCorrectover(
+        makeParams({
+          assertion: {
+            type: 'correctover' as any,
+            value: '{{rulesFile}}',
+            renderedValue: '/resolved/path/rules.yaml',
+          } as any,
+          providerResponse: { output: 'test' } as any,
+        }),
+      );
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'ccs',
+        expect.arrayContaining(['--rules', '/resolved/path/rules.yaml']),
+        expect.any(Object),
+      );
+    });
   });
 
   describe('tool-call metadata scanning', () => {
-    it('should scan metadata.toolCalls from agent providers', async () => {
-      const findings = JSON.stringify([
-        { rule: 'SSRF', detail: 'Internal IP detected' },
-      ]);
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: findings, stderr: '' });
-      }) as any);
+    it('should scan metadata.toolCalls from agent providers (OpenAI format)', async () => {
+      const findings = JSON.stringify([{ rule: 'SSRF', detail: 'Internal IP detected' }]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: {
-          output: 'Done',
-          metadata: {
-            toolCalls: [{ function: { name: 'http_request', arguments: JSON.stringify({ url: 'http://169.254.169.254' }) } }],
-          },
-        } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: {
+            output: 'Done',
+            metadata: {
+              toolCalls: [
+                {
+                  function: {
+                    name: 'http_request',
+                    arguments: JSON.stringify({ url: 'http://169.254.169.254' }),
+                  },
+                },
+              ],
+            },
+          } as any,
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('SSRF');
     });
 
-    it('should scan MCP direct metadata fields (toolArgs)', async () => {
-      const findings = JSON.stringify([
-        { rule: 'SSRF', detail: 'Internal IP detected' },
-      ]);
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: findings, stderr: '' });
-      }) as any);
+    it('should scan metadata.tool_calls (n8n snake_case format)', async () => {
+      const findings = JSON.stringify([{ rule: 'CMD_INJECTION', detail: 'Shell injection detected' }]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: {
-          output: 'Done',
-          metadata: {
-            toolName: 'http_request',
-            toolArgs: { url: 'http://169.254.169.254' },
-          },
-        } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: {
+            output: 'Done',
+            metadata: {
+              tool_calls: [
+                { name: 'execute', arguments: { cmd: 'rm -rf /' } },
+              ],
+            },
+          } as any,
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('CMD_INJECTION');
+    });
+
+    it('should scan metadata.actions array', async () => {
+      const findings = JSON.stringify([{ rule: 'RCE', detail: 'Dangerous action' }]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: {
+            output: 'Done',
+            metadata: {
+              actions: [{ tool: 'shell', command: 'rm -rf /' }],
+            },
+          } as any,
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('RCE');
+    });
+
+    it('should scan MCP direct metadata fields (toolArgs)', async () => {
+      const findings = JSON.stringify([{ rule: 'SSRF', detail: 'Internal IP detected' }]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: {
+            output: 'Done',
+            metadata: {
+              toolName: 'http_request',
+              toolArgs: { url: 'http://169.254.169.254' },
+            },
+          } as any,
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('SSRF');
     });
@@ -110,83 +236,103 @@ describe('handleCorrectover', () => {
 
   describe('post-transform output scanning', () => {
     it('should scan transformed output when different from raw', async () => {
-      const findings = JSON.stringify([
-        { rule: 'PATH_TRAVERSAL', detail: 'Dot-dot-slash detected' },
-      ]);
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        // Only the transformed output contains the path traversal
-        const input = typeof _opts === 'object' ? _opts.input : '';
-        if (input.includes('../')) {
-          cb(null, { stdout: findings, stderr: '' });
-        } else {
-          cb(null, { stdout: '[]', stderr: '' });
-        }
-      }) as any);
+      const findings = JSON.stringify([{ rule: 'PATH_TRAVERSAL', detail: 'Dot-dot-slash detected' }]);
+      // First call: raw output 'encoded_data' -> clean
+      mockSpawn.mockReturnValueOnce(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
+      // Second call: transformed '../../../etc/passwd' -> findings
+      mockSpawn.mockReturnValueOnce(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'encoded_data' } as any,
-        output: '../../../etc/passwd',
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'encoded_data' } as any,
+          output: '../../../etc/passwd',
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('PATH_TRAVERSAL');
     });
 
     it('should not double-scan when transformed equals raw', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: '[]', stderr: '' });
-      }) as any);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
 
-      await handleCorrectover(makeParams({
-        providerResponse: { output: 'same' } as any,
-        output: 'same',
-      }));
-      // Should only be called once (for raw output), not twice
-      expect(mockExec).toHaveBeenCalledTimes(1);
+      await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'same' } as any,
+          output: 'same',
+        }),
+      );
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('error handling', () => {
     it('should fail (not pass) when CCS CLI is not found', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        const err: any = new Error('spawn ccs ENOENT');
-        err.code = 'ENOENT';
-        err.stderr = 'command not found';
-        cb(err, { stdout: '', stderr: 'command not found' });
-      }) as any);
+      mockSpawn.mockReturnValue(
+        createMockChild({ errorEvent: { code: 'ENOENT', message: 'spawn ccs ENOENT' } }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'test' } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'test' } as any,
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('not found');
     });
 
-    it('should fail (not pass) when CCS scanner crashes', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        const err: any = new Error('segfault');
-        err.code = 139;
-        err.stderr = 'Segmentation fault';
-        cb(err, { stdout: '', stderr: 'Segmentation fault' });
-      }) as any);
+    it('should fail when CCS scanner produces empty output', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [''], exitCode: 1 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'test' } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'test' } as any,
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('could not complete');
+    });
+
+    it('should fail when CCS returns non-JSON output', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['not valid json at all'], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'test' } as any,
+        }),
+      );
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('could not complete');
     });
 
     it('should fail when CCS scanner times out', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        const err: any = new Error('timed out');
-        err.killed = true;
-        err.stderr = '';
-        cb(err, { stdout: '', stderr: '' });
-      }) as any);
+      const EventEmitter = require('events');
+      const child = new EventEmitter();
+      child.stdin = { write: vi.fn(), end: vi.fn() };
+      child.stdout = new EventEmitter();
+      child.stderr = new EventEmitter();
+      child.kill = vi.fn(() => {
+        child.emit('close', null);
+      });
+      mockSpawn.mockReturnValue(child);
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'test' } as any,
-      }));
+      vi.useFakeTimers();
+      const promise = handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
+      vi.advanceTimersByTime(31_000);
+      const result = await promise;
+      vi.useRealTimers();
+
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('could not complete');
     });
@@ -195,61 +341,131 @@ describe('handleCorrectover', () => {
   describe('inverse (not-correctover) mode', () => {
     it('should pass when inverse=true and findings exist', async () => {
       const findings = JSON.stringify([{ rule: 'RCE', detail: 'dangerous' }]);
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: findings, stderr: '' });
-      }) as any);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        inverse: true,
-        providerResponse: { output: 'malicious code' } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          inverse: true,
+          providerResponse: { output: 'malicious code' } as any,
+        }),
+      );
       expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
     });
 
     it('should fail when inverse=true and no findings', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: '[]', stderr: '' });
-      }) as any);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        inverse: true,
-        providerResponse: { output: 'safe output' } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({
+          inverse: true,
+          providerResponse: { output: 'safe output' } as any,
+        }),
+      );
       expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
       expect(result.reason).toContain('Expected CCS violations');
+    });
+
+    it('should fail when inverse=true and CLI not found', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChild({ errorEvent: { code: 'ENOENT', message: 'spawn ccs ENOENT' } }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          inverse: true,
+          providerResponse: { output: 'test' } as any,
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
     });
   });
 
   describe('redaction', () => {
-    it('should redact credential-like patterns in findings', async () => {
-      const findings = JSON.stringify([{
-        rule: 'CREDENTIAL_LEAK',
-        detail: 'Found key ghp_abc123def456ghi789jkl012mno345pqr678 in tool input',
-      }]);
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        cb(null, { stdout: findings, stderr: '' });
-      }) as any);
+    it('should redact GitHub PATs (ghp_ prefix)', async () => {
+      const findings = JSON.stringify([
+        { rule: 'CREDENTIAL_LEAK', detail: 'Found key ghp_abc123def456ghi789jkl0 in tool input' },
+      ]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
 
-      const result = await handleCorrectover(makeParams({
-        providerResponse: { output: 'test' } as any,
-      }));
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
       expect(result.reason).not.toContain('ghp_abc123');
+      expect(result.reason).toContain('<REDACTED>');
+    });
+
+    it('should redact sk- prefixed tokens', async () => {
+      const findings = JSON.stringify([
+        { rule: 'CREDENTIAL_LEAK', detail: 'Found sk-abc123def456ghi789jkl0mnop in output' },
+      ]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
+      expect(result.reason).not.toContain('sk-abc123');
+      expect(result.reason).toContain('<REDACTED>');
+    });
+
+    it('should redact password= patterns', async () => {
+      const findings = JSON.stringify([
+        { rule: 'CREDENTIAL_LEAK', detail: 'Found password=supersecret123 in config' },
+      ]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
+      expect(result.reason).not.toContain('supersecret123');
+    });
+
+    it('should redact AWS access key IDs', async () => {
+      const findings = JSON.stringify([
+        { rule: 'CREDENTIAL_LEAK', detail: 'Found AWS key AKIAIOSFODNN7EXAMPLE in output' },
+      ]);
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
+      expect(result.reason).not.toContain('AKIAIOSFODNN7EXAMPLE');
       expect(result.reason).toContain('<REDACTED>');
     });
   });
 
-  describe('rules configuration', () => {
-    it('should pass rules file path to CCS CLI', async () => {
-      mockExec.mockImplementation(((_cmd: any, _opts: any, cb: any) => {
-        expect(_cmd).toContain('--rules');
-        expect(_cmd).toContain('/path/to/rules.yaml');
-        cb(null, { stdout: '[]', stderr: '' });
-      }) as any);
+  describe('stdin piping', () => {
+    it('should write payload to child process stdin', async () => {
+      mockSpawn.mockReturnValue(
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
 
-      await handleCorrectover(makeParams({
-        assertion: { type: 'correctover' as any, value: '/path/to/rules.yaml' },
-        providerResponse: { output: 'test' } as any,
-      }));
+      await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test payload' } as any }),
+      );
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'ccs',
+        expect.arrayContaining(['--input', '-']),
+        expect.objectContaining({ stdio: ['pipe', 'pipe', 'pipe'] }),
+      );
+      const child = mockSpawn.mock.results[0].value;
+      expect(child.stdin.write).toHaveBeenCalledWith('test payload');
+      expect(child.stdin.end).toHaveBeenCalled();
     });
   });
 });

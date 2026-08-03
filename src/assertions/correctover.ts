@@ -1,37 +1,40 @@
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import { safeJsonStringify } from '../util';
-import { promisify } from 'util';
 import logger from '../logger';
-import type { AssertionParams, GradingResult } from '../types/index';
 
-const execAsync = promisify(exec);
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Correctover CCS (Call Shield) assertion handler.
  *
  * Validates AI agent tool call outputs against Correctover's runtime
- * call verification rules (24 detection rules across 7 categories).
+ * call verification rules using 6-dimension verification
+ * (structure, schema, latency, cost, identity, integrity).
  *
- * Usage in promptfoo config:
+ * Usage in promptfoo config (under tests[].assert):
  * ```yaml
- * assertions:
- *   - type: correctover
- *     value: /path/to/ccs-rules.yaml    # optional: custom rule file
- *     inverse: false                     // optional: invert pass/fail
+ * tests:
+ *   - assert:
+ *       - type: correctover
+ *         value: /path/to/ccs-rules.yaml    # optional: custom rule file
  * ```
  *
- * Requires: pip install correctover-ccs (or fallback to built-in rules).
+ * Requires: pip install correctover-ccs
  * See https://correctover.com/docs for installation.
  */
 
 const CCS_CLI_NOT_FOUND =
   'Correctover CCS CLI not found. Install: pip install correctover-ccs. See https://correctover.com/docs';
 
-/** Redact potentially sensitive data (offending payload excerpts) from scanner output. */
-function redactDetail(text: string): string {
+/** Redact sensitive data (credentials, tokens, payloads) from text. */
+function redactSensitive(text: string): string {
   return text
+    .replace(/\b(ghp_|gho_|ghu_|ghs_|ghr_|sk-|sk_)[A-Za-z0-9]{10,}/g, '<REDACTED>')
+    .replace(/password\s*[=:]\s*\S+/gi, 'password=<REDACTED>')
+    .replace(/\bAKIA[0-9A-Z]{16}\b/g, '<REDACTED>')
     .replace(/[A-Za-z0-9+/=]{40,}/g, '<REDACTED>')
     .replace(/0x[0-9a-fA-F]{16,}/g, '<REDACTED>')
+    .replace(/Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi, 'Bearer <REDACTED>')
     .split('\n')
     .map((line) => (line.length > 120 ? line.substring(0, 117) + '...' : line))
     .join('\n')
@@ -40,8 +43,12 @@ function redactDetail(text: string): string {
 
 /** Serialize a value to a JSON string for scanning. */
 function serializeForScan(value: unknown): string | null {
-  if (value === undefined || value === null) return null;
-  if (typeof value === 'string') return value || null;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value || null;
+  }
   try {
     const s = safeJsonStringify(value);
     return s && s !== '""' ? s : null;
@@ -50,90 +57,189 @@ function serializeForScan(value: unknown): string | null {
   }
 }
 
-/** Extract tool call payloads from provider response metadata, if present. */
-function extractToolCalls(providerResponse: any): string[] {
+/**
+ * Extract tool call payloads from provider response metadata.
+ */
+function extractToolCalls(providerResponse: Record<string, unknown> | undefined): string[] {
   const payloads: string[] = [];
-  const metadata = providerResponse?.metadata;
-  if (!metadata) return payloads;
+  if (!providerResponse) {
+    return payloads;
+  }
+  const metadata = providerResponse.metadata;
+  if (!metadata || typeof metadata !== 'object') {
+    return payloads;
+  }
+  const meta = metadata as Record<string, unknown>;
 
-  // Standard toolCalls array (OpenAI, Anthropic, Claude Agent SDK, n8n, ElevenLabs, etc.)
-  const toolCalls = metadata.toolCalls;
+  // Standard toolCalls array (OpenAI, Anthropic, Claude Agent SDK)
+  const toolCalls = meta.toolCalls;
   if (Array.isArray(toolCalls)) {
     for (const tc of toolCalls) {
-      if (tc.function?.arguments) {
-        payloads.push(tc.function.arguments);
+      const tcObj = tc as Record<string, unknown>;
+      if (tcObj.function && typeof tcObj.function === 'object') {
+        const fn = tcObj.function as Record<string, unknown>;
+        if (fn.arguments) {
+          payloads.push(
+            typeof fn.arguments === 'string'
+              ? fn.arguments
+              : serializeForScan(fn.arguments) ?? '',
+          );
+        }
       }
-      if (tc.input && typeof tc.input === 'object') {
-        const s = serializeForScan(tc.input);
-        if (s) payloads.push(s);
+      if (tcObj.input && typeof tcObj.input === 'object') {
+        const s = serializeForScan(tcObj.input);
+        if (s) {
+          payloads.push(s);
+        }
       }
-      // Generic: serialize entire tool call if it has a name but no structured fields
-      if (tc.name && !tc.function?.arguments && !tc.input) {
-        const s = serializeForScan(tc);
-        if (s) payloads.push(s);
+      if (tcObj.name && !tcObj.function && !tcObj.input && !tcObj.arguments) {
+        const s = serializeForScan(tcObj);
+        if (s) {
+          payloads.push(s);
+        }
       }
     }
   }
 
-  // MCP provider direct metadata fields (MCPProvider.transformToolResult)
-  // Stores toolArgs/originalPayload directly on metadata, not in toolCalls array
-  if (metadata.toolArgs !== undefined) {
-    const s = serializeForScan(metadata.toolArgs);
-    if (s) payloads.push(s);
-  }
-  if (metadata.originalPayload !== undefined) {
-    const s = serializeForScan(metadata.originalPayload);
-    if (s) payloads.push(s);
+  // n8n snake_case variant
+  const toolCallsSnake = meta.tool_calls;
+  if (Array.isArray(toolCallsSnake)) {
+    for (const tc of toolCallsSnake) {
+      const tcObj = tc as Record<string, unknown>;
+      if (tcObj.arguments) {
+        const s = serializeForScan(tcObj.arguments);
+        if (s) {
+          payloads.push(s);
+        }
+      }
+      if (tcObj.name && !tcObj.arguments) {
+        const s = serializeForScan(tcObj);
+        if (s) {
+          payloads.push(s);
+        }
+      }
+    }
   }
 
-  return payloads;
+  // Actions metadata
+  const actions = meta.actions;
+  if (Array.isArray(actions)) {
+    for (const action of actions) {
+      const s = serializeForScan(action);
+      if (s) {
+        payloads.push(s);
+      }
+    }
+  }
+
+  // MCP provider direct metadata fields
+  if (meta.toolArgs !== undefined) {
+    const s = serializeForScan(meta.toolArgs);
+    if (s) {
+      payloads.push(s);
+    }
+  }
+  if (meta.originalPayload !== undefined) {
+    const s = serializeForScan(meta.originalPayload);
+    if (s) {
+      payloads.push(s);
+    }
+  }
+
+  return payloads.filter((p) => p.length > 0);
 }
 
-/** Run CCS scanner CLI with the given payload. Returns findings array or null on error. */
+/**
+ * Run CCS scanner CLI with the given payload via stdin.
+ * Uses spawn (not exec) to avoid shell injection from rules paths.
+ */
 async function runCcsScanner(
   payload: string,
   rulesPath?: string,
-): Promise<{ findings: any[]; raw: string } | null> {
-  let args = 'ccs scan --format json --input -';
+): Promise<{ findings: Record<string, unknown>[]; raw: string } | null> {
+  const args = ['scan', '--format', 'json', '--input', '-'];
   if (rulesPath) {
-    args += ` --rules "${rulesPath}"`;
+    args.push('--rules', rulesPath);
   }
 
-  try {
-    const { stdout, stderr } = await execAsync(args, {
-      input: payload,
-      timeout: 30_000,
-      maxBuffer: 10 * 1024 * 1024,
+  return new Promise((resolve, reject) => {
+    const child = spawn('ccs', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    if (stderr && stderr.includes('command not found')) {
-      return null; // CLI not found — caller handles
-    }
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
 
-    const output = (stdout || '').trim();
-    if (!output) {
-      return { findings: [], raw: '' };
-    }
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+      reject(new Error('CCS scanner timed out after 30 seconds'));
+    }, 30_000);
 
-    let parsed: any;
-    try {
-      parsed = JSON.parse(output);
-    } catch {
-      return { findings: [{ rule: 'ccs-scan', detail: redactDetail(output.substring(0, 200)) }], raw: redactDetail(output) };
-    }
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
 
-    const findings = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
-    // Sanitize raw output in case stderr diagnostics leaked into stdout
-    const raw = stderr ? redactDetail(`${output}\n[stderr] ${stderr.substring(0, 200)}`) : redactDetail(output);
-    return { findings, raw };
-  } catch (err: any) {
-    if (err.code === 'ENOENT' || (err.stderr || '').includes('command not found') || (err.stderr || '').includes('No such file')) {
-      return null;
-    }
-    // Sanitize error message before re-throwing — may contain payload excerpts
-    const sanitized = redactDetail(err.message || String(err));
-    throw new Error(`CCS scanner execution failed: ${sanitized}`);
-  }
+    child.on('error', (err: Error & { code?: string }) => {
+      clearTimeout(timer);
+      if (err.code === 'ENOENT') {
+        resolve(null);
+        return;
+      }
+      reject(new Error(`CCS scanner failed to start: ${err.message}`));
+    });
+
+    child.on('close', (code: number | null) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        return;
+      }
+
+      if (stderr.includes('command not found') || stderr.includes('No such file')) {
+        resolve(null);
+        return;
+      }
+
+      const output = (stdout || '').trim();
+      if (!output) {
+        reject(
+          new Error(
+            `CCS scanner produced no output (exit code: ${String(code)}). ` +
+              'This may indicate a scanner failure rather than a clean scan.',
+          ),
+        );
+        return;
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(output);
+      } catch {
+        reject(
+          new Error(
+            `CCS scanner returned non-JSON output: ${redactSensitive(output.substring(0, 200))}`,
+          ),
+        );
+        return;
+      }
+
+      const findings: Record<string, unknown>[] = Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>[])
+        : parsed
+          ? [parsed as Record<string, unknown>]
+          : [];
+      const raw = redactSensitive(output);
+      resolve({ findings, raw });
+    });
+
+    // Write payload to stdin and close
+    child.stdin.write(payload);
+    child.stdin.end();
+  });
 }
 
 export const handleCorrectover = async (params: AssertionParams): Promise<GradingResult> => {
@@ -147,7 +253,6 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
   }
 
   // 2. Post-transform output (from assertion transform function)
-  //    Serialize first, then compare — avoids string-vs-object always-unequal bug
   if (transformedOutput !== undefined) {
     const transformed = serializeForScan(transformedOutput);
     if (transformed && transformed !== rawOutput) {
@@ -155,9 +260,11 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
     }
   }
 
-  // 3. Tool call payloads from metadata (agent providers store called tools here)
+  // 3. Tool call payloads from metadata
   try {
-    const toolCallPayloads = extractToolCalls(providerResponse);
+    const toolCallPayloads = extractToolCalls(
+      providerResponse as Record<string, unknown> | undefined,
+    );
     payloads.push(...toolCallPayloads);
   } catch {
     // Silently skip if metadata structure is unexpected
@@ -174,13 +281,16 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
     };
   }
 
-  // Determine custom rules path from assertion value
-  const rulesPath = typeof assertion.value === 'string' && assertion.value.length > 0
-    ? assertion.value
-    : undefined;
+  // Determine custom rules path — prefer renderedValue over raw value
+  const rulesPath =
+    typeof assertion.renderedValue === 'string' && assertion.renderedValue.length > 0
+      ? assertion.renderedValue
+      : typeof assertion.value === 'string' && assertion.value.length > 0
+        ? assertion.value
+        : undefined;
 
   try {
-    const allFindings: any[] = [];
+    const allFindings: Record<string, unknown>[] = [];
 
     for (const payload of payloads) {
       const result = await runCcsScanner(payload, rulesPath);
@@ -198,11 +308,15 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
     const hasFindings = allFindings.length > 0;
 
     if (hasFindings) {
-      const ruleSummary = allFindings.map((f: any) => f.rule || f.id || 'unknown').join(', ');
+      const ruleSummary = allFindings
+        .map((f) => (f.rule as string) || (f.id as string) || 'unknown')
+        .join(', ');
       const detail = allFindings
-        .map((f: any) => {
-          const rule = f.rule || f.id || 'unknown';
-          const msg = redactDetail(f.detail || f.message || 'no details');
+        .map((f) => {
+          const rule = (f.rule as string) || (f.id as string) || 'unknown';
+          const msg = redactSensitive(
+            (f.detail as string) || (f.message as string) || 'no details',
+          );
           return `${rule}: ${msg}`;
         })
         .join('; ');
@@ -225,12 +339,14 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
         : 'No issues detected by Correctover CCS',
       assertion,
     };
-  } catch (err: any) {
-    logger.warn('Correctover CCS assertion error: ' + redactDetail(err.message || String(err)));
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const sanitizedMsg = redactSensitive(errMsg);
+    logger.warn('Correctover CCS assertion error: ' + sanitizedMsg);
     return {
       pass: false,
       score: 0,
-      reason: `CCS assertion could not complete: ${redactDetail(err.message)}`,
+      reason: `CCS assertion could not complete: ${sanitizedMsg}`,
       assertion,
     };
   }
