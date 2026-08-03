@@ -60,7 +60,7 @@ interface PluginRowProps {
 }
 
 const PluginRow = ({ test, pluginPassRateThreshold, onPluginClick }: PluginRowProps) => {
-  const passRate = test.numPassed / test.total;
+  const passRate = test.total > 0 ? test.numPassed / test.total : 0;
   const isPassing = passRate >= pluginPassRateThreshold;
 
   const displayName =
@@ -293,7 +293,7 @@ const RiskCategories = ({
 
       return {
         name: category,
-        description: categoryDescriptions[categoryName as keyof typeof categoryDescriptions],
+        description: categoryDescriptions[categoryName as keyof typeof categoryDescriptions] ?? '',
         totalPasses,
         totalTests,
         testTypes,

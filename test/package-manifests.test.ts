@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { validRange } from 'semver';
+import { minVersion, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -169,6 +169,53 @@ describe('package manifests', () => {
     expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
   });
 
+  it('keeps the WatsonX authentication SDK manifest and lockfile on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = 'ibm-cloud-sdk-core';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+
+    expect(developmentRange).toBeDefined();
+    expect(optionalRange).toBe(developmentRange);
+    expect(minVersion(developmentRange!)?.compare('5.6.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('5.6.0'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the OpenAPI generator manifest and lockfile on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = '@asteasolutions/zod-to-openapi';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+
+    expect(developmentRange).toBeDefined();
+    expect(minVersion(developmentRange!)?.compare('9.1.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.1.0'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
@@ -181,6 +228,28 @@ describe('package manifests', () => {
     expect(packageJson.dependencies?.jsdom).toBeUndefined();
     expect(parse5Range).toBeDefined();
     expect(validRange(parse5Range as string)).not.toBeNull();
+  });
+
+  it('requires patched WebSocket fragment limits in published and example manifests', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const lockfile = readPackageJson<{
+      packages?: Record<string, PackageManifest>;
+    }>('package-lock.json');
+    const websocketManifests = [
+      'package.json',
+      'examples/config-websockets/basic/test-server/package.json',
+      'examples/config-websockets/streaming/server/package.json',
+    ];
+
+    for (const manifestPath of websocketManifests) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      const websocketRange = manifest.dependencies?.ws;
+
+      expect(websocketRange, `${manifestPath} must depend on ws`).toBeDefined();
+      expect(minVersion(websocketRange as string)?.compare('8.21.1')).toBeGreaterThanOrEqual(0);
+    }
+
+    expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
   });
 
   it('does not import jsdom from root src/', () => {
@@ -198,6 +267,21 @@ describe('package manifests', () => {
     );
 
     expect(offenders).toEqual([]);
+  });
+
+  it('keeps the supported Node.js range aligned across workspace manifests', () => {
+    // These three drifted apart before (root allowed Node 20.20 while site and
+    // code-scan-action pinned >=20.20.1), so an engine bump that misses one is a real
+    // failure mode. Assert they agree rather than restating the value.
+    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
+      ?.node;
+
+    expect(validRange(rootEngines ?? '')).toBeTruthy();
+
+    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
+      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
+      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
+    }
   });
 
   it('keeps sharp optional for the docs workspace', () => {

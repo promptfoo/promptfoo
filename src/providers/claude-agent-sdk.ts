@@ -292,7 +292,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -338,13 +338,21 @@ export interface ClaudeCodeOptions {
   /**
    * Permission mode for controlling how tool executions are handled:
    * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'manual' - Alias for 'default', prompts for dangerous operations
    * - 'plan' - Planning mode, no actual tool execution
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
    * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
+  permission_mode?:
+    | 'default'
+    | 'manual'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'dontAsk'
+    | 'auto';
 
   /**
    * Custom workflow instructions for plan mode. Only takes effect when
@@ -1179,7 +1187,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode,
+      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt
