@@ -194,6 +194,32 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the patched Hono request parser optional and aligned across manifests', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = 'hono';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('4.12.32')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
+        '4.12.32',
+      ),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps the OpenAPI generator manifest and lockfile on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
@@ -214,6 +240,46 @@ describe('package manifests', () => {
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.1.0'),
     ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps MCP optional while locking its Node adapter to a patched release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+          engines?: Record<string, string>;
+        }
+      >;
+    }>('package-lock.json');
+    const sdkName = '@modelcontextprotocol/sdk';
+    const adapterName = '@hono/node-server';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+    const lockedSdk = packageLock.packages[`node_modules/${sdkName}`];
+    const lockedAdapter = packageLock.packages[`node_modules/${adapterName}`];
+
+    expect(sdkRange).toBeDefined();
+    expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.0.12')).toBeGreaterThanOrEqual(0);
+    expect(lockedAdapter.engines?.node).toBe('>=20');
+
+    for (const manifestPath of [
+      'examples/redteam-mcp-agent/package.json',
+      'examples/simple-mcp/package.json',
+    ]) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      expect(manifest.dependencies?.[sdkName], manifestPath).toBe(sdkRange);
+      expect(manifest.dependencies?.[adapterName], manifestPath).toBe('2.0.12');
+    }
   });
 
   it('keeps the Langium parser override present and reproducible in the lockfile', () => {
@@ -309,6 +375,21 @@ describe('package manifests', () => {
     );
 
     expect(offenders).toEqual([]);
+  });
+
+  it('keeps the supported Node.js range aligned across workspace manifests', () => {
+    // These three drifted apart before (root allowed Node 20.20 while site and
+    // code-scan-action pinned >=20.20.1), so an engine bump that misses one is a real
+    // failure mode. Assert they agree rather than restating the value.
+    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
+      ?.node;
+
+    expect(validRange(rootEngines ?? '')).toBeTruthy();
+
+    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
+      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
+      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
+    }
   });
 
   it('keeps sharp optional for the docs workspace', () => {
