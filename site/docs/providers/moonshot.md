@@ -76,7 +76,7 @@ The `kimi-k3` and `kimi-k2.x` models are reasoning models and behave differently
 - **Reasoning output.** Kimi returns a separate `reasoning_content` stream that promptfoo surfaces with a `Thinking: …` prefix. Set `showThinking: false` when you assert on structured output (for example `is-json`) so the reasoning doesn't contaminate the parsed result.
 - **Token budget.** Reasoning tokens count against the output budget. When you leave the token limit unset the provider lets Moonshot apply its server default (32k for K2.x, 131k for K3); if you set one, leave generous headroom for the answer. Moonshot's canonical field is `max_completion_tokens` (`max_tokens` is a deprecated alias) — the provider sends `max_completion_tokens` for `kimi-*` models whichever of the two you configure.
 - **Controlling thinking.** The two generations use different, mutually exclusive controls:
-  - `kimi-k3` is always thinking and accepts a top-level `reasoning_effort` field, which the provider forwards from `config.reasoning_effort`. Currently only `max` (the default) is accepted; Moonshot plans more levels. Do **not** send the K2.x `thinking` parameter to K3 — the API rejects it.
+  - `kimi-k3` is always thinking and accepts a top-level `reasoning_effort` field (`low`, `high`, or `max`), which the provider forwards from `config.reasoning_effort`. Do **not** send the K2.x `thinking` parameter to K3 — the API rejects it.
   - `kimi-k2.6` and `kimi-k2.5` support `thinking: { type: disabled }` (pass it via `config.passthrough`); `kimi-k2.7-code` is always thinking. The `thinking` parameter is K2.x-only.
   - Setting `config.reasoning_effort` on a non-K3 model is a configuration error and the provider fails fast with a clear message instead of sending it.
 
@@ -85,14 +85,14 @@ providers:
   - id: moonshot:kimi-k3
     config:
       showThinking: false
-      reasoning_effort: max # optional: currently the only accepted value
+      reasoning_effort: high # optional: low, high, or max
   - id: moonshot:kimi-k2.6
     config:
       passthrough:
         thinking: { type: disabled } # K2.x only: turn reasoning off
 ```
 
-See the [Kimi K3 quickstart](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart) and [Using Thinking Models](https://platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model) for the full behavior matrix.
+See the [Kimi K3 quickstart](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart), [Kimi thinking effort guide](https://platform.kimi.ai/docs/guide/use-thinking-effort), and [Using Thinking Models](https://platform.kimi.ai/docs/guide/use-kimi-k2-thinking-model) for the full behavior matrix.
 
 ## Vision
 

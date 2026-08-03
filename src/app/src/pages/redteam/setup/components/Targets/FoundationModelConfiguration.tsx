@@ -186,10 +186,31 @@ const FoundationModelConfiguration = ({
       },
       deepseek: {
         name: 'DeepSeek',
-        defaultModel: 'deepseek:deepseek-chat',
-        placeholder: 'deepseek:deepseek-chat, deepseek:deepseek-coder',
+        defaultModel: 'deepseek:deepseek-v4-flash',
+        placeholder: 'deepseek:deepseek-v4-flash, deepseek:deepseek-v4-pro',
         docUrl: 'https://www.promptfoo.dev/docs/providers/deepseek',
         envVar: 'DEEPSEEK_API_KEY',
+      },
+      alibaba: {
+        name: 'Alibaba Cloud (Qwen)',
+        defaultModel: 'alibaba:qwen3.7-plus',
+        placeholder: 'alibaba:qwen3.7-plus, alibaba:qwen3.7-max',
+        docUrl: 'https://www.promptfoo.dev/docs/providers/alibaba',
+        envVar: 'DASHSCOPE_API_KEY',
+      },
+      moonshot: {
+        name: 'Moonshot (Kimi)',
+        defaultModel: 'moonshot:kimi-k3',
+        placeholder: 'moonshot:kimi-k3, moonshot:kimi-k2.7-code',
+        docUrl: 'https://www.promptfoo.dev/docs/providers/moonshot',
+        envVar: 'MOONSHOT_API_KEY',
+      },
+      minimax: {
+        name: 'MiniMax',
+        defaultModel: 'minimax:MiniMax-M3',
+        placeholder: 'minimax:MiniMax-M3, minimax:MiniMax-M2.7',
+        docUrl: 'https://www.promptfoo.dev/docs/providers/minimax',
+        envVar: 'MINIMAX_API_KEY',
       },
       azure: {
         name: 'Azure OpenAI',

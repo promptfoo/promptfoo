@@ -96,6 +96,18 @@ describe('contracts leaf surface', () => {
       }
     });
 
+    it('preserves Alibaba and DeepSeek provider API keys', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        DASHSCOPE_API_KEY: 'dashscope-key',
+        DEEPSEEK_API_KEY: 'deepseek-key',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.DASHSCOPE_API_KEY).toBe('dashscope-key');
+        expect(parsed.data.DEEPSEEK_API_KEY).toBe('deepseek-key');
+      }
+    });
+
     it('strips unknown keys at parse time (strict z.object)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
         OPENAI_API_KEY: 'sk-known',

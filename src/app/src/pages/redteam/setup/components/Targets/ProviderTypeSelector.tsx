@@ -210,7 +210,25 @@ const allProviderOptions = [
   {
     value: 'deepseek',
     label: 'DeepSeek',
-    description: 'DeepSeek-V3 and R1 models',
+    description: 'DeepSeek-V4 Flash and Pro models',
+    tag: 'providers',
+  },
+  {
+    value: 'alibaba',
+    label: 'Alibaba Cloud (Qwen)',
+    description: 'Qwen3.7, Qwen3.6, and other DashScope models',
+    tag: 'providers',
+  },
+  {
+    value: 'moonshot',
+    label: 'Moonshot (Kimi)',
+    description: 'Kimi K3 and K2 thinking models',
+    tag: 'providers',
+  },
+  {
+    value: 'minimax',
+    label: 'MiniMax',
+    description: 'MiniMax M3 and M2.7 models',
     tag: 'providers',
   },
   {
@@ -639,14 +657,20 @@ export default function ProviderTypeSelector({
         },
         'groq',
       );
-    } else if (value === 'deepseek') {
+    } else if (['deepseek', 'alibaba', 'moonshot', 'minimax'].includes(value)) {
+      const defaultModels: Record<string, string> = {
+        deepseek: 'deepseek:deepseek-v4-flash',
+        alibaba: 'alibaba:qwen3.7-plus',
+        moonshot: 'moonshot:kimi-k3',
+        minimax: 'minimax:MiniMax-M3',
+      };
       setProvider(
         {
-          id: 'deepseek:deepseek-chat',
+          id: defaultModels[value],
           config: {},
           label: currentLabel,
         },
-        'deepseek',
+        value,
       );
     } else if (value === 'openrouter') {
       setProvider(
