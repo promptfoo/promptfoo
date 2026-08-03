@@ -35,7 +35,7 @@ function createMockChild(opts: {
   child.stderr = new EventEmitter();
   child.kill = vi.fn();
 
-  process.nextTick(() => {
+  setImmediate(() => {
     if (opts.errorEvent) {
       const err = new Error(opts.errorEvent.message || 'spawn error');
       (err as Error & { code?: string }).code = opts.errorEvent.code;
