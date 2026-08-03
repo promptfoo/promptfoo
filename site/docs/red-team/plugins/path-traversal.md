@@ -2,7 +2,7 @@
 sidebar_label: Path traversal
 sidebar_position: 35
 title: Path Traversal Plugin
-description: Tests whether an AI app correctly blocks path traversal attempts using ../ sequences, URL-encoded variants, file://, and Windows backslash paths.
+description: Tests whether an AI app blocks path traversal attacks (../ sequences, URL-encoded, file://, Windows backslash) that attempt to escape the authorized file scope.
 ---
 
 # Path Traversal Plugin

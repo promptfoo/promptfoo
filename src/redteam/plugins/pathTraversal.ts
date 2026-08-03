@@ -3,12 +3,13 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
+  AssertionValue,
   AtomicTestCase,
-  GradingContext,
   GradingResult,
   ResultSuggestion,
   TestCase,
 } from '../../types';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:path-traversal';
 
@@ -306,10 +307,10 @@ export class PathTraversalGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
-    renderedValue?: unknown,
+    renderedValue: AssertionValue | undefined,
     additionalRubric?: string,
     _skipRefusalCheck?: boolean,
-    gradingContext?: GradingContext,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string; suggestions?: ResultSuggestion[] }> {
     const attackTarget = test.metadata?.attackTarget as string | undefined;
     const evidence = checkPathTraversalEvidence(prompt, llmOutput, attackTarget);
