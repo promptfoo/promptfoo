@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import logger from '../logger';
-import { safeJsonStringify } from '../util';
+import { safeJsonStringify } from '../util/json';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
@@ -242,7 +242,7 @@ async function runCcsScanner(
 }
 
 export const handleCorrectover = async (params: AssertionParams): Promise<GradingResult> => {
-  const { assertion, inverse = false, providerResponse, output: transformedOutput } = params;
+  const { assertion, inverse = false, providerResponse, output: transformedOutput, renderedValue } = params;
   const payloads: string[] = [];
 
   // 1. Raw provider output
@@ -282,8 +282,8 @@ export const handleCorrectover = async (params: AssertionParams): Promise<Gradin
 
   // Determine custom rules path — prefer renderedValue over raw value
   const rulesPath =
-    typeof assertion.renderedValue === 'string' && assertion.renderedValue.length > 0
-      ? assertion.renderedValue
+    typeof renderedValue === 'string' && renderedValue.length > 0
+      ? renderedValue
       : typeof assertion.value === 'string' && assertion.value.length > 0
         ? assertion.value
         : undefined;

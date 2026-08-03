@@ -57,6 +57,7 @@ import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
 import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
+import { handleCorrectover } from './correctover';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
 import { handleFinishReason } from './finishReason';
@@ -64,7 +65,6 @@ import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
-import { handleCorrectover } from './correctover';
 import { handleContainsHtml, handleIsHtml } from './html';
 import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
@@ -243,6 +243,7 @@ const ASSERTION_HANDLERS: Record<
   'context-recall': handleContextRecall,
   'context-relevance': handleContextRelevance,
   'conversation-relevance': handleConversationRelevance,
+  correctover: handleCorrectover,
   cost: handleCost,
   equals: handleEquals,
   factuality: handleFactuality,
@@ -250,7 +251,6 @@ const ASSERTION_HANDLERS: Record<
   'g-eval': handleGEval,
   gleu: handleGleuScore,
   guardrails: handleGuardrails,
-  'correctover': handleCorrectover,
   icontains: handleIContains,
   'icontains-all': handleIContainsAll,
   'icontains-any': handleIContainsAny,
