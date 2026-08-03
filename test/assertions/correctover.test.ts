@@ -461,4 +461,94 @@ describe('handleCorrectover', () => {
       expect(child.stdin.end).toHaveBeenCalled();
     });
   });
+
+  describe('additional branch coverage', () => {
+    it('should fail when CCS scanner error is not ENOENT', async () => {
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ errorEvent: { code: 'EACCES', message: 'Permission denied' } }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('CCS scanner failed to start');
+    });
+
+    it('should resolve null when stderr contains command not found', async () => {
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ stdoutChunks: [''], stderrChunks: ['ccs: command not found'], exitCode: 127 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: { output: 'test' } as any }),
+      );
+      // resolve(null) means no findings -> pass
+      expect(result.pass).toBe(true);
+    });
+
+    it('should return no-output message when provider has no output and no metadata', async () => {
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({ providerResponse: {} as any }),
+      );
+      expect(result.pass).toBe(true);
+      expect(result.reason).toContain('No output to scan');
+    });
+
+    it('should use assertion.value as rulesPath when renderedValue is empty', async () => {
+      const rulesFile = '/tmp/rules-from-value.yaml';
+
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ stdoutChunks: [JSON.stringify([])], exitCode: 0 }),
+      );
+
+      await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'test' } as any,
+          assertion: { type: 'correctover', value: rulesFile } as any,
+        }),
+      );
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'ccs',
+        expect.arrayContaining(['--rules', rulesFile]),
+        expect.any(Object),
+      );
+    });
+
+    it('should handle metadata extraction error gracefully', async () => {
+      const badMeta: any = {};
+      Object.defineProperty(badMeta, 'toolCalls', {
+        get() { throw new Error('bad getter'); },
+      });
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'test', metadata: badMeta } as any,
+        }),
+      );
+      // Should not throw, just continue with empty tool call payloads
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle non-object metadata gracefully', async () => {
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ stdoutChunks: ['[]'], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: { output: 'test', metadata: 'not-an-object' } as any,
+        }),
+      );
+      expect(result.pass).toBe(true);
+    });
+  });
 });
