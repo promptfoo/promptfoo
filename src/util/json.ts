@@ -221,13 +221,27 @@ export function extractJsonObjects(str: string): object[] {
       let openBraces = 1;
       let closeBraces = 0;
       let j = i + 1;
+      let inString = false;
+      let escaped = false;
 
       // Track braces as we go to detect potential JSON objects
       while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
-        if (str[j] === '{') {
+        const ch = str[j];
+        // Ignore braces inside string literals so a `}` in a value doesn't
+        // prematurely balance the object (e.g. `{"a": "}"}`).
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (ch === '\\') {
+            escaped = true;
+          } else if (ch === '"') {
+            inString = false;
+          }
+        } else if (ch === '"') {
+          inString = true;
+        } else if (ch === '{') {
           openBraces++;
-        }
-        if (str[j] === '}') {
+        } else if (ch === '}') {
           closeBraces++;
         }
         j++;
