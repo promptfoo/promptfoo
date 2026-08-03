@@ -46,7 +46,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": "^20.20.0 || >=22.22.0"
+    "node": ">=22.22.0"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
@@ -291,7 +291,7 @@
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
     "@opencode-ai/sdk": "^1.14.33",
@@ -306,7 +306,7 @@
     "@swc/core-linux-x64-musl": "^1.15.41",
     "@swc/core-win32-x64-msvc": "^1.15.41",
     "google-auth-library": "^10.9.0",
-    "hono": "^4.12.25",
+    "hono": "^4.12.32",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
@@ -321,6 +321,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.112.5",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
+    "@hono/node-server": "2.0.12",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",

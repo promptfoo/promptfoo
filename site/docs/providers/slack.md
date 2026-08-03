@@ -24,7 +24,7 @@ npm install @slack/web-api@^8
 ```
 
 :::note
-This optional dependency requires Node.js 20 or newer and only needs to be installed if you want to use the Slack provider.
+This optional dependency only needs to be installed if you want to use the Slack provider.
 :::
 
 ### Slack App Setup
