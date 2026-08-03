@@ -36,7 +36,12 @@ export function extractAttackTarget(probe: string): string | undefined {
     return fileSchemeMatch[1];
   }
 
-  // Traversal sequences anywhere in the probe: capture path after ../ or ..\ chains
+  // Traversal sequences anywhere in the probe: capture path after ../ or ..\ chains.
+  // Known gap: Windows probes produce "/Windows/win.ini" (no drive letter, forward slash).
+  // Real Windows error messages use "C:\Windows\win.ini" or "\Windows\win.ini", neither
+  // of which matches. Drive-letter normalisation on the response side is not implemented
+  // because the false-positive risk outweighs the benefit for Linux-hosted AI targets.
+  // Windows traversal successes are more reliably caught via structural content checks.
   const traversalMatch = normalized.match(/(?:\.\.(?:\/|\\))+([^\s'"<>]+)/);
   if (traversalMatch) {
     const tail = traversalMatch[1];
