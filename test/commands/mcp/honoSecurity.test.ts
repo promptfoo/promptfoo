@@ -6,9 +6,10 @@ describe('MCP Hono dependency security', () => {
   it('preserves reserved request keys without inherited query or header properties', async () => {
     const app = new Hono();
 
-    app.get('/items/:name', (context) => {
+    app.get('/items/:constructor', (context) => {
       const query = context.req.query();
       const headers = context.req.header();
+      const parameters = context.req.param();
 
       return context.json({
         queryHasNullPrototype: Object.getPrototypeOf(query) === null,
@@ -16,7 +17,8 @@ describe('MCP Hono dependency security', () => {
         constructorQuery: query.constructor,
         prototypeQuery: query.__proto__,
         constructorHeader: headers.constructor,
-        routeParameter: context.req.param('name'),
+        routeParameter: parameters.constructor,
+        routeParameterIsOwn: Object.hasOwn(parameters, 'constructor'),
       });
     });
 
@@ -35,6 +37,7 @@ describe('MCP Hono dependency security', () => {
       prototypeQuery: 'polluted',
       constructorHeader: 'header-value',
       routeParameter: 'constructor',
+      routeParameterIsOwn: true,
     });
   });
 
