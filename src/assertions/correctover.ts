@@ -1,7 +1,6 @@
 import { spawn } from 'child_process';
-import { safeJsonStringify } from '../util';
 import logger from '../logger';
-
+import { safeJsonStringify } from '../util';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
