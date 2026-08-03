@@ -551,5 +551,27 @@ describe('handleCorrectover', () => {
       );
       expect(result.pass).toBe(true);
     });
+
+    it('should scan original_payload from metadata', async () => {
+      const findings = JSON.stringify([{ id: 'test-rule', severity: 'HIGH', detail: 'original payload scan' }]);
+      mockSpawn.mockImplementation(() =>
+        createMockChild({ stdoutChunks: [findings], exitCode: 0 }),
+      );
+
+      const result = await handleCorrectover(
+        makeParams({
+          providerResponse: {
+            output: '',
+            metadata: { originalPayload: { secret: 'my-api-key-12345' } },
+          } as any,
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'ccs',
+        expect.arrayContaining(['--input', '-']),
+        expect.any(Object),
+      );
+    });
   });
 });
