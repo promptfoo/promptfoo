@@ -1,0 +1,5 @@
+title: 'BERTScore Evaluation'
+description: 'Measure semantic similarity between LLM outputs and reference text using BERTScore with Python assertions'
+tags:
+  - Evaluation
+  - Python

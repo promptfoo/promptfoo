@@ -1,0 +1,6 @@
+title: 'OWASP API Security Top 10 Red Team'
+description: 'Test AI chatbots against OWASP API Security Top 10 vulnerabilities using a deliberately vulnerable FastAPI app with MCP tool integration'
+tags:
+  - Red Teaming
+  - MCP
+  - Python

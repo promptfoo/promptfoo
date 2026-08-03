@@ -1,0 +1,4 @@
+title: 'Multiline YAML Prompt Formatting'
+description: 'Define chat prompts with system and user roles using multiline YAML format'
+tags:
+  - Configuration

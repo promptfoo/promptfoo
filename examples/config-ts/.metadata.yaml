@@ -1,0 +1,5 @@
+title: 'TypeScript Configuration File'
+description: 'Type-safe promptfoo configuration using TypeScript with Zod schema generation and structured outputs'
+tags:
+  - Configuration
+  - Structured Output

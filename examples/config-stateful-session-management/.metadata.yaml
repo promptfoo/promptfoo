@@ -1,0 +1,6 @@
+title: 'Stateful Session Management'
+description: 'Using server-generated session IDs with extension hooks to maintain conversation threads across multi-turn red team evaluations'
+tags:
+  - Multi-turn
+  - Red Teaming
+  - Configuration

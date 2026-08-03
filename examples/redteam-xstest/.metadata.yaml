@@ -1,0 +1,4 @@
+title: 'XSTest Homonym Safety Benchmark'
+description: 'Test how models handle ambiguous words with both harmful and benign meanings using the XSTest dataset'
+tags:
+  - Red Teaming

@@ -1,0 +1,5 @@
+title: 'OpenAI Audio Input and Output'
+description: 'Process audio input (speech-to-text) and generate audio output using GPT-4o audio models'
+tags:
+  - Audio
+  - OpenAI

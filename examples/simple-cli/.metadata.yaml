@@ -1,0 +1,4 @@
+title: 'Simple CLI Usage'
+description: 'Basic promptfoo eval with inline prompts and CLI overrides for providers, prompts, and output format'
+tags:
+  - Getting Started

@@ -1,0 +1,4 @@
+title: 'Custom Node Module Provider'
+description: 'Using a local Node.js package as a custom provider via the package: prefix'
+tags:
+  - Configuration
