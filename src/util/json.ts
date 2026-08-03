@@ -223,10 +223,11 @@ export function extractJsonObjects(str: string): object[] {
       let j = i + 1;
       let inString = false;
       let escaped = false;
-      // A `"` only opens a quoted scalar at a key/value boundary; a YAML plain
-      // scalar can contain a bare `"` mid-value (e.g. `mentions "admin`) that
-      // must not be mistaken for the start of a string, or the real closing
-      // `}` gets swallowed as string content and never counted.
+      // A `"` only opens a quoted scalar at a key/value boundary (also right
+      // after `[`, so a string that's the first array element is tracked); a
+      // YAML plain scalar can contain a bare `"` mid-value (e.g. `mentions
+      // "admin`) that must not be mistaken for the start of a string, or the
+      // real closing `}` gets swallowed as string content and never counted.
       let atValueStart = true;
 
       // Track braces as we go to detect potential JSON objects
@@ -245,11 +246,15 @@ export function extractJsonObjects(str: string): object[] {
           }
         } else if (ch === '"' && atValueStart) {
           inString = true;
-        } else if (ch === '{') {
-          openBraces++;
+        } else if (ch === '{' || ch === '[') {
+          if (ch === '{') {
+            openBraces++;
+          }
           atValueStart = true;
-        } else if (ch === '}') {
-          closeBraces++;
+        } else if (ch === '}' || ch === ']') {
+          if (ch === '}') {
+            closeBraces++;
+          }
           atValueStart = false;
         } else if (ch === ':' || ch === ',') {
           atValueStart = true;
