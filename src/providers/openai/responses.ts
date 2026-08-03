@@ -1272,6 +1272,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 response,
                 'OpenAI',
                 logger,
+                controller.signal,
                 (streamedResponse) => {
                   if (typeof streamedResponse.id === 'string') {
                     backgroundResponseId = streamedResponse.id;
@@ -1322,24 +1323,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           ? AbortSignal.any([controller.signal, abortSignal])
           : controller.signal;
         try {
-          const response = await fetchWithCache<string>(
+          const response = await fetchWithCache<Response | string>(
             url,
             { ...request, signal },
             timeout,
-            'text',
+            'stream',
             true,
             config.maxRetries,
           );
           status = response.status;
           statusText = response.statusText;
           responseHeaders = response.headers;
+          const streamResponse =
+            response.data instanceof Response ? response.data : new Response(response.data);
           if (status >= 200 && status < 300) {
-            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
+            data = await readResponsesStream(streamResponse, 'OpenAI', logger, signal);
           } else {
+            const responseText = await streamResponse.text();
             try {
-              data = JSON.parse(response.data);
+              data = JSON.parse(responseText);
             } catch {
-              data = response.data as OpenAIResponsesResponse;
+              data = responseText as OpenAIResponsesResponse;
             }
           }
         } catch (err) {

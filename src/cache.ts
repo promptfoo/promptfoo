@@ -775,7 +775,7 @@ async function prepareFetchResponse(
  * @param url URL to fetch
  * @param options Fetch options (method, headers, body, etc.)
  * @param timeout Request timeout in milliseconds (default: standard timeout)
- * @param format Response format: 'json' or 'text' (default: 'json')
+ * @param format Response format: 'json', 'text', or an uncached live 'stream' (default: 'json')
  * @param bustOrOptions Bypass cache or provide cache options for this request
  * @param maxRetries Maximum number of retries on transient errors
  *
@@ -805,7 +805,7 @@ export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number = getRequestTimeoutMs(),
-  format: 'json' | 'text' = 'json',
+  format: 'json' | 'text' | 'stream' = 'json',
   bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
@@ -818,6 +818,19 @@ export async function fetchWithCache<T = unknown>(
   // headers arrived; only the response body stream failed).
   const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
+
+  if (format === 'stream') {
+    const fetchStart = Date.now();
+    const resp = await fetchWithRetries(url, options, timeout, maxRetries);
+    return {
+      cached: false,
+      data: resp as T,
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: Object.fromEntries(resp.headers.entries()),
+      latencyMs: Date.now() - fetchStart,
+    };
+  }
 
   const cacheEnabled = getEffectiveCacheEnabled();
   const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
