@@ -126,8 +126,8 @@ describe('handleCorrectover', () => {
           assertion: {
             type: 'correctover' as any,
             value: '{{rulesFile}}',
-            renderedValue: '/resolved/path/rules.yaml',
           } as any,
+          renderedValue: '/resolved/path/rules.yaml',
           providerResponse: { output: 'test' } as any,
         }),
       );
