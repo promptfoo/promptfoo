@@ -1,10 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AssertionParams } from '../../src/types/index';
+
 import { handleCorrectover } from '../../src/assertions/correctover';
+
+import type { AssertionParams } from '../../src/types/index';
 
 vi.mock('child_process', () => {
   return {
     spawn: vi.fn(),
+    execFile: vi.fn(),
+    exec: vi.fn(),
+    execFileSync: vi.fn(),
   };
 });
 
