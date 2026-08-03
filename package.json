@@ -46,7 +46,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": "^20.20.0 || >=22.22.0"
+    "node": ">=22.22.0"
   },
   "bin": {
     "promptfoo": "dist/src/entrypoint.js",
@@ -159,7 +159,7 @@
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^7.1.4",
     "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.2.0",
+    "ip-address": "10.3.1",
     "mongoose": {
       "gcp-metadata": "^8.1.2"
     },
@@ -190,7 +190,7 @@
       ".": "4.3.1",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "chevrotain": "11.2.0",
-      "chevrotain-allstar": "0.4.1"
+      "chevrotain-allstar": "0.4.4"
     },
     "chevrotain": {
       ".": "11.2.0",
@@ -206,7 +206,7 @@
       "@chevrotain/types": "12.0.0"
     },
     "chevrotain-allstar": {
-      ".": "0.4.1",
+      ".": "0.4.4",
       "chevrotain": "11.2.0"
     },
     "webpack": "5.108.4",
@@ -217,7 +217,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.214",
+    "@anthropic-ai/claude-agent-sdk": "0.3.217",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -275,7 +275,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.214",
+    "@anthropic-ai/claude-agent-sdk": "0.3.217",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -291,7 +291,7 @@
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
     "@opencode-ai/sdk": "^1.14.33",
@@ -306,7 +306,7 @@
     "@swc/core-linux-x64-musl": "^1.15.46",
     "@swc/core-win32-x64-msvc": "^1.15.46",
     "google-auth-library": "^10.9.0",
-    "hono": "^4.12.25",
+    "hono": "^4.12.32",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
@@ -319,8 +319,9 @@
     "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.112.3",
+    "@anthropic-ai/sdk": "0.112.5",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
+    "@hono/node-server": "2.0.12",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",
@@ -356,7 +357,7 @@
     "dedent": "^1.7.2",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
-    "execa": "^9.6.1",
+    "execa": "^10.0.0",
     "express": "^5.2.1",
     "exsolve": "^1.0.8",
     "fast-deep-equal": "^3.1.3",

@@ -30,7 +30,6 @@ jobs:
         run: |
           # Shared entries: all Linux versions + one Windows Node version (sharded)
           base_entries='
-            {"node":"20.20","os":"ubuntu-latest","shard":""},
             {"node":"22.22","os":"ubuntu-latest","shard":""},
             {"node":"24.x","os":"ubuntu-latest","shard":""},
             {"node":"26.x","os":"ubuntu-latest","shard":""},
@@ -38,21 +37,18 @@ jobs:
             {"node":"22.22","os":"windows-2025-vs2026","shard":2},
             {"node":"22.22","os":"windows-2025-vs2026","shard":3}
           '
+          build_matrix='{"node":["22.22","24.x","26.x"]}'
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             # PRs: add 1 macOS version only
             extra_entries='
               ,{"node":"22.22","os":"macOS-latest","shard":""}
             '
-            build_matrix='{"node":["20.20","24.x","26.x"]}'
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
             extra_entries='
-              ,{"node":"20.20","os":"macOS-latest","shard":""},
-              {"node":"22.22","os":"macOS-latest","shard":""},
-              {"node":"20.20","os":"windows-2025-vs2026","shard":1},
-              {"node":"20.20","os":"windows-2025-vs2026","shard":2},
-              {"node":"20.20","os":"windows-2025-vs2026","shard":3},
+              ,{"node":"22.22","os":"macOS-latest","shard":""},
+              {"node":"24.x","os":"macOS-latest","shard":""},
               {"node":"24.x","os":"windows-2025-vs2026","shard":1},
               {"node":"24.x","os":"windows-2025-vs2026","shard":2},
               {"node":"24.x","os":"windows-2025-vs2026","shard":3},
@@ -60,7 +56,6 @@ jobs:
               {"node":"26.x","os":"windows-2025-vs2026","shard":2},
               {"node":"26.x","os":"windows-2025-vs2026","shard":3}
             '
-            build_matrix='{"node":["20.20","22.22","24.x","26.x"]}'
           fi
 
           # Build the matrix JSON (shard:"" is falsy in GHA expressions, used to skip shard flags)
@@ -91,8 +86,9 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
+          # Keep the matrix label at 22.22 for stable check names, but install exactly
+          # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
       - name: Use Python 3.14
@@ -133,14 +129,14 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}
 
       - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
         run: npm run test:coverage:ratchet -- --report backend
 
       - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard
+        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage/coverage-final.json
@@ -172,8 +168,9 @@ jobs:
       - name: Use Node ${{ matrix.node }}
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          # Keep matrix label at 20.20 for stable check names, but install 20.20.1 to satisfy engines.
-          node-version: ${{ matrix.node == '20.20' && '20.20.1' || matrix.node }}
+          # Keep the matrix label at 22.22 for stable check names, but install exactly
+          # 22.22.0 so this lane tests the engines floor itself rather than latest 22.22.x.
+          node-version: ${{ matrix.node == '22.22' && '22.22.0' || matrix.node }}
           cache: 'npm'
 
       - name: Install Dependencies
@@ -213,7 +210,6 @@ jobs:
           fi
 
       - name: Test Package Artifact
-        if: matrix.node == '20.20' || matrix.node == '26.x'
         env:
           PROMPTFOO_DISABLE_TELEMETRY: 1
         run: npm run test:package-artifact
@@ -579,6 +575,24 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      # Keep real unsupported and minimum-supported runtimes available while
+      # installing dependencies, building, and running Vitest on the repo Node.
+      - name: Set up unsupported Node 20
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '20.20.0'
+
+      - name: Record unsupported Node executable
+        run: echo "PROMPTFOO_NODE20_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
+
+      - name: Set up minimum supported Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '22.22.0'
+
+      - name: Record minimum supported Node executable
+        run: echo "PROMPTFOO_MIN_NODE_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
 
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
