@@ -355,6 +355,13 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual([{ reason: 'mentions "admin', score: 1 }]);
     });
 
+    it('should not treat braces inside a string that is the first array element as structural', () => {
+      expect(extractJsonObjects('{"messages":["}"]}')).toEqual([{ messages: ['}'] }]);
+      expect(extractJsonObjects('{"tags": ["{open", "close}"]}')).toEqual([
+        { tags: ['{open', 'close}'] },
+      ]);
+    });
+
     describe('convertSlashCommentsToHash', () => {
       it('should convert basic // comments to # comments', () => {
         const input = 'some text // this is a comment';
