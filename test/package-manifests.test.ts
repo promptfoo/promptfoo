@@ -216,6 +216,46 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps MCP optional while locking its Node adapter to a patched release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+          engines?: Record<string, string>;
+        }
+      >;
+    }>('package-lock.json');
+    const sdkName = '@modelcontextprotocol/sdk';
+    const adapterName = '@hono/node-server';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+    const lockedSdk = packageLock.packages[`node_modules/${sdkName}`];
+    const lockedAdapter = packageLock.packages[`node_modules/${adapterName}`];
+
+    expect(sdkRange).toBeDefined();
+    expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.0.12')).toBeGreaterThanOrEqual(0);
+    expect(lockedAdapter.engines?.node).toBe('>=20');
+
+    for (const manifestPath of [
+      'examples/redteam-mcp-agent/package.json',
+      'examples/simple-mcp/package.json',
+    ]) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      expect(manifest.dependencies?.[sdkName], manifestPath).toBe(sdkRange);
+      expect(manifest.dependencies?.[adapterName], manifestPath).toBe('2.0.12');
+    }
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
