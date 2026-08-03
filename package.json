@@ -357,7 +357,7 @@
     "dedent": "^1.7.2",
     "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.1",
-    "execa": "^9.6.1",
+    "execa": "^10.0.0",
     "express": "^5.2.1",
     "exsolve": "^1.0.8",
     "fast-deep-equal": "^3.1.3",
