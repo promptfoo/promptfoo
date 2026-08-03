@@ -11,8 +11,6 @@ export interface SlotQueueOptions {
   maxConcurrency: number;
   minConcurrency: number;
   queueTimeoutMs?: number; // Optional timeout for queued requests
-  onSlotAcquired?: (queueDepth: number) => void;
-  onSlotReleased?: (queueDepth: number) => void;
 }
 
 const DEFAULT_QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -40,15 +38,10 @@ export class SlotQueue {
   private requestLimit: number | null = null;
   private tokenLimit: number | null = null;
 
-  private onSlotAcquired?: (queueDepth: number) => void;
-  private onSlotReleased?: (queueDepth: number) => void;
-
   constructor(options: SlotQueueOptions) {
     this.maxConcurrency = options.maxConcurrency;
     this.minConcurrency = options.minConcurrency;
     this.queueTimeoutMs = options.queueTimeoutMs ?? DEFAULT_QUEUE_TIMEOUT_MS;
-    this.onSlotAcquired = options.onSlotAcquired;
-    this.onSlotReleased = options.onSlotReleased;
   }
 
   /**
@@ -79,7 +72,6 @@ export class SlotQueue {
           clearTimeout(timeoutId);
         }
         this.activeCount++;
-        this.onSlotAcquired?.(this.waiting.length);
         resolve();
       };
 
@@ -112,7 +104,6 @@ export class SlotQueue {
       return;
     }
     this.activeCount--;
-    this.onSlotReleased?.(this.waiting.length);
     this.processQueue();
   }
 

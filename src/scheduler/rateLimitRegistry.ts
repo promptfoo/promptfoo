@@ -1,10 +1,8 @@
-import { EventEmitter } from 'events';
-
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
 import { sanitizeProviderIdForLog } from '../util/provider';
-import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
+import { ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider } from '../types/providers';
@@ -19,15 +17,15 @@ export interface RateLimitRegistryOptions {
  * Per-eval registry that manages rate limit state for all providers.
  * NOT a singleton - create one per evaluation context.
  */
-export class RateLimitRegistry extends EventEmitter {
+export class RateLimitRegistry {
   private states: Map<string, ProviderRateLimitState> = new Map();
   private maxConcurrency: number;
   private minConcurrency: number;
   private queueTimeoutMs: number;
   private enabled: boolean;
+  private nextRequestId = 0;
 
   constructor(options: RateLimitRegistryOptions) {
-    super();
     this.maxConcurrency = options.maxConcurrency;
     this.minConcurrency = options.minConcurrency ?? getEnvInt('PROMPTFOO_MIN_CONCURRENCY', 1);
     // Queue timeout: 0 means disabled, default is 5 minutes
@@ -63,14 +61,7 @@ export class RateLimitRegistry extends EventEmitter {
     const rateLimitKey = getRateLimitKey(provider);
     const state = this.getOrCreateState(rateLimitKey);
 
-    // Generate unique request ID for metrics/logging
-    const requestId = `${rateLimitKey}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-    this.emit('request:started', {
-      rateLimitKey,
-      requestId,
-      queueDepth: state.getQueueDepth(),
-    });
+    const requestId = `${rateLimitKey}-${++this.nextRequestId}`;
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
@@ -80,23 +71,7 @@ export class RateLimitRegistry extends EventEmitter {
         maxRetriesOverride: providerMaxRetries,
       });
 
-    try {
-      const result = await withFetchRetryContext(providerMaxRetries, run);
-
-      this.emit('request:completed', {
-        rateLimitKey,
-        requestId,
-      });
-
-      return result;
-    } catch (error) {
-      this.emit('request:failed', {
-        rateLimitKey,
-        requestId,
-        error: String(error),
-      });
-      throw error;
-    }
+    return withFetchRetryContext(providerMaxRetries, run);
   }
 
   /**
@@ -109,31 +84,13 @@ export class RateLimitRegistry extends EventEmitter {
         maxConcurrency: this.maxConcurrency,
         minConcurrency: this.minConcurrency,
         queueTimeoutMs: this.queueTimeoutMs,
+        onDebug: (message, context) => logger.debug(message, context),
       });
-
-      // Forward events
-      state.on('ratelimit:hit', (data) => this.emit('ratelimit:hit', data));
-      state.on('ratelimit:warning', (data) => this.emit('ratelimit:warning', data));
-      state.on('ratelimit:learned', (data) => this.emit('ratelimit:learned', data));
-      state.on('concurrency:increased', (data) => this.emit('concurrency:increased', data));
-      state.on('concurrency:decreased', (data) => this.emit('concurrency:decreased', data));
-      state.on('request:retrying', (data) => this.emit('request:retrying', data));
 
       this.states.set(rateLimitKey, state);
     }
 
     return this.states.get(rateLimitKey)!;
-  }
-
-  /**
-   * Get metrics for all tracked providers.
-   */
-  getMetrics(): Record<string, ProviderMetrics> {
-    const metrics: Record<string, ProviderMetrics> = {};
-    for (const [key, state] of this.states) {
-      metrics[key] = state.getMetrics();
-    }
-    return metrics;
   }
 
   /**
@@ -144,7 +101,6 @@ export class RateLimitRegistry extends EventEmitter {
       state.dispose();
     }
     this.states.clear();
-    this.removeAllListeners();
   }
 }
 
