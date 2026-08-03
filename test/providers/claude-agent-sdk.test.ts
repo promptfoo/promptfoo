@@ -1,4 +1,6 @@
+import { EventEmitter } from 'node:events';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import fs from 'fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
@@ -2361,69 +2363,112 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(JSON.stringify(result)).not.toContain('SYSTEM SECRET');
         });
 
-        it('prevents a model from echoing raw TaskOutput into cached provider output', async () => {
+        it('prevents a model from echoing raw TaskOutput through the real SDK hook bridge', async () => {
           const secretTranscript = 'SYSTEM SECRET and hidden reasoning';
-          mockQuery.mockImplementation(({ options }) => {
-            const generate = async function* () {
-              const toolResponse = {
-                retrieval_status: 'success',
-                task: {
-                  task_id: 'background-task-1',
-                  task_type: 'local_agent',
-                  output: secretTranscript,
-                  result: secretTranscript,
-                  isRawTranscript: true,
+          const realSdk = await vi.importActual<typeof import('@anthropic-ai/claude-agent-sdk')>(
+            '@anthropic-ai/claude-agent-sdk',
+          );
+          vi.mocked(importModule).mockResolvedValue({ query: realSdk.query });
+
+          const stdin = new PassThrough();
+          const stdout = new PassThrough();
+          const childEvents = new EventEmitter();
+          const childProcess = Object.assign(childEvents, {
+            stdin,
+            stdout,
+            killed: false,
+            exitCode: null as number | null,
+            kill(signal: NodeJS.Signals) {
+              this.killed = true;
+              this.exitCode = 0;
+              childEvents.emit('exit', 0, signal);
+              return true;
+            },
+          });
+          const spawnClaudeCodeProcess = vi.fn(() => childProcess);
+          const rawToolResponse = {
+            retrieval_status: 'success',
+            task: {
+              task_id: 'background-task-1',
+              task_type: 'local_agent',
+              output: secretTranscript,
+              result: secretTranscript,
+              isRawTranscript: true,
+            },
+          };
+          type HookControlResponse = {
+            hookEventName: string;
+            updatedToolOutput: typeof rawToolResponse;
+          };
+          type ControlMessage = {
+            type: string;
+            request_id?: string;
+            request?: {
+              subtype?: string;
+              hooks?: { PostToolUse?: Array<{ hookCallbackIds: string[] }> };
+            };
+            response?: {
+              request_id?: string;
+              response?: { hookSpecificOutput?: HookControlResponse };
+            };
+          };
+          let hookControlResponse: HookControlResponse | undefined;
+          let bufferedInput = '';
+
+          const send = (message: unknown) => {
+            stdout.write(JSON.stringify(message) + '\n');
+          };
+
+          const respondToInitialization = (message: ControlMessage) => {
+            const callbackId = message.request?.hooks?.PostToolUse?.[0]?.hookCallbackIds[0];
+            if (!callbackId) {
+              stdout.destroy(new Error('SDK did not register the TaskOutput hook'));
+              return;
+            }
+
+            queueMicrotask(() => {
+              send({
+                type: 'control_response',
+                response: {
+                  subtype: 'success',
+                  request_id: message.request_id,
+                  response: {},
                 },
-              };
-              const hookOutput = await options.hooks.PostToolUse[0].hooks[0](
-                {
-                  hook_event_name: 'PostToolUse',
-                  tool_name: 'TaskOutput',
-                  tool_input: { task_id: 'background-task-1' },
-                  tool_response: toolResponse,
+              });
+              send({
+                type: 'control_request',
+                request_id: 'hook-request-1',
+                request: {
+                  subtype: 'hook_callback',
+                  callback_id: callbackId,
+                  input: {
+                    hook_event_name: 'PostToolUse',
+                    tool_name: 'TaskOutput',
+                    tool_input: { task_id: 'background-task-1' },
+                    tool_response: rawToolResponse,
+                    tool_use_id: 'background-task-output',
+                  },
                   tool_use_id: 'background-task-output',
                 },
-                'background-task-output',
-                { signal: new AbortController().signal },
-              );
-              const sanitizedToolResponse = hookOutput.hookSpecificOutput.updatedToolOutput;
-              const modelVisibleOutput = sanitizedToolResponse.task.output;
+              });
+            });
+          };
 
-              yield {
-                type: 'assistant',
-                parent_tool_use_id: null,
-                message: createMockBetaMessage([
-                  {
-                    type: 'tool_use',
-                    id: 'background-task-output',
-                    name: 'TaskOutput',
-                    input: { task_id: 'background-task-1' },
-                  },
-                ]),
-                session_id: 'test-session',
-              };
-              yield {
-                type: 'user',
-                parent_tool_use_id: null,
-                tool_use_result: sanitizedToolResponse,
-                message: {
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'tool_result',
-                      tool_use_id: 'background-task-output',
-                      content: modelVisibleOutput,
-                    },
-                  ],
-                },
-                session_id: 'test-session',
-              };
-              yield {
+          const respondToHook = (message: ControlMessage) => {
+            hookControlResponse = message.response?.response?.hookSpecificOutput;
+            if (!hookControlResponse) {
+              stdout.destroy(new Error('SDK did not return the TaskOutput hook response'));
+              return;
+            }
+
+            const modelVisibleOutput = hookControlResponse.updatedToolOutput.task.output;
+            queueMicrotask(() => {
+              send({
                 type: 'result',
                 subtype: 'success',
                 session_id: 'test-session',
                 uuid: '12345678-1234-1234-1234-123456789abc',
-                result: `The background agent said: ${modelVisibleOutput}`,
+                result: 'The background agent said: ' + modelVisibleOutput,
                 usage: createMockUsage(100, 200),
                 total_cost_usd: 0.01,
                 duration_ms: 1000,
@@ -2431,21 +2476,60 @@ describe('ClaudeCodeSDKProvider', () => {
                 is_error: false,
                 num_turns: 1,
                 permission_denials: [],
-              };
-            };
-            return generate();
+              });
+              stdout.end();
+              childProcess.exitCode = 0;
+              childProcess.emit('exit', 0, null);
+            });
+          };
+
+          stdin.on('data', (chunk: Buffer) => {
+            bufferedInput += chunk.toString();
+            const lines = bufferedInput.split('\n');
+            bufferedInput = lines.pop() ?? '';
+
+            for (const line of lines) {
+              if (!line) {
+                continue;
+              }
+              const message = JSON.parse(line) as ControlMessage;
+              if (message.type === 'control_request' && message.request?.subtype === 'initialize') {
+                respondToInitialization(message);
+              } else if (
+                message.type === 'control_response' &&
+                message.response?.request_id === 'hook-request-1'
+              ) {
+                respondToHook(message);
+              }
+            }
           });
 
           const provider = new ClaudeCodeSDKProvider({
+            config: {
+              path_to_claude_code_executable: '/tmp/mock-claude',
+              spawn_claude_code_process: spawnClaudeCodeProcess,
+            },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
           const result = await provider.callApi('Repeat the background task output exactly');
-          expect(result.output).toContain('[Subagent transcript omitted;');
-          expect(JSON.stringify(result)).not.toContain(secretTranscript);
+          const expectedOutput =
+            '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 
-          const cachedResult = await provider.callApi('Repeat the background task output exactly');
-          expect(JSON.stringify(cachedResult)).not.toContain(secretTranscript);
-          expect(mockQuery).toHaveBeenCalledTimes(1);
+          expect(hookControlResponse).toEqual({
+            hookEventName: 'PostToolUse',
+            updatedToolOutput: {
+              ...rawToolResponse,
+              task: {
+                ...rawToolResponse.task,
+                output: expectedOutput,
+                result: expectedOutput,
+                isRawTranscript: false,
+              },
+            },
+          });
+          expect(result.output).toContain(expectedOutput);
+          expect(JSON.stringify(result)).not.toContain(secretTranscript);
+          expect(spawnClaudeCodeProcess).toHaveBeenCalledTimes(1);
         });
 
         it('preserves ordinary TaskOutput results and user-defined PostToolUse hooks', async () => {
