@@ -266,6 +266,38 @@ describe('retryCommand', () => {
     );
   });
 
+  it('treats cached rows without cost as zero incremental cost during recalculation', async () => {
+    const prompts = [{}] as any[];
+    const evalRecord = createEval({
+      prompts,
+      fetchResultsBatched: vi.fn(async function* () {
+        yield [
+          {
+            id: 'fresh-result',
+            promptIdx: 0,
+            success: true,
+            failureReason: ResultFailureReason.NONE,
+            score: 1,
+            cost: 0.25,
+            response: { output: 'fresh' },
+          },
+          {
+            id: 'cached-result',
+            promptIdx: 0,
+            success: true,
+            failureReason: ResultFailureReason.NONE,
+            score: 1,
+            response: { output: 'cached', cached: true },
+          },
+        ] as any[];
+      }),
+    });
+
+    await recalculatePromptMetrics(evalRecord);
+
+    expect(prompts[0].metrics?.cost).toBe(0.25);
+  });
+
   it('logs and rethrows metric recalculation and persistence failures', async () => {
     const calculationError = new Error('batch unavailable');
     const calculationEval = createEval({

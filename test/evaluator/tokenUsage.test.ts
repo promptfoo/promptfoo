@@ -10,6 +10,104 @@ import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpe
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator token usage', () => {
+  it('counts a successful response with omitted token usage without inventing counts', async () => {
+    const providerWithoutTokenUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-without-token-usage'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Generated output' }),
+    };
+    const results = await runEval({
+      conversations: {},
+      delay: 0,
+      isRedteam: false,
+      prompt: toPrompt('Test prompt'),
+      promptIdx: 0,
+      provider: providerWithoutTokenUsage,
+      registers: {},
+      repeatIndex: 0,
+      test: {},
+      testIdx: 0,
+    });
+
+    expect(results[0].tokenUsage).toMatchObject({ numRequests: 1 });
+    expect(results[0].tokenUsage).not.toHaveProperty('prompt');
+    expect(results[0].tokenUsage).not.toHaveProperty('completion');
+    expect(results[0].tokenUsage).not.toHaveProperty('cached');
+    expect(results[0].tokenUsage).not.toHaveProperty('total');
+  });
+
+  it('preserves unknown provider usage and cost through persistence and export', async () => {
+    const providerWithoutUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-without-usage'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Generated output',
+        tokenUsage: { numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerWithoutUsage],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    evalRecord.clearResults();
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.version).toBe(3);
+    if (!('prompts' in summary)) {
+      throw new Error('Expected a persisted v3 evaluation summary');
+    }
+
+    const result = summary.results[0];
+    expect(result.cost).toBeUndefined();
+    expect(result.response?.tokenUsage).toEqual({ numRequests: 1 });
+    expect(result.tokenUsage).toMatchObject({ numRequests: 1 });
+    expect(result.tokenUsage).not.toHaveProperty('prompt');
+    expect(result.tokenUsage).not.toHaveProperty('completion');
+    expect(result.tokenUsage).not.toHaveProperty('cached');
+    expect(result.tokenUsage).not.toHaveProperty('total');
+
+    expect(summary.prompts[0].metrics?.cost).toBeUndefined();
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('prompt');
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('completion');
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('cached');
+    expect(summary.prompts[0].metrics?.tokenUsage).not.toHaveProperty('total');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('prompt');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('completion');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('cached');
+    expect(summary.stats.tokenUsage).not.toHaveProperty('total');
+    expect(JSON.parse(JSON.stringify(summary.prompts[0].metrics))).not.toHaveProperty('cost');
+  });
+
+  it('treats a successful Promptfoo cache hit as zero incremental cost', async () => {
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cache-aware-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) =>
+        prompt === 'fresh'
+          ? {
+              output: 'Fresh output',
+              cost: 0.25,
+              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+            }
+          : {
+              output: 'Cached output',
+              cached: true,
+              tokenUsage: { numRequests: 0 },
+            },
+      ),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{kind}}')],
+      tests: [{ vars: { kind: 'fresh' } }, { vars: { kind: 'cached' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts[0].metrics?.cost).toBe(0.25);
+  });
+
   it('should accumulate token usage correctly', async () => {
     const mockOptions = {
       delay: 0,

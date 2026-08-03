@@ -43,7 +43,10 @@ import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/f
 import invariant from '../util/invariant';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateTokenUsagePreservingUnknown,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -1411,7 +1414,7 @@ export default class Eval {
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
 
-      accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
+      accumulateTokenUsagePreservingUnknown(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
     return stats;

@@ -4,12 +4,59 @@ import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator metrics and scoring', () => {
+  it('accumulates prompt cost when concurrent rows finish out of reservation order', async () => {
+    let signalFirstHookEntered: () => void;
+    const firstHookEntered = new Promise<void>((resolve) => {
+      signalFirstHookEntered = resolve;
+    });
+    let releaseFirstHook: () => void;
+    const firstHookCanFinish = new Promise<void>((resolve) => {
+      releaseFirstHook = resolve;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('concurrent-cost-provider'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        const cost = Number(prompt);
+        if (cost === 0.2) {
+          await firstHookEntered;
+        }
+        return { output: 'Generated output', cost };
+      }),
+    };
+    const testSuite: TestSuite = {
+      extensions: ['file://test-extension.js'],
+      providers: [provider],
+      prompts: [toPrompt('{{cost}}')],
+      tests: [{ vars: { cost: 0.1 } }, { vars: { cost: 0.2 } }],
+    };
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'afterEach' && 'result' in context && context.result?.cost === 0.1) {
+        signalFirstHookEntered();
+        await firstHookCanFinish;
+      }
+      return context;
+    });
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 2,
+      progressCallback: (_completed, _total, _index, _evalStep, metrics) => {
+        if (metrics.cost === 0.2) {
+          releaseFirstHook();
+        }
+      },
+    });
+
+    expect(evalRecord.prompts[0].metrics?.cost).toBeCloseTo(0.3);
+  });
+
   it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

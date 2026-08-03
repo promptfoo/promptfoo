@@ -10,7 +10,12 @@ import { GoogleAuthManager } from './auth';
 import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { CompletionOptions, GoogleProviderConfig } from './types';
 
 type InteractionContent = {
@@ -52,6 +57,45 @@ function normalizeAudioMimeType(format?: string): string {
     return 'audio/pcm';
   }
   return `audio/${format || 'mpeg'}`;
+}
+
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function hasUnsupportedSafetySettings(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+  return !Array.isArray(value) || value.length > 0;
+}
+
+async function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    await sleep(ms);
+    return;
+  }
+  if (signal.aborted) {
+    throw getAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      reject(getAbortError(signal));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
@@ -107,7 +151,17 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             }
             return part;
           }
-          const imagePart = part as { type?: string; image_url?: string | { url?: string } };
+          const imagePart = part as {
+            type?: string;
+            text?: string;
+            image_url?: string | { url?: string };
+          };
+          if (
+            (imagePart.type === 'input_text' || imagePart.type === 'output_text') &&
+            typeof imagePart.text === 'string'
+          ) {
+            return { type: 'text', text: imagePart.text };
+          }
           if (imagePart.type === 'input_audio') {
             const inputAudio = (part as { input_audio?: { data?: string; format?: string } })
               .input_audio;
@@ -165,15 +219,6 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
   }
 }
 
-function normalizeInteractionSafetySettings(
-  safetySettings: NonNullable<CompletionOptions['safetySettings']>,
-) {
-  return safetySettings.map(({ category, threshold, probability }) => ({
-    type: category.replace(/^HARM_CATEGORY_/i, '').toLowerCase(),
-    ...(threshold || probability ? { threshold: (threshold || probability)?.toLowerCase() } : {}),
-  }));
-}
-
 function getInteractionModalityTokenCount(
   details: Array<{ modality?: string; tokens?: number }> | undefined,
   modalities: string[],
@@ -221,20 +266,14 @@ function getVertexInteractionsEndpoint(
   projectId: string,
   env?: EnvOverrides,
 ): string {
-  const region =
-    config.region ||
-    env?.VERTEX_REGION ||
-    getEnvString('VERTEX_REGION') ||
-    getEnvString('GOOGLE_CLOUD_LOCATION') ||
-    'global';
   const configuredHost =
     config.apiBaseUrl ||
     config.apiHost ||
     env?.VERTEX_API_HOST ||
     getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
+    'aiplatform.googleapis.com';
   const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
-  return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
+  return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/global/interactions`;
 }
 
 export class GoogleInteractionsProvider implements ApiProvider {
@@ -242,6 +281,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
   config: GoogleProviderConfig;
   env?: EnvOverrides;
   private providerId?: string;
+  private readonly isVertexProvider: boolean;
 
   constructor(
     modelName: string,
@@ -251,6 +291,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     this.config = options.config || {};
     this.env = options.env;
     this.providerId = options.id;
+    this.isVertexProvider = this.config.vertexai === true;
   }
 
   id(): string {
@@ -261,21 +302,45 @@ export class GoogleInteractionsProvider implements ApiProvider {
     return `[Google Interactions Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const abortSignal = callApiOptions?.abortSignal;
+    if (abortSignal?.aborted) {
+      throw getAbortError(abortSignal);
+    }
     if (!prompt.trim()) {
       return { error: 'Prompt is required for Gemini Interactions API' };
     }
 
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    ) as GoogleProviderConfig;
-    const passthroughPreviousInteractionId =
-      config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
-    if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {
+    const config = {
+      ...mergeGoogleCompletionOptions(
+        this.config,
+        context?.prompt?.config as Partial<CompletionOptions> | undefined,
+      ),
+      vertexai: this.isVertexProvider,
+    } as GoogleProviderConfig;
+    if (
+      config.vertexai &&
+      (Boolean(config.previousInteractionId) ||
+        config.passthrough?.previous_interaction_id !== undefined ||
+        config.passthrough?.previousInteractionId !== undefined)
+    ) {
       return {
         error:
           'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
+      };
+    }
+    if (
+      hasUnsupportedSafetySettings(config.safetySettings) ||
+      hasUnsupportedSafetySettings(config.passthrough?.safetySettings) ||
+      hasUnsupportedSafetySettings(config.passthrough?.safety_settings)
+    ) {
+      return {
+        error:
+          'Gemini Omni Flash does not support custom safety settings through the Interactions API.',
       };
     }
     if (
@@ -334,6 +399,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           ...config.headers,
         };
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
         return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
       }
     } else {
@@ -356,8 +424,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
+    if (abortSignal?.aborted) {
+      throw getAbortError(abortSignal);
+    }
     const unsupportedGenerationFields = new Set([
-      ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
+      'temperature',
+      'top_p',
+      'topP',
       'stop_sequences',
       'stopSequences',
       'negative_prompt',
@@ -372,10 +445,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(config.maxOutputTokens === undefined
         ? {}
         : { max_output_tokens: config.maxOutputTokens }),
-      ...(config.vertexai && config.temperature !== undefined
-        ? { temperature: config.temperature }
-        : {}),
-      ...(config.vertexai && config.topP !== undefined ? { top_p: config.topP } : {}),
       ...Object.fromEntries(
         Object.entries({
           ...(config.generationConfig || {}),
@@ -397,6 +466,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ([field]) =>
           field !== 'generation_config' &&
           field !== 'generationConfig' &&
+          field !== 'safetySettings' &&
+          field !== 'safety_settings' &&
           !unsupportedGenerationFields.has(field),
       ),
     );
@@ -414,9 +485,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? { previous_interaction_id: config.previousInteractionId }
         : {}),
       ...(config.store === undefined ? {} : { store: config.store }),
-      ...(config.safetySettings
-        ? { safety_settings: normalizeInteractionSafetySettings(config.safetySettings) }
-        : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...passthrough,
       background: false,
@@ -439,6 +507,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          signal: abortSignal,
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
@@ -446,6 +515,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
         true,
       )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
     } catch (err) {
+      if (abortSignal?.aborted) {
+        throw getAbortError(abortSignal);
+      }
       return { error: `Gemini Interactions API error: ${String(err)}` };
     }
 
@@ -464,6 +536,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const pollStartedAt = Date.now();
     let pollCount = 0;
     while (data.status === 'in_progress' && data.id) {
+      if (abortSignal?.aborted) {
+        throw getAbortError(abortSignal);
+      }
       const elapsed = Date.now() - pollStartedAt;
       if (elapsed >= pollTimeoutMs) {
         return {
@@ -472,7 +547,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         };
       }
       if (pollCount > 0) {
-        await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
+        await sleepWithAbort(Math.min(1_000, pollTimeoutMs - elapsed), abortSignal);
       }
       try {
         ({
@@ -481,12 +556,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
           statusText: httpStatusText,
         } = (await fetchWithCache(
           `${endpoint}/${encodeURIComponent(data.id)}`,
-          { method: 'GET', headers } as RequestInit,
+          { method: 'GET', headers, signal: abortSignal } as RequestInit,
           Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
           'json',
           true,
         )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
         return { error: `Gemini Interactions API polling error: ${String(err)}` };
       }
       pollCount++;
@@ -500,6 +578,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           raw: data,
         };
       }
+    }
+    if (abortSignal?.aborted) {
+      throw getAbortError(abortSignal);
     }
     if (data.status && data.status !== 'completed') {
       return { error: `Gemini interaction did not complete (status: ${data.status})`, raw: data };
@@ -569,6 +650,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
               method: 'GET',
               headers: downloadHeaders,
               redirect: 'manual',
+              signal: abortSignal,
             },
             getRequestTimeoutMs(),
           );
@@ -592,6 +674,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
                 method: 'GET',
                 ...(redirectUrl.origin === downloadUrl.origin ? { headers: downloadHeaders } : {}),
                 redirect: 'manual',
+                signal: abortSignal,
               },
               getRequestTimeoutMs(),
             );
@@ -603,6 +686,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
             };
           }
           videoBuffer = Buffer.from(await response.arrayBuffer());
+          if (abortSignal?.aborted) {
+            throw getAbortError(abortSignal);
+          }
         } else {
           // Not on the download allowlist — keep the raw URI in the output, but say why
           // the video was not fetched instead of silently returning a link we never followed.
@@ -612,27 +698,44 @@ export class GoogleInteractionsProvider implements ApiProvider {
           );
         }
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
         return { error: `Failed to download Gemini interaction video: ${String(err)}` };
       }
     }
     if (videoBuffer) {
+      if (abortSignal?.aborted) {
+        throw getAbortError(abortSignal);
+      }
       try {
         ({ ref: blobRef } = await storeBlob(videoBuffer, video.mime_type || 'video/mp4', {
+          abortSignal,
           evalId: context?.evaluationId,
           kind: 'video',
           location: 'response.video',
           promptIdx: context?.promptIdx,
           testIdx: context?.testIdx,
         }));
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
       } catch (err) {
+        if (abortSignal?.aborted) {
+          throw getAbortError(abortSignal);
+        }
         return { error: `Failed to store Gemini interaction video: ${String(err)}` };
       }
     }
 
     const usage = data.usage;
-    const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
-    const outputTokens = usage?.total_output_tokens ?? 0;
-    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
+    const promptTokens = usage
+      ? (usage.total_input_tokens ?? 0) + (usage.total_tool_use_tokens ?? 0)
+      : undefined;
+    const outputTokens = usage ? (usage.total_output_tokens ?? 0) : undefined;
+    const thoughtTokens = usage
+      ? (usage.total_reasoning_tokens ?? usage.total_thought_tokens ?? 0)
+      : undefined;
     const audioInputTokens =
       getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
       getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
@@ -673,30 +776,37 @@ export class GoogleInteractionsProvider implements ApiProvider {
     return {
       output: text || `[Video: ${sanitizedPrompt}](${videoUrl})`,
       cached,
-      tokenUsage: {
-        prompt: promptTokens,
-        completion: outputTokens,
-        total: usage?.total_tokens ?? promptTokens + outputTokens + thoughtTokens,
-        cached: usage?.total_cached_tokens ?? 0,
-        numRequests: 1,
-        ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
-      },
-      cost: cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            promptTokens,
-            outputTokens + thoughtTokens,
-            config.vertexai,
-            audioInputTokens,
-            audioOutputTokens,
-            videoTokens,
-            imageInputTokens,
-            usage?.total_cached_tokens,
-            cachedAudioTokens,
-            cachedImageTokens,
-          ),
+      tokenUsage: usage
+        ? {
+            prompt: promptTokens,
+            completion: outputTokens,
+            total:
+              usage.total_tokens ??
+              (promptTokens ?? 0) + (outputTokens ?? 0) + (thoughtTokens ?? 0),
+            cached: usage.total_cached_tokens ?? 0,
+            numRequests: 1,
+            ...((thoughtTokens ?? 0) > 0
+              ? { completionDetails: { reasoning: thoughtTokens } }
+              : {}),
+          }
+        : { numRequests: 1 },
+      cost:
+        cached || !usage
+          ? undefined
+          : calculateGoogleCost(
+              this.modelName,
+              config,
+              promptTokens ?? 0,
+              (outputTokens ?? 0) + (thoughtTokens ?? 0),
+              config.vertexai,
+              audioInputTokens,
+              audioOutputTokens,
+              videoTokens,
+              imageInputTokens,
+              usage?.total_cached_tokens,
+              cachedAudioTokens,
+              cachedImageTokens,
+            ),
       video: {
         id: data.id,
         blobRef,

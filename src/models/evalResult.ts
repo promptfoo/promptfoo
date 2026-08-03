@@ -25,7 +25,7 @@ import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingRequest,
-  accumulateResponseTokenUsage,
+  accumulateResponseTokenUsagePreservingUnknown,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { invalidateEvaluationCache } from './evalMutation';
@@ -877,7 +877,7 @@ export default class EvalResult {
   namedScores: Record<string, number>;
   provider: ProviderOptions;
   latencyMs: number;
-  cost: number;
+  cost?: number;
   // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata: Record<string, any>;
   traceId?: string;
@@ -924,7 +924,7 @@ export default class EvalResult {
     this.namedScores = opts.namedScores || {};
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
-    this.cost = opts.cost || 0;
+    this.cost = opts.cost ?? undefined;
     ({
       metadata: this.metadata,
       traceId: this.traceId,
@@ -983,19 +983,24 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
     });
-    // Mirror the live accounting in the evaluator: a response counts as one provider
-    // request even when it reports no token usage, and a grading result counts as one
-    // assertion request (with its tokens folded in when present).
-    const tokenUsage = createEmptyTokenUsage();
+    const tokenUsage: NonNullable<ProviderResponse['tokenUsage']> = createEmptyTokenUsage();
     if (this.response) {
-      accumulateResponseTokenUsage(tokenUsage, this.response);
+      accumulateResponseTokenUsagePreservingUnknown(tokenUsage, this.response);
     }
     if (this.gradingResult) {
+      tokenUsage.assertions ??= {};
       accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed);
+    } else if (
+      tokenUsage.prompt === undefined &&
+      tokenUsage.completion === undefined &&
+      tokenUsage.cached === undefined &&
+      tokenUsage.total === undefined
+    ) {
+      delete tokenUsage.assertions;
     }
 
     return {
-      cost: this.cost,
+      ...(this.cost === undefined ? {} : { cost: this.cost }),
       description: this.description || undefined,
       error: this.error || undefined,
       gradingResult: shouldStripGradingResult ? null : this.gradingResult,

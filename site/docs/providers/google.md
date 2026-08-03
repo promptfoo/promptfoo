@@ -416,7 +416,7 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Video Generation Models (Gemini Omni Flash)
 
-Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools.
+Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth, the configured Google Cloud project, and the required `global` location even when the provider's ordinary Vertex region is set. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support custom safety settings, grounding, code execution, or function-calling tools; Promptfoo rejects these options before sending a request.
 
 ```yaml
 providers:

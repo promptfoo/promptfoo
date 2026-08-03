@@ -68,10 +68,6 @@ describe('GoogleInteractionsProvider', () => {
         aspectRatio: '9:16',
         previousInteractionId: 'interaction-0',
         store: true,
-        safetySettings: [
-          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_LOW_AND_ABOVE' },
-          { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
-        ],
         service_tier: 'priority',
         maxOutputTokens: 2_048,
         generationConfig: {
@@ -117,10 +113,6 @@ describe('GoogleInteractionsProvider', () => {
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
           store: true,
-          safety_settings: [
-            { type: 'hate_speech', threshold: 'block_low_and_above' },
-            { type: 'harassment', threshold: 'block_medium_and_above' },
-          ],
           generation_config: {
             max_output_tokens: 2_048,
             thinking_level: 'low',
@@ -199,12 +191,16 @@ describe('GoogleInteractionsProvider', () => {
           role: 'user',
           content: [
             { type: 'text', text: 'Use this reference.' },
+            { type: 'input_text', text: 'Use an establishing shot.' },
             { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,aW1hZ2U=' } },
             { type: 'input_image', image_url: 'https://image.example/reference.png' },
             { type: 'input_audio', input_audio: { data: 'YXVkaW8=', format: 'mp3' } },
           ],
         },
-        { role: 'assistant', content: 'I will create that scene.' },
+        {
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'I will create that scene.' }],
+        },
         { role: 'user', content: 'Add rain.' },
       ]),
     );
@@ -221,6 +217,7 @@ describe('GoogleInteractionsProvider', () => {
         type: 'user_input',
         content: [
           { type: 'text', text: 'Use this reference.' },
+          { type: 'text', text: 'Use an establishing shot.' },
           { type: 'image', mime_type: 'image/jpeg', data: 'aW1hZ2U=' },
           { type: 'image', uri: 'https://image.example/reference.png' },
           { type: 'audio', mime_type: 'audio/mpeg', data: 'YXVkaW8=' },
@@ -368,6 +365,29 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.cost).toBeCloseTo(48.8, 10);
   });
 
+  it('leaves token counts and cost unknown when Interactions omits usage', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Animate the reference');
+
+    expect(result.tokenUsage).toEqual({ numRequests: 1 });
+    expect(result.cost).toBeUndefined();
+  });
+
   it('returns only the latest Omni turn and stores authenticated URI-delivered video', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -422,6 +442,7 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it('does not forward Gemini credentials across a video-download redirect', async () => {
+    const controller = new AbortController();
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
@@ -452,7 +473,7 @@ describe('GoogleInteractionsProvider', () => {
       config: { apiKey: 'test-key' },
     });
 
-    await provider.callApi('a city at dusk');
+    await provider.callApi('a city at dusk', undefined, { abortSignal: controller.signal });
 
     expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
       1,
@@ -460,13 +481,14 @@ describe('GoogleInteractionsProvider', () => {
       expect.objectContaining({
         headers: expect.objectContaining({ 'x-goog-api-key': 'test-key' }),
         redirect: 'manual',
+        signal: controller.signal,
       }),
       expect.any(Number),
     );
     expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
       2,
       'https://storage.googleapis.com/signed-video',
-      { method: 'GET', redirect: 'manual' },
+      { method: 'GET', redirect: 'manual', signal: controller.signal },
       expect.any(Number),
     );
     expect(mockStoreBlob).toHaveBeenCalledWith(
@@ -579,6 +601,50 @@ describe('GoogleInteractionsProvider', () => {
       'json',
       true,
     );
+  });
+
+  it('does not start an interaction for an already-aborted eval', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('cancelled before dispatch'));
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(
+      provider.callApi('make it rainy', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'cancelled before dispatch' });
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
+  it('stops polling immediately when the eval is aborted', async () => {
+    const controller = new AbortController();
+    mockFetchWithCache
+      .mockResolvedValueOnce({
+        data: { id: 'interaction-pending', status: 'in_progress' },
+        cached: false,
+      } as any)
+      .mockResolvedValueOnce({
+        data: { id: 'interaction-pending', status: 'in_progress' },
+        cached: false,
+      } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 5_000 },
+    });
+
+    const result = provider.callApi('make it rainy', undefined, {
+      abortSignal: controller.signal,
+    });
+    await vi.waitFor(() => expect(mockFetchWithCache).toHaveBeenCalledTimes(2));
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
+    expect(mockFetchWithCache.mock.calls[0]?.[1]).toMatchObject({ signal: controller.signal });
+    expect(mockFetchWithCache.mock.calls[1]?.[1]).toMatchObject({ signal: controller.signal });
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 
   it('surfaces a failed latest Omni model-output step instead of reusing old video', async () => {
@@ -749,6 +815,15 @@ describe('GoogleInteractionsProvider', () => {
         aspectRatio: '16:9',
         temperature: 0.2,
         topP: 0.9,
+        generationConfig: {
+          seed: 42,
+          temperature: 0.4,
+          top_p: 0.8,
+        } as any,
+        passthrough: {
+          temperature: 0.6,
+          top_p: 0.7,
+        },
       },
     });
 
@@ -767,7 +842,7 @@ describe('GoogleInteractionsProvider', () => {
           model: 'gemini-omni-flash-preview',
           input: [{ type: 'text', text: 'A city at dusk' }],
           response_format: [{ type: 'video', aspect_ratio: '16:9' }],
-          generation_config: { temperature: 0.2, top_p: 0.9 },
+          generation_config: { seed: 42 },
           background: false,
           stream: false,
         }),
@@ -778,6 +853,92 @@ describe('GoogleInteractionsProvider', () => {
     );
     expect(getRequestHeaders).toHaveBeenCalledWith(
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
+    );
+  });
+
+  it('keeps the constructed Vertex route when prompt config sets vertexai false', async () => {
+    const authSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+      },
+    });
+
+    const result = await provider.callApi('Make it brighter', {
+      prompt: {
+        config: {
+          vertexai: false,
+          previousInteractionId: 'interaction-0',
+        },
+      },
+    } as any);
+
+    expect(result.error).toContain('does not support previousInteractionId');
+    expect(authSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['provider region', { region: 'us-central1' }, {}, 'https://aiplatform.googleapis.com'],
+    ['VERTEX_REGION', {}, { VERTEX_REGION: 'us-central1' }, 'https://aiplatform.googleapis.com'],
+    [
+      'GOOGLE_CLOUD_LOCATION',
+      {},
+      { GOOGLE_CLOUD_LOCATION: 'us-east1' },
+      'https://aiplatform.googleapis.com',
+    ],
+    [
+      'an explicit API base URL',
+      { apiBaseUrl: 'http://127.0.0.1:15500/vertex-proxy' },
+      {},
+      'http://127.0.0.1:15500/vertex-proxy',
+    ],
+    [
+      'an explicit API host',
+      { apiHost: 'vertex-proxy.example' },
+      {},
+      'https://vertex-proxy.example',
+    ],
+    [
+      'VERTEX_API_HOST',
+      {},
+      { VERTEX_API_HOST: 'env-vertex-proxy.example' },
+      'https://env-vertex-proxy.example',
+    ],
+  ])('keeps Vertex Omni on the global endpoint despite %s', async (_source, config, env, host) => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(new Headers()),
+      },
+      projectId: 'configured-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { ...config, vertexai: true, projectId: 'configured-project' },
+      env,
+    });
+
+    await provider.callApi('A city at dusk');
+
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      `${host}/v1beta1/projects/configured-project/locations/global/interactions`,
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
     );
   });
 
@@ -794,6 +955,41 @@ describe('GoogleInteractionsProvider', () => {
 
     expect(result.error).toContain('does not support previousInteractionId');
     expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty top-level Vertex previousInteractionId as absent', async () => {
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders: vi.fn().mockResolvedValue(new Headers()),
+      },
+      projectId: 'configured-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        previousInteractionId: '',
+      },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    const body = JSON.parse(String(mockFetchWithCache.mock.calls[0]?.[1]?.body));
+    expect(body).not.toHaveProperty('previous_interaction_id');
   });
 
   it('rejects unsupported Vertex Omni follow-ups supplied through passthrough', async () => {
@@ -823,6 +1019,26 @@ describe('GoogleInteractionsProvider', () => {
     const result = await provider.callApi('Make it brighter');
 
     expect(result.error).toContain('does not support previousInteractionId');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('rejects a real camelCase Vertex follow-up when the snake-case alias is empty', async () => {
+    const authSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        passthrough: {
+          previous_interaction_id: '',
+          previousInteractionId: 'interaction-0',
+        },
+      },
+    });
+
+    const result = await provider.callApi('Make it brighter');
+
+    expect(result.error).toContain('does not support previousInteractionId');
+    expect(authSpy).not.toHaveBeenCalled();
     expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
@@ -859,6 +1075,65 @@ describe('GoogleInteractionsProvider', () => {
       expect(result.error).toContain('does not support tools');
       expect(mockFetchWithCache).not.toHaveBeenCalled();
     }
+  });
+
+  it.each([
+    [
+      'top-level safetySettings',
+      {
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_LOW_AND_ABOVE' },
+        ],
+      },
+    ],
+    ['passthrough safetySettings', { passthrough: { safetySettings: [{}] } }],
+    ['passthrough safety_settings', { passthrough: { safety_settings: [{}] } }],
+  ])('rejects unsupported %s before Vertex auth or network', async (_source, safetyConfig) => {
+    const authSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: {
+        vertexai: true,
+        projectId: 'configured-project',
+        ...safetyConfig,
+      } as any,
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBe(
+      'Gemini Omni Flash does not support custom safety settings through the Interactions API.',
+    );
+    expect(authSpy).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['top-level safetySettings', { safetySettings: [] }],
+    ['passthrough safetySettings', { passthrough: { safetySettings: [] } }],
+    ['passthrough safety_settings', { passthrough: { safety_settings: [] } }],
+  ])('allows and omits empty %s', async (_source, safetyConfig) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', ...safetyConfig } as any,
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    const body = JSON.parse(mockFetchWithCache.mock.calls[0]?.[1]?.body as string);
+    expect(body).not.toHaveProperty('safetySettings');
+    expect(body).not.toHaveProperty('safety_settings');
   });
 
   it.each([
@@ -937,6 +1212,119 @@ describe('GoogleInteractionsProvider', () => {
       'video/mp4',
       expect.any(Object),
     );
+  });
+
+  it('does not store a downloaded video after the eval is aborted', async () => {
+    const controller = new AbortController();
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [
+              {
+                type: 'video',
+                mime_type: 'video/mp4',
+                uri: 'https://generativelanguage.googleapis.com/v1beta/files/video:download',
+              },
+            ],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(),
+      arrayBuffer: vi.fn().mockImplementation(async () => {
+        controller.abort();
+        return Buffer.from('downloaded video');
+      }),
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await expect(
+      provider.callApi('A city at dusk', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: controller.signal }),
+      expect.any(Number),
+    );
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
+  it('normalizes cancellation while blob persistence is pending', async () => {
+    const controller = new AbortController();
+    let finishStore: (() => void) | undefined;
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    mockStoreBlob.mockImplementationOnce(async (_data, _mimeType, context) => {
+      await new Promise<void>((resolve) => {
+        finishStore = resolve;
+      });
+      context?.abortSignal?.throwIfAborted();
+      return {
+        ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
+        deduplicated: false,
+      } as any;
+    });
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const pendingCall = provider.callApi('A city at dusk', { evaluationId: 'eval-1' } as any, {
+      abortSignal: controller.signal,
+    });
+    await vi.waitFor(() => expect(mockStoreBlob).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled during blob persistence'));
+    finishStore?.();
+
+    await expect(pendingCall).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cancelled during blob persistence',
+    });
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      Buffer.from('video'),
+      'video/mp4',
+      expect.objectContaining({ abortSignal: controller.signal, evalId: 'eval-1' }),
+    );
+  });
+
+  it('normalizes cancellation that wins a Vertex authentication failure race', async () => {
+    const controller = new AbortController();
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockImplementationOnce(async () => {
+      controller.abort(new Error('cancelled during authentication'));
+      throw new Error('OAuth failed after cancellation');
+    });
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { vertexai: true, projectId: 'configured-project' },
+    });
+
+    await expect(
+      provider.callApi('A city at dusk', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cancelled during authentication',
+    });
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 
   it('preserves a configured provider id and supports the legacy PALM API key', async () => {

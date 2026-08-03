@@ -21,7 +21,7 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
   accumulateAssertionTokenUsage,
-  accumulateResponseTokenUsage,
+  accumulateResponseTokenUsagePreservingUnknown,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
@@ -196,7 +196,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       namedScores: Record<string, number>;
       namedScoresCount: Record<string, number>;
       namedScoreWeights?: Record<string, number>;
-      cost: number;
+      cost?: number;
     }
   >();
 
@@ -248,7 +248,17 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
-        metrics.cost += result.cost || 0;
+        const promptResultCount =
+          metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount;
+        if (result.cost === undefined) {
+          if (result.response && !result.response.error && !result.response.cached) {
+            metrics.cost = undefined;
+          }
+        } else if (promptResultCount === 1) {
+          metrics.cost = result.cost;
+        } else if (metrics.cost !== undefined) {
+          metrics.cost += result.cost;
+        }
 
         for (const [key, value] of Object.entries(result.namedScores || {})) {
           accumulateNamedMetric(metrics, {
@@ -270,10 +280,8 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         }
 
         // Update token usage
-        if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
+        if (result.response) {
+          accumulateResponseTokenUsagePreservingUnknown(metrics.tokenUsage, result.response);
         }
 
         // Update assertion token usage

@@ -315,7 +315,9 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
     failureReason: output.failureReason,
     latencyDisplay: Number.isFinite(output.latencyMs) ? `${output.latencyMs.toFixed(0)} ms` : '',
     costDisplay:
-      Number.isFinite(output.cost) && output.cost > 0 ? `$${output.cost.toFixed(6)}` : '',
+      typeof output.cost === 'number' && Number.isFinite(output.cost) && output.cost > 0
+        ? `$${output.cost.toFixed(6)}`
+        : '',
     totalTokensDisplay:
       typeof output.tokenUsage?.total === 'number'
         ? output.tokenUsage.total.toLocaleString('en-US')

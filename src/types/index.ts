@@ -335,7 +335,7 @@ const PromptMetricsSchema = z.object({
       strategyFailCount: z.record(z.string(), z.number()),
     })
     .optional(),
-  cost: z.number(),
+  cost: z.number().optional(),
 });
 export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
 
@@ -402,7 +402,7 @@ export interface EvaluateResult {
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: TokenUsage;
   /**
    * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
    * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
@@ -414,7 +414,7 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
-  cost: number;
+  cost?: number;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
   id: string;
@@ -478,7 +478,7 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: TokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;

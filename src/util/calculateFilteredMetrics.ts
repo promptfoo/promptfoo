@@ -131,7 +131,39 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER)) as prompt_tokens,
       SUM(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER)) as completion_tokens,
       SUM(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER)) as cached_tokens,
-      COUNT(CASE WHEN json_extract(response, '$.tokenUsage') IS NOT NULL THEN 1 END) as num_requests_with_tokens
+      SUM(
+        CASE
+          WHEN response IS NULL THEN 0
+          WHEN json_extract(response, '$.tokenUsage.numRequests') IS NOT NULL
+            THEN CAST(json_extract(response, '$.tokenUsage.numRequests') AS INTEGER)
+          ELSE 1
+        END
+      ) as num_requests,
+      MAX(
+        CASE
+          WHEN response IS NOT NULL
+            AND COALESCE(
+              CAST(json_extract(response, '$.tokenUsage.numRequests') AS INTEGER),
+              1
+            ) > 0
+            AND json_extract(response, '$.tokenUsage.total') IS NULL
+            AND json_extract(response, '$.tokenUsage.prompt') IS NULL
+            AND json_extract(response, '$.tokenUsage.completion') IS NULL
+            AND json_extract(response, '$.tokenUsage.cached') IS NULL
+          THEN 1
+          ELSE 0
+        END
+      ) as has_unknown_token_usage,
+      MAX(
+        CASE
+          WHEN response IS NOT NULL
+            AND cost IS NULL
+            AND COALESCE(CAST(json_extract(response, '$.cached') AS INTEGER), 0) = 0
+            AND json_extract(response, '$.error') IS NULL
+          THEN 1
+          ELSE 0
+        END
+      ) as has_unknown_cost
     FROM eval_results
     WHERE ${whereSql}
     GROUP BY prompt_idx
@@ -146,12 +178,14 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     error_count: number;
     total_score: number;
     total_latency: number;
-    total_cost: number;
+    total_cost: number | null;
     total_tokens: number | null;
     prompt_tokens: number | null;
     completion_tokens: number | null;
     cached_tokens: number | null;
-    num_requests_with_tokens: number;
+    num_requests: number;
+    has_unknown_token_usage: number;
+    has_unknown_cost: number;
   }>;
 
   // Populate basic metrics
@@ -168,13 +202,17 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       testFailCount: row.fail_count || 0,
       testErrorCount: row.error_count || 0,
       totalLatencyMs: row.total_latency || 0,
-      cost: row.total_cost || 0,
+      ...(row.has_unknown_cost ? {} : { cost: row.total_cost ?? 0 }),
       tokenUsage: {
-        total: row.total_tokens || 0,
-        prompt: row.prompt_tokens || 0,
-        completion: row.completion_tokens || 0,
-        cached: row.cached_tokens || 0,
-        numRequests: row.num_requests_with_tokens || 0,
+        ...(row.has_unknown_token_usage
+          ? {}
+          : {
+              total: row.total_tokens ?? 0,
+              prompt: row.prompt_tokens ?? 0,
+              completion: row.completion_tokens ?? 0,
+              cached: row.cached_tokens ?? 0,
+            }),
+        numRequests: row.num_requests || 0,
       },
       namedScores: {},
       namedScoresCount: {},
