@@ -334,6 +334,8 @@ export class WebSocketProvider implements ApiProvider {
           try {
             const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
             accumulator = newAccumulator;
+            // Only disarm the request deadline once the stream settles this promise.
+            // Clearing it on every chunk leaves a stalled stream pending forever.
             if (isComplete) {
               clearTimeout(timeout);
               ws.close();
