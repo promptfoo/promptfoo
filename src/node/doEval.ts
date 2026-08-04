@@ -1046,10 +1046,11 @@ export async function doEval(
         }).start();
 
         try {
-          shareableUrl = await sharePromise;
-          if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
+          const resolvedShareUrl: string | null = await sharePromise;
+          shareableUrl = resolvedShareUrl;
+          if (resolvedShareUrl) {
             evalRecord.shared = true;
-            spinner.succeed(shareableUrl);
+            spinner.succeed(resolvedShareUrl);
           } else {
             spinner.fail(chalk.red('Share failed'));
           }
@@ -1060,10 +1061,11 @@ export async function doEval(
       } else {
         // CI mode - just await and log result
         try {
-          shareableUrl = await sharePromise;
-          if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
+          const resolvedShareUrl: string | null = await sharePromise;
+          shareableUrl = resolvedShareUrl;
+          if (resolvedShareUrl) {
             evalRecord.shared = true;
-            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${resolvedShareUrl}`);
           }
         } catch (error) {
           logger.debug(`Share error: ${error}`);

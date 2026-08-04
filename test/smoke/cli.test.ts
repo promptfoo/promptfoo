@@ -339,17 +339,17 @@ describe('CLI Smoke Tests', () => {
       expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
     });
 
-    it.each([
-      'v20.20.0',
-      'v22.21.9',
-    ])('1.7.5 - shipped runtime guard rejects unsupported Node.js %s', (version) => {
-      const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
+    it.each(['v20.20.0', 'v22.21.9'])(
+      '1.7.5 - shipped runtime guard rejects unsupported Node.js %s',
+      (version) => {
+        const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
 
-      expect(exitCode).toBe(1);
-      expect(stderr).toContain(`Detected: ${version}`);
-      expect(stderr).toContain('Required: >=22.22.0');
-      expect(stderr).toContain('Install a supported Node.js version and try again.');
-    });
+        expect(exitCode).toBe(1);
+        expect(stderr).toContain(`Detected: ${version}`);
+        expect(stderr).toContain('Required: >=22.22.0');
+        expect(stderr).toContain('Install a supported Node.js version and try again.');
+      },
+    );
 
     it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
       const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');

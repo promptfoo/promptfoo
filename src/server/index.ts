@@ -13,7 +13,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  void (await startServer(port, BrowserBehavior.SKIP));
+  await startServer(port, BrowserBehavior.SKIP);
 }
 
 main().catch((err) => {

@@ -266,7 +266,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
   }
 
   async sendSystemPrompt(sessionId: string, prompt: string) {
-    return this.sendTextMessage(sessionId, 'SYSTEM', prompt);
+    return await this.sendTextMessage(sessionId, 'SYSTEM', prompt);
   }
 
   async sendChatTextHistory(sessionId: string, role: 'USER' | 'ASSISTANT', prompt: string) {
@@ -392,7 +392,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       });
 
       logger.debug('Sending system prompt');
-      void (await this.sendSystemPrompt(sessionId, context?.test?.metadata?.systemPrompt || ''));
+      await this.sendSystemPrompt(sessionId, context?.test?.metadata?.systemPrompt || '');
 
       logger.debug('Processing conversation history');
       let promptText = prompt;

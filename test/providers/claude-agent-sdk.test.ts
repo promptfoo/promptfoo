@@ -4165,108 +4165,108 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('tool call tracking', () => {
-      it.each([
-        false,
-        true,
-      ])('only forwards raw TaskOutput subagent transcripts when explicitly enabled: %s', async (forwardSubagentText) => {
-        const rawTranscript = 'SYSTEM SECRET and hidden subagent reasoning';
-        const taskOutput = `<output>${rawTranscript}</output>`;
-        const emittedToolSpans: Array<Record<string, unknown>> = [];
-        vi.spyOn(genaiTracer, 'getGenAITracer').mockReturnValue({
-          startSpan: vi.fn((name: string, options: { attributes?: Record<string, unknown> }) => {
-            if (name === 'tool TaskOutput') {
-              emittedToolSpans.push(options.attributes ?? {});
-            }
-            return { setStatus: vi.fn(), end: vi.fn() };
-          }),
-        } as any);
+      it.each([false, true])(
+        'only forwards raw TaskOutput subagent transcripts when explicitly enabled: %s',
+        async (forwardSubagentText) => {
+          const rawTranscript = 'SYSTEM SECRET and hidden subagent reasoning';
+          const taskOutput = `<output>${rawTranscript}</output>`;
+          const emittedToolSpans: Array<Record<string, unknown>> = [];
+          vi.spyOn(genaiTracer, 'getGenAITracer').mockReturnValue({
+            startSpan: vi.fn((name: string, options: { attributes?: Record<string, unknown> }) => {
+              if (name === 'tool TaskOutput') {
+                emittedToolSpans.push(options.attributes ?? {});
+              }
+              return { setStatus: vi.fn(), end: vi.fn() };
+            }),
+          } as any);
 
-        mockQuery.mockReturnValue(
-          createMockQuery([
-            {
-              type: 'assistant',
-              parent_tool_use_id: null,
-              message: createMockBetaMessage([
-                {
-                  type: 'tool_use',
-                  id: 'background-task-output',
-                  name: 'TaskOutput',
-                  input: { task_id: 'background-task-1' },
-                },
-              ]),
-              session_id: 'test-session',
-            },
-            {
-              type: 'user',
-              parent_tool_use_id: null,
-              tool_use_result: {
-                retrieval_status: 'success',
-                task: {
-                  task_id: 'background-task-1',
-                  task_type: 'local_agent',
-                  output: rawTranscript,
-                  isRawTranscript: true,
-                },
-              },
-              message: {
-                role: 'user',
-                content: [
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([
                   {
-                    type: 'tool_result',
-                    tool_use_id: 'background-task-output',
-                    content: taskOutput,
+                    type: 'tool_use',
+                    id: 'background-task-output',
+                    name: 'TaskOutput',
+                    input: { task_id: 'background-task-1' },
                   },
-                ],
+                ]),
+                session_id: 'test-session',
               },
-              session_id: 'test-session',
-            },
-            {
-              type: 'result',
-              subtype: 'success',
-              session_id: 'test-session',
-              uuid: '12345678-1234-1234-1234-123456789abc',
-              result: 'Background task completed',
-              usage: createMockUsage(100, 200),
-              total_cost_usd: 0.01,
-              duration_ms: 1000,
-              duration_api_ms: 800,
-              is_error: false,
-              num_turns: 1,
-              permission_denials: [],
-            },
-          ]),
-        );
+              {
+                type: 'user',
+                parent_tool_use_id: null,
+                tool_use_result: {
+                  retrieval_status: 'success',
+                  task: {
+                    task_id: 'background-task-1',
+                    task_type: 'local_agent',
+                    output: rawTranscript,
+                    isRawTranscript: true,
+                  },
+                },
+                message: {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'background-task-output',
+                      content: taskOutput,
+                    },
+                  ],
+                },
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'Background task completed',
+                usage: createMockUsage(100, 200),
+                total_cost_usd: 0.01,
+                duration_ms: 1000,
+                duration_api_ms: 800,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
 
-        const provider = new ClaudeCodeSDKProvider({
-          config: { forward_subagent_text: forwardSubagentText },
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        const result = await provider.callApi('Collect background output');
+          const provider = new ClaudeCodeSDKProvider({
+            config: { forward_subagent_text: forwardSubagentText },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Collect background output');
 
-        expect(result.metadata?.toolCalls).toEqual([
-          expect.objectContaining({
-            name: 'TaskOutput',
-            output: forwardSubagentText
+          expect(result.metadata?.toolCalls).toEqual([
+            expect.objectContaining({
+              name: 'TaskOutput',
+              output: forwardSubagentText
+                ? taskOutput
+                : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+            }),
+          ]);
+
+          expect(emittedToolSpans).toHaveLength(1);
+          expect(emittedToolSpans[0]?.['tool.output']).toBe(
+            forwardSubagentText
               ? taskOutput
               : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
-          }),
-        ]);
+          );
 
-        expect(emittedToolSpans).toHaveLength(1);
-        expect(emittedToolSpans[0]?.['tool.output']).toBe(
-          forwardSubagentText
-            ? taskOutput
-            : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
-        );
+          if (!forwardSubagentText) {
+            expect(JSON.stringify(result)).not.toContain(rawTranscript);
 
-        if (!forwardSubagentText) {
-          expect(JSON.stringify(result)).not.toContain(rawTranscript);
-
-          const cachedResult = await provider.callApi('Collect background output');
-          expect(JSON.stringify(cachedResult)).not.toContain(rawTranscript);
-          expect(mockQuery).toHaveBeenCalledTimes(1);
-        }
-      });
+            const cachedResult = await provider.callApi('Collect background output');
+            expect(JSON.stringify(cachedResult)).not.toContain(rawTranscript);
+            expect(mockQuery).toHaveBeenCalledTimes(1);
+          }
+        },
+      );
 
       it('should capture tool calls in response metadata', async () => {
         mockQuery.mockReturnValue(

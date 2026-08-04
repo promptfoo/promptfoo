@@ -3317,7 +3317,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }: ProcessEvalStepOptions,
     context: EvalProcessingContext,
   ) {
-    return withCacheNamespace(
+    return await withCacheNamespace(
       getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
       async () => {
         const rows =
@@ -3497,7 +3497,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
-      return this.processEvalStep(evalStep, index, { deferGrading, providerCallQueue }, context);
+      return await this.processEvalStep(
+        evalStep,
+        index,
+        { deferGrading, providerCallQueue },
+        context,
+      );
     }
 
     const abortController = new AbortController();
@@ -3707,12 +3712,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       await this.store.appendPrompts(prompts);
     };
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
-      void (await this.processEvalStep(
-        evalStep,
-        index,
-        { precomputedRows: rows },
-        processingContext,
-      ));
+      await this.processEvalStep(evalStep, index, { precomputedRows: rows }, processingContext);
       processedIndices.add(index);
       await flushPromptMetrics();
     };
@@ -3833,7 +3833,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       checkAbort();
       logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
-      void (await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext));
+      await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
       processedIndices.add(idx);
       const now = Date.now();
       if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
@@ -3865,7 +3865,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       async (evalStep) => {
         checkAbort();
         const idx = evalStepIndexMap.get(evalStep)!;
-        void (await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext));
+        await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
         processedIndices.add(idx);
         const now = Date.now();
         if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {

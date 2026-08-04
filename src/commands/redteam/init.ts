@@ -42,7 +42,7 @@ export function initCommand(program: Command) {
             if (isRunning) {
               await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             } else {
-              void (await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE));
+              await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             }
           } else {
             await redteamInit(directory);

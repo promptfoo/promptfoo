@@ -34,7 +34,7 @@ export function evalSetupCommand(program: Command) {
         if (isRunning) {
           await openBrowser(browserBehavior);
         } else {
-          void (await startServer(cmdObj.port, browserBehavior));
+          await startServer(cmdObj.port, browserBehavior);
         }
       },
     );

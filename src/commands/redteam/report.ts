@@ -40,7 +40,7 @@ export function redteamReportCommand(program: Command) {
         if (isRunning) {
           await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
         } else {
-          void (await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT));
+          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT);
         }
       },
     );

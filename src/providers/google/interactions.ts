@@ -283,7 +283,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       (Array.isArray(config.passthrough?.tools)
         ? config.passthrough.tools.length > 0
         : Boolean(config.passthrough?.tools)) ||
-      (config.mcp?.enabled ?? false)
+      config.mcp?.enabled
     ) {
       return {
         error:

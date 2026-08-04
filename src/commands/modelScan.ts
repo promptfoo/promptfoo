@@ -749,8 +749,8 @@ async function processJsonResults(
       }).start();
 
       try {
-        const shareableUrl = await sharePromise;
-        if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
+        const shareableUrl: string | null = await sharePromise;
+        if (shareableUrl) {
           spinner.succeed(shareableUrl);
         } else {
           spinner.fail(chalk.red('Share failed'));
@@ -762,8 +762,8 @@ async function processJsonResults(
     } else {
       // CI mode - direct log
       try {
-        const shareableUrl = await sharePromise;
-        if (typeof shareableUrl === 'string' && shareableUrl.length > 0) {
+        const shareableUrl: string | null = await sharePromise;
+        if (shareableUrl) {
           logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
         }
       } catch (error) {
