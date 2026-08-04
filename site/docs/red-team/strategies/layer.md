@@ -455,7 +455,7 @@ The following strategies can be used as the first step with per-turn transforms:
 
 - [Audio Strategy](./audio.md) - Text-to-speech conversion
 - [Image Strategy](./image.md) - Text-to-image conversion
-- [Hydra Strategy](./multi-turn.md) - Multi-turn jailbreak attacks
+- [Hydra Strategy](./hydra.md) - Multi-turn jailbreak attacks
 - [ROT13](./rot13.md) - Simple cipher encoding
 - [Base64](./base64.md) - Common encoding technique
 - [Custom Strategy Scripts](./custom.md) - Create your own strategies
