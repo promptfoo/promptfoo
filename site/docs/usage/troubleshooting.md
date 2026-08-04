@@ -12,6 +12,7 @@ Before troubleshooting specific issues, you can access detailed logs to help dia
 - **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
 - **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
 - **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+- **Custom log file**: Use the `--log-file <path>` option to write logs to a specific file in addition to the default logging behavior. For example: `promptfoo eval --log-file ./my-eval.log`
 
 ### Live Debug Toggle
 
