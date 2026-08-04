@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Fallback Assertion Example
+#
+# This example demonstrates the fallback mechanism for assertions.
+# When an assertion fails and has `fallback: next`, the next assertion
+# in the list will be executed. This is useful for implementing cascading
+# validation strategies - fast checks first, expensive checks as fallback.
+
+description: 'Fallback assertion example - fast check with LLM fallback'
+
+prompts:
+  - 'Answer the following question concisely: {{question}}'
+
+providers:
+  - openai:chat:gpt-5.4-mini
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      # Fast exact match check
+      - type: javascript
+        value: |
+          const validAnswers = ['Paris', 'paris'];
+          return validAnswers.includes(output.trim());
+        fallback: next # If this fails, try the next assertion
+
+      # LLM judge as fallback (only runs if exact match fails)
+      - type: llm-rubric
+        provider: openai:chat:gpt-5.4-mini
+        value: 'The response correctly identifies Paris as the capital of France'
+
+  - vars:
+      question: 'Explain photosynthesis'
+    assert:
+      # Multi-level fallback chain
+      - type: contains
+        value: 'sunlight'
+        fallback: next # Try regex if simple contains fails
+
+      - type: regex
+        value: '(sun|light|photo)'
+        fallback: next # Try LLM judge if regex fails
+
+      - type: llm-rubric
+        provider: openai:chat:gpt-5.4-mini
+        value: |
+          The response demonstrates understanding of photosynthesis,
+          mentioning key concepts like light energy, plants, and glucose production.
+
+  - vars:
+      question: 'What is 2+2?'
+    assert:
+      # Independent assertion (no fallback)
+      - type: contains
+        value: '4'
+
+      # Fallback chain
+      - type: javascript
+        value: |
+          /\b4\b/.test(output)
+        fallback: next
+
+      # Final fallback
+      - type: llm-rubric
+        provider: openai:chat:gpt-5.4-mini
+        value: 'The response correctly states that 2+2=4'
+
+      # Another independent assertion
+      - type: not-contains
+        value: '5'

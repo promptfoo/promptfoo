@@ -839,10 +839,19 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    if (componentResults.length > 0) {
+    // Diagnostic fallback-chain primaries (`fallbackIntermediate`) are retained
+    // for traceability but must not contribute to the recomputed automated
+    // pass/score — counting them would rewrite a passing fallback result into a
+    // spurious failure.
+    const scoringComponentResults = componentResults.filter(
+      (result) => result.metadata?.fallbackIntermediate !== true,
+    );
+
+    if (scoringComponentResults.length > 0) {
       finalPass =
-        componentResults.filter((result) => result.pass).length === componentResults.length;
-      finalScore = averageComponentResultScore(componentResults, finalScore);
+        scoringComponentResults.filter((result) => result.pass).length ===
+        scoringComponentResults.length;
+      finalScore = averageComponentResultScore(scoringComponentResults, finalScore);
     }
 
     return {

@@ -1,5 +1,5 @@
 import { getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { graderFail } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -27,7 +27,10 @@ export async function matchesClassification(
   const resp = await finalProvider.callClassificationApi(output);
 
   if (!resp.classification) {
-    return fail(resp.error || 'Unknown error fetching classification');
+    // A provider/transport failure is not evidence about the classification.
+    // Tag it as a grader error so fallback chains and inverse-aware callers
+    // (`not-classifier`) fail closed instead of masking the outage.
+    return graderFail(resp.error || 'Unknown error fetching classification');
   }
   let score: number;
   if (expected === undefined) {

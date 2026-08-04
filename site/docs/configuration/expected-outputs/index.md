@@ -55,6 +55,25 @@ tests:
 | transform        | string \| Function | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
 | metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
 | contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+| fallback         | `next` \| `true`   | No       | If set to `next` or `true`, run the next assertion only when this assertion fails. Useful for cascading from cheap assertions to more expensive fallbacks.                                                                                                                                                                                         |
+
+## Fallback assertions
+
+Use `fallback: next` to build a cascading assertion chain. When an assertion with fallback passes, promptfoo skips the remaining fallback assertions in that chain. When it fails, promptfoo runs the next assertion and uses the final executed assertion for scoring.
+
+```yaml
+tests:
+  - vars:
+      answer: Paris
+    assert:
+      - type: equals
+        value: 'Paris'
+        fallback: next
+      - type: llm-rubric
+        value: 'The response correctly identifies Paris as the capital of France'
+```
+
+Fallbacks are useful when you want cheap deterministic checks to handle common cases and reserve model-graded assertions for ambiguous outputs. Assertions that are bypassed because an earlier fallback passed do not affect the score or named metrics. Failed-then-fallback primaries that actually executed remain visible in `componentResults` and named metrics, and their token usage is summed into the chain's result so per-test cost telemetry stays accurate. Assertion errors, redteam guardrail failures, and model-grader failures do not activate fallbacks; they continue to surface as errors or failures. Fallback sources cannot be redteam guardrail assertions. Fallback targets cannot be assertion sets, `select-*` assertions, or `max-score`.
 
 ## Grouping assertions via Assertion Sets
 

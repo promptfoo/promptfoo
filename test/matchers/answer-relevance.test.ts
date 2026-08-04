@@ -212,4 +212,18 @@ describe('matchesAnswerRelevance', () => {
     expect(result.metadata?.threshold).toBe(0.7);
     expect(result.pass).toBe(true);
   });
+
+  it('tags a grader/transport outage as a grader error (fail closed)', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider unavailable',
+    });
+
+    const result = await matchesAnswerRelevance('Input text', 'Sample output', 0.5);
+
+    // A provider outage is not evidence about relevance: fail closed with a
+    // grader-error tag so fallback chains cannot mask it.
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata?.graderError).toBe(true);
+  });
 });

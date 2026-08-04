@@ -104,23 +104,11 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
-    if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
-    }
-
-    if (result.namedScores) {
-      Object.entries(result.namedScores).forEach(([metricName, score]) => {
-        if (metricName !== metric) {
-          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
-          const weightedIncomingWeight = incomingWeight * weight;
-          this.namedScores[metricName] =
-            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
-          this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
-        }
-      });
-    }
+    this.addNamedScores({
+      result,
+      metric,
+      weight,
+    });
 
     if (result.tokensUsed) {
       this.tokensUsed.total += result.tokensUsed.total || 0;
@@ -138,6 +126,35 @@ export class AssertionsResult {
 
     if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
       throw new Error(result.reason);
+    }
+  }
+
+  // Preserve metric observability for results that should not affect aggregate scoring.
+  addNamedScores({
+    result,
+    metric,
+    weight = 1,
+  }: {
+    result: GradingResult;
+    metric?: string;
+    weight?: number;
+  }) {
+    if (metric) {
+      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+    }
+
+    if (result.namedScores) {
+      Object.entries(result.namedScores).forEach(([metricName, score]) => {
+        if (metricName !== metric) {
+          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
+          const weightedIncomingWeight = incomingWeight * weight;
+          this.namedScores[metricName] =
+            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
+          this.namedScoreWeights[metricName] =
+            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
+        }
+      });
     }
   }
 

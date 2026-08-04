@@ -563,12 +563,18 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Failed fallback-chain primaries are preserved for traceability but do
+    // not participate in downstream aggregate scoring such as max-score.
+    fallbackIntermediate?: true;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Set by assertion handlers when the validator itself could not execute,
+    // e.g. JavaScript/Python/Ruby syntax errors or unreachable webhooks.
+    assertionError?: true;
     [key: string]: any;
   };
 }
@@ -737,6 +743,12 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // When set to 'next' (or `true` as a synonym), and this assertion fails,
+  // run the following assertion as a fallback. Bypassed assertions do not
+  // contribute to the score; failed-then-fallback primaries remain visible
+  // in componentResults and their tokens are summed into the chain result.
+  fallback: z.union([z.literal('next'), z.literal(true)]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
