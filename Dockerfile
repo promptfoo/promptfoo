@@ -1,16 +1,8 @@
 # syntax=docker/dockerfile:1
-FROM node:24.18.0-alpine AS base
+FROM node:24.18.1-alpine AS base
 
-# Update Alpine packages to get latest security patches. Alpine published its
-# Node 24.18.1 security update before the official Node Docker image, so replace
-# the older bundled binary with Alpine's patched package until the base catches
-# up. Keep full ICU locale support, and skip the temporary overlay once the
-# upstream image advances beyond the affected release.
-RUN apk upgrade --no-cache && \
-    if [ "$(node --version)" = 'v24.18.0' ]; then \
-      apk add --no-cache 'nodejs>=24.18.1' icu-data-full; \
-      ln -sf /usr/bin/node /usr/local/bin/node; \
-    fi
+# Update Alpine packages to get latest security patches
+RUN apk upgrade --no-cache
 
 RUN addgroup -S promptfoo && adduser -S promptfoo -G promptfoo
 # Python version pin. Empty by default so `apk` installs whatever python3 the
