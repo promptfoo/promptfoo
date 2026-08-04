@@ -113,6 +113,12 @@ const createMockUsage = (input = 0, output = 0): MockUsage => ({
     ephemeral_1h_input_tokens: 0,
     ephemeral_5m_input_tokens: 0,
   },
+  // @anthropic-ai/sdk 0.115.0 added `fallback_credit` to BetaUsage, and
+  // NonNullableUsage makes every field required. These mocks never present a
+  // fallback-credit token, so the neutral outcome is "not applied".
+  fallback_credit: {
+    status: { type: 'not_applied', reason: 'not_enabled' },
+  },
   server_tool_use: {
     web_search_requests: 0,
     web_fetch_requests: 0,
@@ -147,6 +153,7 @@ const createMockBetaMessage = (
     cache_creation_input_tokens: null,
     cache_read_input_tokens: null,
     cache_creation: null,
+    fallback_credit: null,
     inference_geo: null,
     iterations: null,
     server_tool_use: null,
