@@ -1005,6 +1005,42 @@ describe('ResultsTable Metrics Display', () => {
         providerImagePrompt,
       );
     });
+
+    it('renders a long hyphen/underscore test description as plain text, not an image', () => {
+      const longDescription = 'golden-047-brushless-dc-motor-assemblies-for-applia-a45abef4';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: { description: longDescription },
+              vars: [],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: [],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText(longDescription)).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: 'Base64 encoded image' })).not.toBeInTheDocument();
+    });
   });
 });
 
