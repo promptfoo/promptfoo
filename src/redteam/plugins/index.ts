@@ -57,6 +57,7 @@ import { getHarmfulAssertions } from './harmful/common';
 import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
+import { MedicalReproductiveHealthPlugin } from './medical/medicalReproductiveHealth';
 import { OverreliancePlugin } from './overreliance';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
@@ -530,6 +531,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(MedicalReproductiveHealthPlugin, 'medical:reproductive-health'),
   createPluginFactory(
     TeenSafetyAgeRestrictedGoodsAndServicesPlugin,
     'teen-safety:age-restricted-goods-and-services',
