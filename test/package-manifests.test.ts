@@ -191,6 +191,23 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
+    const workflow = fs.readFileSync(
+      path.join(process.cwd(), '.github/workflows/main.yml'),
+      'utf8',
+    );
+
+    const unsupportedNodeVersion = workflow.match(
+      /name:\s*Set up unsupported Node 20[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
+    )?.[1];
+    const minimumSupportedNodeVersion = workflow.match(
+      /name:\s*Set up minimum supported Node[\s\S]*?node-version:\s*['"]([^'"]+)['"]/,
+    )?.[1];
+
+    expect(unsupportedNodeVersion).toBe('20.20.0');
+    expect(minimumSupportedNodeVersion).toBe('22.22.0');
+  });
+
   it('keeps the Docker runtime on the patched Node release', () => {
     const expectedVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
     const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
