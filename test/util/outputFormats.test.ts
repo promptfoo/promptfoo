@@ -15,4 +15,10 @@ describe('outputFormats', () => {
   it('advertises junit.xml as a supported output format', () => {
     expect(SUPPORTED_OUTPUT_FILE_FORMATS).toContain('junit.xml');
   });
+
+  it('detects PDF outputs and advertises pdf as supported', () => {
+    expect(getOutputFileFormat('results.pdf')).toBe('pdf');
+    expect(getOutputFileFormat('reports/RESULTS.PDF')).toBe('pdf');
+    expect(SUPPORTED_OUTPUT_FILE_FORMATS).toContain('pdf');
+  });
 });
