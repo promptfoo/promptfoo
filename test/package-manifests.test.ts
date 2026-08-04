@@ -442,6 +442,74 @@ describe('package manifests', () => {
     );
   });
 
+  it('keeps the Chevrotain CST generator aligned with its parser grammar', () => {
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          integrity?: string;
+          resolved?: string;
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const generatorName = '@chevrotain/cst-dts-gen';
+    const generatorOverride = packageJson.overrides?.[generatorName] as
+      | Record<string, string>
+      | undefined;
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const generatorVersion = generatorOverride?.['.'];
+
+    expect(generatorVersion, `${generatorName} must have an override`).toBeDefined();
+    expect(chevrotainOverride?.[generatorName]).toBe(generatorVersion);
+    expect(packageLock.packages[`node_modules/${generatorName}`]).toEqual(
+      expect.objectContaining({
+        integrity: expect.stringMatching(/^sha512-/),
+        resolved: `https://registry.npmjs.org/${generatorName}/-/cst-dts-gen-${generatorVersion}.tgz`,
+        version: generatorVersion,
+      }),
+    );
+
+    const parserVersion = chevrotainOverride?.['.'];
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+
+    for (const dependencyName of ['@chevrotain/gast', '@chevrotain/types']) {
+      expect(
+        generatorOverride?.[dependencyName],
+        `${generatorName} must share the parser's ${dependencyName} version`,
+      ).toBe(parserVersion);
+      expect(packageLock.packages[`node_modules/${dependencyName}`]?.version).toBe(parserVersion);
+      expect(
+        packageLock.packages[`node_modules/${generatorName}/node_modules/${dependencyName}`],
+      ).toBeUndefined();
+    }
+  });
+
+  it('generates CST declarations using the pinned Chevrotain parser', async () => {
+    const { createToken, CstParser, generateCstDts } = await import('chevrotain');
+    const identifier = createToken({
+      name: 'DependencyGuardIdentifier',
+      pattern: /[a-z]+/,
+    });
+
+    class DependencyGuardParser extends CstParser {
+      constructor() {
+        super([identifier]);
+        this.RULE('dependencyGuard', () => this.CONSUME(identifier));
+        this.performSelfAnalysis();
+      }
+    }
+
+    const declarations = generateCstDts(new DependencyGuardParser().getGAstProductions());
+    expect(declarations).toContain('DependencyGuardCstNode');
+    expect(declarations).toContain('DependencyGuardIdentifier');
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
