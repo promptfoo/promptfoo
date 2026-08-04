@@ -1338,6 +1338,30 @@ describe('useTableStore', () => {
       expect(isFetchingDuringFetch).toBe(true);
       expect(state.isFetching).toBe(false);
     });
+
+    it('increments tableRefreshVersion only for successful background refreshes', async () => {
+      const mockEvalId = 'test-eval-id';
+      (callApi as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          table: { head: { prompts: [] }, body: [] },
+          totalCount: 0,
+          filteredCount: 0,
+        }),
+      } as Response);
+
+      expect(useTableStore.getState().tableRefreshVersion).toBe(0);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId);
+      });
+      expect(useTableStore.getState().tableRefreshVersion).toBe(0);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId, { skipLoadingState: true });
+      });
+      expect(useTableStore.getState().tableRefreshVersion).toBe(1);
+    });
     it('should complete successfully without showing loading indicators when skipLoadingState=true and isStreaming=false', async () => {
       const mockEvalId = 'test-eval-id';
       (callApi as Mock).mockResolvedValue({
