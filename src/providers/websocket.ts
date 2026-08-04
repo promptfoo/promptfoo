@@ -46,9 +46,10 @@ function getSafeWebSocketError(event: WebSocket.ErrorEvent): Error {
   }
 
   const isSafeTransportCode = ['ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(sourceCode ?? '');
+  const transportErrorMessage = sourceError.message.replace(/\b(?:wss?|https?):\/\/\S+/gi, '');
   const isPermanentProtocolError =
     /wrong version number|self signed|unable to verify|unknown ca|cert|alert protocol version|unsupported protocol/i.test(
-      sourceError.message,
+      transportErrorMessage,
     );
   let safeReason: string | undefined;
 
@@ -318,7 +319,6 @@ export class WebSocketProvider implements ApiProvider {
       });
 
       ws.onmessage = (event) => {
-        clearTimeout(timeout);
         if (streamResponse) {
           try {
             logger.debug(`[WebSocket Provider] Data Received: ${JSON.stringify(event.data)}`);
@@ -328,17 +328,22 @@ export class WebSocketProvider implements ApiProvider {
           try {
             const [newAccumulator, isComplete] = streamResponse(accumulator, event, context);
             accumulator = newAccumulator;
+            // Only disarm the request deadline once the stream settles this promise.
+            // Clearing it on every chunk leaves a stalled stream pending forever.
             if (isComplete) {
+              clearTimeout(timeout);
               ws.close();
               const response = processResult(accumulator);
               resolve(response);
             }
           } catch (err) {
+            clearTimeout(timeout);
             logger.debug(`[WebSocket Provider]: ${(err as Error).message}`);
             ws.close();
             reject(new Error(`Error executing streamResponse function: ${(err as Error).message}`));
           }
         } else {
+          clearTimeout(timeout);
           try {
             let data = event.data;
             if (typeof data === 'string') {

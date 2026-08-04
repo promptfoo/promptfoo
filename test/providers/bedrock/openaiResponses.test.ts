@@ -562,7 +562,11 @@ describe('bedrock openaiResponses helper', () => {
         headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
       });
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { stream: true, reasoning_effort: 'max', include: ['reasoning.encrypted_content'] },
+        config: {
+          stream: true,
+          reasoning_effort: 'max',
+          include: ['reasoning.encrypted_content'],
+        },
       });
 
       const result = await provider.callApi('hello');

@@ -48,17 +48,6 @@
       "groupName": "@inquirer packages"
     },
     {
-      "description": "Disable Chevrotain major updates while Node 20 is supported",
-      "matchPackageNames": ["chevrotain", "/^@chevrotain\\//"],
-      "matchUpdateTypes": ["major"],
-      "enabled": false
-    },
-    {
-      "description": "Hold tsdown on 0.21.x while Node 20 is supported: tsdown 0.22+ sets engines node ^22.18.0 || >=24.0.0 (drops Node 20.19/20.20), but the repo still builds/tests on Node 20.20 with engine-strict, so 0.22+ aborts npm ci. Revisit when the Node 20 floor is dropped.",
-      "matchPackageNames": ["tsdown"],
-      "allowedVersions": "<0.22.0"
-    },
-    {
       "description": "Group Anthropic packages together across all dependency types",
       "matchPackagePatterns": ["^@anthropic-ai/"],
       "matchDepTypes": [
@@ -233,6 +222,16 @@
       "description": "Keep jsdom in sync across all workspaces",
       "matchPackageNames": ["jsdom"],
       "groupName": "jsdom"
+    },
+    {
+      "description": "Chevrotain's sub-packages are pinned to the parser version, not to whatever is newest. chevrotain@11.2.0 declares each of @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast and @chevrotain/utils at exactly 11.2.0, and test/package-manifests.test.ts asserts the overrides keep them equal to the pinned parser so a single shared instance is used. Renovate bumping them individually yields an incoherent tree (see the closed #10293 and #10294). Only @chevrotain/cst-dts-gen floats ahead, so it is deliberately not listed here. Re-enable if the pinned chevrotain parser itself moves.",
+      "matchPackageNames": [
+        "@chevrotain/gast",
+        "@chevrotain/types",
+        "@chevrotain/regexp-to-ast",
+        "@chevrotain/utils"
+      ],
+      "enabled": false
     },
     {
       "description": "Keep undici in sync across root and code-scan-action",

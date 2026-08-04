@@ -117,7 +117,7 @@ const ConfigValidator = () => {
     <Layout title="Config Validator" description="Validate your promptfoo configuration">
       <Container maxWidth="lg" sx={{ mb: 4 }}>
         <Box sx={{ my: 4 }}>
-          <Typography variant="h3" gutterBottom align="center">
+          <Typography variant="h3" component="h1" gutterBottom align="center">
             Promptfoo Config Validator
           </Typography>
           <Typography variant="body1" gutterBottom align="center">

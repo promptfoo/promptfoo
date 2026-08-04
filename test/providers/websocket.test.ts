@@ -497,6 +497,57 @@ describe('WebSocketProvider', () => {
     }
   });
 
+  it('should retry transient TLS failures when the rendered URL contains certificate text', async () => {
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const renderedUrl =
+      'ws://certificate-service.invalid/sessions/private-session-123?token=runtime-query-secret';
+    provider = new WebSocketProvider('ws://test.com', {
+      config: {
+        url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+        messageTemplate: '{{ prompt }}',
+        timeoutMs: 1000,
+        maxRetries: 1,
+      },
+    });
+    emitWebSocketEvents({
+      type: 'error',
+      error: Object.assign(new Error(`write EPROTO transient TLS failure ${renderedUrl}`), {
+        code: 'EPROTO',
+      }),
+    });
+
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+    const callApi = vi.fn(() =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {
+          tenant: 'certificate-service',
+          sessionId: 'private-session-123',
+          token: 'runtime-query-secret',
+        },
+      }),
+    );
+
+    try {
+      await expect(
+        registry.execute(provider, callApi, {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        }),
+      ).rejects.toThrow('WebSocket connection failed (EPROTO)');
+      expect(callApi).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        retriedRequests: 1,
+        rateLimitHits: 0,
+        failedRequests: 1,
+      });
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('certificate-service');
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('runtime-query-secret');
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it.each([
     new Error('getaddrinfo ENOTFOUND runtime-secret-tenant.invalid'),
     Object.assign(new Error('getaddrinfo ENOTFOUND tenant-429.invalid'), { code: 'ENOTFOUND' }),
@@ -818,17 +869,74 @@ describe('WebSocketProvider', () => {
 
   describe('timeouts', () => {
     it('should timeout with streamResponse', async () => {
-      provider = new WebSocketProvider('ws://test.com', {
-        config: {
-          messageTemplate: '{{ prompt }}',
-          timeoutMs: 100,
-          // never signal completion; ensures timeout path is exercised
-          streamResponse: (acc: any, _data: any) => [acc, ''],
-        },
-      });
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            // never signal completion; ensures timeout path is exercised
+            streamResponse: (acc: any, _data: any) => [acc, ''],
+          },
+        });
 
-      await expect(provider.callApi('timeout test')).rejects.toThrow('WebSocket request timed out');
-      expect(mockWs.close).toHaveBeenCalled();
+        const timeoutPromise = expect(provider.callApi('timeout test')).rejects.toThrow(
+          'WebSocket request timed out',
+        );
+
+        await vi.runAllTimersAsync();
+        await timeoutPromise;
+
+        expect(mockWs.close).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should time out when the stream delivers a partial chunk and then stalls', async () => {
+      vi.useFakeTimers();
+      try {
+        // Accumulates every chunk but never signals completion, which is what a server
+        // that streams a partial answer and then stops sending looks like.
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'partial chunk' });
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('timeout test').then(onResolved, onRejected);
+
+        // Deliver the partial chunk while the clock is still short of the timeout.
+        await vi.advanceTimersByTimeAsync(0);
+        expect(streamResponse).toHaveBeenCalledTimes(1);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        // Nothing else ever arrives, so the request deadline still has to fire.
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).toHaveBeenCalledTimes(1);
+        const [error] = onRejected.mock.calls[0];
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain('WebSocket request timed out after 100ms');
+        expect(mockWs.close).toHaveBeenCalled();
+
+        await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

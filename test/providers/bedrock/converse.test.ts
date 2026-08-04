@@ -2063,6 +2063,32 @@ Third line`;
       );
     });
 
+    it('should coerce numeric YAML guardrail identifiers and versions to strings', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          guardrailIdentifier: 12345 as unknown as string,
+          guardrailVersion: 2 as unknown as string,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailConfig: {
+            guardrailIdentifier: '12345',
+            guardrailVersion: '2',
+          },
+        }),
+      );
+    });
+
     it('should use DRAFT as default guardrail version', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
@@ -2145,6 +2171,107 @@ Third line`;
               type: 'adaptive',
             },
           },
+        }),
+      );
+    });
+
+    it('should convert manual thinking to adaptive for Claude Opus 5', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          thinking: { type: 'enabled', budget_tokens: 16000 },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'adaptive' } },
+        }),
+      );
+    });
+
+    it('drops disabled thinking for Opus 5 when raw fields carry a capped effort', async () => {
+      // Converse has no typed effort option, but output_config.effort rides through
+      // additionalModelRequestFields — so the disabled+xhigh 400 is reachable here and the
+      // rejected `disabled` must be dropped, exactly as on the Anthropic path.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: {
+            output_config: { effort: 'xhigh' },
+            thinking: { type: 'disabled' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          // effort survives; only the rejected `disabled` is removed.
+          additionalModelRequestFields: { output_config: { effort: 'xhigh' } },
+        }),
+      );
+    });
+
+    it('keeps disabled thinking for Opus 5 when raw effort is within the cap', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: {
+            output_config: { effort: 'high' },
+            thinking: { type: 'disabled' },
+          },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            output_config: { effort: 'high' },
+            thinking: { type: 'disabled' },
+          },
+        }),
+      );
+    });
+
+    it('preserves disabled thinking for Claude Opus 5 (Bedrock does not send effort)', async () => {
+      // Opus 5 rejects `thinking: disabled` only at effort xhigh/max, and the Bedrock path
+      // never forwards `output_config.effort` — so the API sees the default effort (`high`)
+      // and `disabled` is valid. Dropping it here would needlessly re-enable thinking.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          additionalModelRequestFields: { top_k: 40, thinking: { type: 'disabled' } },
+        },
+      });
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: { thinking: { type: 'disabled' } },
         }),
       );
     });

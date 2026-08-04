@@ -763,7 +763,12 @@ describe('OpenAiResponsesProvider request building', () => {
       if (String(url).endsWith('/responses') && options?.method === 'POST') {
         creates++;
         return {
-          data: { id: `resp_path_secret_${creates}`, status: 'completed', output: [], usage: null },
+          data: {
+            id: `resp_path_secret_${creates}`,
+            status: 'completed',
+            output: [],
+            usage: null,
+          },
           cached: false,
           status: 200,
           statusText: 'OK',

@@ -510,7 +510,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
     )('should support inherited instrumentation for %s (via OpenAI base)', async (system) => {
       // Category B providers inherit from OpenAI and should work with the same pattern
       await withGenAISpan(
-        { system, operationName: 'chat', model: 'model-name', providerId: `${system}:model-name` },
+        {
+          system,
+          operationName: 'chat',
+          model: 'model-name',
+          providerId: `${system}:model-name`,
+        },
         async () => ({ output: 'test' }),
       );
 

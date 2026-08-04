@@ -276,8 +276,8 @@ docker build -t promptfoo:custom .
 ```
 
 Images built from this Dockerfile are marked as custom containers. To apply a Promptfoo update,
-first advance the checkout to the desired release, then rebuild and redeploy. If a runtime notice is
-active, also update the image's Node.js base to a supported version. Use `docker build --pull` when a
+first advance the checkout to the desired release, then rebuild and redeploy. Use a Node.js
+`22.22.0` or newer base image (24 LTS recommended). Use `docker build --pull` when a
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
@@ -620,7 +620,7 @@ The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the cor
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js `^20.20.0` or `>=22.22.0`, npm
+- **Dependencies**: Node.js `>=22.22.0`, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 
