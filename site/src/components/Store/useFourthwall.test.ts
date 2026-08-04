@@ -5,8 +5,11 @@ import {
   getAttributeSwatch,
   getCheckoutUrl,
   isInStock,
+  isProductSoldOut,
   stripHtml,
 } from './useFourthwall';
+
+import type { FourthwallProduct } from './types';
 
 describe('formatPrice', () => {
   it('formats USD prices correctly', () => {
@@ -96,21 +99,77 @@ describe('isInStock', () => {
     expect(isInStock({ type: 'UNLIMITED' })).toBe(true);
   });
 
-  it('returns true for limited stock with quantity > 0', () => {
-    expect(isInStock({ type: 'LIMITED', quantity: 5 })).toBe(true);
-    expect(isInStock({ type: 'LIMITED', quantity: 1 })).toBe(true);
+  it('returns true for limited stock with inventory remaining', () => {
+    expect(isInStock({ type: 'LIMITED', inStock: 5 })).toBe(true);
   });
 
-  it('returns false for limited stock with quantity 0', () => {
-    expect(isInStock({ type: 'LIMITED', quantity: 0 })).toBe(false);
+  it('returns false for limited stock with no inventory remaining', () => {
+    expect(isInStock({ type: 'LIMITED', inStock: 0 })).toBe(false);
+  });
+});
+
+describe('isProductSoldOut', () => {
+  const makeVariant = (overrides: Partial<FourthwallProduct['variants'][number]> = {}) => ({
+    id: 'var-1',
+    name: 'Default',
+    sku: 'SKU-1',
+    unitPrice: { value: 10, currency: 'USD' },
+    stock: { type: 'UNLIMITED' as const },
+    images: [],
+    attributes: {},
+    ...overrides,
   });
 
-  it('returns false for limited stock without quantity', () => {
-    expect(isInStock({ type: 'LIMITED' })).toBe(false);
+  const makeProduct = (overrides: Partial<FourthwallProduct> = {}): FourthwallProduct => ({
+    id: 'prod-1',
+    slug: 'test-product',
+    name: 'Test Product',
+    description: '',
+    state: { type: 'AVAILABLE' },
+    access: { type: 'PUBLIC' },
+    images: [],
+    variants: [makeVariant()],
+    ...overrides,
   });
 
-  it('returns false for unknown stock type', () => {
-    expect(isInStock({ type: 'UNKNOWN' })).toBe(false);
+  it('returns true when Fourthwall marks the product sold out', () => {
+    expect(isProductSoldOut(makeProduct({ state: { type: 'SOLD_OUT' } }))).toBe(true);
+  });
+
+  it('returns true when all variants are out of stock', () => {
+    expect(
+      isProductSoldOut(
+        makeProduct({
+          variants: [
+            makeVariant({ name: 'Small', stock: { type: 'LIMITED', inStock: 0 } }),
+            makeVariant({
+              id: 'var-2',
+              name: 'Large',
+              sku: 'SKU-2',
+              stock: { type: 'LIMITED', inStock: 0 },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false when any variant is in stock', () => {
+    expect(
+      isProductSoldOut(
+        makeProduct({
+          variants: [
+            makeVariant({ name: 'Small', stock: { type: 'LIMITED', inStock: 0 } }),
+            makeVariant({
+              id: 'var-2',
+              name: 'Large',
+              sku: 'SKU-2',
+              stock: { type: 'LIMITED', inStock: 1 },
+            }),
+          ],
+        }),
+      ),
+    ).toBe(false);
   });
 });
 

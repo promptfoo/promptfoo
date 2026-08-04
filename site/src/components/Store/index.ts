@@ -15,6 +15,7 @@ export {
   getAttributeSwatch,
   getCheckoutUrl,
   isInStock,
+  isProductSoldOut,
   stripHtml,
   useCart,
   useCollections,
@@ -32,6 +33,7 @@ export type {
   FourthwallImage,
   FourthwallMoney,
   FourthwallProduct,
+  FourthwallStock,
   FourthwallVariant,
   PaginatedResponse,
 } from './types';
