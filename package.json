@@ -52,6 +52,9 @@
     "promptfoo": "dist/src/entrypoint.js",
     "pf": "dist/src/entrypoint.js"
   },
+  "bundleDependencies": [
+    "cache-manager"
+  ],
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "architecture:baseline": "tsx scripts/regenerateEdgeBaseline.ts",

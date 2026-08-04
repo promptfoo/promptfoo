@@ -113,6 +113,33 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
   });
 
+  it('bundles the resolved runtime cache dependency', () => {
+    const packageJson = readPackageJson<PackageManifest & { bundleDependencies?: string[] }>(
+      'package.json',
+    );
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        {
+          bundleDependencies?: string[];
+          dependencies?: Record<string, string>;
+          inBundle?: boolean;
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+
+    expect(packageJson.bundleDependencies).toEqual(['cache-manager']);
+    expect(packageLock.packages[''].bundleDependencies).toEqual(packageJson.bundleDependencies);
+
+    for (const dependencyName of ['cache-manager', '@cacheable/utils']) {
+      const dependency = packageLock.packages[`node_modules/${dependencyName}`];
+
+      expect(dependency?.version, `${dependencyName} must be resolved`).toBeDefined();
+      expect(dependency?.inBundle, `${dependencyName} must be bundled`).toBe(true);
+    }
+  });
+
   it('keeps the contracts subpath extension-safe for emitted ESM', () => {
     const contractsDir = path.join(process.cwd(), 'src', 'contracts');
     const files = [
