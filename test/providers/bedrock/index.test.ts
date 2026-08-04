@@ -755,30 +755,30 @@ describe('AwsBedrockGenericProvider', () => {
       expect(disabledParams.thinking).toBeUndefined();
     });
 
-    it.each([
-      { type: 'any' as const },
-      { type: 'tool' as const, name: 'get_weather' },
-    ])('omits forced tool choice for Claude Fable 5: %j', async (tool_choice) => {
-      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        {
-          region: 'us-east-1',
-          tools: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather',
-              input_schema: { type: 'object', properties: {} },
-            },
-          ],
-          tool_choice,
-        },
-        'hi',
-        undefined,
-        'anthropic.claude-fable-5',
-      );
+    it.each([{ type: 'any' as const }, { type: 'tool' as const, name: 'get_weather' }])(
+      'omits forced tool choice for Claude Fable 5: %j',
+      async (tool_choice) => {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          {
+            region: 'us-east-1',
+            tools: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather',
+                input_schema: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice,
+          },
+          'hi',
+          undefined,
+          'anthropic.claude-fable-5',
+        );
 
-      expect(params.tools).toHaveLength(1);
-      expect(params.tool_choice).toBeUndefined();
-    });
+        expect(params.tools).toHaveLength(1);
+        expect(params.tool_choice).toBeUndefined();
+      },
+    );
 
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
@@ -4918,15 +4918,11 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
   });
 
-  it.each([
-    'zai',
-    'minimax',
-    'moonshot',
-    'nvidia',
-    'writer',
-    'gemma',
-  ] as const)('maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT', (inferenceModelType) => {
-    const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
-    expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
-  });
+  it.each(['zai', 'minimax', 'moonshot', 'nvidia', 'writer', 'gemma'] as const)(
+    'maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT',
+    (inferenceModelType) => {
+      const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
+      expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    },
+  );
 });

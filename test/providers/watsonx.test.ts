@@ -1014,53 +1014,52 @@ describe('WatsonXProvider', () => {
         generatedTokens: 100,
         expectedCost: undefined,
       },
-    ])('should calculate cost with $name', async ({
-      inputTokens,
-      generatedTokens,
-      expectedCost,
-    }) => {
-      const mockedWatsonXAIClient: Partial<any> = {
-        generateText: vi.fn().mockResolvedValue({
-          result: {
-            model_id: MODEL_ID,
-            model_version: '3.2.0',
-            created_at: '2024-03-25T00:00:00Z',
-            results: [
-              {
-                generated_text: 'Boundary response',
-                generated_token_count: generatedTokens,
-                input_token_count: inputTokens,
-              },
-            ],
-          },
-        }),
-      };
-      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
-        return mockedWatsonXAIClient as any;
-      });
+    ])(
+      'should calculate cost with $name',
+      async ({ inputTokens, generatedTokens, expectedCost }) => {
+        const mockedWatsonXAIClient: Partial<any> = {
+          generateText: vi.fn().mockResolvedValue({
+            result: {
+              model_id: MODEL_ID,
+              model_version: '3.2.0',
+              created_at: '2024-03-25T00:00:00Z',
+              results: [
+                {
+                  generated_text: 'Boundary response',
+                  generated_token_count: generatedTokens,
+                  input_token_count: inputTokens,
+                },
+              ],
+            },
+          }),
+        };
+        vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+          return mockedWatsonXAIClient as any;
+        });
 
-      const cache = {
-        get: vi.fn().mockResolvedValue(null),
-        set: vi.fn(),
-      };
-      vi.mocked(getCache).mockImplementation(function () {
-        return cache as any;
-      });
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
+        const cache = {
+          get: vi.fn().mockResolvedValue(null),
+          set: vi.fn(),
+        };
+        vi.mocked(getCache).mockImplementation(function () {
+          return cache as any;
+        });
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
 
-      const response = await new WatsonXProvider(MODEL_ID, {
-        config: configWithModelId,
-      }).callApi(prompt);
+        const response = await new WatsonXProvider(MODEL_ID, {
+          config: configWithModelId,
+        }).callApi(prompt);
 
-      if (expectedCost === undefined) {
-        expect(response.cost).toBeUndefined();
-        expect(fetchWithCache).not.toHaveBeenCalled();
-      } else {
-        expect(response.cost).toBeCloseTo(expectedCost, 10);
-      }
-    });
+        if (expectedCost === undefined) {
+          expect(response.cost).toBeUndefined();
+          expect(fetchWithCache).not.toHaveBeenCalled();
+        } else {
+          expect(response.cost).toBeCloseTo(expectedCost, 10);
+        }
+      },
+    );
 
     it('should calculate cost correctly for class_9 tier', async () => {
       const modelId = 'meta-llama/llama-3-2-11b-vision-instruct';
