@@ -581,7 +581,7 @@ jobs:
       - name: Set up unsupported Node 20
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '20.20.0'
+          node-version: '24.19.0'
 
       - name: Record unsupported Node executable
         run: echo "PROMPTFOO_NODE20_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
@@ -589,7 +589,7 @@ jobs:
       - name: Set up minimum supported Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: '22.22.0'
+          node-version: '24.19.0'
 
       - name: Record minimum supported Node executable
         run: echo "PROMPTFOO_MIN_NODE_BIN=$(node -p process.execPath)" >> "$GITHUB_ENV"
