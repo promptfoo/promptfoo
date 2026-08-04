@@ -36,7 +36,7 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
+import { getNunjucksEngine, renderMetricName } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
@@ -79,7 +79,6 @@ import { handlePython } from './python';
 import { handleRedteam } from './redteam';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
-import { renderMetricName } from './renderMetricName';
 import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
 import { handleSearchRubric } from './searchRubric';
