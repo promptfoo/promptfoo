@@ -2063,6 +2063,32 @@ Third line`;
       );
     });
 
+    it('should coerce numeric YAML guardrail identifiers and versions to strings', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          guardrailIdentifier: 12345 as unknown as string,
+          guardrailVersion: 2 as unknown as string,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailConfig: {
+            guardrailIdentifier: '12345',
+            guardrailVersion: '2',
+          },
+        }),
+      );
+    });
+
     it('should use DRAFT as default guardrail version', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
