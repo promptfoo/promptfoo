@@ -52,6 +52,45 @@ describe('Cerebras provider', () => {
       });
     });
 
+    it('should keep custom pricing overrides out of the API request body', async () => {
+      const provider = createCerebrasProvider('cerebras:gpt-oss-120b', {
+        config: {
+          config: {
+            cost: 9 / 1e6,
+            inputCost: 1 / 1e6,
+            outputCost: 2 / 1e6,
+            temperature: 0.8,
+          },
+        },
+      });
+
+      const cerebras = provider as OpenAiChatCompletionProvider & {
+        calculateResponseCost(
+          data: Record<string, unknown>,
+          config: Record<string, unknown>,
+          cached: boolean,
+        ): number | undefined;
+      };
+      const { body, config } = await cerebras.getOpenAiBody('test prompt');
+
+      expect(body).not.toHaveProperty('cost');
+      expect(body).not.toHaveProperty('inputCost');
+      expect(body).not.toHaveProperty('outputCost');
+      expect(body.temperature).toBe(0.8);
+      expect(config.passthrough).toMatchObject({
+        cost: 9 / 1e6,
+        inputCost: 1 / 1e6,
+        outputCost: 2 / 1e6,
+      });
+      expect(
+        cerebras.calculateResponseCost(
+          { usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 } },
+          config,
+          false,
+        ),
+      ).toBeCloseTo(3, 10);
+    });
+
     it('should handle max_tokens correctly', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b');
       const { body } = await (provider as OpenAiChatCompletionProvider).getOpenAiBody(

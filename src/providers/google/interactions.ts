@@ -963,7 +963,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       headers = {
         'Content-Type': 'application/json',
         'Api-Revision': '2026-05-20',
-        'x-goog-api-key': apiKey,
+        'x-goog-api-key': vertexApiKey,
         ...config.headers,
       };
     } else if (config.vertexai) {

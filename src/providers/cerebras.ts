@@ -35,7 +35,7 @@ export function calculateCerebrasCost(
  * Documentation: https://docs.cerebras.ai
  *
  * Cerebras API supports the OpenAI-compatible chat completion interface.
- * All parameters are automatically passed through to the Cerebras API.
+ * Cerebras-supported parameters are automatically passed through to the Cerebras API.
  */
 export function createCerebrasProvider(
   providerPath: string,
@@ -62,6 +62,11 @@ export function createCerebrasProvider(
       if (body.max_completion_tokens) {
         delete body.max_tokens;
       }
+
+      // Promptfoo pricing overrides are local billing metadata, not Cerebras request fields.
+      delete body.cost;
+      delete body.inputCost;
+      delete body.outputCost;
 
       return { body, config };
     }

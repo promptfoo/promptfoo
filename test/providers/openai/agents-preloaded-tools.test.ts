@@ -7,7 +7,6 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
   });
 
   afterEach(() => {
-    vi.doUnmock('@openai/agents');
     vi.restoreAllMocks();
   });
 
@@ -65,7 +64,6 @@ describe('OpenAiAgentsProvider preloaded agent tools', () => {
 
   it('shares execution overrides across duplicate provider module loads', async () => {
     const agents = await import('@openai/agents');
-    vi.doMock('@openai/agents', () => agents);
 
     const executedSettings: Array<Pick<Agent<any, any>, 'model' | 'modelSettings'>> = [];
     vi.spyOn(agents.Runner.prototype, 'run').mockImplementation(async (agent: any) => {
