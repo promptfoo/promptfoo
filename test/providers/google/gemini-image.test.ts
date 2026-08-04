@@ -532,6 +532,51 @@ describe('GeminiImageProvider', () => {
       );
     });
 
+    it('should honor a scoped Vertex project and region over an unrelated Google API key', async () => {
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockResolveProjectId.mockImplementation(async (config, env) =>
+        Promise.resolve(config.projectId || env?.GOOGLE_CLOUD_PROJECT),
+      );
+      const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
+        config: { vertexai: true, region: 'europe-west1' },
+        env: {
+          GOOGLE_API_KEY: 'unrelated-studio-key',
+          GOOGLE_CLOUD_PROJECT: 'provider-project',
+        },
+      });
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        }),
+      };
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'provider-project',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(mockGetGoogleClient).toHaveBeenCalled();
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining(
+            'europe-west1-aiplatform.googleapis.com/v1/projects/provider-project/locations/europe-west1',
+          ),
+        }),
+      );
+    });
+
     it.each([
       {
         description: 'GOOGLE_CLOUD_LOCATION',
@@ -551,44 +596,43 @@ describe('GeminiImageProvider', () => {
         expectedLocation: 'global',
         expectedHost: 'aiplatform.googleapis.com',
       },
-    ])('should use provider-scoped $description over process VERTEX_REGION for regional image models', async ({
-      env,
-      expectedLocation,
-      expectedHost,
-    }) => {
-      mockProcessEnv({ VERTEX_REGION: 'process-location' });
-      const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
-        config: { projectId: 'test-project' },
-        env,
-      });
-      const mockClient = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            candidates: [
-              {
-                content: {
-                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+    ])(
+      'should use provider-scoped $description over process VERTEX_REGION for regional image models',
+      async ({ env, expectedLocation, expectedHost }) => {
+        mockProcessEnv({ VERTEX_REGION: 'process-location' });
+        const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
+          config: { projectId: 'test-project' },
+          env,
+        });
+        const mockClient = {
+          request: vi.fn().mockResolvedValue({
+            data: {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                  },
+                  finishReason: 'STOP',
                 },
-                finishReason: 'STOP',
-              },
-            ],
-          },
-        }),
-      };
-      mockGetGoogleClient.mockResolvedValue({
-        client: mockClient as any,
-        projectId: 'test-project',
-      });
+              ],
+            },
+          }),
+        };
+        mockGetGoogleClient.mockResolvedValue({
+          client: mockClient as any,
+          projectId: 'test-project',
+        });
 
-      const result = await provider.callApi('Test prompt');
+        const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toBeUndefined();
-      expect(mockClient.request).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: `https://${expectedHost}/v1/projects/test-project/locations/${expectedLocation}/publishers/google/models/gemini-2.5-flash-image:generateContent`,
-        }),
-      );
-    });
+        expect(result.error).toBeUndefined();
+        expect(mockClient.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            url: `https://${expectedHost}/v1/projects/test-project/locations/${expectedLocation}/publishers/google/models/gemini-2.5-flash-image:generateContent`,
+          }),
+        );
+      },
+    );
 
     it('should use global endpoint with v1 for gemini-3-pro-image-preview', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
@@ -1346,33 +1390,32 @@ describe('GeminiImageProvider', () => {
       { model: 'gemini-3.1-flash-image', imageSize: '4K', expected: 0.151 },
       { model: 'gemini-3-pro-image', imageSize: '2K', expected: 0.134 },
       { model: 'gemini-3-pro-image', imageSize: '4K', expected: 0.24 },
-    ] as const)('should scale per-image cost by imageSize ($model @ $imageSize)', async ({
-      model,
-      imageSize,
-      expected,
-    }) => {
-      const provider = new GeminiImageProvider(model, { config: { imageSize } });
+    ] as const)(
+      'should scale per-image cost by imageSize ($model @ $imageSize)',
+      async ({ model, imageSize, expected }) => {
+        const provider = new GeminiImageProvider(model, { config: { imageSize } });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+        mockFetchWithCache.mockResolvedValueOnce({
+          status: 200,
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
               },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+            ],
+          },
+          cached: false,
+          statusText: 'OK',
+        });
 
-      const result = await provider.callApi('Test prompt');
+        const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(expected);
-    });
+        expect(result.cost).toBe(expected);
+      },
+    );
 
     it('should default resolution-tiered cost to the 1K price when imageSize is unset', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image');

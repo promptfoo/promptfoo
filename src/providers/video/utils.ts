@@ -11,7 +11,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { getConfigDirectoryPath } from '../../util/config/manage';
-import { isSecretField, REDACTED, sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, looksLikeSecret, REDACTED, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 
 import type { MediaMetadata, MediaStorageRef } from '../../storage/types';
@@ -32,6 +32,40 @@ export const DEFAULT_POLL_INTERVAL_MS = 10000;
 
 /** Default maximum polling time for video generation jobs (10 minutes) */
 export const DEFAULT_MAX_POLL_TIME_MS = 600000;
+
+function isCredentialLikeVideoUrlValue(value: string): boolean {
+  return looksLikeSecret(value) || CACHE_CREDENTIAL_PATH_SEGMENT.test(value);
+}
+
+function scrubVideoUrlParams(params: URLSearchParams, removeCredentials: boolean): void {
+  for (const key of Array.from(params.keys())) {
+    const values = params.getAll(key);
+    const containsCredentialValue = values.some(
+      (value) => value === REDACTED || isCredentialLikeVideoUrlValue(value),
+    );
+    if (SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) || containsCredentialValue) {
+      if (removeCredentials) {
+        params.delete(key);
+      } else {
+        params.set(key, REDACTED);
+      }
+    }
+  }
+}
+
+function hasVideoUrlCredentialParams(params: URLSearchParams): boolean {
+  for (const [key, value] of params.entries()) {
+    if (
+      isSecretField(key) ||
+      SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) ||
+      value === REDACTED ||
+      isCredentialLikeVideoUrlValue(value)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function scrubVideoReferenceUrl(
   reference: string,
@@ -55,19 +89,19 @@ function scrubVideoReferenceUrl(
         })
         .join('/');
     }
-    for (const key of Array.from(safeUrl.searchParams.keys())) {
-      const values = safeUrl.searchParams.getAll(key);
-      const containsRedactedValue = values.includes('[REDACTED]');
-      if (SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) || containsRedactedValue) {
-        if (removeCredentials) {
-          safeUrl.searchParams.delete(key);
-        } else {
-          safeUrl.searchParams.set(key, '[REDACTED]');
-        }
-      }
-    }
+    scrubVideoUrlParams(safeUrl.searchParams, removeCredentials);
     if (!removeCredentials) {
       safeUrl.searchParams.sort();
+    }
+
+    if (safeUrl.hash.includes('=')) {
+      const fragmentParams = new URLSearchParams(safeUrl.hash.slice(1));
+      scrubVideoUrlParams(fragmentParams, removeCredentials);
+      if (!removeCredentials) {
+        fragmentParams.sort();
+      }
+      const fragment = fragmentParams.toString();
+      safeUrl.hash = fragment ? `#${fragment}` : '';
     }
     return safeUrl.toString();
   } catch {
@@ -114,8 +148,13 @@ export function isVideoCacheReferenceUrlSafe(reference: string): boolean {
       return false;
     }
 
-    for (const key of referenceUrl.searchParams.keys()) {
-      if (isSecretField(key) || SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key)) {
+    if (hasVideoUrlCredentialParams(referenceUrl.searchParams)) {
+      return false;
+    }
+
+    if (referenceUrl.hash.includes('=')) {
+      const fragmentParams = new URLSearchParams(referenceUrl.hash.slice(1));
+      if (hasVideoUrlCredentialParams(fragmentParams)) {
         return false;
       }
     }

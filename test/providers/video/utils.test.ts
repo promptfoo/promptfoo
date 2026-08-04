@@ -101,13 +101,22 @@ describe('video cache utilities', () => {
     );
   });
 
-  it('rejects JWT query credentials from cache identity and persisted source metadata', () => {
+  it('rejects JWT query values from cache identity and persisted source metadata', () => {
     const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.signature';
-    const sourceUri = `https://generativelanguage.googleapis.com/v1beta/files/example?jwt=${jwt}&alt=media`;
+    const sourceUri = `https://generativelanguage.googleapis.com/v1beta/files/example?download=${jwt}&alt=media`;
 
     expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
     expect(sanitizeVideoSourceUri(sourceUri)).toBe(
       'https://generativelanguage.googleapis.com/v1beta/files/example?alt=media',
+    );
+  });
+
+  it('rejects signed credentials carried in URL fragments', () => {
+    const sourceUri = 'https://cdn.example.com/video.mp4#X-Amz-Signature=abcd1234&view=preview';
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+    expect(sanitizeVideoSourceUri(sourceUri)).toBe(
+      'https://cdn.example.com/video.mp4#view=preview',
     );
   });
 });
