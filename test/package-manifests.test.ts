@@ -520,6 +520,9 @@ describe('package manifests', () => {
       },
     ] as const;
 
+    const minimumVersions: string[] = [];
+    const directResolvedVersions: string[] = [];
+
     for (const { manifest, lockfile, field } of projects) {
       const packageJson =
         readPackageJson<Record<string, Record<string, string> | undefined>>(manifest);
@@ -527,22 +530,43 @@ describe('package manifests', () => {
 
       expect(pinnedRange, `${manifest} must pin undici under "${field}"`).toBeDefined();
       expect(validRange(pinnedRange as string)).not.toBeNull();
+
+      const minimum = minVersion(pinnedRange as string);
       expect(
-        minVersion(pinnedRange as string)?.compare(PATCHED_UNDICI),
+        minimum?.compare(PATCHED_UNDICI),
         `${manifest} must not allow undici below ${PATCHED_UNDICI}`,
       ).toBeGreaterThanOrEqual(0);
+      minimumVersions.push(minimum?.version ?? '');
 
       const packageLock = readPackageJson<{
         packages: Record<string, { version?: string }>;
       }>(lockfile);
-      const resolved = packageLock.packages['node_modules/undici']?.version;
+      const installations = Object.entries(packageLock.packages).filter(
+        ([packagePath]) =>
+          packagePath === 'node_modules/undici' || packagePath.endsWith('/node_modules/undici'),
+      );
 
-      expect(resolved, `${lockfile} must resolve undici`).toBeDefined();
-      expect(
-        minVersion(resolved as string)?.compare(PATCHED_UNDICI),
-        `${lockfile} resolves undici ${resolved}`,
-      ).toBeGreaterThanOrEqual(0);
+      expect(installations, `${lockfile} must resolve undici`).not.toHaveLength(0);
+      for (const [packagePath, installation] of installations) {
+        expect(
+          installation.version,
+          `${lockfile}:${packagePath} must have a version`,
+        ).toBeDefined();
+        expect(
+          minVersion(installation.version as string)?.compare(PATCHED_UNDICI),
+          `${lockfile}:${packagePath} resolves vulnerable undici ${installation.version}`,
+        ).toBeGreaterThanOrEqual(0);
+      }
+
+      const resolved = packageLock.packages['node_modules/undici']?.version;
+      expect(resolved, `${lockfile} must resolve a top-level undici installation`).toBeDefined();
+      directResolvedVersions.push(resolved as string);
     }
+
+    expect(new Set(minimumVersions).size, 'undici minimum versions must stay aligned').toBe(1);
+    expect(new Set(directResolvedVersions).size, 'resolved undici versions must stay aligned').toBe(
+      1,
+    );
   });
 
   it('does not import jsdom from root src/', () => {
