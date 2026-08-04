@@ -51,6 +51,7 @@ describe('WebSocketProvider', () => {
       | { type: 'open' }
       | { type: 'message'; data: unknown }
       | { type: 'error'; error?: Error; message?: string }
+      | { type: 'close'; code?: number }
     >
   ) => {
     websocketMocks.setFactory(() => {
@@ -61,6 +62,14 @@ describe('WebSocketProvider', () => {
             ws.onopen?.({ type: 'open', target: ws } as WebSocket.Event);
           } else if (event.type === 'message') {
             ws.onmessage?.({ data: event.data } as WebSocket.MessageEvent);
+          } else if (event.type === 'close') {
+            ws.onclose?.({
+              type: 'close',
+              code: event.code ?? 1000,
+              reason: '',
+              wasClean: true,
+              target: ws,
+            } as WebSocket.CloseEvent);
           } else {
             const error = event.error ?? new Error(event.message ?? 'connection failed');
             ws.onerror?.({
@@ -933,6 +942,41 @@ describe('WebSocketProvider', () => {
         expect(mockWs.close).toHaveBeenCalled();
 
         await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should reject promptly when the server closes the connection mid-stream', async () => {
+      vi.useFakeTimers();
+      try {
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 60000,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents(
+          { type: 'open' },
+          { type: 'message', data: 'partial chunk' },
+          { type: 'close', code: 1001 },
+        );
+
+        const responsePromise = provider.callApi('close test');
+        // The close settles the promise on its own; nothing is left waiting
+        // on the 60s request deadline.
+        await vi.advanceTimersByTimeAsync(0);
+        await expect(responsePromise).rejects.toThrow(
+          'WebSocket connection closed before the response completed (code 1001)',
+        );
+        expect(vi.getTimerCount()).toBe(0);
       } finally {
         vi.useRealTimers();
       }

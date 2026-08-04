@@ -391,6 +391,19 @@ export class WebSocketProvider implements ApiProvider {
         reject(getSafeWebSocketError(event));
       };
 
+      ws.onclose = (event) => {
+        // A peer that closes mid-stream fires no error and completes nothing,
+        // so without this the promise would sit until the request deadline.
+        // Fail fast instead. Our own close() calls settle the promise first,
+        // making this reject a no-op on every path we initiated.
+        clearTimeout(timeout);
+        reject(
+          new Error(
+            `WebSocket connection closed before the response completed (code ${event.code ?? 'unknown'})`,
+          ),
+        );
+      };
+
       ws.onopen = () => {
         logger.debug(`[WebSocket Provider] Message sent: ${safeJsonStringify(message)}`);
         ws.send(message);
