@@ -3347,6 +3347,34 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.finishReason).toBe('content_filter');
     });
 
+    it('should expose general_harms refusals as flagged guardrails', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const refusalResponse = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'general_harms',
+          explanation: 'The request may involve a harmful area',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(refusalResponse);
+
+      const result = await provider.callApi('A request refused for general harms');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: general_harms'),
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
     it('should not include guardrails for non-refusal responses', async () => {
       const provider = createProvider('claude-sonnet-4-6', { config: {} });
       const normalResponse = {

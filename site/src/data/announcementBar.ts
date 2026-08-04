@@ -23,12 +23,12 @@ export const VEGAS_ANNOUNCEMENT_BAR_ID = 'vegas-2026';
 export const EVERGREEN_ANNOUNCEMENT_BAR_ID = 'events-evergreen';
 
 /**
- * End of DEF CON 34's last day, Aug 9 2026 (PDT).
+ * Close of the final DEF CON booth day, Aug 9 2026 at 4:00 p.m. PDT.
  *
  * Offset-qualified on purpose: it has to mean the same instant on a UTC build host and in
  * a browser in any timezone.
  */
-const VEGAS_BANNER_EXPIRY_ISO = '2026-08-10T00:00:00-07:00';
+const VEGAS_BANNER_EXPIRY_ISO = '2026-08-09T16:00:00-07:00';
 
 /** `VEGAS_BANNER_EXPIRY_ISO` in epoch milliseconds. */
 export const VEGAS_BANNER_EXPIRY = Date.parse(VEGAS_BANNER_EXPIRY_ISO);

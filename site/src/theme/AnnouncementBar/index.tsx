@@ -10,8 +10,7 @@ import OriginalAnnouncementBar from '@theme-original/AnnouncementBar';
 
 /**
  * `setTimeout` stores its delay in a signed 32-bit int; anything larger overflows and the
- * callback fires immediately. A visitor arriving more than ~24 days before the expiry does
- * not need an in-place retirement — the next page load re-runs this effect.
+ * callback fires immediately. Longer waits must be split across multiple timers.
  */
 const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
@@ -54,12 +53,22 @@ export default function AnnouncementBar(): ReactNode {
     }
 
     // A tab left open across the expiry instant retires the bar where it stands.
-    const msUntilExpiry = VEGAS_BANNER_EXPIRY - now;
-    if (msUntilExpiry > MAX_TIMEOUT_MS) {
-      return;
-    }
+    let timer: ReturnType<typeof setTimeout>;
+    const scheduleExpiry = (msUntilExpiry: number) => {
+      timer = setTimeout(
+        () => {
+          const remainingMs = VEGAS_BANNER_EXPIRY - Date.now();
+          if (remainingMs > 0) {
+            scheduleExpiry(remainingMs);
+          } else {
+            setIsExpired(true);
+          }
+        },
+        Math.min(msUntilExpiry, MAX_TIMEOUT_MS),
+      );
+    };
 
-    const timer = setTimeout(() => setIsExpired(true), msUntilExpiry);
+    scheduleExpiry(VEGAS_BANNER_EXPIRY - now);
     return () => clearTimeout(timer);
   }, [isTimeLimitedBar]);
 

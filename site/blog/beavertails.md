@@ -66,7 +66,7 @@ Each test case includes:
 
 Before starting, make sure you have:
 
-- **Node.js**: 20+ ([download](https://nodejs.org/))
+- **Node.js**: `>=22.22.0` (Node.js 24 LTS recommended; [download](https://nodejs.org/))
 - **Promptfoo**: We'll use `npx` to run commands, so no separate installation is needed
 - **Model Access**: API keys or local setup for the models you want to test
 

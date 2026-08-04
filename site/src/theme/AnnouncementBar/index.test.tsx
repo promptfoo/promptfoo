@@ -33,6 +33,7 @@ vi.mock('@theme-original/AnnouncementBar', () => ({
 }));
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 describe('AnnouncementBar expiry wrapper', () => {
   beforeEach(() => {
@@ -125,6 +126,25 @@ describe('AnnouncementBar expiry wrapper', () => {
 
     act(() => {
       vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.queryByTestId(ORIGINAL_BAR_TEST_ID)).not.toBeInTheDocument();
+  });
+
+  it('retires the bar after an expiry beyond the maximum timeout delay', () => {
+    const remainingAfterFirstTimeout = 5000;
+    vi.setSystemTime(VEGAS_BANNER_EXPIRY - MAX_TIMEOUT_MS - remainingAfterFirstTimeout);
+
+    render(<AnnouncementBar />);
+    expect(screen.getByTestId(ORIGINAL_BAR_TEST_ID)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(MAX_TIMEOUT_MS);
+    });
+    expect(screen.getByTestId(ORIGINAL_BAR_TEST_ID)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(remainingAfterFirstTimeout);
     });
 
     expect(screen.queryByTestId(ORIGINAL_BAR_TEST_ID)).not.toBeInTheDocument();
