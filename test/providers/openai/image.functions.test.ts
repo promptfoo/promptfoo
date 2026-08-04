@@ -345,29 +345,32 @@ describe('OpenAI Image Provider Functions', () => {
       ['https://gateway.example/v1/token_privateTenantCredential123/images/generations', {}],
       ['https://gateway.example/v1/images/generations', { Authorization: 'Bearer tenant-secret' }],
       ['https://gateway.example/v1/images/generations', { 'X-Route': 'Bearer tenant-secret' }],
-    ])('should bypass persistent image caching for an authenticated custom gateway', async (url, headers) => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { some: 'data' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+    ])(
+      'should bypass persistent image caching for an authenticated custom gateway',
+      async (url, headers) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { some: 'data' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      await callOpenAiImageApi(
-        url,
-        { model: 'gpt-image-1', prompt: 'test' },
-        { 'Content-Type': 'application/json', ...headers },
-        30000,
-      );
+        await callOpenAiImageApi(
+          url,
+          { model: 'gpt-image-1', prompt: 'test' },
+          { 'Content-Type': 'application/json', ...headers },
+          30000,
+        );
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        url,
-        expect.objectContaining({ method: 'POST' }),
-        30000,
-        'json',
-        true,
-      );
-    });
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          url,
+          expect.objectContaining({ method: 'POST' }),
+          30000,
+          'json',
+          true,
+        );
+      },
+    );
 
     it('should bypass persistent image caching when the request body embeds a credential', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({

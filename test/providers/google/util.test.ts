@@ -2705,12 +2705,15 @@ describe('util', () => {
       ['gemini-2.5-flash-native-audio-latest', 0.5, 2.0, 3.0, 12.0],
       ['gemini-2.5-flash-native-audio-preview-09-2025', 0.3, 2.5, 1.0, 2.5],
       ['gemini-2.5-flash-native-audio-preview-12-2025', 0.5, 2.0, 3.0, 12.0],
-    ])('should calculate mixed text and audio cost for %s', (id, input, output, audioInput, audioOutput) => {
-      expect(calculateGoogleCost(id, {}, 1_000, 500, false, 200, 100)).toBeCloseTo(
-        (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
-        12,
-      );
-    });
+    ])(
+      'should calculate mixed text and audio cost for %s',
+      (id, input, output, audioInput, audioOutput) => {
+        expect(calculateGoogleCost(id, {}, 1_000, 500, false, 200, 100)).toBeCloseTo(
+          (800 * input + 200 * audioInput + 400 * output + 100 * audioOutput) / 1e6,
+          12,
+        );
+      },
+    );
 
     it('should apply the Gemini Live cached-input rate across cached modalities', () => {
       const cost = calculateGoogleCost(
@@ -2730,49 +2733,49 @@ describe('util', () => {
       expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
     });
 
-    it.each([
-      'gemini-3.5-flash',
-      'gemini-flash-latest',
-    ])('should apply cached, audio, and priority pricing for %s', (modelId) => {
-      const cost = calculateGoogleCost(
-        modelId,
-        { passthrough: { service_tier: 'priority' } },
-        1_000,
-        500,
-        false,
-        400,
-        0,
-        undefined,
-        0,
-        500,
-        300,
-      );
+    it.each(['gemini-3.5-flash', 'gemini-flash-latest'])(
+      'should apply cached, audio, and priority pricing for %s',
+      (modelId) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { passthrough: { service_tier: 'priority' } },
+          1_000,
+          500,
+          false,
+          400,
+          0,
+          undefined,
+          0,
+          500,
+          300,
+        );
 
-      expect(cost).toBeCloseTo(
-        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
-        12,
-      );
-    });
+        expect(cost).toBeCloseTo(
+          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+          12,
+        );
+      },
+    );
 
-    it.each([
-      'gemini-3.1-pro-preview',
-      'gemini-pro-latest',
-    ])('should apply long-context cached and priority pricing for %s', (modelId) => {
-      const cost = calculateGoogleCost(
-        modelId,
-        { service_tier: 'priority' } as any,
-        250_001,
-        1_000,
-        false,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        1_000,
-      );
+    it.each(['gemini-3.1-pro-preview', 'gemini-pro-latest'])(
+      'should apply long-context cached and priority pricing for %s',
+      (modelId) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'priority' } as any,
+          250_001,
+          1_000,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          1_000,
+        );
 
-      expect(cost).toBeCloseTo((1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6, 12);
-    });
+        expect(cost).toBeCloseTo((1.8 * (249_001 * 4 + 1_000 * 0.4 + 1_000 * 18)) / 1e6, 12);
+      },
+    );
 
     it('should apply standard and long-context priority pricing for Gemini 3.1 Pro custom tools', () => {
       const standardCost = calculateGoogleCost(
@@ -2801,67 +2804,70 @@ describe('util', () => {
       );
     });
 
-    it.each([
-      'gemini-3.1-flash-lite',
-      'gemini-flash-lite-latest',
-    ])('should preserve the %s audio-input rate at priority tier', (modelId) => {
-      const cost = calculateGoogleCost(
-        modelId,
-        { service_tier: 'priority' },
-        1_000,
-        100,
-        false,
-        200,
-        0,
-        undefined,
-        0,
-        500,
-        100,
-      );
+    it.each(['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'])(
+      'should preserve the %s audio-input rate at priority tier',
+      (modelId) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'priority' },
+          1_000,
+          100,
+          false,
+          200,
+          0,
+          undefined,
+          0,
+          500,
+          100,
+        );
 
-      expect(cost).toBeCloseTo(
-        (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.09 + 100 * 2.7) / 1e6,
-        12,
-      );
-    });
+        expect(cost).toBeCloseTo(
+          (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.09 + 100 * 2.7) / 1e6,
+          12,
+        );
+      },
+    );
 
-    it.each([
-      'gemini-3.1-flash-lite',
-      'gemini-flash-lite-latest',
-    ])('should apply %s flex pricing with passthrough precedence', (modelId) => {
-      const flexCost = calculateGoogleCost(
-        modelId,
-        { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
-        1_000_000,
-        100_000,
-        false,
-        200_000,
-        0,
-        undefined,
-        0,
-        500_000,
-        100_000,
-      );
+    it.each(['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'])(
+      'should apply %s flex pricing with passthrough precedence',
+      (modelId) => {
+        const flexCost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
+          1_000_000,
+          100_000,
+          false,
+          200_000,
+          0,
+          undefined,
+          0,
+          500_000,
+          100_000,
+        );
 
-      expect(flexCost).toBeCloseTo(
-        (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.025 + 100_000 * 0.75) /
-          1e6,
-        12,
-      );
-    });
+        expect(flexCost).toBeCloseTo(
+          (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.025 + 100_000 * 0.75) /
+            1e6,
+          12,
+        );
+      },
+    );
 
     it.each([
       ['gemini-flash-latest', 1.5, 0.15, 0.15, 1, 9],
       ['gemini-flash-lite-latest', 0.25, 0.025, 0.05, 0.5, 1.5],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
-    ])('uses AI Studio cached and audio rates for %s', (id, input, cached, cachedAudio, audioInput, output) => {
-      expect(
-        calculateGoogleCost(id, {}, 1_000, 100, false, 200, 0, undefined, 0, 400, 100),
-      ).toBeCloseTo(
-        (500 * input + 300 * cached + 100 * audioInput + 100 * cachedAudio + 100 * output) / 1e6,
-        12,
-      );
-    });
+    ])(
+      'uses AI Studio cached and audio rates for %s',
+      (id, input, cached, cachedAudio, audioInput, output) => {
+        expect(
+          calculateGoogleCost(id, {}, 1_000, 100, false, 200, 0, undefined, 0, 400, 100),
+        ).toBeCloseTo(
+          (500 * input + 300 * cached + 100 * audioInput + 100 * cachedAudio + 100 * output) / 1e6,
+          12,
+        );
+      },
+    );
 
     it.each([
       ['gemini-2.5-flash', 0.1],
