@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,41 @@ interface TestCasesSectionProps {
   varsList: string[];
   onOpenYamlEditor?: () => void;
 }
+
+type DeletionKind = 'single' | 'selected' | 'all';
+
+interface PendingDeletion {
+  kind: DeletionKind;
+  indices: Set<number>;
+  sourceTests: unknown;
+}
+
+const DELETION_DESCRIPTIONS: Record<DeletionKind, string> = {
+  single: 'This removes the test case from this evaluation. This action cannot be undone.',
+  selected:
+    'This removes the selected test cases from this evaluation. This action cannot be undone.',
+  all: 'This removes every test case from this evaluation. This action cannot be undone.',
+};
+
+const getDeletionCopy = (pendingDeletion: PendingDeletion | null) => {
+  if (!pendingDeletion) {
+    return { title: '', description: '', action: 'Delete' };
+  }
+
+  const count = pendingDeletion.indices.size;
+  const title =
+    pendingDeletion.kind === 'single'
+      ? 'Delete test case?'
+      : pendingDeletion.kind === 'all'
+        ? `Delete all ${count} test case${count === 1 ? '' : 's'}?`
+        : `Delete ${count} selected test case${count === 1 ? '' : 's'}?`;
+
+  return {
+    title,
+    description: DELETION_DESCRIPTIONS[pendingDeletion.kind],
+    action: pendingDeletion.kind === 'all' ? 'Delete All' : 'Delete',
+  };
+};
 
 // Validation function for TestCase structure
 function isValidTestCase(obj: unknown): obj is TestCase {
@@ -89,9 +125,127 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
-  const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const [selectedIndices, setSelectedIndices] = React.useState<Set<number> | null>(null);
+  const [pendingDeletion, setPendingDeletion] = React.useState<PendingDeletion | null>(null);
+  const selectionMode = selectedIndices !== null;
   const { showToast } = useToast();
+  const previousRawTestsRef = React.useRef(rawTests);
+  const latestRawTestsRef = React.useRef(rawTests);
+  latestRawTestsRef.current = rawTests;
+
+  const addTestCaseButtonRef = React.useRef<HTMLButtonElement>(null);
+  const selectButtonRef = React.useRef<HTMLButtonElement>(null);
+  const selectAllCheckboxRef = React.useRef<HTMLButtonElement>(null);
+  const yamlEditorButtonRef = React.useRef<HTMLButtonElement>(null);
+  const deletionTriggerRef = React.useRef<HTMLButtonElement | null>(null);
+
+  // Index-backed selections and confirmations are valid only for the exact list that created them.
+  React.useEffect(() => {
+    if (previousRawTestsRef.current !== rawTests) {
+      previousRawTestsRef.current = rawTests;
+      setSelectedIndices(null);
+      setPendingDeletion(null);
+    }
+  }, [rawTests]);
+
+  const toggleSelected = (index: number) => {
+    setSelectedIndices((prev) => {
+      if (prev === null) {
+        return prev;
+      }
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const handleActivateTestCase = (index: number) => {
+    if (selectionMode) {
+      toggleSelected(index);
+      return;
+    }
+    setEditingTestCaseIndex(index);
+    setTestCaseDialogOpen(true);
+  };
+
+  const getTestCaseButtonLabel = (index: number, isSelected: boolean) =>
+    selectionMode
+      ? `${isSelected ? 'Deselect' : 'Select'} test case ${index + 1}`
+      : `Open test case ${index + 1} for editing`;
+
+  const selectedCount = selectedIndices?.size ?? 0;
+  const allSelected = testCases.length > 0 && selectedCount === testCases.length;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIndices(new Set());
+    } else {
+      setSelectedIndices(new Set(testCases.map((_, i) => i)));
+    }
+  };
+
+  const enterSelectionMode = () => {
+    setSelectedIndices(new Set());
+    requestAnimationFrame(() => selectAllCheckboxRef.current?.focus());
+  };
+
+  const exitSelectionMode = () => {
+    setSelectedIndices(null);
+    requestAnimationFrame(() => selectButtonRef.current?.focus());
+  };
+
+  const requestDeletion = (
+    kind: DeletionKind,
+    indices: Iterable<number>,
+    trigger: HTMLButtonElement,
+  ) => {
+    deletionTriggerRef.current = trigger;
+    setPendingDeletion({ kind, indices: new Set(indices), sourceTests: rawTests });
+  };
+
+  const handleDeletionCloseAutoFocus = (event: Event) => {
+    event.preventDefault();
+    const trigger = deletionTriggerRef.current;
+    const fallback =
+      (trigger?.isConnected ? trigger : null) ||
+      selectButtonRef.current ||
+      addTestCaseButtonRef.current ||
+      yamlEditorButtonRef.current;
+    fallback?.focus();
+  };
+
+  const confirmDeletion = () => {
+    if (!pendingDeletion) {
+      return;
+    }
+
+    if (pendingDeletion.sourceTests !== rawTests || !canEditInlineTests) {
+      deletionTriggerRef.current = canEditInlineTests
+        ? addTestCaseButtonRef.current
+        : yamlEditorButtonRef.current;
+      setPendingDeletion(null);
+      showToast('Test cases changed. Review the updated list before deleting.', 'warning');
+      return;
+    }
+
+    const remaining = testCases.filter((_, index) => !pendingDeletion.indices.has(index));
+    const removedCount = testCases.length - remaining.length;
+    deletionTriggerRef.current = addTestCaseButtonRef.current;
+    setPendingDeletion(null);
+    if (pendingDeletion.kind !== 'single') {
+      setSelectedIndices(null);
+    }
+    setTestCases(remaining);
+
+    if (pendingDeletion.kind !== 'single') {
+      showToast(`Deleted ${removedCount} test case${removedCount === 1 ? '' : 's'}`, 'success');
+    }
+  };
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
@@ -183,15 +337,29 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             return;
           }
 
+          const latestRawTests = latestRawTestsRef.current;
+          const latestTestsAreInline =
+            latestRawTests === undefined ||
+            (Array.isArray(latestRawTests) && latestRawTests.every(isInlineTestCase));
+          if (!latestTestsAreInline) {
+            showToast(
+              'Test cases are now managed in YAML. The imported cases were not applied.',
+              'warning',
+            );
+            event.target.value = '';
+            return;
+          }
+          const latestTestCases = (latestRawTests || []) as TestCase[];
+
           // Add description only for YAML files if missing
           if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
             newTestCases = newTestCases.map((tc, idx) => ({
               ...tc,
-              description: tc.description || `Test Case #${testCases.length + idx + 1}`,
+              description: tc.description || `Test Case #${latestTestCases.length + idx + 1}`,
             }));
           }
 
-          setTestCases([...testCases, ...newTestCases]);
+          setTestCases([...latestTestCases, ...newTestCases]);
           showToast(
             `Successfully imported ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}`,
             'success',
@@ -222,23 +390,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     }
   };
 
-  const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
+  const handleRemoveTestCase = (event: React.MouseEvent<HTMLButtonElement>, index: number) => {
     event.stopPropagation();
-    setTestCaseToDelete(index);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDeleteTestCase = () => {
-    if (testCaseToDelete !== null) {
-      setTestCases(testCases.filter((_, i) => i !== testCaseToDelete));
-      setTestCaseToDelete(null);
-    }
-    setDeleteDialogOpen(false);
-  };
-
-  const cancelDeleteTestCase = () => {
-    setTestCaseToDelete(null);
-    setDeleteDialogOpen(false);
+    requestDeletion('single', [index], event.currentTarget);
   };
 
   const handleDuplicateTestCase = (event: React.MouseEvent, index: number) => {
@@ -246,6 +400,8 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
     setTestCases([...testCases, duplicatedTestCase]);
   };
+
+  const deletionCopy = getDeletionCopy(pendingDeletion);
 
   return (
     <div className="space-y-4">
@@ -262,7 +418,12 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             </AlertDescription>
           </AlertContent>
           {onOpenYamlEditor && (
-            <Button variant="outline" size="sm" onClick={onOpenYamlEditor}>
+            <Button
+              ref={yamlEditorButtonRef}
+              variant="outline"
+              size="sm"
+              onClick={onOpenYamlEditor}
+            >
               Edit YAML
             </Button>
           )}
@@ -295,11 +456,47 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
               </Tooltip>
 
               <Button
+                ref={addTestCaseButtonRef}
                 onClick={() => setTestCaseDialogOpen(true)}
                 className="dark:bg-blue-600 dark:hover:bg-blue-500"
               >
                 Add Test Case
               </Button>
+
+              {testCases.length > 0 && !selectionMode && (
+                <>
+                  <Button ref={selectButtonRef} variant="outline" onClick={enterSelectionMode}>
+                    Select
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={(event) =>
+                      requestDeletion('all', testCases.keys(), event.currentTarget)
+                    }
+                    className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30 dark:hover:text-red-200"
+                  >
+                    Delete All
+                  </Button>
+                </>
+              )}
+
+              {selectionMode && (
+                <>
+                  <Button
+                    variant="destructive"
+                    className="bg-red-700 text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-700"
+                    disabled={selectedCount === 0}
+                    onClick={(event) =>
+                      requestDeletion('selected', selectedIndices ?? [], event.currentTarget)
+                    }
+                  >
+                    Delete Selected ({selectedCount})
+                  </Button>
+                  <Button variant="outline" onClick={exitSelectionMode}>
+                    Cancel
+                  </Button>
+                </>
+              )}
 
               {testCases.length === 0 && (
                 <Button
@@ -339,6 +536,17 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
         <table className="w-full min-w-[640px]">
           <thead className="bg-muted/50">
             <tr className="border-b border-border">
+              {selectionMode && canEditInlineTests && (
+                <th className="w-[44px] px-4 py-3 text-left">
+                  <Checkbox
+                    ref={selectAllCheckboxRef}
+                    checked={allSelected}
+                    indeterminate={someSelected}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all test cases"
+                  />
+                </th>
+              )}
               <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">Assertions</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">Variables</th>
@@ -351,7 +559,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             {canEditInlineTests ? (
               testCases.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  <td
+                    colSpan={selectionMode ? 5 : 4}
+                    className="p-8 text-center text-muted-foreground"
+                  >
                     No test cases added yet.
                   </td>
                 </tr>
@@ -360,29 +571,36 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                   const testCaseVars = Object.keys(testCase.vars || {});
                   const missingVars = varsList.filter((v) => !testCaseVars.includes(v));
                   const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
+                  const isSelected = selectedIndices?.has(index) ?? false;
 
                   return (
                     <tr
                       key={index}
-                      onClick={() => {
-                        setEditingTestCaseIndex(index);
-                        setTestCaseDialogOpen(true);
-                      }}
+                      onClick={() => handleActivateTestCase(index)}
                       className={cn(
                         'border-b border-border cursor-pointer',
                         'hover:bg-muted/50 transition-colors',
                         hasMissingVars && 'bg-amber-50/50 dark:bg-amber-950/20',
+                        selectionMode && isSelected && 'bg-primary/5 dark:bg-primary/10',
                       )}
                     >
+                      {selectionMode && (
+                        <td className="px-4 py-3">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelected(index)}
+                            aria-label={`Select test case ${index + 1}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm">
                         <button
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            setEditingTestCaseIndex(index);
-                            setTestCaseDialogOpen(true);
+                            handleActivateTestCase(index);
                           }}
-                          aria-label={`Open test case ${index + 1} for editing`}
+                          aria-label={getTestCaseButtonLabel(index, isSelected)}
                           className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {hasMissingVars && (
@@ -430,6 +648,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={selectionMode}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setEditingTestCaseIndex(index);
@@ -448,6 +667,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={selectionMode}
                                 onClick={(event) => handleDuplicateTestCase(event, index)}
                                 aria-label={`Duplicate test case ${index + 1}`}
                               >
@@ -462,6 +682,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={selectionMode}
                                 onClick={(event) => handleRemoveTestCase(event, index)}
                                 aria-label={`Delete test case ${index + 1}`}
                               >
@@ -478,7 +699,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
               )
             ) : (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                <td
+                  colSpan={selectionMode ? 5 : 4}
+                  className="p-8 text-center text-muted-foreground"
+                >
                   Test entries from YAML are not editable in the UI editor.
                 </td>
               </tr>
@@ -504,20 +728,25 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
-        <DialogContent>
+      <Dialog
+        open={pendingDeletion !== null}
+        onOpenChange={(open) => !open && setPendingDeletion(null)}
+      >
+        <DialogContent onCloseAutoFocus={handleDeletionCloseAutoFocus}>
           <DialogHeader>
-            <DialogTitle>Delete test case?</DialogTitle>
-            <DialogDescription>
-              This removes the test case from this evaluation. This action cannot be undone.
-            </DialogDescription>
+            <DialogTitle>{deletionCopy.title}</DialogTitle>
+            <DialogDescription>{deletionCopy.description}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={cancelDeleteTestCase}>
+            <Button variant="outline" onClick={() => setPendingDeletion(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={confirmDeleteTestCase}>
-              Delete
+            <Button
+              variant="destructive"
+              className="bg-red-700 text-white hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-700"
+              onClick={confirmDeletion}
+            >
+              {deletionCopy.action}
             </Button>
           </DialogFooter>
         </DialogContent>
