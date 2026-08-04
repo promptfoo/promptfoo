@@ -535,6 +535,27 @@ describe('package manifests', () => {
     expect(declarations).toContain('DependencyGuardIdentifier');
   });
 
+  it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const browserName = '@playwright/browser-chromium';
+    const optionalRange = packageJson.optionalDependencies?.[browserName];
+
+    expect(optionalRange).toBeDefined();
+    expect(packageJson.dependencies?.[browserName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[browserName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[browserName]).toBe(optionalRange);
+
+    const versions = ['playwright', 'playwright-core', browserName].map((name) => {
+      const version = packageLock.packages[`node_modules/${name}`]?.version;
+      expect(version, `${name} must be present in the lockfile`).toBeDefined();
+      return version;
+    });
+    expect(new Set(versions).size, 'Playwright browser versions must stay aligned').toBe(1);
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
