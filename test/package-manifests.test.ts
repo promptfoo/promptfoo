@@ -276,6 +276,31 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the Excel parser above the XML entity decoding regression', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = 'read-excel-file';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+
+    expect(developmentRange).toBeDefined();
+    expect(optionalRange).toBe(developmentRange);
+    expect(minVersion(developmentRange!)?.compare('9.3.3')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.3'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps native SWC packages optional and aligned across root and docs manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
