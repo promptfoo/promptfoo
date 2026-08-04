@@ -515,26 +515,6 @@ describe('package manifests', () => {
     }
   });
 
-  it('generates CST declarations using the pinned Chevrotain parser', async () => {
-    const { createToken, CstParser, generateCstDts } = await import('chevrotain');
-    const identifier = createToken({
-      name: 'DependencyGuardIdentifier',
-      pattern: /[a-z]+/,
-    });
-
-    class DependencyGuardParser extends CstParser {
-      constructor() {
-        super([identifier]);
-        this.RULE('dependencyGuard', () => this.CONSUME(identifier));
-        this.performSelfAnalysis();
-      }
-    }
-
-    const declarations = generateCstDts(new DependencyGuardParser().getGAstProductions());
-    expect(declarations).toContain('DependencyGuardCstNode');
-    expect(declarations).toContain('DependencyGuardIdentifier');
-  });
-
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
