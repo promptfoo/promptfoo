@@ -3,6 +3,7 @@ import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -4200,6 +4201,220 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('preserves streamed and SDK output evidence when their aggregates diverge', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with divergent output');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_divergent' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_divergent', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_divergent',
+        turnId: 'turn_divergent',
+        itemId: 'cmd_divergent',
+        delta: 'streamed line one\nstreamed line two',
+      },
+    });
+    // The SDK reports a completed-item aggregate that is neither a prefix of
+    // nor prefixed by the streamed deltas, and is shorter. The streamed output
+    // must not be silently discarded in favor of this truncated value.
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_divergent',
+        turnId: 'turn_divergent',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_divergent',
+          command: 'printf "..."',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'truncated',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_divergent',
+        turnId: 'turn_divergent',
+        itemId: 'msg_divergent',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_divergent',
+        turn: { id: 'turn_divergent', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'streamed line one\nstreamed line two',
+          sdk_aggregated_output: 'truncated',
+        }),
+      ]),
+    );
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'streamed line one\nstreamed line two',
+          sdkAggregatedOutput: 'truncated',
+        }),
+      ]),
+    );
+  });
+
+  it('reconciles a diverged item so post-completion deltas still apply', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with a late divergent delta');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_reconcile' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_reconcile', status: 'inProgress' } },
+    });
+
+    // A short streamed delta, then a completed item whose SDK aggregate
+    // diverges from and is longer than that delta. Both observations are
+    // evidence: the stream stays primary and the SDK aggregate is retained.
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'cmd_reconcile',
+        delta: 'short',
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_reconcile',
+          command: 'printf "..."',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'sdk reports a much longer divergent output',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    // A delta arriving after completion must still extend the chosen value —
+    // not be dropped because the accumulator diverged from it.
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'cmd_reconcile',
+        delta: ' + late delta',
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'msg_reconcile',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_reconcile',
+        turn: { id: 'turn_reconcile', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'short + late delta',
+          sdk_aggregated_output: 'sdk reports a much longer divergent output',
+        }),
+      ]),
+    );
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'short + late delta',
+          sdkAggregatedOutput: 'sdk reports a much longer divergent output',
+        }),
+      ]),
+    );
+  });
+
+  it('includes preserved SDK command output in trace evidence attributes', () => {
+    const provider = new OpenAICodexAppServerProvider();
+
+    expect(
+      (provider as any).getCompletionAttributesForItem({
+        type: 'commandExecution',
+        status: 'completed',
+        aggregatedOutput: 'streamed output',
+        sdkAggregatedOutput: 'SDK divergent output',
+        exitCode: 0,
+      }),
+    ).toMatchObject({
+      'codex.output': 'streamed output',
+      'codex.sdk_output': 'SDK divergent output',
+    });
+  });
+
   it('continues completed command output when later deltas extend an existing aggregate', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -4291,6 +4506,7 @@ describe('OpenAICodexAppServerProvider', () => {
   it('continues from a completed command aggregate when earlier deltas already exist', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
+    const loggerDebugSpy = vi.spyOn(logger, 'debug');
 
     const provider = new OpenAICodexAppServerProvider({
       config: {
@@ -4382,6 +4598,10 @@ describe('OpenAICodexAppServerProvider', () => {
           aggregatedOutput: 'line one\nline two\nline three',
         }),
       ]),
+    );
+    expect(loggerDebugSpy).not.toHaveBeenCalledWith(
+      '[CodexAppServer] commandExecution output deltas diverged from the SDK aggregate',
+      expect.any(Object),
     );
   });
 

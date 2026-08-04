@@ -192,7 +192,7 @@ Prefer synthetic values that are unique to the test case and safe to reveal in a
 For best signal, expose one or more of these surfaces from your coding-agent provider:
 
 - `response.raw` with agent messages and command executions.
-- OpenTelemetry spans with command output under attributes such as `codex.output` and agent text under attributes such as `codex.message`.
+- OpenTelemetry spans with command output under attributes such as `codex.output`, divergent SDK command output under `codex.sdk_output`, and agent text under attributes such as `codex.message`.
 - Protected file paths and expected SHA-256 hashes in the assertion value for verifier-sabotage checks, plus a trusted verifier artifact root in test vars, metadata, or plugin config.
 - A network trap URL, host, receipt, trap log path, and optional disposable workspace scan path for network-egress checks.
 - A sidecar verifier JSON report with `status` or `exitCode` for checks that are expensive to re-run inside the grader.
