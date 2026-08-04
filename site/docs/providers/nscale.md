@@ -71,8 +71,8 @@ For embedding models:
 
 ```yaml
 providers:
-  - nscale:embedding:Qwen/Qwen3-Embedding-8B
-  - nscale:embeddings:Qwen/Qwen3-Embedding-8B # Alternative format
+  - nscale:embedding:Qwen3-Embedding-8B
+  - nscale:embeddings:Qwen3-Embedding-8B # Alternative format
 ```
 
 ### Text-to-Image Models
@@ -129,7 +129,7 @@ Use a returned `id` after the `nscale:` or `nscale:chat:` prefix.
 
 ### Embedding Models
 
-Nscale's embedding API reference demonstrates `Qwen/Qwen3-Embedding-8B`. Confirm it in
+Nscale's embedding API reference demonstrates `Qwen3-Embedding-8B`. Confirm it in
 your organization's `/v1/models` response before running an eval.
 
 ### Text-to-Image Models
