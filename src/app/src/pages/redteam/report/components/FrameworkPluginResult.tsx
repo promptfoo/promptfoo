@@ -2,10 +2,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
-import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
+import { Severity } from '@promptfoo/redteam/constants';
 import { CheckCircle, Info, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getPluginDisplayName } from './FrameworkComplianceUtils';
+import { getPluginDisplayName, getPluginSeverity } from './FrameworkComplianceUtils';
 
 export interface FrameworkPluginResultProps {
   evalId: string;
@@ -50,8 +50,7 @@ export default function FrameworkPluginResult({
 
   const { asr, total, failCount } = getPluginASR(plugin);
 
-  const pluginSeverity =
-    riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+  const pluginSeverity = getPluginSeverity(plugin);
 
   return (
     <div

@@ -144,6 +144,19 @@ describe('FrameworkPluginResult', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it('should use normalized severity styling for fully qualified plugin IDs', () => {
+    const { container } = renderWithProviders(
+      <FrameworkPluginResult
+        evalId="test-eval-123"
+        plugin="promptfoo:redteam:intent"
+        getPluginASR={vi.fn().mockReturnValue({ asr: 100, total: 1, failCount: 1 })}
+        type="failed"
+      />,
+    );
+
+    expect(container.firstChild).toHaveClass('border-l-red-500');
+  });
+
   it("should navigate to the eval results page with a JSON-encoded filter and mode 'passes' when a plugin with ASR of zero is clicked and type is 'passed'", async () => {
     const props = {
       evalId: 'test-eval-123',
