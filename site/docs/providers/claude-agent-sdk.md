@@ -175,6 +175,8 @@ prompts:
 | `plan_mode_instructions`             | string           | Custom workflow instructions when `permission_mode` is `plan`                                                | None                     |
 | `output_format`                      | object           | Structured output configuration with JSON schema                                                             | None                     |
 | `agents`                             | object           | Programmatic agent definitions for custom subagents                                                          | None                     |
+| `max_subagent_spawn_depth`           | number           | Maximum subagent nesting depth; preserves the pre-0.3.217 SDK default                                        | 5                        |
+| `max_concurrent_subagents`           | number           | Maximum concurrently running subagents                                                                       | 20 (SDK default)         |
 | `hooks`                              | object           | Event hooks for intercepting tool calls and other events                                                     | None                     |
 | `include_partial_messages`           | boolean          | Include partial/streaming messages in response                                                               | false                    |
 | `include_hook_events`                | boolean          | Include hook lifecycle events in output stream                                                               | false                    |
@@ -921,6 +923,20 @@ providers:
           tools: [Bash, Read]
 ```
 
+### Subagent Limits
+
+Claude Agent SDK 0.3.217 limits concurrent subagents to 20. Promptfoo preserves the previous maximum nesting depth of five; set either limit to a positive integer when your eval needs different behavior:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      max_subagent_spawn_depth: 3
+      max_concurrent_subagents: 40
+```
+
+The options set `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` and `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` for the SDK subprocess. Explicit typed options take precedence over `config.env` and provider environment overrides; those environment values still apply when the typed options are omitted.
+
 ## Handling AskUserQuestion Tool
 
 The `AskUserQuestion` tool allows Claude to ask the user multiple-choice questions during execution. In automated evaluations, there's no human to answer these questions, so you need to configure how they should be handled.
@@ -1008,7 +1024,7 @@ If you're testing scenarios where the agent asks questions, consider what answer
 
 ## Hooks
 
-Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+Promptfoo preserves all configured hooks, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Unless `forward_subagent_text` is enabled, Promptfoo first installs a `TaskOutput` hook that removes raw subagent transcripts before the main agent can read them. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
 
 The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
 
@@ -1022,8 +1038,10 @@ export default {
           matcher: 'Bash',
           hooks: [
             async (input) => ({
-              hookEventName: 'PostToolUse',
-              updatedToolOutput: redact(input.tool_response),
+              hookSpecificOutput: {
+                hookEventName: 'PostToolUse',
+                updatedToolOutput: redact(input.tool_response),
+              },
             }),
           ],
         },
@@ -1087,7 +1105,7 @@ assert:
 
 For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
 
-By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
+By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. If `TaskOutput` returns an unsummarized background-subagent transcript, Promptfoo redacts it before the main agent sees the tool result and again from tool metadata, tracing, and cached eval results. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
 
 ```yaml
 providers:
