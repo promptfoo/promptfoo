@@ -203,8 +203,8 @@
     },
     "@chevrotain/cst-dts-gen": {
       ".": "13.0.0",
-      "@chevrotain/gast": "12.0.0",
-      "@chevrotain/types": "12.0.0"
+      "@chevrotain/gast": "13.0.0",
+      "@chevrotain/types": "13.0.0"
     },
     "chevrotain-allstar": {
       ".": "0.4.4",
