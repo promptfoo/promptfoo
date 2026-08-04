@@ -199,8 +199,10 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
       error={error}
       emptyMessage="No red team reports found. Run a red team evaluation to get started."
       onRowClick={(row) => onReportSelected(row.evalId)}
+      getRowId={(row) => row.evalId}
       initialSorting={[{ id: 'createdAt', desc: true }]}
       globalFilterLabel="Search reports"
+      rowDisplayMode="client-virtualized"
       showToolbar
       showColumnToggle
       showExport

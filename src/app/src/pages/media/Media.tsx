@@ -685,6 +685,7 @@ export default function Media() {
             ) : (
               <MediaGrid
                 items={items}
+                total={total}
                 isLoading={isLoading}
                 isLoadingMore={isLoadingMore}
                 hasMore={hasMore}
