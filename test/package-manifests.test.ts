@@ -467,6 +467,75 @@ describe('package manifests', () => {
     );
   });
 
+  it('keeps the Chevrotain CST generator aligned with its parser grammar', () => {
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          integrity?: string;
+          resolved?: string;
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const generatorName = '@chevrotain/cst-dts-gen';
+    const generatorOverride = packageJson.overrides?.[generatorName] as
+      | Record<string, string>
+      | undefined;
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const generatorVersion = generatorOverride?.['.'];
+
+    expect(generatorVersion, `${generatorName} must have an override`).toBeDefined();
+    expect(chevrotainOverride?.[generatorName]).toBe(generatorVersion);
+    expect(packageLock.packages[`node_modules/${generatorName}`]).toEqual(
+      expect.objectContaining({
+        integrity: expect.stringMatching(/^sha512-/),
+        resolved: `https://registry.npmjs.org/${generatorName}/-/cst-dts-gen-${generatorVersion}.tgz`,
+        version: generatorVersion,
+      }),
+    );
+
+    const parserVersion = chevrotainOverride?.['.'];
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+
+    for (const dependencyName of ['@chevrotain/gast', '@chevrotain/types']) {
+      expect(
+        generatorOverride?.[dependencyName],
+        `${generatorName} must share the parser's ${dependencyName} version`,
+      ).toBe(parserVersion);
+      expect(packageLock.packages[`node_modules/${dependencyName}`]?.version).toBe(parserVersion);
+      expect(
+        packageLock.packages[`node_modules/${generatorName}/node_modules/${dependencyName}`],
+      ).toBeUndefined();
+    }
+  });
+
+  it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const browserName = '@playwright/browser-chromium';
+    const optionalRange = packageJson.optionalDependencies?.[browserName];
+
+    expect(optionalRange).toBeDefined();
+    expect(packageJson.dependencies?.[browserName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[browserName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[browserName]).toBe(optionalRange);
+
+    const versions = ['playwright', 'playwright-core', browserName].map((name) => {
+      const version = packageLock.packages[`node_modules/${name}`]?.version;
+      expect(version, `${name} must be present in the lockfile`).toBeDefined();
+      return version;
+    });
+    expect(new Set(versions).size, 'Playwright browser versions must stay aligned').toBe(1);
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
