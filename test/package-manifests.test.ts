@@ -167,6 +167,47 @@ describe('package manifests', () => {
     expect(tsconfig.compilerOptions?.noEmit).toBe(true);
   });
 
+  it('keeps the pull-request code scan on its known-good Node release', () => {
+    const workflowPath = '.github/workflows/promptfoo-code-scan.yml';
+    const workflow = fs.readFileSync(path.join(process.cwd(), workflowPath), 'utf8');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchFileNames?: string[];
+        matchManagers?: string[];
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+
+    expect(workflow).toMatch(/node-version:\s*['"]24\.15\.0['"]/);
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false &&
+          rule.matchManagers?.includes('github-actions') &&
+          rule.matchPackageNames?.includes('node') &&
+          rule.matchFileNames?.includes(workflowPath),
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps the Docker runtime on the patched Node release', () => {
+    const expectedVersion = fs.readFileSync(path.join(process.cwd(), '.nvmrc'), 'utf8').trim();
+    const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+    const baseImageVersion = dockerfile.match(/^FROM node:([\d.]+)-alpine\b/m)?.[1];
+
+    expect(baseImageVersion).toBeDefined();
+
+    if (minVersion(baseImageVersion!)!.compare(expectedVersion) < 0) {
+      const alpineNodeVersion = dockerfile.match(/apk add[^\n]*['"]nodejs>=([\d.]+)['"]/)?.[1];
+
+      expect(alpineNodeVersion).toBeDefined();
+      expect(minVersion(alpineNodeVersion!)!.compare(expectedVersion)).toBeGreaterThanOrEqual(0);
+      expect(dockerfile).toMatch(/apk add[^\n]*['"]nodejs>=[\d.]+['"][^\n]*icu-data-full/);
+      expect(dockerfile).toMatch(/ln -sf \/usr\/bin\/node \/usr\/local\/bin\/node/);
+    }
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;
@@ -252,14 +293,14 @@ describe('package manifests', () => {
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
 
     expect(optionalRange).toBeDefined();
-    expect(minVersion(optionalRange!)?.compare('4.12.32')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(optionalRange!)?.compare('4.12.34')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
       minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '4.12.32',
+        '4.12.34',
       ),
     ).toBeGreaterThanOrEqual(0);
   });
