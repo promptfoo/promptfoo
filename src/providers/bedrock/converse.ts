@@ -1072,8 +1072,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     return {
-      guardrailIdentifier: String(this.config.guardrailIdentifier),
-      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      guardrailIdentifier: this.config.guardrailIdentifier,
+      guardrailVersion: this.config.guardrailVersion || 'DRAFT',
       ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }

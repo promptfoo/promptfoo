@@ -636,18 +636,21 @@ describe('OpenInterpreterProvider', () => {
     ['terminus-2', 'harness="terminus-2"'],
     ['minimal', 'harness="minimal"'],
     ['custom-harness', 'harness="custom-harness"'],
-  ])('maps the upstream %s harness without inventing a native enum value', async (harness, expected) => {
-    mockProcessEnv({ OPENAI_API_KEY: undefined });
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenInterpreterProvider({ config: { harness } });
+  ])(
+    'maps the upstream %s harness without inventing a native enum value',
+    async (harness, expected) => {
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenInterpreterProvider({ config: { harness } });
 
-    const resultPromise = provider.callApi('harness mapping');
-    await startTurn(server);
-    expect(mocks.spawn.mock.calls[0][1]).toContain(expected);
-    completeTurn(server, 'mapped');
-    await expect(resultPromise).resolves.toMatchObject({ output: 'mapped' });
-  });
+      const resultPromise = provider.callApi('harness mapping');
+      await startTurn(server);
+      expect(mocks.spawn.mock.calls[0][1]).toContain(expected);
+      completeTurn(server, 'mapped');
+      await expect(resultPromise).resolves.toMatchObject({ output: 'mapped' });
+    },
+  );
 
   it('accepts bounded inline image data and rejects all remote or non-data image URLs before spawn', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
