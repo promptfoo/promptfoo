@@ -493,11 +493,20 @@ describe('OTLPReceiver', () => {
                     spanId: spanIdBytes,
                     name: 'protobuf-test-span',
                     kind: 2, // SPAN_KIND_SERVER
-                    startTimeUnixNano: 1700000000000000000n,
-                    endTimeUnixNano: 1700000001000000000n,
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
                     attributes: [
                       { key: 'http.method', value: { stringValue: 'POST' } },
                       { key: 'http.status_code', value: { intValue: 200 } },
+                    ],
+                    events: [
+                      {
+                        name: 'guardrail decision',
+                        timeUnixNano: '1700000000500000000',
+                        attributes: [
+                          { key: 'guardrails.decision', value: { stringValue: 'blocked' } },
+                        ],
+                      },
                     ],
                     status: {
                       code: 1, // STATUS_CODE_OK
@@ -535,6 +544,13 @@ describe('OTLPReceiver', () => {
               'otel.scope.name': 'opentelemetry.instrumentation.test',
               'otel.scope.version': '1.0.0',
             }),
+            events: [
+              {
+                name: 'guardrail decision',
+                timestamp: 1700000000500,
+                attributes: { 'guardrails.decision': 'blocked' },
+              },
+            ],
             statusCode: 1,
             statusMessage: 'Success',
           }),

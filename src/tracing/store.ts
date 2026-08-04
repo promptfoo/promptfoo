@@ -3,7 +3,7 @@ import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 
-import type { TraceData } from '../types/tracing';
+import type { TraceData, TraceSpanEvent } from '../types/tracing';
 
 interface StoreTraceData extends Omit<TraceData, 'spans'> {
   evaluationId: string;
@@ -18,6 +18,7 @@ export interface SpanData {
   startTime: number;
   endTime?: number;
   attributes?: Record<string, any>;
+  events?: TraceSpanEvent[];
   statusCode?: number;
   statusMessage?: string;
 }
@@ -121,6 +122,18 @@ function sanitizeAttributes(
   return sanitized;
 }
 
+function sanitizeEvents(
+  events: TraceSpanEvent[] | null | undefined,
+  shouldSanitizeAttributes: boolean,
+): TraceSpanEvent[] | undefined {
+  return events?.map((event) => ({
+    ...event,
+    attributes: shouldSanitizeAttributes
+      ? sanitizeAttributes(event.attributes)
+      : (event.attributes ?? undefined),
+  }));
+}
+
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
@@ -138,6 +151,11 @@ function serializeSpan(
         ? sanitizeAttributes(rawAttributes)
         : rawAttributes
       : undefined,
+    ...(span.events
+      ? {
+          events: sanitizeEvents(span.events, shouldSanitizeAttributes),
+        }
+      : {}),
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
   };
@@ -282,6 +300,7 @@ export class TraceStore {
           startTime: span.startTime,
           endTime: span.endTime,
           attributes: span.attributes,
+          ...(span.events ? { events: span.events } : {}),
           statusCode: span.statusCode,
           statusMessage: span.statusMessage,
         };
@@ -468,6 +487,7 @@ export class TraceStore {
           startTime: row.startTime,
           endTime: row.endTime ?? undefined,
           attributes: shouldSanitize ? sanitizeAttributes(rawAttributes) : rawAttributes,
+          ...(row.events ? { events: sanitizeEvents(row.events, shouldSanitize) } : {}),
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
         };
