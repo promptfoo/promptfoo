@@ -90,6 +90,8 @@ export interface AssistantErrorEntry {
 
 /** Hard cap for attribute body length on synthesized tool spans. */
 const TOOL_SPAN_BODY_LIMIT = 4096;
+const REDACTED_SUBAGENT_TRANSCRIPT =
+  '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -199,6 +201,64 @@ function emitToolSpan(
   }
 }
 
+function isRawSubagentTranscript(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) {
+    return false;
+  }
+  if ('isRawTranscript' in result && result.isRawTranscript === true) {
+    return true;
+  }
+  return (
+    'task' in result &&
+    typeof result.task === 'object' &&
+    result.task !== null &&
+    'isRawTranscript' in result.task &&
+    result.task.isRawTranscript === true
+  );
+}
+
+function redactRawSubagentToolOutput(result: unknown): unknown {
+  if (!isRawSubagentTranscript(result)) {
+    return result;
+  }
+
+  const output = result as Record<string, unknown>;
+  const nestedTask = 'task' in output && typeof output.task === 'object' && output.task !== null;
+  const task = (nestedTask ? output.task : output) as Record<string, unknown>;
+  const redactedTask = {
+    ...task,
+    output: REDACTED_SUBAGENT_TRANSCRIPT,
+    ...('result' in task ? { result: REDACTED_SUBAGENT_TRANSCRIPT } : {}),
+    isRawTranscript: false,
+  };
+
+  return nestedTask ? { ...output, task: redactedTask } : redactedTask;
+}
+
+function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
+  return {
+    matcher: 'TaskOutput',
+    hooks: [
+      async (input) => {
+        if (
+          input.hook_event_name !== 'PostToolUse' ||
+          input.tool_name !== 'TaskOutput' ||
+          !isRawSubagentTranscript(input.tool_response)
+        ) {
+          return {};
+        }
+
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
+            updatedToolOutput: redactRawSubagentToolOutput(input.tool_response),
+          },
+        };
+      },
+    ],
+  };
+}
+
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
   return toolCalls
     .filter((toolCall) => toolCall.name === 'Skill')
@@ -292,7 +352,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -480,6 +540,18 @@ export interface ClaudeCodeOptions {
    * Keys are agent names, values are agent definitions with description, tools, and prompt.
    */
   agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Maximum nesting depth for subagents. Defaults to five to preserve the
+   * behavior of Claude Agent SDK versions before 0.3.217.
+   */
+  max_subagent_spawn_depth?: number;
+
+  /**
+   * Maximum number of subagents that can run concurrently. When omitted, the
+   * Claude Agent SDK applies its own default (20 as of version 0.3.217).
+   */
+  max_concurrent_subagents?: number;
 
   /**
    * Output format specification for structured outputs.
@@ -1070,6 +1142,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
+    const subagentLimits = [
+      ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],
+      ['max_concurrent_subagents', 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS'],
+    ] as const;
+
+    for (const [option, environmentVariable] of subagentLimits) {
+      const value = config[option];
+      if (value === undefined) {
+        continue;
+      }
+      if (!Number.isSafeInteger(value) || value < 1) {
+        throw new Error(`${option} must be a positive safe integer`);
+      }
+      env[environmentVariable] = String(value);
+    }
+
+    // Claude Agent SDK 0.3.217 lowered this default from five to one. Keep
+    // existing nested-agent evals working unless an env override opts out.
+    env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ??= '5';
+
     // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
@@ -1167,6 +1259,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
+    // Sanitize raw background-agent transcripts before TaskOutput reaches the
+    // main model. User-provided hook matchers remain installed after this one.
+    const hooks = config.forward_subagent_text
+      ? config.hooks
+      : {
+          ...config.hooks,
+          PostToolUse: [
+            createTaskOutputTranscriptRedactionHook(),
+            ...(config.hooks?.PostToolUse ?? []),
+          ],
+        };
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     // Keys listed here are excluded from the cache key because they're either
@@ -1215,7 +1319,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       continue: config.continue,
       agents: config.agents,
       outputFormat: config.output_format,
-      hooks: config.hooks,
+      hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
       forwardSubagentText: config.forward_subagent_text,
@@ -1536,7 +1640,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   if (block.type === 'tool_result') {
                     const entry = toolCallsMap.get(block.tool_use_id);
                     if (entry) {
-                      entry.output = block.content;
+                      entry.output =
+                        entry.name === 'TaskOutput' &&
+                        isRawSubagentTranscript(msg.tool_use_result) &&
+                        !config.forward_subagent_text
+                          ? REDACTED_SUBAGENT_TRANSCRIPT
+                          : block.content;
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {
