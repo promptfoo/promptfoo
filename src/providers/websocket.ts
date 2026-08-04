@@ -395,7 +395,12 @@ export class WebSocketProvider implements ApiProvider {
         // A peer that closes mid-stream fires no error and completes nothing,
         // so without this the promise would sit until the request deadline.
         // Fail fast instead. Our own close() calls settle the promise first,
-        // making this reject a no-op on every path we initiated.
+        // making this reject a no-op on every path we initiated. The two
+        // close codes that explicitly invite reconnecting (RFC 6455) keep the
+        // deadline armed instead, so the retryable timeout path still fires.
+        if (event.code === 1012 || event.code === 1013) {
+          return;
+        }
         clearTimeout(timeout);
         reject(
           new Error(

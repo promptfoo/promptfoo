@@ -981,5 +981,47 @@ describe('WebSocketProvider', () => {
         vi.useRealTimers();
       }
     });
+
+    it('should keep the deadline armed when the close code invites a reconnect', async () => {
+      vi.useFakeTimers();
+      try {
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents(
+          { type: 'open' },
+          { type: 'message', data: 'partial chunk' },
+          { type: 'close', code: 1013 },
+        );
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('close test').then(onResolved, onRejected);
+
+        // 1013 (try again later) is transient: the retryable timeout error
+        // still fires instead of a fast permanent failure.
+        await vi.advanceTimersByTimeAsync(0);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(200);
+        const [error] = onRejected.mock.calls[0];
+        expect(error.message).toContain('WebSocket request timed out after 100ms');
+
+        await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });
