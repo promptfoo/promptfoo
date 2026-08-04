@@ -1072,9 +1072,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     return {
-      guardrailIdentifier: String(this.config.guardrailIdentifier),
-      // biome-ignore lint/nursery/noUselessTypeConversion: YAML may deserialize versions as numbers.
-      guardrailVersion: String(this.config.guardrailVersion || 'DRAFT'),
+      // YAML can deserialize unquoted guardrail values as numbers despite their TypeScript types.
+      guardrailIdentifier: String(this.config.guardrailIdentifier as unknown),
+      guardrailVersion: String((this.config.guardrailVersion || 'DRAFT') as unknown),
       ...(this.config.trace ? { trace: this.config.trace as GuardrailTrace } : {}),
     };
   }
