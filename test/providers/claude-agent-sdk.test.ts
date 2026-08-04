@@ -109,6 +109,7 @@ const createMockUsage = (input = 0, output = 0): MockUsage => ({
   output_tokens: output,
   cache_creation_input_tokens: 0,
   cache_read_input_tokens: 0,
+  fallback_credit: { status: { type: 'not_applied', reason: 'not_enabled' } },
   cache_creation: {
     ephemeral_1h_input_tokens: 0,
     ephemeral_5m_input_tokens: 0,
@@ -146,6 +147,7 @@ const createMockBetaMessage = (
     output_tokens: 0,
     cache_creation_input_tokens: null,
     cache_read_input_tokens: null,
+    fallback_credit: null,
     cache_creation: null,
     inference_geo: null,
     iterations: null,
