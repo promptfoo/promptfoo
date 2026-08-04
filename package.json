@@ -213,7 +213,7 @@
     "webpack": "5.108.4",
     "dompurify": "3.4.12",
     "monaco-editor": {
-      ".": "0.55.1",
+      ".": "0.56.0",
       "dompurify": "3.4.12"
     }
   },
@@ -228,7 +228,7 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.5",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
@@ -269,7 +269,7 @@
     "source-map-support": "^0.5.21",
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
-    "tsdown": "0.21.9",
+    "tsdown": "0.22.14",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0",
@@ -396,7 +396,7 @@
     "socket.io-client": "^4.8.3",
     "text-extensions": "^3.1.0",
     "tsx": "^4.21.0",
-    "undici": ">=7.28.0 <8",
+    "undici": ">=7.29.0 <8",
     "winston": "^3.19.0",
     "ws": "^8.21.1",
     "zod": "^4.3.6"
