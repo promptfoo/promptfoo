@@ -892,5 +892,51 @@ describe('WebSocketProvider', () => {
         vi.useRealTimers();
       }
     });
+
+    it('should time out when the stream delivers a partial chunk and then stalls', async () => {
+      vi.useFakeTimers();
+      try {
+        // Accumulates every chunk but never signals completion, which is what a server
+        // that streams a partial answer and then stops sending looks like.
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents({ type: 'open' }, { type: 'message', data: 'partial chunk' });
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('timeout test').then(onResolved, onRejected);
+
+        // Deliver the partial chunk while the clock is still short of the timeout.
+        await vi.advanceTimersByTimeAsync(0);
+        expect(streamResponse).toHaveBeenCalledTimes(1);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        // Nothing else ever arrives, so the request deadline still has to fire.
+        await vi.advanceTimersByTimeAsync(200);
+
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).toHaveBeenCalledTimes(1);
+        const [error] = onRejected.mock.calls[0];
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toContain('WebSocket request timed out after 100ms');
+        expect(mockWs.close).toHaveBeenCalled();
+
+        await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

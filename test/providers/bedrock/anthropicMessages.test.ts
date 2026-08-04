@@ -318,7 +318,6 @@ describe('Bedrock Anthropic Messages provider', () => {
       usage: { input_tokens: 5, output_tokens: 1 },
     } as Anthropic.Messages.Message;
     const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
-
     const result = await provider.callApi('hello');
 
     const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;

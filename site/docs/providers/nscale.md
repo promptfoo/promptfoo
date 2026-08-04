@@ -36,9 +36,11 @@ To use Nscale models in your promptfoo configuration, use the `nscale:` prefix f
 ```yaml
 providers:
   - nscale:openai/gpt-oss-120b
-  - nscale:meta/llama-3.3-70b-instruct
-  - nscale:qwen/qwen-3-235b-a22b-instruct
+  - nscale:meta-llama/Llama-3.3-70B-Instruct
+  - nscale:Qwen/Qwen3-235B-A22B-Instruct-2507
 ```
+
+Model IDs are the upstream Hugging Face repository IDs and are case-sensitive.
 
 ## Model Types
 
@@ -69,13 +71,23 @@ For embedding models:
 
 ```yaml
 providers:
-  - nscale:embedding:Qwen3-Embedding-8B
-  - nscale:embeddings:Qwen3-Embedding-8B # Alternative format
+  - nscale:embedding:Qwen/Qwen3-Embedding-8B
+  - nscale:embeddings:Qwen/Qwen3-Embedding-8B # Alternative format
+```
+
+### Text-to-Image Models
+
+For image generation models:
+
+```yaml
+providers:
+  - nscale:image:black-forest-labs/FLUX.1-schnell
 ```
 
 ## Popular Models
 
-Nscale exposes the current catalog through an authenticated OpenAI-compatible endpoint:
+The authoritative list for your account is `GET https://inference.api.nscale.com/v1/models`,
+which also returns pricing and context length:
 
 ```bash
 curl -fsS https://inference.api.nscale.com/v1/models \
@@ -86,16 +98,51 @@ curl -fsS https://inference.api.nscale.com/v1/models \
 
 Use a returned `id` after the `nscale:` or `nscale:chat:` prefix.
 
+| Model                          | Provider Format                                    | Use Case                            |
+| ------------------------------ | -------------------------------------------------- | ----------------------------------- |
+| GPT OSS 120B                   | `nscale:openai/gpt-oss-120b`                       | General-purpose reasoning and tasks |
+| GPT OSS 20B                    | `nscale:openai/gpt-oss-20b`                        | Lightweight general-purpose model   |
+| Kimi K2.5                      | `nscale:moonshotai/Kimi-K2.5`                      | Large-scale agentic reasoning       |
+| Qwen 3 235B A22B               | `nscale:Qwen/Qwen3-235B-A22B`                      | Large-scale language understanding  |
+| Qwen 3 235B A22B Instruct 2507 | `nscale:Qwen/Qwen3-235B-A22B-Instruct-2507`        | Qwen 3 235B 2507 variant            |
+| Qwen 3 4B Instruct 2507        | `nscale:Qwen/Qwen3-4B-Instruct-2507`               | Lightweight instruction following   |
+| Qwen 3 4B Thinking 2507        | `nscale:Qwen/Qwen3-4B-Thinking-2507`               | Reasoning and thinking tasks        |
+| Qwen 3 8B                      | `nscale:Qwen/Qwen3-8B`                             | Mid-size general-purpose model      |
+| Qwen 3 14B                     | `nscale:Qwen/Qwen3-14B`                            | Enhanced reasoning capabilities     |
+| Qwen 3 32B                     | `nscale:Qwen/Qwen3-32B`                            | Large-scale reasoning and analysis  |
+| Qwen 2.5 Coder 3B Instruct     | `nscale:Qwen/Qwen2.5-Coder-3B-Instruct`            | Lightweight code generation         |
+| Qwen 2.5 Coder 7B Instruct     | `nscale:Qwen/Qwen2.5-Coder-7B-Instruct`            | Code generation and programming     |
+| Qwen 2.5 Coder 32B Instruct    | `nscale:Qwen/Qwen2.5-Coder-32B-Instruct`           | Advanced code generation            |
+| Qwen QwQ 32B                   | `nscale:Qwen/QwQ-32B`                              | Specialized reasoning model         |
+| Llama 3.3 70B Instruct         | `nscale:meta-llama/Llama-3.3-70B-Instruct`         | High-quality instruction following  |
+| Llama 3.1 8B Instruct          | `nscale:meta-llama/Llama-3.1-8B-Instruct`          | Efficient instruction following     |
+| Llama 3.2 11B Vision Instruct  | `nscale:meta-llama/Llama-3.2-11B-Vision-Instruct`  | Vision-language tasks               |
+| Llama 4 Scout 17B              | `nscale:meta-llama/Llama-4-Scout-17B-16E-Instruct` | Image-Text-to-Text capabilities     |
+| DeepSeek R1 Distill Llama 70B  | `nscale:deepseek-ai/DeepSeek-R1-Distill-Llama-70B` | Efficient reasoning model           |
+| DeepSeek R1 Distill Llama 8B   | `nscale:deepseek-ai/DeepSeek-R1-Distill-Llama-8B`  | Lightweight reasoning model         |
+| DeepSeek R1 Distill Qwen 1.5B  | `nscale:deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B` | Ultra-lightweight reasoning         |
+| DeepSeek R1 Distill Qwen 7B    | `nscale:deepseek-ai/DeepSeek-R1-Distill-Qwen-7B`   | Compact reasoning model             |
+| DeepSeek R1 Distill Qwen 14B   | `nscale:deepseek-ai/DeepSeek-R1-Distill-Qwen-14B`  | Mid-size reasoning model            |
+| DeepSeek R1 Distill Qwen 32B   | `nscale:deepseek-ai/DeepSeek-R1-Distill-Qwen-32B`  | Large reasoning model               |
+| Devstral Small 2505            | `nscale:mistralai/Devstral-Small-2505`             | Code generation and development     |
+| Mixtral 8x22B Instruct         | `nscale:mistralai/Mixtral-8x22B-Instruct-v0.1`     | Large mixture-of-experts model      |
+
 ### Embedding Models
 
-Nscale's embedding API reference currently demonstrates `Qwen3-Embedding-8B`. Confirm it in
+Nscale's embedding API reference demonstrates `Qwen/Qwen3-Embedding-8B`. Confirm it in
 your organization's `/v1/models` response before running an eval.
 
 ### Text-to-Image Models
 
-Nscale's image API reference currently demonstrates
+Nscale's image API reference demonstrates
 `nscale:image:black-forest-labs/FLUX.1-schnell`. Confirm it in your organization's catalog before
 running an eval.
+
+| Model               | Provider Format                                         | Use Case                      |
+| ------------------- | ------------------------------------------------------- | ----------------------------- |
+| Flux.1 Schnell      | `nscale:image:black-forest-labs/FLUX.1-schnell`         | Fast image generation         |
+| Stable Diffusion XL | `nscale:image:stabilityai/stable-diffusion-xl-base-1.0` | High-quality image generation |
+| SDXL Lightning      | `nscale:image:ByteDance/SDXL-Lightning`                 | Ultra-fast image generation   |
 
 ## Configuration Options
 
@@ -111,19 +158,27 @@ providers:
       frequency_penalty: 0.1
       presence_penalty: 0.2
       stop: ['END', 'STOP']
-      stream: true
+      seed: 42
 ```
 
 ### Supported Parameters
 
-- `temperature`: Controls randomness (0.0 to 2.0)
-- `max_tokens`: Maximum number of tokens to generate
+- `temperature`: Controls randomness (0.0 to 2.0). Defaults to `0` unless set.
+- `max_tokens`: Maximum number of tokens to generate. Defaults to `1024` unless set.
 - `top_p`: Nucleus sampling parameter
 - `frequency_penalty`: Reduces repetition based on frequency
 - `presence_penalty`: Reduces repetition based on presence
 - `stop`: Stop sequences to halt generation
-- `stream`: Enable streaming responses
 - `seed`: Deterministic sampling seed
+
+Any other parameter is forwarded to the Nscale API unchanged.
+
+:::note
+
+Streaming is not supported. Promptfoo reads each response as a single JSON body, so
+setting `stream: true` produces a response it cannot parse.
+
+:::
 
 ## Example Configuration
 
@@ -132,11 +187,16 @@ Here's a complete example configuration:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: nscale:meta-llama/Llama-4-Scout-17B-16E-Instruct
-    label: nscale-llama-scout
+  - id: nscale:openai/gpt-oss-120b
+    label: nscale-gpt-oss
     config:
       temperature: 0.7
       max_tokens: 512
+  - id: nscale:meta-llama/Llama-3.3-70B-Instruct
+    label: nscale-llama
+    config:
+      temperature: 0.5
+      max_tokens: 1024
 
 prompts:
   - 'Explain {{concept}} in simple terms'
