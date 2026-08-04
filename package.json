@@ -179,6 +179,7 @@
       ".": "2.5.8",
       "ws": "$ws"
     },
+    "socket.io-parser": ">=4.2.7 <5",
     "qs": ">=6.15.2 <7.0.0",
     "@isaacs/brace-expansion": ">=5.0.1",
     "brace-expansion@5": "^5.0.6",
