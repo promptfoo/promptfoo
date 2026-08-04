@@ -478,6 +478,48 @@ describe('package manifests', () => {
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
   });
 
+  it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
+    // GHSA-4cwx-7wf7-3272 and four sibling advisories were fixed in undici 7.29.0.
+    // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
+    // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
+    // projects override undici; assert the floors and the resolved copies together.
+    const PATCHED_UNDICI = '7.29.0';
+    const projects = [
+      // The root declares undici directly; code-scan-action only pins it through an
+      // override, since it arrives transitively via @actions/github.
+      { manifest: 'package.json', lockfile: 'package-lock.json', field: 'dependencies' },
+      {
+        manifest: 'code-scan-action/package.json',
+        lockfile: 'code-scan-action/package-lock.json',
+        field: 'overrides',
+      },
+    ] as const;
+
+    for (const { manifest, lockfile, field } of projects) {
+      const packageJson =
+        readPackageJson<Record<string, Record<string, string> | undefined>>(manifest);
+      const pinnedRange = packageJson[field]?.undici;
+
+      expect(pinnedRange, `${manifest} must pin undici under "${field}"`).toBeDefined();
+      expect(validRange(pinnedRange as string)).not.toBeNull();
+      expect(
+        minVersion(pinnedRange as string)?.compare(PATCHED_UNDICI),
+        `${manifest} must not allow undici below ${PATCHED_UNDICI}`,
+      ).toBeGreaterThanOrEqual(0);
+
+      const packageLock = readPackageJson<{
+        packages: Record<string, { version?: string }>;
+      }>(lockfile);
+      const resolved = packageLock.packages['node_modules/undici']?.version;
+
+      expect(resolved, `${lockfile} must resolve undici`).toBeDefined();
+      expect(
+        minVersion(resolved as string)?.compare(PATCHED_UNDICI),
+        `${lockfile} resolves undici ${resolved}`,
+      ).toBeGreaterThanOrEqual(0);
+    }
+  });
+
   it('does not import jsdom from root src/', () => {
     // Guards against re-introducing jsdom into the CLI startup graph, which
     // previously broke `npx promptfoo` on Node 24 via ERR_REQUIRE_ASYNC_MODULE.
