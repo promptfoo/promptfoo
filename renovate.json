@@ -224,6 +224,16 @@
       "groupName": "jsdom"
     },
     {
+      "description": "Chevrotain's sub-packages are pinned to the parser version, not to whatever is newest. chevrotain@11.2.0 declares each of @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast and @chevrotain/utils at exactly 11.2.0, and test/package-manifests.test.ts asserts the overrides keep them equal to the pinned parser so a single shared instance is used. Renovate bumping them individually yields an incoherent tree (see the closed #10293 and #10294). Only @chevrotain/cst-dts-gen floats ahead, so it is deliberately not listed here. Re-enable if the pinned chevrotain parser itself moves.",
+      "matchPackageNames": [
+        "@chevrotain/gast",
+        "@chevrotain/types",
+        "@chevrotain/regexp-to-ast",
+        "@chevrotain/utils"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Keep undici in sync across root and code-scan-action",
       "matchPackageNames": ["undici"],
       "groupName": "undici"
