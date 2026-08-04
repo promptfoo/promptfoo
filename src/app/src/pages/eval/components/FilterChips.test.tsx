@@ -157,7 +157,7 @@ describe('FilterChips with active filter', () => {
     );
   });
 
-  it('applies blue styling for active filter', () => {
+  it('applies brand styling for active filter', () => {
     render(
       <TooltipProvider>
         <FilterChips />
@@ -165,7 +165,7 @@ describe('FilterChips with active filter', () => {
     );
 
     const activeChip = screen.getByText('harmful-content').closest('button');
-    expect(activeChip).toHaveClass('bg-blue-50');
+    expect(activeChip).toHaveClass('bg-red-50');
   });
 
   it('calls removeFilter when clicking an active chip', async () => {
