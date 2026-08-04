@@ -20,6 +20,14 @@ function readPackageJson<T>(relativePath: string): T {
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.3';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
+const SWC_PACKAGE_NAMES = [
+  '@swc/core',
+  '@swc/core-darwin-arm64',
+  '@swc/core-darwin-x64',
+  '@swc/core-linux-x64-gnu',
+  '@swc/core-linux-x64-musl',
+  '@swc/core-win32-x64-msvc',
+] as const;
 const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
@@ -235,6 +243,172 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps native SWC packages optional and aligned across root and docs manifests', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const sitePackageJson = readPackageJson<PackageManifest>('site/package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+
+    for (const dependencyName of SWC_PACKAGE_NAMES) {
+      const optionalRange = rootPackageJson.optionalDependencies?.[dependencyName];
+
+      expect(optionalRange, `${dependencyName} must stay optional`).toBeDefined();
+      expect(minVersion(optionalRange!)?.compare('1.15.46')).toBeGreaterThanOrEqual(0);
+      expect(rootPackageJson.dependencies?.[dependencyName]).toBeUndefined();
+      expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+      expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+      expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+      expect(
+        minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
+          '1.15.46',
+        ),
+      ).toBeGreaterThanOrEqual(0);
+    }
+
+    expect(sitePackageJson.devDependencies?.['@swc/core']).toBe(
+      rootPackageJson.optionalDependencies?.['@swc/core'],
+    );
+    expect(packageLock.packages.site.devDependencies?.['@swc/core']).toBe(
+      sitePackageJson.devDependencies?.['@swc/core'],
+    );
+  });
+
+  it('keeps the patched Hono request parser optional and aligned across manifests', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = 'hono';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('4.12.32')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
+        '4.12.32',
+      ),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the OpenAPI generator manifest and lockfile on the supported floor', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = '@asteasolutions/zod-to-openapi';
+    const developmentRange = packageJson.devDependencies?.[dependencyName];
+
+    expect(developmentRange).toBeDefined();
+    expect(minVersion(developmentRange!)?.compare('9.1.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.1.0'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps MCP optional while locking its Node adapter to a patched release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+          engines?: Record<string, string>;
+        }
+      >;
+    }>('package-lock.json');
+    const sdkName = '@modelcontextprotocol/sdk';
+    const adapterName = '@hono/node-server';
+    const sdkRange = packageJson.optionalDependencies?.[sdkName];
+    const lockedSdk = packageLock.packages[`node_modules/${sdkName}`];
+    const lockedAdapter = packageLock.packages[`node_modules/${adapterName}`];
+
+    expect(sdkRange).toBeDefined();
+    expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
+    expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
+    expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
+    expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.0.12')).toBeGreaterThanOrEqual(0);
+    expect(lockedAdapter.engines?.node).toBe('>=20');
+
+    for (const manifestPath of [
+      'examples/redteam-mcp-agent/package.json',
+      'examples/simple-mcp/package.json',
+    ]) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      expect(manifest.dependencies?.[sdkName], manifestPath).toBe(sdkRange);
+      expect(manifest.dependencies?.[adapterName], manifestPath).toBe('2.0.12');
+    }
+  });
+
+  it('keeps the Langium parser override present and reproducible in the lockfile', () => {
+    const dependencyName = 'chevrotain-allstar';
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          integrity?: string;
+          resolved?: string;
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const parserOverride = packageJson.overrides?.[dependencyName];
+    const langiumOverride = packageJson.overrides?.langium;
+
+    expect(parserOverride).toEqual(
+      expect.objectContaining({
+        '.': expect.any(String),
+        chevrotain: '11.2.0',
+      }),
+    );
+    const parserVersion = (parserOverride as Record<string, string>)['.'];
+
+    expect(minVersion(parserVersion)?.compare('0.4.4')).toBeGreaterThanOrEqual(0);
+    expect(langiumOverride).toEqual(
+      expect.objectContaining({
+        [dependencyName]: parserVersion,
+        chevrotain: '11.2.0',
+      }),
+    );
+    expect(packageLock.packages[`node_modules/${dependencyName}`]).toEqual(
+      expect.objectContaining({
+        integrity: expect.stringMatching(/^sha512-/),
+        resolved: `https://registry.npmjs.org/${dependencyName}/-/${dependencyName}-${parserVersion}.tgz`,
+        version: parserVersion,
+      }),
+    );
+  });
+
   it('keeps jsdom out of root runtime dependencies', () => {
     const packageJson = readPackageJson<{
       dependencies?: Record<string, string>;
@@ -286,6 +460,21 @@ describe('package manifests', () => {
     );
 
     expect(offenders).toEqual([]);
+  });
+
+  it('keeps the supported Node.js range aligned across workspace manifests', () => {
+    // These three drifted apart before (root allowed Node 20.20 while site and
+    // code-scan-action pinned >=20.20.1), so an engine bump that misses one is a real
+    // failure mode. Assert they agree rather than restating the value.
+    const rootEngines = readPackageJson<{ engines?: { node?: string } }>('package.json').engines
+      ?.node;
+
+    expect(validRange(rootEngines ?? '')).toBeTruthy();
+
+    for (const manifestPath of ['site/package.json', 'code-scan-action/package.json']) {
+      const engines = readPackageJson<{ engines?: { node?: string } }>(manifestPath).engines?.node;
+      expect(engines, `${manifestPath} must declare the root engines.node range`).toBe(rootEngines);
+    }
   });
 
   it('keeps sharp optional for the docs workspace', () => {
