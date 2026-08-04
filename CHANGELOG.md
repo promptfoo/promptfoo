@@ -6,30 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.122.0](https://github.com/promptfoo/promptfoo/compare/0.121.20...0.122.0) (2026-08-04)
 
-
 ### ⚠ BREAKING CHANGES
 
-* drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260))
+- drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260))
 
 ### Bug Fixes
 
-* **deps:** keep the Shai-Hulud compromised versions unreachable ([#10301](https://github.com/promptfoo/promptfoo/issues/10301)) ([db2a066](https://github.com/promptfoo/promptfoo/commit/db2a0665648b49dde742c4d027bef92f221930f4))
-* **deps:** patch undici in code-scan-action and guard both lockfiles ([#10278](https://github.com/promptfoo/promptfoo/issues/10278)) ([15bf41f](https://github.com/promptfoo/promptfoo/commit/15bf41f2dcb7187fc6ed40cddea96b609b2610a9))
-* **deps:** pin socket.io-parser above the packet-decoder DoS ([#10279](https://github.com/promptfoo/promptfoo/issues/10279)) ([d0f2a83](https://github.com/promptfoo/promptfoo/commit/d0f2a83d8b72f3c0ad71950e2822d9350b7a48ed))
-* **deps:** repair Biome and undici upgrade regressions ([#10292](https://github.com/promptfoo/promptfoo/issues/10292)) ([3565a3c](https://github.com/promptfoo/promptfoo/commit/3565a3c1ffc16fd9f9a8d65ae93e4a6885c4b5c1))
-* **deps:** restore XML entity decoding for xlsx test files ([#10249](https://github.com/promptfoo/promptfoo/issues/10249)) ([00cdeb9](https://github.com/promptfoo/promptfoo/commit/00cdeb9a857ab019f61789b69ef75c3c852ce283))
-* **deps:** update anthropic packages ([#10234](https://github.com/promptfoo/promptfoo/issues/10234)) ([6279230](https://github.com/promptfoo/promptfoo/commit/6279230cae992d0ad4d6a823728b4a06d2553d73))
-* **deps:** update anthropic packages ([#10277](https://github.com/promptfoo/promptfoo/issues/10277)) ([f8609a6](https://github.com/promptfoo/promptfoo/commit/f8609a6b70a0c155f84c6921d111d3b30968e952))
-* **deps:** update dependency execa to v10 ([#10227](https://github.com/promptfoo/promptfoo/issues/10227)) ([bab74b8](https://github.com/promptfoo/promptfoo/commit/bab74b8623bb44182843de01b95890ae10c1cfcb))
-* **deps:** update opentelemetry ([#10290](https://github.com/promptfoo/promptfoo/issues/10290)) ([5638797](https://github.com/promptfoo/promptfoo/commit/5638797888b50e38ac263463ef2c7bd7d1ae2a6c))
-* **providers:** correct Nscale model identifiers ([#10259](https://github.com/promptfoo/promptfoo/issues/10259)) ([249b125](https://github.com/promptfoo/promptfoo/commit/249b125277d5c6fdeaaf610c253ddbbb1c460685))
-* **providers:** stop leaking Nscale provider settings into the request body ([#10258](https://github.com/promptfoo/promptfoo/issues/10258)) ([d23f86a](https://github.com/promptfoo/promptfoo/commit/d23f86a3907946f02c962a190e66edb0a642efe1))
-* **providers:** stop WebSocket evals from hanging when a stream stalls ([#10266](https://github.com/promptfoo/promptfoo/issues/10266)) ([60898c7](https://github.com/promptfoo/promptfoo/commit/60898c7faedbfa6bedf4832feffffcd5d6ecaef0))
-
+- **deps:** keep the Shai-Hulud compromised versions unreachable ([#10301](https://github.com/promptfoo/promptfoo/issues/10301)) ([db2a066](https://github.com/promptfoo/promptfoo/commit/db2a0665648b49dde742c4d027bef92f221930f4))
+- **deps:** patch undici in code-scan-action and guard both lockfiles ([#10278](https://github.com/promptfoo/promptfoo/issues/10278)) ([15bf41f](https://github.com/promptfoo/promptfoo/commit/15bf41f2dcb7187fc6ed40cddea96b609b2610a9))
+- **deps:** pin socket.io-parser above the packet-decoder DoS ([#10279](https://github.com/promptfoo/promptfoo/issues/10279)) ([d0f2a83](https://github.com/promptfoo/promptfoo/commit/d0f2a83d8b72f3c0ad71950e2822d9350b7a48ed))
+- **deps:** repair Biome and undici upgrade regressions ([#10292](https://github.com/promptfoo/promptfoo/issues/10292)) ([3565a3c](https://github.com/promptfoo/promptfoo/commit/3565a3c1ffc16fd9f9a8d65ae93e4a6885c4b5c1))
+- **deps:** restore XML entity decoding for xlsx test files ([#10249](https://github.com/promptfoo/promptfoo/issues/10249)) ([00cdeb9](https://github.com/promptfoo/promptfoo/commit/00cdeb9a857ab019f61789b69ef75c3c852ce283))
+- **deps:** update anthropic packages ([#10234](https://github.com/promptfoo/promptfoo/issues/10234)) ([6279230](https://github.com/promptfoo/promptfoo/commit/6279230cae992d0ad4d6a823728b4a06d2553d73))
+- **deps:** update anthropic packages ([#10277](https://github.com/promptfoo/promptfoo/issues/10277)) ([f8609a6](https://github.com/promptfoo/promptfoo/commit/f8609a6b70a0c155f84c6921d111d3b30968e952))
+- **deps:** update dependency execa to v10 ([#10227](https://github.com/promptfoo/promptfoo/issues/10227)) ([bab74b8](https://github.com/promptfoo/promptfoo/commit/bab74b8623bb44182843de01b95890ae10c1cfcb))
+- **deps:** update opentelemetry ([#10290](https://github.com/promptfoo/promptfoo/issues/10290)) ([5638797](https://github.com/promptfoo/promptfoo/commit/5638797888b50e38ac263463ef2c7bd7d1ae2a6c))
+- **providers:** correct Nscale model identifiers ([#10259](https://github.com/promptfoo/promptfoo/issues/10259)) ([249b125](https://github.com/promptfoo/promptfoo/commit/249b125277d5c6fdeaaf610c253ddbbb1c460685))
+- **providers:** stop leaking Nscale provider settings into the request body ([#10258](https://github.com/promptfoo/promptfoo/issues/10258)) ([d23f86a](https://github.com/promptfoo/promptfoo/commit/d23f86a3907946f02c962a190e66edb0a642efe1))
+- **providers:** stop WebSocket evals from hanging when a stream stalls ([#10266](https://github.com/promptfoo/promptfoo/issues/10266)) ([60898c7](https://github.com/promptfoo/promptfoo/commit/60898c7faedbfa6bedf4832feffffcd5d6ecaef0))
 
 ### Miscellaneous Chores
 
-* drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260)) ([26b725b](https://github.com/promptfoo/promptfoo/commit/26b725bd9496351ef269380c9fd83b9c2c338a0e))
+- drop Node.js 20 support ([#10260](https://github.com/promptfoo/promptfoo/issues/10260)) ([26b725b](https://github.com/promptfoo/promptfoo/commit/26b725bd9496351ef269380c9fd83b9c2c338a0e))
 
 ## [0.121.20](https://github.com/promptfoo/promptfoo/compare/0.121.19...0.121.20) (2026-07-30)
 
