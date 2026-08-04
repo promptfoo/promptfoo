@@ -218,6 +218,39 @@ describe('package manifests', () => {
     expect(packageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
   });
 
+  it('keeps Anthropic SDK manifests, lock entries, and optional binaries aligned', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+        }
+      >;
+    }>('package-lock.json');
+    const sdkName = '@anthropic-ai/sdk';
+    const agentName = '@anthropic-ai/claude-agent-sdk';
+    const sdkVersion = packageJson.dependencies?.[sdkName];
+    const agentVersion = packageJson.devDependencies?.[agentName];
+    const agentPackage = packageLock.packages[`node_modules/${agentName}`];
+
+    expect(sdkVersion).toBeDefined();
+    expect(agentVersion).toBeDefined();
+    expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
+    expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
+    expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
+    expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
+    expect(packageLock.packages[`node_modules/${sdkName}`].version).toBe(sdkVersion);
+    expect(agentPackage.version).toBe(agentVersion);
+
+    for (const [binaryName, binaryVersion] of Object.entries(
+      agentPackage.optionalDependencies ?? {},
+    )) {
+      expect(binaryVersion).toBe(agentVersion);
+      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentVersion);
+    }
+  });
+
   it('keeps the WatsonX authentication SDK manifest and lockfile on the supported floor', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
