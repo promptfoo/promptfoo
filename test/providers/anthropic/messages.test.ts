@@ -1275,6 +1275,18 @@ describe('AnthropicMessagesProvider', () => {
         expect(result.finishReason).toBe('length');
       });
 
+      it('should normalize model_context_window_exceeded to length', async () => {
+        const provider = createProvider('claude-3-5-sonnet-20241022');
+        vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+          content: [{ type: 'text', text: 'Test response' }],
+          stop_reason: 'model_context_window_exceeded',
+          usage: { input_tokens: 10, output_tokens: 10, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.finishReason).toBe('length');
+      });
+
       it('should normalize tool_use to tool_calls', async () => {
         const provider = createProvider('claude-3-5-sonnet-20241022');
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
