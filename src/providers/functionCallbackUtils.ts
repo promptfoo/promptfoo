@@ -1,9 +1,9 @@
-import path from 'path';
-
-import cliState from '../cliState';
-import { importModule } from '../esm';
 import logger from '../logger';
-import { parseFileUrl } from '../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 
 import type {
@@ -74,7 +74,22 @@ export class FunctionCallbackHandler {
         isError: false,
       };
     } catch (error) {
-      logger.debug(`Function callback failed for ${functionInfo.name}: ${error}`);
+      // Surface security-class failures at `warn` so a rejected path-traversal
+      // attempt isn't indistinguishable from "no callback registered". The
+      // generic loader/runtime errors stay at debug to avoid log noise from
+      // expected user mistakes (missing file, syntax error in callback, etc.).
+      // Reach for `.cause` via a cast: it exists at runtime on Node 18+ but
+      // isn't on the ES2020 Error type that some downstream tsconfigs use.
+      const cause = (error as Error & { cause?: unknown })?.cause;
+      const isTraversal =
+        error instanceof CallbackPathTraversalError || cause instanceof CallbackPathTraversalError;
+      if (isTraversal) {
+        logger.warn(
+          `[FunctionCallback] Rejected callback '${functionInfo.name}': ${(error as Error).message}`,
+        );
+      } else {
+        logger.debug(`Function callback failed for ${functionInfo.name}: ${error}`);
+      }
       // Return original call on error
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
@@ -198,29 +213,21 @@ export class FunctionCallbackHandler {
   }
 
   /**
-   * Loads a function from an external file
+   * Loads a function from an external file.
+   *
+   * Uses `lenient: true` so a missing named export silently falls back to the
+   * module's default export, preserving long-standing behavior. The six
+   * provider-specific loaders use strict mode and throw on missing named
+   * exports — see {@link loadCallbackFromFileUrl}.
    */
   private async loadExternalFunction(fileRef: string): Promise<FunctionCallback> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const mod = await importModule(resolvedPath);
-      const func = functionName && mod[functionName] ? mod[functionName] : mod.default || mod;
-
-      if (typeof func !== 'function') {
-        throw new Error(
-          `Expected ${resolvedPath}${functionName ? `:${functionName}` : ''} to export a function, got ${typeof func}`,
-        );
-      }
-
-      return func as FunctionCallback;
+      return (await loadCallbackFromFileUrl(fileRef, { lenient: true })) as FunctionCallback;
     } catch (error) {
-      throw new Error(`Failed to load function from ${fileRef}: ${error}`);
+      throw wrapError(
+        `Failed to load function from ${fileRef}: ${(error as Error).message}`,
+        error,
+      );
     }
   }
 
