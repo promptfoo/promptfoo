@@ -41,12 +41,15 @@ export function __clearFeatureCache(): void {
  * Checks if a server supports a specific feature based on build date
  * @param featureName - Name of the feature (for caching and logging)
  * @param requiredBuildDate - Minimum build date when feature was added (ISO string)
+ * @param signal - Optional cancellation signal
  * @returns Promise<boolean> - true if server supports the feature
  */
 export async function checkServerFeatureSupport(
   featureName: string,
   requiredBuildDate: string,
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  signal?.throwIfAborted();
   const cacheKey = `${featureName}`;
 
   // Return cached result if available
@@ -65,9 +68,11 @@ export async function checkServerFeatureSupport(
       const response = await fetchWithProxy(versionUrl, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        ...(signal ? { signal } : {}),
       });
 
       const data = await response.json();
+      signal?.throwIfAborted();
 
       if (data.buildDate) {
         // Parse build date and check if it's after the required date
@@ -88,6 +93,9 @@ export async function checkServerFeatureSupport(
       supported = true;
     }
   } catch (error) {
+    if (signal?.aborted) {
+      signal.throwIfAborted();
+    }
     logger.debug(
       `[Feature Detection] Version check failed for ${featureName}, assuming not supported: ${error}`,
     );
@@ -95,6 +103,7 @@ export async function checkServerFeatureSupport(
   }
 
   // Cache the result
+  signal?.throwIfAborted();
   featureCache.set(cacheKey, supported);
   return supported;
 }

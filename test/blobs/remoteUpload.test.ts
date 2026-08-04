@@ -95,4 +95,27 @@ describe('remote blob upload', () => {
     expect(cloudConfig.getApiHost).toHaveBeenCalledTimes(1);
     expect(cloudConfig.getApiKey).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    'AbortError',
+    'AbortException',
+  ])('propagates %s cancellation instead of downgrading it to an unavailable blob', async (errorName) => {
+    const controller = new AbortController();
+    const cancellation = new Error('cancelled');
+    cancellation.name = errorName;
+    vi.mocked(fetchWithProxy).mockRejectedValue(cancellation);
+
+    await expect(
+      uploadBlobRemote(
+        Buffer.from('image-bytes'),
+        'image/png',
+        { evalId: 'eval-123', location: 'share', kind: 'image' },
+        controller.signal,
+      ),
+    ).rejects.toBe(cancellation);
+    expect(fetchWithProxy).toHaveBeenCalledWith(
+      'https://api.example.com/api/blobs',
+      expect.objectContaining({ signal: controller.signal }),
+    );
+  });
 });
