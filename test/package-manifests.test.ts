@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { minVersion, validRange } from 'semver';
+import { minVersion, satisfies, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -653,6 +653,58 @@ describe('package manifests', () => {
     expect(new Set(directResolvedVersions).size, 'resolved undici versions must stay aligned').toBe(
       1,
     );
+  });
+
+  it('keeps the Shai-Hulud compromised package versions unreachable', () => {
+    // 2026-08-04: jaredwray's GitHub account was compromised and malicious releases
+    // were cut for the keyv/cacheable family. Each carried a `preinstall` credential
+    // stealer. npm has since removed them, but the ranges we shipped could reach two
+    // of them, so the floors below are what stop a lockfile refresh from wandering
+    // back in if those versions ever reappear.
+    const COMPROMISED = {
+      keyv: '6.0.0',
+      'cache-manager': '7.2.10',
+      '@cacheable/utils': '2.5.1',
+      'cacheable-request': '13.0.20',
+    } as const;
+
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: Record<string, string | Record<string, string>> }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+
+    // No installation anywhere in the tree — including nested copies — may sit on a
+    // compromised version.
+    for (const [packagePath, installation] of Object.entries(packageLock.packages)) {
+      const name = packagePath.replace(/^.*node_modules\//, '');
+      const bad = COMPROMISED[name as keyof typeof COMPROMISED];
+      if (!bad || !installation.version) {
+        continue;
+      }
+      expect(
+        installation.version,
+        `${packagePath} resolves the compromised ${name}@${bad}`,
+      ).not.toBe(bad);
+    }
+
+    // The declared ranges must not be *able* to reach them either. cache-manager is a
+    // shipped runtime dependency, so its range is what protects consumers — npm ignores
+    // a dependency's own `overrides` when it is not the root project.
+    const declaredRanges: Array<[string, string | undefined]> = [
+      ['cache-manager', packageJson.dependencies?.['cache-manager']],
+      ['keyv', packageJson.dependencies?.keyv],
+      ['@cacheable/utils', packageJson.overrides?.['@cacheable/utils'] as string | undefined],
+    ];
+
+    for (const [name, range] of declaredRanges) {
+      expect(range, `${name} must declare a range`).toBeDefined();
+      expect(
+        satisfies(COMPROMISED[name as keyof typeof COMPROMISED], range as string),
+        `${name} range "${range}" can still resolve the compromised ${COMPROMISED[name as keyof typeof COMPROMISED]}`,
+      ).toBe(false);
+    }
   });
 
   it('does not import jsdom from root src/', () => {
