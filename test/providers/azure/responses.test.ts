@@ -219,24 +219,24 @@ describe('AzureResponsesProvider', () => {
       expect(body.temperature).toBe(0.7);
     });
 
-    it.each([
-      'gpt-chat-latest',
-      'gpt-chat-latest-2026-06-24',
-    ])('uses reasoning request fields for Azure Responses alias %s', async (deploymentName) => {
-      const provider = new AzureResponsesProvider(deploymentName, {
-        config: {
-          max_output_tokens: 2_000,
-          reasoning_effort: 'high',
-          temperature: 0.7,
-        } as any,
-      });
+    it.each(['gpt-chat-latest', 'gpt-chat-latest-2026-06-24'])(
+      'uses reasoning request fields for Azure Responses alias %s',
+      async (deploymentName) => {
+        const provider = new AzureResponsesProvider(deploymentName, {
+          config: {
+            max_output_tokens: 2_000,
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          } as any,
+        });
 
-      const body = await provider.getAzureResponsesBody('Hello world');
+        const body = await provider.getAzureResponsesBody('Hello world');
 
-      expect(body).toHaveProperty('max_output_tokens', 2_000);
-      expect(body).toHaveProperty('reasoning.effort', 'high');
-      expect(body).not.toHaveProperty('temperature');
-    });
+        expect(body).toHaveProperty('max_output_tokens', 2_000);
+        expect(body).toHaveProperty('reasoning.effort', 'high');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
 
     it('should correctly send temperature: 0 in the request body', async () => {
       // Test that temperature: 0 is correctly sent (not filtered out by falsy check)

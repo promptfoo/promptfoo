@@ -1143,31 +1143,34 @@ describe('ProviderTypeSelector', () => {
       ['Fireworks AI', 'fireworks', 'fireworks:accounts/fireworks/models/gpt-oss-120b', {}],
       ['Cerebras', 'cerebras', 'cerebras:gpt-oss-120b', {}],
       ['Ollama', 'ollama', 'ollama:llama4:scout', {}],
-    ])('should use the current %s default model', async (label, providerType, expectedId, expectedConfig) => {
-      const user = userEvent.setup();
-      const mockSetProvider = vi.fn();
+    ])(
+      'should use the current %s default model',
+      async (label, providerType, expectedId, expectedConfig) => {
+        const user = userEvent.setup();
+        const mockSetProvider = vi.fn();
 
-      renderWithTooltipProvider(
-        <ProviderTypeSelector
-          provider={{ id: 'http', label: 'Current Model', config: {} }}
-          setProvider={mockSetProvider}
-          providerType="http"
-        />,
-      );
+        renderWithTooltipProvider(
+          <ProviderTypeSelector
+            provider={{ id: 'http', label: 'Current Model', config: {} }}
+            setProvider={mockSetProvider}
+            providerType="http"
+          />,
+        );
 
-      const providerCard = screen.getByText(label).closest('[role="button"]');
-      expect(providerCard).not.toBeNull();
-      await user.click(providerCard!);
+        const providerCard = screen.getByText(label).closest('[role="button"]');
+        expect(providerCard).not.toBeNull();
+        await user.click(providerCard!);
 
-      expect(mockSetProvider).toHaveBeenCalledWith(
-        {
-          id: expectedId,
-          label: 'Current Model',
-          config: expectedConfig,
-        },
-        providerType,
-      );
-    });
+        expect(mockSetProvider).toHaveBeenCalledWith(
+          {
+            id: expectedId,
+            label: 'Current Model',
+            config: expectedConfig,
+          },
+          providerType,
+        );
+      },
+    );
 
     it('should use minimal defaults when switching to A2A provider', async () => {
       const user = userEvent.setup();

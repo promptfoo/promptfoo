@@ -241,95 +241,95 @@ describe('Bedrock Anthropic Messages provider', () => {
     expect(req.headers.get('anthropic-version')).toBe('2023-06-01');
   });
 
-  it.each([
-    'provider',
-    'prompt',
-  ] as const)('filters protected Bedrock headers from %s config', async (configSource) => {
-    disableCache();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          content: [{ type: 'text', text: 'ok' }],
-          model: 'anthropic.claude-opus-5',
-          id: 'msg-filtered-headers',
-          role: 'assistant',
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          type: 'message',
-          usage: { input_tokens: 1, output_tokens: 1 },
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
-    const hostileHeaders = {
-      Authorization: 'Bearer anthropic-secret',
-      'X-Api-Key': 'anthropic-wrong-key',
-      'aNtHrOpIc-VeRsIoN': 'wrong-version',
-      'X-Tenant': 'safe-tenant',
-    };
-    const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-5', {
-      config: {
-        region: 'us-east-1',
-        apiKey: 'bedrock-key',
-        ...(configSource === 'provider' ? { headers: hostileHeaders } : {}),
-      },
-    });
+  it.each(['provider', 'prompt'] as const)(
+    'filters protected Bedrock headers from %s config',
+    async (configSource) => {
+      disableCache();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            content: [{ type: 'text', text: 'ok' }],
+            model: 'anthropic.claude-opus-5',
+            id: 'msg-filtered-headers',
+            role: 'assistant',
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            type: 'message',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      const hostileHeaders = {
+        Authorization: 'Bearer anthropic-secret',
+        'X-Api-Key': 'anthropic-wrong-key',
+        'aNtHrOpIc-VeRsIoN': 'wrong-version',
+        'X-Tenant': 'safe-tenant',
+      };
+      const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-opus-5', {
+        config: {
+          region: 'us-east-1',
+          apiKey: 'bedrock-key',
+          ...(configSource === 'provider' ? { headers: hostileHeaders } : {}),
+        },
+      });
 
-    await provider.callApi(
-      'hello',
-      configSource === 'prompt'
-        ? ({ prompt: { config: { headers: hostileHeaders } }, vars: {} } as any)
-        : undefined,
-    );
+      await provider.callApi(
+        'hello',
+        configSource === 'prompt'
+          ? ({ prompt: { config: { headers: hostileHeaders } }, vars: {} } as any)
+          : undefined,
+      );
 
-    const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
-    expect(headers.get('x-api-key')).toBe('bedrock-key');
-    expect(headers.get('authorization')).toBeNull();
-    expect(headers.get('x-tenant')).toBe('safe-tenant');
-    expect(headers.get('anthropic-version')).toBe('2023-06-01');
-  });
+      const headers = new Headers(fetchSpy.mock.calls[0][1]?.headers);
+      expect(headers.get('x-api-key')).toBe('bedrock-key');
+      expect(headers.get('authorization')).toBeNull();
+      expect(headers.get('x-tenant')).toBe('safe-tenant');
+      expect(headers.get('anthropic-version')).toBe('2023-06-01');
+    },
+  );
 
-  it.each([
-    'anthropic.claude-fable-5',
-    'anthropic.claude-mythos-5',
-  ])('sends %s while reusing Anthropic compatibility and billing logic', async (bedrockModel) => {
-    disableCache();
-    const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {
-      id: `bedrock:${bedrockModel}`,
-      config: {
-        region: 'us-east-1',
-        apiKey: 'bedrock-key',
-        max_tokens: 4096,
-        temperature: 0.5,
-        top_p: 0.9,
-        top_k: 40,
-        thinking: { type: 'disabled' },
-      },
-    });
-    const response = {
-      content: [{ type: 'text', text: 'ok' }],
-      model: bedrockModel,
-      id: 'msg-1',
-      role: 'assistant',
-      stop_reason: 'end_turn',
-      stop_details: null,
-      stop_sequence: null,
-      type: 'message',
-      usage: { input_tokens: 5, output_tokens: 1 },
-    } as Anthropic.Messages.Message;
-    const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
-    const result = await provider.callApi('hello');
+  it.each(['anthropic.claude-fable-5', 'anthropic.claude-mythos-5'])(
+    'sends %s while reusing Anthropic compatibility and billing logic',
+    async (bedrockModel) => {
+      disableCache();
+      const provider = createBedrockAnthropicMessagesProvider(bedrockModel, {
+        id: `bedrock:${bedrockModel}`,
+        config: {
+          region: 'us-east-1',
+          apiKey: 'bedrock-key',
+          max_tokens: 4096,
+          temperature: 0.5,
+          top_p: 0.9,
+          top_k: 40,
+          thinking: { type: 'disabled' },
+        },
+      });
+      const response = {
+        content: [{ type: 'text', text: 'ok' }],
+        model: bedrockModel,
+        id: 'msg-1',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 5, output_tokens: 1 },
+      } as Anthropic.Messages.Message;
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(response);
+      const result = await provider.callApi('hello');
 
-    const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-    expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
-    expect(params.model).toBe(bedrockModel);
-    expect(params).not.toHaveProperty('temperature');
-    expect(params).not.toHaveProperty('top_p');
-    expect(params).not.toHaveProperty('top_k');
-    expect(params).not.toHaveProperty('thinking');
-    expect(result.output).toBe('ok');
-    expect(result.cost).toBeCloseTo(0.00011, 8);
-  });
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
+      expect(params.model).toBe(bedrockModel);
+      expect(params).not.toHaveProperty('temperature');
+      expect(params).not.toHaveProperty('top_p');
+      expect(params).not.toHaveProperty('top_k');
+      expect(params).not.toHaveProperty('thinking');
+      expect(result.output).toBe('ok');
+      expect(result.cost).toBeCloseTo(0.00011, 8);
+    },
+  );
 
   it('normalizes Mythos Preview manual thinking while preserving supported sampling controls', async () => {
     disableCache();

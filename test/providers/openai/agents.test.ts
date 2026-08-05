@@ -661,26 +661,24 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[0][2].model).toBeUndefined();
   });
 
-  it.each([
-    'gpt-transcribe',
-    'gpt-live-transcribe',
-    'gpt-5-chat-latest',
-    'gpt-5.3-codex-spark',
-  ])('defers explicit model override %s to the configured SDK provider', async (model) => {
-    const provider = new OpenAiAgentsProvider('support-agent', {
-      config: {
-        agent: {
-          name: 'Inline Support Agent',
-          instructions: 'Help the user.',
+  it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5-chat-latest', 'gpt-5.3-codex-spark'])(
+    'defers explicit model override %s to the configured SDK provider',
+    async (model) => {
+      const provider = new OpenAiAgentsProvider('support-agent', {
+        config: {
+          agent: {
+            name: 'Inline Support Agent',
+            instructions: 'Help the user.',
+          },
+          model,
         },
-        model,
-      },
-    });
+      });
 
-    await provider.callApi('Where is my order?');
+      await provider.callApi('Where is my order?');
 
-    expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
-  });
+      expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+    },
+  );
 
   it('applies explicit model and model settings to the whole run', async () => {
     const provider = new OpenAiAgentsProvider('support-agent', {
@@ -749,36 +747,39 @@ describe('OpenAiAgentsProvider', () => {
     ['inline', 'gpt-transcribe'],
     ['direct', 'gpt-5-chat-latest'],
     ['file', 'gpt-5.3-codex-spark'],
-  ])('defers %s agent definition model %s to the configured SDK provider', async (source, model) => {
-    let agentConfig: OpenAiAgentsOptions['agent'];
-    if (source === 'inline') {
-      agentConfig = {
-        name: 'Inline Support Agent',
-        instructions: 'Help the user.',
-        model,
-      };
-    } else {
-      const agent = new Agent({
-        name: 'SDK Support Agent',
-        instructions: 'Help the user.',
-        model,
-      });
-      if (source === 'file') {
-        mockImportModule.mockResolvedValueOnce({ default: agent });
-        agentConfig = 'file:///tmp/agent.ts';
+  ])(
+    'defers %s agent definition model %s to the configured SDK provider',
+    async (source, model) => {
+      let agentConfig: OpenAiAgentsOptions['agent'];
+      if (source === 'inline') {
+        agentConfig = {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model,
+        };
       } else {
-        agentConfig = agent;
+        const agent = new Agent({
+          name: 'SDK Support Agent',
+          instructions: 'Help the user.',
+          model,
+        });
+        if (source === 'file') {
+          mockImportModule.mockResolvedValueOnce({ default: agent });
+          agentConfig = 'file:///tmp/agent.ts';
+        } else {
+          agentConfig = agent;
+        }
       }
-    }
 
-    const provider = new OpenAiAgentsProvider('support-agent', {
-      config: { agent: agentConfig },
-    });
+      const provider = new OpenAiAgentsProvider('support-agent', {
+        config: { agent: agentConfig },
+      });
 
-    await provider.callApi('Where is my order?');
+      await provider.callApi('Where is my order?');
 
-    expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
-  });
+      expect(mockRun.mock.calls[0][0]).toMatchObject({ model });
+    },
+  );
 
   it('allows agent models when the Agents SDK uses a custom endpoint', async () => {
     vi.stubEnv('OPENAI_BASE_URL', 'https://gateway.example/v1');

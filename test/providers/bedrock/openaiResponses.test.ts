@@ -254,55 +254,57 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider as any).getBillingModelName({})).toBe('gpt-5.5');
     });
 
-    it.each([
-      ...GPT_5_6_MODELS,
-      'openai.gpt-5.5',
-      'openai.gpt-5.4',
-    ])('computes a finite, non-zero cost end-to-end for %s', (modelId) => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {});
-      const billingModelName = (provider as any).getBillingModelName({});
-      // The normalized id must resolve in the applicable billing table, not just be a string.
-      const cost = calculateOpenAIUsageCost(
-        billingModelName,
-        {},
-        {
-          input_tokens: 1000,
-          output_tokens: 500,
-          input_tokens_details: { cache_write_tokens: 0 },
-        },
-      );
-      expect(cost).toBeGreaterThan(0);
-      expect(Number.isFinite(cost)).toBe(true);
-    });
+    it.each([...GPT_5_6_MODELS, 'openai.gpt-5.5', 'openai.gpt-5.4'])(
+      'computes a finite, non-zero cost end-to-end for %s',
+      (modelId) => {
+        restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {});
+        const billingModelName = (provider as any).getBillingModelName({});
+        // The normalized id must resolve in the applicable billing table, not just be a string.
+        const cost = calculateOpenAIUsageCost(
+          billingModelName,
+          {},
+          {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cache_write_tokens: 0 },
+          },
+        );
+        expect(cost).toBeGreaterThan(0);
+        expect(Number.isFinite(cost)).toBe(true);
+      },
+    );
 
     it.each([
       ['openai.gpt-5.6-sol', 5.5, 0.55, 6.875, 33],
       ['openai.gpt-5.6-terra', 2.75, 0.275, 3.4375, 16.5],
       ['openai.gpt-5.6-luna', 1.1, 0.11, 1.375, 6.6],
-    ])('applies Bedrock cache read/write and output rates to %s', (modelId, input, cacheRead, cacheWrite, output) => {
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: {
-          apiKey: 'bedrock-key',
-          apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
-        },
-      });
-      const cost = calculateOpenAIUsageCost(
-        (provider as any).getBillingModelName({}),
-        provider.config,
-        {
-          input_tokens: 1000,
-          output_tokens: 500,
-          input_tokens_details: { cached_tokens: 200, cache_write_tokens: 300 },
-        },
-        { apiUrl: provider.getApiUrl() },
-      );
+    ])(
+      'applies Bedrock cache read/write and output rates to %s',
+      (modelId, input, cacheRead, cacheWrite, output) => {
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: {
+            apiKey: 'bedrock-key',
+            apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          },
+        });
+        const cost = calculateOpenAIUsageCost(
+          (provider as any).getBillingModelName({}),
+          provider.config,
+          {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 200, cache_write_tokens: 300 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        );
 
-      expect(cost).toBeCloseTo(
-        (500 * input + 200 * cacheRead + 300 * cacheWrite + 500 * output) / 1e6,
-        12,
-      );
-    });
+        expect(cost).toBeCloseTo(
+          (500 * input + 200 * cacheRead + 300 * cacheWrite + 500 * output) / 1e6,
+          12,
+        );
+      },
+    );
 
     it('uses the capability model for the Bedrock web-search tool fee', () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
@@ -378,15 +380,18 @@ describe('bedrock openaiResponses helper', () => {
         { prompt: { config: { passthrough: { service_tier: 'fast' } } } },
         'fast',
       ],
-    ] as const)('rejects unsupported Bedrock GPT service tiers from %s', async (_case, config, context, tier) => {
-      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
-        config: { apiKey: 'bedrock-key', ...config } as any,
-      });
+    ] as const)(
+      'rejects unsupported Bedrock GPT service tiers from %s',
+      async (_case, config, context, tier) => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+          config: { apiKey: 'bedrock-key', ...config } as any,
+        });
 
-      await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
-        `supports only the standard inference tier; received "${tier}"`,
-      );
-    });
+        await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
+          `supports only the standard inference tier; received "${tier}"`,
+        );
+      },
+    );
 
     it.each([
       ['omitted', undefined],
@@ -427,39 +432,41 @@ describe('bedrock openaiResponses helper', () => {
       ['openai.gpt-5.6-sol', 5.5, 0.55, 6.875, 33],
       ['openai.gpt-5.6-terra', 2.75, 0.275, 3.4375, 16.5],
       ['openai.gpt-5.6-luna', 1.1, 0.11, 1.375, 6.6],
-    ])('does not apply first-party long-context or regional rates to %s', (modelId, input, cacheRead, cacheWrite, output) => {
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { apiKey: 'bedrock-key', region: 'us-east-1' },
-      });
-      const cost = calculateOpenAIUsageCost(
-        (provider as any).getBillingModelName({}),
-        provider.config,
-        {
-          input_tokens: 300_000,
-          output_tokens: 1000,
-          input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
-        },
-        { apiUrl: provider.getApiUrl() },
-      );
+    ])(
+      'does not apply first-party long-context or regional rates to %s',
+      (modelId, input, cacheRead, cacheWrite, output) => {
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: { apiKey: 'bedrock-key', region: 'us-east-1' },
+        });
+        const cost = calculateOpenAIUsageCost(
+          (provider as any).getBillingModelName({}),
+          provider.config,
+          {
+            input_tokens: 300_000,
+            output_tokens: 1000,
+            input_tokens_details: { cached_tokens: 100_000, cache_write_tokens: 50_000 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        );
 
-      expect(cost).toBeCloseTo(
-        (150_000 * input + 100_000 * cacheRead + 50_000 * cacheWrite + 1000 * output) / 1e6,
-        10,
-      );
-    });
+        expect(cost).toBeCloseTo(
+          (150_000 * input + 100_000 * cacheRead + 50_000 * cacheWrite + 1000 * output) / 1e6,
+          10,
+        );
+      },
+    );
 
-    it.each([
-      ...GPT_5_6_MODELS,
-      'openai.gpt-5.5',
-      'openai.gpt-5.4',
-    ])('detects the prefixed frontier id %s as a GPT-5 / reasoning model', (modelId) => {
-      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {});
-      // Without prefix-stripping these would be false (the id starts with "openai.").
-      expect((provider as any).isGPT5Model()).toBe(true);
-      expect((provider as any).isReasoningModel()).toBe(true);
-      expect((provider as any).supportsTemperature()).toBe(false);
-    });
+    it.each([...GPT_5_6_MODELS, 'openai.gpt-5.5', 'openai.gpt-5.4'])(
+      'detects the prefixed frontier id %s as a GPT-5 / reasoning model',
+      (modelId) => {
+        restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {});
+        // Without prefix-stripping these would be false (the id starts with "openai.").
+        expect((provider as any).isGPT5Model()).toBe(true);
+        expect((provider as any).isReasoningModel()).toBe(true);
+        expect((provider as any).supportsTemperature()).toBe(false);
+      },
+    );
 
     it('forwards GPT-5.6 cache breakpoints, structured output, tools, and state controls', async () => {
       const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
@@ -622,93 +629,94 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it.each(
-      GPT_5_6_MODELS,
-    )('parses streamed Responses events and usage for %s', async (modelId) => {
-      restoreEnv = mockProcessEnv({
-        AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
-        OPENAI_API_HOST: 'ambient-openai.invalid',
-      });
-      const completed = {
-        id: 'resp_stream',
-        model: modelId,
-        output: [
-          {
-            type: 'reasoning',
-            summary: [{ text: 'internal reasoning' }],
-            encrypted_content: 'opaque',
+    it.each(GPT_5_6_MODELS)(
+      'parses streamed Responses events and usage for %s',
+      async (modelId) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
+          OPENAI_API_HOST: 'ambient-openai.invalid',
+        });
+        const completed = {
+          id: 'resp_stream',
+          model: modelId,
+          output: [
+            {
+              type: 'reasoning',
+              summary: [{ text: 'internal reasoning' }],
+              encrypted_content: 'opaque',
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'streamed answer' }],
+            },
+          ],
+          usage: {
+            input_tokens: 100,
+            output_tokens: 20,
+            total_tokens: 120,
+            input_tokens_details: { cached_tokens: 10, cache_write_tokens: 30 },
+            output_tokens_details: { reasoning_tokens: 5 },
           },
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [{ type: 'output_text', text: 'streamed answer' }],
+        };
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: [
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"streamed "}',
+            '',
+            'event: response.completed',
+            `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
+        });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: {
+            stream: true,
+            reasoning_effort: 'max',
+            include: ['reasoning.encrypted_content'],
           },
-        ],
-        usage: {
-          input_tokens: 100,
-          output_tokens: 20,
-          total_tokens: 120,
-          input_tokens_details: { cached_tokens: 10, cache_write_tokens: 30 },
-          output_tokens_details: { reasoning_tokens: 5 },
-        },
-      };
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"streamed "}',
-          '',
-          'event: response.completed',
-          `data: ${JSON.stringify({ type: 'response.completed', response: completed })}`,
-          '',
-          'data: [DONE]',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: {
-          stream: true,
-          reasoning_effort: 'max',
-          include: ['reasoning.encrypted_content'],
-        },
-      });
+        });
 
-      const result = await provider.callApi('hello');
+        const result = await provider.callApi('hello');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
-        expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
-          body: expect.stringContaining(`"model":"${modelId}"`),
-        }),
-        expect.any(Number),
-        'text',
-        true,
-        undefined,
-      );
-      expect(result.output).toBe('streamed answer');
-      expect(result.output).not.toContain('internal reasoning');
-      expect(result.tokenUsage).toEqual({
-        total: 120,
-        prompt: 100,
-        completion: 20,
-        numRequests: 1,
-        completionDetails: {
-          reasoning: 5,
-          acceptedPrediction: undefined,
-          rejectedPrediction: undefined,
-          cacheReadInputTokens: 10,
-          cacheCreationInputTokens: 30,
-        },
-      });
-      expect(result.cost).toBeGreaterThan(0);
-      expect(result.metadata?.http?.headers).toEqual(
-        expect.objectContaining({ 'x-request-id': 'r1' }),
-      );
-    });
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          'https://bedrock-mantle.us-east-2.api.aws/openai/v1/responses',
+          expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer env-bedrock-key' }),
+            body: expect.stringContaining(`"model":"${modelId}"`),
+          }),
+          expect.any(Number),
+          'text',
+          true,
+          undefined,
+        );
+        expect(result.output).toBe('streamed answer');
+        expect(result.output).not.toContain('internal reasoning');
+        expect(result.tokenUsage).toEqual({
+          total: 120,
+          prompt: 100,
+          completion: 20,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 5,
+            acceptedPrediction: undefined,
+            rejectedPrediction: undefined,
+            cacheReadInputTokens: 10,
+            cacheCreationInputTokens: 30,
+          },
+        });
+        expect(result.cost).toBeGreaterThan(0);
+        expect(result.metadata?.http?.headers).toEqual(
+          expect.objectContaining({ 'x-request-id': 'r1' }),
+        );
+      },
+    );
 
     it('surfaces a streamed Bedrock error without attempting to parse it as SSE', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -728,33 +736,34 @@ describe('bedrock openaiResponses helper', () => {
       expect(result.error).toContain('not enabled');
     });
 
-    it.each(
-      GPT_5_6_MODELS,
-    )('fails closed on a terminal SSE error after partial output for %s', async (modelId) => {
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: [
-          'event: response.output_text.delta',
-          'data: {"type":"response.output_text.delta","delta":"partial answer"}',
-          '',
-          'event: error',
-          'data: {"type":"error","code":"server_error","message":"capacity exhausted"}',
-          '',
-        ].join('\n'),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'text/event-stream' },
-      });
-      const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { apiKey: 'bedrock-key', stream: true },
-      });
+    it.each(GPT_5_6_MODELS)(
+      'fails closed on a terminal SSE error after partial output for %s',
+      async (modelId) => {
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: [
+            'event: response.output_text.delta',
+            'data: {"type":"response.output_text.delta","delta":"partial answer"}',
+            '',
+            'event: error',
+            'data: {"type":"error","code":"server_error","message":"capacity exhausted"}',
+            '',
+          ].join('\n'),
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'text/event-stream' },
+        });
+        const provider = createBedrockOpenAiResponsesProvider(modelId, {
+          config: { apiKey: 'bedrock-key', stream: true },
+        });
 
-      const result = await provider.callApi('hello');
+        const result = await provider.callApi('hello');
 
-      expect(result.error).toContain('OpenAI streaming response error (server_error)');
-      expect(result.error).toContain('capacity exhausted');
-      expect(result.output).toBeUndefined();
-    });
+        expect(result.error).toContain('OpenAI streaming response error (server_error)');
+        expect(result.error).toContain('capacity exhausted');
+        expect(result.output).toBeUndefined();
+      },
+    );
 
     it('falls back to the base OpenAI URL when constructed directly without apiBaseUrl', () => {
       // The factory always sets config.apiBaseUrl, so the `|| super.getApiUrl()` fallback in the

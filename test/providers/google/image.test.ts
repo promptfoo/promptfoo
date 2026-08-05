@@ -331,37 +331,36 @@ describe('GoogleImageProvider', async () => {
         expectedLocation: 'global',
         expectedHost: 'aiplatform.googleapis.com',
       },
-    ])('should use provider-scoped $description over process VERTEX_REGION', async ({
-      env,
-      expectedLocation,
-      expectedHost,
-    }) => {
-      mockProcessEnv({ VERTEX_REGION: 'process-location' });
-      const provider = new GoogleImageProvider('imagen-3.0-generate-001', {
-        config: { projectId: 'test-project' },
-        env,
-      });
-      const mockClient = {
-        request: vi.fn().mockResolvedValue({
-          data: {
-            predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
-          },
-        }),
-      };
-      mockGetGoogleClient.mockResolvedValue({
-        client: mockClient,
-        projectId: 'test-project',
-      });
+    ])(
+      'should use provider-scoped $description over process VERTEX_REGION',
+      async ({ env, expectedLocation, expectedHost }) => {
+        mockProcessEnv({ VERTEX_REGION: 'process-location' });
+        const provider = new GoogleImageProvider('imagen-3.0-generate-001', {
+          config: { projectId: 'test-project' },
+          env,
+        });
+        const mockClient = {
+          request: vi.fn().mockResolvedValue({
+            data: {
+              predictions: [{ bytesBase64Encoded: 'base64data', mimeType: 'image/png' }],
+            },
+          }),
+        };
+        mockGetGoogleClient.mockResolvedValue({
+          client: mockClient,
+          projectId: 'test-project',
+        });
 
-      const result = await provider.callApi('Test prompt');
+        const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toBeUndefined();
-      expect(mockClient.request).toHaveBeenCalledWith(
-        expect.objectContaining({
-          url: `https://${expectedHost}/v1/projects/test-project/locations/${expectedLocation}/publishers/google/models/imagen-3.0-generate-001:predict`,
-        }),
-      );
-    });
+        expect(result.error).toBeUndefined();
+        expect(mockClient.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            url: `https://${expectedHost}/v1/projects/test-project/locations/${expectedLocation}/publishers/google/models/imagen-3.0-generate-001:predict`,
+          }),
+        );
+      },
+    );
   });
 
   it('should support different model name formats', () => {

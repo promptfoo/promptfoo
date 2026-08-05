@@ -2392,31 +2392,34 @@ describe('OpenAICodexSDKProvider', () => {
       it.each([
         '00-00000000000000000000000000000000-b7ad6b7169203331-01',
         '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
-      ])('should ignore an invalid active traceparent and use the evaluator trace', async (active) => {
-        mockRun.mockResolvedValue(createMockResponse('Response'));
-        mockGetTraceparent.mockReturnValue(active);
-        const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
-        const spanId = '00f067aa0ba902b7';
-        const provider = new OpenAICodexSDKProvider({
-          config: { deep_tracing: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+      ])(
+        'should ignore an invalid active traceparent and use the evaluator trace',
+        async (active) => {
+          mockRun.mockResolvedValue(createMockResponse('Response'));
+          mockGetTraceparent.mockReturnValue(active);
+          const traceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+          const spanId = '00f067aa0ba902b7';
+          const provider = new OpenAICodexSDKProvider({
+            config: { deep_tracing: true },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
 
-        await provider.callApi('Test prompt', {
-          traceparent: `00-${traceId}-${spanId}-01`,
-          prompt: { raw: 'Test prompt', label: 'test' },
-          vars: {},
-        } as CallApiContextParams);
+          await provider.callApi('Test prompt', {
+            traceparent: `00-${traceId}-${spanId}-01`,
+            prompt: { raw: 'Test prompt', label: 'test' },
+            vars: {},
+          } as CallApiContextParams);
 
-        expect(MockCodex).toHaveBeenCalledWith(
-          expect.objectContaining({
-            env: expect.objectContaining({
-              TRACEPARENT: `00-${traceId}-${spanId}-01`,
-              OTEL_RESOURCE_ATTRIBUTES: `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+          expect(MockCodex).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                TRACEPARENT: `00-${traceId}-${spanId}-01`,
+                OTEL_RESOURCE_ATTRIBUTES: `promptfoo.trace_id=${traceId},promptfoo.parent_span_id=${spanId}`,
+              }),
             }),
-          }),
-        );
-      });
+          );
+        },
+      );
 
       it('should handle codex_path_override', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
@@ -2867,19 +2870,16 @@ describe('OpenAICodexSDKProvider', () => {
     });
 
     describe('GPT-5.2 through GPT-5.6 models', () => {
-      it.each([
-        'gpt-5.6',
-        'gpt-5.6-sol',
-        'gpt-5.6-terra',
-        'gpt-5.6-luna',
-        'gpt-5.4-mini',
-      ])('should recognize %s as a known model', (model) => {
-        const provider = new OpenAICodexSDKProvider({
-          config: { model },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-        expect(provider.config.model).toBe(model);
-      });
+      it.each(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.4-mini'])(
+        'should recognize %s as a known model',
+        (model) => {
+          const provider = new OpenAICodexSDKProvider({
+            config: { model },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+          expect(provider.config.model).toBe(model);
+        },
+      );
 
       it('should omit gpt-5.6 cost when Codex does not report cache-write tokens', async () => {
         mockRun.mockResolvedValue(
@@ -2971,28 +2971,31 @@ describe('OpenAICodexSDKProvider', () => {
       it.each([
         ['omits cache-write usage', undefined],
         ['reports zero cache-write usage', 0],
-      ])('should not estimate gpt-5.6 cost when a custom Codex binary %s', async (_description, cacheWriteInputTokens) => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            cache_write_input_tokens: cacheWriteInputTokens,
-            output_tokens: 1000,
-          }),
-        );
+      ])(
+        'should not estimate gpt-5.6 cost when a custom Codex binary %s',
+        async (_description, cacheWriteInputTokens) => {
+          mockRun.mockResolvedValue(
+            createMockResponse('Response', {
+              input_tokens: 2000,
+              cached_input_tokens: 500,
+              cache_write_input_tokens: cacheWriteInputTokens,
+              output_tokens: 1000,
+            }),
+          );
 
-        const provider = new OpenAICodexSDKProvider({
-          config: {
-            model: 'gpt-5.6-sol',
-            codex_path_override: '/custom/path/to/codex',
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              model: 'gpt-5.6-sol',
+              codex_path_override: '/custom/path/to/codex',
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
 
-        const result = await provider.callApi('Test prompt');
+          const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBeUndefined();
-      });
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
       it('should recognize gpt-5.5 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({

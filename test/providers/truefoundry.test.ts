@@ -308,26 +308,29 @@ describe('TrueFoundry', () => {
         'production-east/gpt-4',
         'openai-prod/gpt-4',
         'vendor/openai-prod/gpt-4',
-      ])('should not apply OpenAI pricing to another TrueFoundry model namespace: %s', async (model) => {
-        const mockResponse = {
-          choices: [{ message: { content: 'Vendor output' } }],
-          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-        };
-        mockedFetchWithRetries.mockResolvedValueOnce(
-          new Response(JSON.stringify(mockResponse), {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          }),
-        );
-        const vendorProvider = new TrueFoundryProvider(model, {});
+      ])(
+        'should not apply OpenAI pricing to another TrueFoundry model namespace: %s',
+        async (model) => {
+          const mockResponse = {
+            choices: [{ message: { content: 'Vendor output' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          };
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            new Response(JSON.stringify(mockResponse), {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            }),
+          );
+          const vendorProvider = new TrueFoundryProvider(model, {});
 
-        const result = await vendorProvider.callApi('Test prompt');
-        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+          const result = await vendorProvider.callApi('Test prompt');
+          const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
 
-        expect(JSON.parse(request.body ?? '{}').model).toBe(model);
-        expect(result.cost).toBeUndefined();
-      });
+          expect(JSON.parse(request.body ?? '{}').model).toBe(model);
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
       it('should not apply OpenAI pricing to an unrelated passthrough namespace', async () => {
         const model = 'vendor/production-east/gpt-4';
@@ -626,28 +629,31 @@ describe('TrueFoundry', () => {
         "Unable to determine whether response content blocked by label 'MultiSeverity_HateSpeechScore' because the content filtering system timed out",
         'Content management policy check did not complete because the content filtering system timed out',
         'Responsible AI policy check did not complete because the content filtering system timed out',
-      ])('should preserve downstream content filter failures as API errors: %s', async (message) => {
-        const errorResponse = {
-          error: {
-            message,
-            code: 'content_filter_error',
-          },
-        };
+      ])(
+        'should preserve downstream content filter failures as API errors: %s',
+        async (message) => {
+          const errorResponse = {
+            error: {
+              message,
+              code: 'content_filter_error',
+            },
+          };
 
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          const response = new Response(JSON.stringify(errorResponse), {
+            status: 400,
+            statusText: 'Bad Request',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          });
+          mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        const result = await provider.callApi('Test prompt');
+          const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toContain('400 Bad Request');
-        expect(result.error).toContain('content_filter_error');
-        expect(result.isRefusal).toBeUndefined();
-        expect(result.guardrails).toBeUndefined();
-      });
+          expect(result.error).toContain('400 Bad Request');
+          expect(result.error).toContain('content_filter_error');
+          expect(result.isRefusal).toBeUndefined();
+          expect(result.guardrails).toBeUndefined();
+        },
+      );
 
       it('should preserve nested downstream content filter failures as API errors', async () => {
         const errorResponse = {

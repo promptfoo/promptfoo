@@ -999,18 +999,19 @@ describe('OpenAiTtsProvider', () => {
     ],
   ];
 
-  it.each(
-    invalidCases,
-  )('rejects %s before calling the API', async (_label, testCase, expectedError) => {
-    const provider = new OpenAiTtsProvider(testCase.model ?? 'gpt-4o-mini-tts', {
-      config: { apiKey: 'test-key', ...testCase.config } as any,
-    });
+  it.each(invalidCases)(
+    'rejects %s before calling the API',
+    async (_label, testCase, expectedError) => {
+      const provider = new OpenAiTtsProvider(testCase.model ?? 'gpt-4o-mini-tts', {
+        config: { apiKey: 'test-key', ...testCase.config } as any,
+      });
 
-    const result = await provider.callApi(testCase.input ?? 'Hello');
+      const result = await provider.callApi(testCase.input ?? 'Hello');
 
-    expect(result.error).toContain(expectedError);
-    expect(mockedFetch).not.toHaveBeenCalled();
-  });
+      expect(result.error).toContain(expectedError);
+      expect(mockedFetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns an actionable API error without attempting to parse binary audio', async () => {
     mockedFetch.mockResolvedValue({

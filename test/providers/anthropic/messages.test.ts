@@ -1784,62 +1784,62 @@ describe('AnthropicMessagesProvider', () => {
         mcpResult: { content: '', isError: true },
         expectedContent: 'MCP Tool Error (search_companies): Tool returned an error result',
       },
-    ])('marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)', async ({
-      mcpResult,
-      expectedContent,
-    }) => {
-      provider = createProvider('claude-3-5-sonnet-latest', {
-        config: {
-          mcp: {
-            enabled: true,
-            server: {
-              command: 'npm',
-              args: ['start'],
+    ])(
+      'marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)',
+      async ({ mcpResult, expectedContent }) => {
+        provider = createProvider('claude-3-5-sonnet-latest', {
+          config: {
+            mcp: {
+              enabled: true,
+              server: {
+                command: 'npm',
+                args: ['start'],
+              },
             },
           },
-        },
-      });
+        });
 
-      mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
+        mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
 
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValueOnce({
-          content: [
-            {
-              type: 'tool_use',
-              id: 'toolu_error',
-              name: 'search_companies',
-              input: { query: 'grid storage' },
-            },
-          ],
-          stop_reason: 'tool_use',
-          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
-        } as Anthropic.Messages.Message)
-        .mockResolvedValueOnce({
-          content: [{ type: 'text', text: 'I could not complete that lookup.' }],
-          stop_reason: 'end_turn',
-          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
-        } as Anthropic.Messages.Message);
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_error',
+                name: 'search_companies',
+                input: { query: 'grid storage' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'I could not complete that lookup.' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message);
 
-      const result = await provider.callApi('Find grid storage companies');
+        const result = await provider.callApi('Find grid storage companies');
 
-      expect(result.output).toBe('I could not complete that lookup.');
-      const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
-      expect(secondRequest.messages.slice(-1)).toEqual([
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: 'toolu_error',
-              content: expectedContent,
-              is_error: true,
-            },
-          ],
-        },
-      ]);
-    });
+        expect(result.output).toBe('I could not complete that lookup.');
+        const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+        expect(secondRequest.messages.slice(-1)).toEqual([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'toolu_error',
+                content: expectedContent,
+                is_error: true,
+              },
+            ],
+          },
+        ]);
+      },
+    );
 
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
       provider = createProvider('claude-3-5-sonnet-latest', {
@@ -3353,30 +3353,30 @@ describe('AnthropicMessagesProvider', () => {
       { model: 'claude-sonnet-4-6', thinking: { type: 'adaptive' as const } },
       // Fable is always-on adaptive; normalization strips any explicit config.
       { model: 'claude-fable-5', thinking: undefined },
-    ])('keeps a forced tool_choice with adaptive thinking on $model', async ({
-      model,
-      thinking,
-    }) => {
-      // Verified live that adaptive thinking + a forced tool_choice returns 200 on all of
-      // these; only legacy budget-based thinking is rejected by the API.
-      const provider = createProvider(model, {
-        config: {
-          ...(thinking ? { thinking } : {}),
-          tool_choice: { type: 'any' },
-          tools: [
-            { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
-          ],
-        },
-      });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model });
+    ])(
+      'keeps a forced tool_choice with adaptive thinking on $model',
+      async ({ model, thinking }) => {
+        // Verified live that adaptive thinking + a forced tool_choice returns 200 on all of
+        // these; only legacy budget-based thinking is rejected by the API.
+        const provider = createProvider(model, {
+          config: {
+            ...(thinking ? { thinking } : {}),
+            tool_choice: { type: 'any' },
+            tools: [
+              { name: 'get_weather', description: 'w', input_schema: { type: 'object' } } as any,
+            ],
+          },
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
 
-      await provider.callApi('Hello');
+        await provider.callApi('Hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
-      expect(params.tool_choice).toEqual({ type: 'any' });
-    });
+        const params = createSpy.mock.calls[0][0] as unknown as { tool_choice?: unknown };
+        expect(params.tool_choice).toEqual({ type: 'any' });
+      },
+    );
 
     it('drops a forced tool_choice only for legacy budget-based thinking', async () => {
       // The API rejects this pairing: "Thinking may not be enabled when tool_choice forces

@@ -48,18 +48,17 @@ describe('OpenAiModerationProvider', () => {
     ]);
   });
 
-  it.each([
-    'gpt-transcribe',
-    'gpt-live-transcribe',
-    'gpt-5.3-codex-spark',
-  ])('rejects unsupported first-party model %s before a direct request', (modelName) => {
-    expect(
-      () =>
-        new OpenAiModerationProvider(modelName, {
-          config: { apiKey: 'test-key' },
-        }),
-    ).toThrow();
-  });
+  it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5.3-codex-spark'])(
+    'rejects unsupported first-party model %s before a direct request',
+    (modelName) => {
+      expect(
+        () =>
+          new OpenAiModerationProvider(modelName, {
+            config: { apiKey: 'test-key' },
+          }),
+      ).toThrow();
+    },
+  );
 
   it('rejects a retired first-party model before a direct request', () => {
     expect(

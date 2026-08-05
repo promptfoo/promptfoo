@@ -172,19 +172,18 @@ describe('Provider Registry', () => {
         expect(a.filter((factory) => factory.test(path)).length).toBe(1);
       });
 
-      it.each([
-        'vertex:chat:gemini-2.5-flash',
-        'google:gemini-2.5-flash',
-        'palm:chat-bison',
-      ])('loads Google factories without mutating providerMap for %s', async (path) => {
-        const before = providerMap.length;
-        const factories = await getProviderFactories(path);
+      it.each(['vertex:chat:gemini-2.5-flash', 'google:gemini-2.5-flash', 'palm:chat-bison'])(
+        'loads Google factories without mutating providerMap for %s',
+        async (path) => {
+          const before = providerMap.length;
+          const factories = await getProviderFactories(path);
 
-        expect(factories).not.toBe(providerMap);
-        expect(providerMap.length).toBe(before);
-        expect(providerMap.some((factory) => factory.test(path))).toBe(false);
-        expect(factories.some((factory) => factory.test(path))).toBe(true);
-      });
+          expect(factories).not.toBe(providerMap);
+          expect(providerMap.length).toBe(before);
+          expect(providerMap.some((factory) => factory.test(path))).toBe(false);
+          expect(factories.some((factory) => factory.test(path))).toBe(true);
+        },
+      );
 
       it('resolves the same Google factory under concurrent lookups', async () => {
         const path = 'google:gemini-2.5-flash';
@@ -700,22 +699,25 @@ describe('Provider Registry', () => {
     it.each([
       ['openai:gpt-4.1', 'OpenAiChatCompletionProvider', 'gpt-4.1'],
       ['openai:gpt-3.5-turbo-instruct', 'OpenAiCompletionProvider', 'gpt-3.5-turbo-instruct'],
-    ])('validates the route model for bare provider %s when config.model is ignored', async (providerPath, expectedProvider, expectedModel) => {
-      const factory = providerMap.find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
+    ])(
+      'validates the route model for bare provider %s when config.model is ignored',
+      async (providerPath, expectedProvider, expectedModel) => {
+        const factory = providerMap.find((f) => f.test(providerPath));
+        expect(factory).toBeDefined();
 
-      const provider = await factory!.create(
-        providerPath,
-        {
-          ...mockProviderOptions,
-          config: { ...mockProviderOptions.config, model: 'gpt-transcribe' },
-        },
-        mockContext,
-      );
+        const provider = await factory!.create(
+          providerPath,
+          {
+            ...mockProviderOptions,
+            config: { ...mockProviderOptions.config, model: 'gpt-transcribe' },
+          },
+          mockContext,
+        );
 
-      expect(provider.constructor.name).toBe(expectedProvider);
-      expect((provider as { modelName?: string }).modelName).toBe(expectedModel);
-    });
+        expect(provider.constructor.name).toBe(expectedProvider);
+        expect((provider as { modelName?: string }).modelName).toBe(expectedModel);
+      },
+    );
 
     it.each([
       [
@@ -724,25 +726,28 @@ describe('Provider Registry', () => {
         OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES,
       ],
       ['openai:gpt-4o-mini-tts', 'gpt-4o-mini-tts', OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES],
-    ])('validates the passthrough model sent by bare catalog provider %s', async (providerPath, registeredModel, registeredModels) => {
-      expect(registeredModels).toContain(registeredModel);
-      const factory = providerMap.find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
+    ])(
+      'validates the passthrough model sent by bare catalog provider %s',
+      async (providerPath, registeredModel, registeredModels) => {
+        expect(registeredModels).toContain(registeredModel);
+        const factory = providerMap.find((f) => f.test(providerPath));
+        expect(factory).toBeDefined();
 
-      await expect(
-        factory!.create(
-          providerPath,
-          {
-            ...mockProviderOptions,
-            config: {
-              ...mockProviderOptions.config,
-              passthrough: { model: 'gpt-5.3-codex-spark' },
+        await expect(
+          factory!.create(
+            providerPath,
+            {
+              ...mockProviderOptions,
+              config: {
+                ...mockProviderOptions.config,
+                passthrough: { model: 'gpt-5.3-codex-spark' },
+              },
             },
-          },
-          mockContext,
-        ),
-      ).rejects.toThrow('only available through openai:codex-sdk');
-    });
+            mockContext,
+          ),
+        ).rejects.toThrow('only available through openai:codex-sdk');
+      },
+    );
 
     it('routes transcription-only OpenAI models without falling back to chat', async () => {
       const factory = providerMap.find((f) => f.test('openai:gpt-transcribe'));
@@ -896,29 +901,28 @@ describe('Provider Registry', () => {
       }
     });
 
-    it.each([
-      'gpt-transcribe',
-      'vendor/gpt-transcribe',
-      'vendor/gpt-live-transcribe',
-    ])('allows custom OpenAI-compatible endpoints to route their own %s model', async (customModel) => {
-      const providerPath = `openai:chat:${customModel}`;
-      const factory = providerMap.find((candidate) => candidate.test(providerPath));
-      expect(factory).toBeDefined();
+    it.each(['gpt-transcribe', 'vendor/gpt-transcribe', 'vendor/gpt-live-transcribe'])(
+      'allows custom OpenAI-compatible endpoints to route their own %s model',
+      async (customModel) => {
+        const providerPath = `openai:chat:${customModel}`;
+        const factory = providerMap.find((candidate) => candidate.test(providerPath));
+        expect(factory).toBeDefined();
 
-      const customProvider = await factory!.create(
-        providerPath,
-        {
-          ...mockProviderOptions,
-          config: {
-            ...mockProviderOptions.config,
-            apiBaseUrl: 'https://gateway.example/v1',
+        const customProvider = await factory!.create(
+          providerPath,
+          {
+            ...mockProviderOptions,
+            config: {
+              ...mockProviderOptions.config,
+              apiBaseUrl: 'https://gateway.example/v1',
+            },
           },
-        },
-        mockContext,
-      );
+          mockContext,
+        );
 
-      expect((customProvider as { modelName?: string }).modelName).toBe(customModel);
-    });
+        expect((customProvider as { modelName?: string }).modelName).toBe(customModel);
+      },
+    );
 
     it('should handle bedrock providers correctly', async () => {
       const factories = await getProviderFactories('bedrock:completion:anthropic.claude-v2');
@@ -1061,17 +1065,20 @@ describe('Provider Registry', () => {
       ['sagemaker:jumpstart:endpoint-name', 'SageMakerCompletionProvider', {}, 'jumpstart'],
       ['sagemaker:openai:endpoint-name', 'SageMakerCompletionProvider', {}, 'openai'],
       ['sagemaker:custom:my-jumpstart-endpoint', 'SageMakerCompletionProvider', {}, 'jumpstart'],
-    ])('should handle %s providers correctly', async (path, expectedProviderName, config, expectedModelType) => {
-      const factories = await getProviderFactories(path);
-      const factory = factories.find((f) => f.test(path));
-      expect(factory).toBeDefined();
+    ])(
+      'should handle %s providers correctly',
+      async (path, expectedProviderName, config, expectedModelType) => {
+        const factories = await getProviderFactories(path);
+        const factory = factories.find((f) => f.test(path));
+        expect(factory).toBeDefined();
 
-      const provider = await factory!.create(path, { config }, mockContext);
-      expect(provider.constructor.name).toBe(expectedProviderName);
-      if (expectedModelType) {
-        expect(provider).toHaveProperty('modelType', expectedModelType);
-      }
-    });
+        const provider = await factory!.create(path, { config }, mockContext);
+        expect(provider.constructor.name).toBe(expectedProviderName);
+        if (expectedModelType) {
+          expect(provider).toHaveProperty('modelType', expectedModelType);
+        }
+      },
+    );
 
     it.each([
       [
@@ -1174,15 +1181,18 @@ describe('Provider Registry', () => {
       // 3-segment form so the bare-endpoint path does not trip SageMaker's
       // required-modelType check; the point here is the .ts suffix precedence.
       ['sagemaker:jumpstart:my-endpoint.ts', 'SageMakerCompletionProvider'],
-    ])('routes the AWS path %s to the AWS family, not the generic JS-file loader', async (providerPath, expectedClass) => {
-      const factories = await getProviderFactories(providerPath);
-      // First-match dispatch, exactly how src/providers/index.ts resolves it.
-      const factory = factories.find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
+    ])(
+      'routes the AWS path %s to the AWS family, not the generic JS-file loader',
+      async (providerPath, expectedClass) => {
+        const factories = await getProviderFactories(providerPath);
+        // First-match dispatch, exactly how src/providers/index.ts resolves it.
+        const factory = factories.find((f) => f.test(providerPath));
+        expect(factory).toBeDefined();
 
-      const provider = await factory!.create(providerPath, { config: {} }, mockContext);
-      expect(provider.constructor.name).toBe(expectedClass);
-    });
+        const provider = await factory!.create(providerPath, { config: {} }, mockContext);
+        expect(provider.constructor.name).toBe(expectedClass);
+      },
+    );
 
     it('should handle cloudflare-ai providers correctly', async () => {
       const factory = providerMap.find((f) =>
@@ -1665,41 +1675,56 @@ describe('Provider Registry', () => {
         'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
-    ] as const)('routes %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
-      const provider = await factory!.create(providerPath, bareOptions, bareContext);
-      const ExpectedProvider = await loadExpectedProvider();
-      expect(provider).toBeInstanceOf(ExpectedProvider);
-    });
+    ] as const)(
+      'routes %s to the expected provider class',
+      async (providerPath, loadExpectedProvider) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const ExpectedProvider = await loadExpectedProvider();
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+      },
+    );
 
     it.each([
       'google:gemini-robotics-er-2-streaming-preview',
       'google:gemini-3.5-live-translate-preview',
       'vertex:gemini-robotics-er-2-streaming-preview',
       'vertex:gemini-3.5-live-translate-preview',
-    ])('rejects bare Live-only model route %s with explicit routing guidance', async (providerPath) => {
-      const modelName = providerPath.slice(providerPath.indexOf(':') + 1);
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
+    ])(
+      'rejects bare Live-only model route %s with explicit routing guidance',
+      async (providerPath) => {
+        const modelName = providerPath.slice(providerPath.indexOf(':') + 1);
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
 
-      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-        `Use google:live:${modelName}`,
-      );
-    });
+        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+          `Use google:live:${modelName}`,
+        );
+      },
+    );
 
     it.each([
       'vertex:live:gemini-robotics-er-2-streaming-preview',
       'vertex:live:gemini-3.5-live-translate-preview',
-    ])('rejects unsupported Vertex Live route %s with Google Live guidance', async (providerPath) => {
-      const modelName = providerPath.split(':').slice(2).join(':');
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
+    ])(
+      'rejects unsupported Vertex Live route %s with Google Live guidance',
+      async (providerPath) => {
+        const modelName = providerPath.split(':').slice(2).join(':');
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
 
-      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-        `Use google:live:${modelName}`,
-      );
-    });
+        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+          `Use google:live:${modelName}`,
+        );
+      },
+    );
 
     it.each([
       'google:video:gemini-robotics-er-2-streaming-preview',
@@ -1716,15 +1741,20 @@ describe('Provider Registry', () => {
       'vertex:video:gemini-3.5-live-translate-preview',
       'vertex:embedding:gemini-3.5-live-translate-preview',
       'vertex:embeddings:gemini-3.5-live-translate-preview',
-    ])('rejects incompatible Live-only model route %s before provider dispatch', async (providerPath) => {
-      const modelName = providerPath.split(':').slice(2).join(':');
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
+    ])(
+      'rejects incompatible Live-only model route %s before provider dispatch',
+      async (providerPath) => {
+        const modelName = providerPath.split(':').slice(2).join(':');
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
 
-      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-        `Use google:live:${modelName}`,
-      );
-    });
+        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+          `Use google:live:${modelName}`,
+        );
+      },
+    );
 
     it.each([
       'google:live:gemini-robotics-er-2-preview',
@@ -1812,53 +1842,55 @@ describe('Provider Registry', () => {
       expect(expressProvider.id()).toBe(providerPath);
     });
 
-    it.each([
-      'vertex:gemini-robotics-er-2-preview',
-      'vertex:chat:gemini-robotics-er-2-preview',
-    ])('preserves Interactions option and context precedence for %s', async (providerPath) => {
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
-      const providerOptions: ProviderOptions = {
-        id: 'configured-id',
-        env: { GOOGLE_CLOUD_PROJECT: 'configured-project' },
-        config: {
-          basePath: '/configured-base',
-          region: 'us-west1',
-          vertexai: false,
-        },
-      };
-      const provider = await factory!.create(providerPath, providerOptions, {
-        basePath: '/context-base',
-        env: { GOOGLE_CLOUD_PROJECT: 'context-project' },
-        options: providerOptions,
-      });
-
-      expect((provider as any).config).toMatchObject({
-        basePath: '/configured-base',
-        region: 'us-west1',
-        vertexai: true,
-      });
-      expect((provider as any).env).toEqual(providerOptions.env);
-      expect(provider.id()).toBe(providerPath);
-
-      const contextOnlyProvider = await factory!.create(
-        providerPath,
-        { config: { region: 'us-central1' } },
-        {
+    it.each(['vertex:gemini-robotics-er-2-preview', 'vertex:chat:gemini-robotics-er-2-preview'])(
+      'preserves Interactions option and context precedence for %s',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const providerOptions: ProviderOptions = {
+          id: 'configured-id',
+          env: { GOOGLE_CLOUD_PROJECT: 'configured-project' },
+          config: {
+            basePath: '/configured-base',
+            region: 'us-west1',
+            vertexai: false,
+          },
+        };
+        const provider = await factory!.create(providerPath, providerOptions, {
           basePath: '/context-base',
           env: { GOOGLE_CLOUD_PROJECT: 'context-project' },
-        },
-      );
-      expect((contextOnlyProvider as any).config).toMatchObject({
-        basePath: '/context-base',
-        region: 'us-central1',
-        vertexai: true,
-      });
-      expect((contextOnlyProvider as any).env).toEqual({
-        GOOGLE_CLOUD_PROJECT: 'context-project',
-      });
-      expect(contextOnlyProvider.id()).toBe(providerPath);
-    });
+          options: providerOptions,
+        });
+
+        expect((provider as any).config).toMatchObject({
+          basePath: '/configured-base',
+          region: 'us-west1',
+          vertexai: true,
+        });
+        expect((provider as any).env).toEqual(providerOptions.env);
+        expect(provider.id()).toBe(providerPath);
+
+        const contextOnlyProvider = await factory!.create(
+          providerPath,
+          { config: { region: 'us-central1' } },
+          {
+            basePath: '/context-base',
+            env: { GOOGLE_CLOUD_PROJECT: 'context-project' },
+          },
+        );
+        expect((contextOnlyProvider as any).config).toMatchObject({
+          basePath: '/context-base',
+          region: 'us-central1',
+          vertexai: true,
+        });
+        expect((contextOnlyProvider as any).env).toEqual({
+          GOOGLE_CLOUD_PROJECT: 'context-project',
+        });
+        expect(contextOnlyProvider.id()).toBe(providerPath);
+      },
+    );
 
     it('applies provider id but omits vertexai config for google:video routes', async () => {
       const providerPath = 'google:video:veo-3.1-generate-preview';
@@ -1892,25 +1924,35 @@ describe('Provider Registry', () => {
         'vertex:chat:custom-model.mjs',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
-    ] as const)('routes script-like id %s to the expected provider class', async (providerPath, loadExpectedProvider) => {
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
-      const provider = await factory!.create(providerPath, bareOptions, bareContext);
-      const ExpectedProvider = await loadExpectedProvider();
-      expect(provider).toBeInstanceOf(ExpectedProvider);
-    });
+    ] as const)(
+      'routes script-like id %s to the expected provider class',
+      async (providerPath, loadExpectedProvider) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        const ExpectedProvider = await loadExpectedProvider();
+        expect(provider).toBeInstanceOf(ExpectedProvider);
+      },
+    );
 
     it.each([
       ['google:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['google:embeddings:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
       ['palm:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
-    ])('routes %s to the AI Studio embedding provider (id %s)', async (providerPath, expectedId) => {
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
-      const provider = await factory!.create(providerPath, bareOptions, bareContext);
-      expect(provider.id()).toBe(expectedId);
-      expect(typeof (provider as any).callEmbeddingApi).toBe('function');
-    });
+    ])(
+      'routes %s to the AI Studio embedding provider (id %s)',
+      async (providerPath, expectedId) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        const provider = await factory!.create(providerPath, bareOptions, bareContext);
+        expect(provider.id()).toBe(expectedId);
+        expect(typeof (provider as any).callEmbeddingApi).toBe('function');
+      },
+    );
 
     it('does not route google:<model> (chat) to the embedding provider', async () => {
       const factory = (await getProviderFactories('google:gemini-2.5-flash')).find((f) =>
@@ -1922,16 +1964,17 @@ describe('Provider Registry', () => {
       expect(provider.id()).toContain('gemini-2.5-flash');
     });
 
-    it.each([
-      'google:embedding:',
-      'google:embeddings:',
-      'palm:embedding:',
-    ])('throws a clear error for %s with no model name', async (providerPath) => {
-      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
-      expect(factory).toBeDefined();
-      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-        /Missing model name/,
-      );
-    });
+    it.each(['google:embedding:', 'google:embeddings:', 'palm:embedding:'])(
+      'throws a clear error for %s with no model name',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        expect(factory).toBeDefined();
+        await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+          /Missing model name/,
+        );
+      },
+    );
   });
 });

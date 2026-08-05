@@ -239,17 +239,20 @@ describe('GoogleVideoProvider', () => {
       ['veo-3.1-fast-generate-preview', '4k', 8, 2.4],
       ['veo-3.1-lite-generate-preview', '720p', 4, 0.2],
       ['veo-3.1-lite-generate-preview', '1080p', 8, 0.64],
-    ] as const)('reports the Veo 3.1 video-with-audio cost for %s at %s', async (modelName, resolution, durationSeconds, expectedCost) => {
-      const result = await callVideoProviderWithPromptConfig(
-        'Google AI Studio',
-        { resolution, durationSeconds },
-        {},
-        modelName,
-      );
+    ] as const)(
+      'reports the Veo 3.1 video-with-audio cost for %s at %s',
+      async (modelName, resolution, durationSeconds, expectedCost) => {
+        const result = await callVideoProviderWithPromptConfig(
+          'Google AI Studio',
+          { resolution, durationSeconds },
+          {},
+          modelName,
+        );
 
-      expect(result.error).toBeUndefined();
-      expect(result.cost).toBeCloseTo(expectedCost, 10);
-    });
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeCloseTo(expectedCost, 10);
+      },
+    );
   });
 
   describe('request model selection', () => {
@@ -337,88 +340,91 @@ describe('GoogleVideoProvider', () => {
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
 
-    it.each(
-      videoTransports,
-    )('keeps an inherited provider image relative to the provider basePath for %s', async (transport) => {
-      const fileRef = 'file://assets/provider-image.png';
-      const providerBasePath = path.resolve('/tmp', 'provider-config');
-      const promptBasePath = path.resolve('/tmp', 'prompt-config');
-      const expectedPath = path.resolve(providerBasePath, fileRef.slice('file://'.length));
-      vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
-      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('provider-image'));
+    it.each(videoTransports)(
+      'keeps an inherited provider image relative to the provider basePath for %s',
+      async (transport) => {
+        const fileRef = 'file://assets/provider-image.png';
+        const providerBasePath = path.resolve('/tmp', 'provider-config');
+        const promptBasePath = path.resolve('/tmp', 'prompt-config');
+        const expectedPath = path.resolve(providerBasePath, fileRef.slice('file://'.length));
+        vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
+        vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('provider-image'));
 
-      const result = await callVideoProviderWithPromptConfig(
-        transport,
-        { basePath: providerBasePath, image: fileRef },
-        { basePath: promptBasePath },
-      );
+        const result = await callVideoProviderWithPromptConfig(
+          transport,
+          { basePath: providerBasePath, image: fileRef },
+          { basePath: promptBasePath },
+        );
 
-      expect(result.error).toBeUndefined();
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    });
+        expect(result.error).toBeUndefined();
+        expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+      },
+    );
 
-    it.each(
-      videoTransports,
-    )('lets a prompt lastImage alias override provider lastFrame using the prompt basePath for %s', async (transport) => {
-      const providerLastFrame = 'file://assets/provider-last.png';
-      const promptLastImage = 'file://assets/prompt-last.png';
-      const providerBasePath = path.resolve('/tmp', 'provider-config');
-      const promptBasePath = path.resolve('/tmp', 'prompt-config');
-      const expectedPath = path.resolve(promptBasePath, promptLastImage.slice('file://'.length));
-      vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
-      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('prompt-last-image'));
+    it.each(videoTransports)(
+      'lets a prompt lastImage alias override provider lastFrame using the prompt basePath for %s',
+      async (transport) => {
+        const providerLastFrame = 'file://assets/provider-last.png';
+        const promptLastImage = 'file://assets/prompt-last.png';
+        const providerBasePath = path.resolve('/tmp', 'provider-config');
+        const promptBasePath = path.resolve('/tmp', 'prompt-config');
+        const expectedPath = path.resolve(promptBasePath, promptLastImage.slice('file://'.length));
+        vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
+        vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('prompt-last-image'));
 
-      const result = await callVideoProviderWithPromptConfig(
-        transport,
-        {
-          basePath: providerBasePath,
-          image: 'base64-first-frame',
-          lastFrame: providerLastFrame,
-        },
-        { basePath: promptBasePath, lastImage: promptLastImage },
-      );
+        const result = await callVideoProviderWithPromptConfig(
+          transport,
+          {
+            basePath: providerBasePath,
+            image: 'base64-first-frame',
+            lastFrame: providerLastFrame,
+          },
+          { basePath: promptBasePath, lastImage: promptLastImage },
+        );
 
-      expect(result.error).toBeUndefined();
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    });
+        expect(result.error).toBeUndefined();
+        expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+      },
+    );
 
-    it.each(
-      videoTransports,
-    )('resolves inherited and overridden referenceImages against their owner basePath for %s', async (transport) => {
-      const providerReference = 'file://assets/provider-reference.png';
-      const promptReference = 'file://assets/prompt-reference.png';
-      const providerBasePath = path.resolve('/tmp', 'provider-config');
-      const promptBasePath = path.resolve('/tmp', 'prompt-config');
-      const providerReferencePath = path.resolve(
-        providerBasePath,
-        providerReference.slice('file://'.length),
-      );
-      const promptReferencePath = path.resolve(
-        promptBasePath,
-        promptReference.slice('file://'.length),
-      );
-      const expectedPaths = new Set([providerReferencePath, promptReferencePath]);
-      vi.mocked(fs.existsSync).mockImplementation((candidate) =>
-        expectedPaths.has(candidate.toString()),
-      );
-      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('reference-image'));
+    it.each(videoTransports)(
+      'resolves inherited and overridden referenceImages against their owner basePath for %s',
+      async (transport) => {
+        const providerReference = 'file://assets/provider-reference.png';
+        const promptReference = 'file://assets/prompt-reference.png';
+        const providerBasePath = path.resolve('/tmp', 'provider-config');
+        const promptBasePath = path.resolve('/tmp', 'prompt-config');
+        const providerReferencePath = path.resolve(
+          providerBasePath,
+          providerReference.slice('file://'.length),
+        );
+        const promptReferencePath = path.resolve(
+          promptBasePath,
+          promptReference.slice('file://'.length),
+        );
+        const expectedPaths = new Set([providerReferencePath, promptReferencePath]);
+        vi.mocked(fs.existsSync).mockImplementation((candidate) =>
+          expectedPaths.has(candidate.toString()),
+        );
+        vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('reference-image'));
 
-      const inheritedResult = await callVideoProviderWithPromptConfig(
-        transport,
-        { basePath: providerBasePath, referenceImages: [providerReference] },
-        { basePath: promptBasePath },
-      );
-      const overriddenResult = await callVideoProviderWithPromptConfig(
-        transport,
-        { basePath: providerBasePath, referenceImages: [providerReference] },
-        { basePath: promptBasePath, referenceImages: [promptReference] },
-      );
+        const inheritedResult = await callVideoProviderWithPromptConfig(
+          transport,
+          { basePath: providerBasePath, referenceImages: [providerReference] },
+          { basePath: promptBasePath },
+        );
+        const overriddenResult = await callVideoProviderWithPromptConfig(
+          transport,
+          { basePath: providerBasePath, referenceImages: [providerReference] },
+          { basePath: promptBasePath, referenceImages: [promptReference] },
+        );
 
-      expect(inheritedResult.error).toBeUndefined();
-      expect(overriddenResult.error).toBeUndefined();
-      expect(fs.existsSync).toHaveBeenCalledWith(providerReferencePath);
-      expect(fs.existsSync).toHaveBeenCalledWith(promptReferencePath);
-    });
+        expect(inheritedResult.error).toBeUndefined();
+        expect(overriddenResult.error).toBeUndefined();
+        expect(fs.existsSync).toHaveBeenCalledWith(providerReferencePath);
+        expect(fs.existsSync).toHaveBeenCalledWith(promptReferencePath);
+      },
+    );
 
     it.each(
       videoTransports.flatMap((transport) =>
@@ -426,63 +432,67 @@ describe('GoogleVideoProvider', () => {
           (field) => [field, transport] as const,
         ),
       ),
-    )('falls back to the provider basePath for prompt-owned %s media on %s', async (field, transport) => {
-      const fileRef = `file://assets/prompt-${field}.png`;
-      const providerBasePath = path.resolve('/tmp', 'provider-config');
-      const expectedPath = path.resolve(providerBasePath, fileRef.slice('file://'.length));
-      vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
-      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('prompt-media'));
+    )(
+      'falls back to the provider basePath for prompt-owned %s media on %s',
+      async (field, transport) => {
+        const fileRef = `file://assets/prompt-${field}.png`;
+        const providerBasePath = path.resolve('/tmp', 'provider-config');
+        const expectedPath = path.resolve(providerBasePath, fileRef.slice('file://'.length));
+        vi.mocked(fs.existsSync).mockImplementation((candidate) => candidate === expectedPath);
+        vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('prompt-media'));
 
-      const providerConfig: GoogleVideoOptions = { basePath: providerBasePath };
-      const promptConfig: GoogleVideoOptions = {};
-      if (field === 'referenceImages') {
-        promptConfig.referenceImages = [fileRef];
-      } else {
-        promptConfig[field] = fileRef;
-      }
-      if (field === 'lastFrame' || field === 'lastImage') {
-        providerConfig.image = 'base64-first-frame';
-      }
+        const providerConfig: GoogleVideoOptions = { basePath: providerBasePath };
+        const promptConfig: GoogleVideoOptions = {};
+        if (field === 'referenceImages') {
+          promptConfig.referenceImages = [fileRef];
+        } else {
+          promptConfig[field] = fileRef;
+        }
+        if (field === 'lastFrame' || field === 'lastImage') {
+          providerConfig.image = 'base64-first-frame';
+        }
 
-      const result = await callVideoProviderWithPromptConfig(
-        transport,
-        providerConfig,
-        promptConfig,
-      );
-
-      expect(result.error).toBeUndefined();
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
-    });
-
-    it.each(
-      videoTransports,
-    )('treats prompt sourceVideo and extendVideoId as one owned alias pair on %s', async (transport) => {
-      const uriPrefix =
-        transport === 'Vertex'
-          ? 'gs://test-bucket'
-          : 'https://generativelanguage.googleapis.com/v1beta/files';
-      const aliasDirections = [
-        ['sourceVideo', 'extendVideoId'],
-        ['extendVideoId', 'sourceVideo'],
-      ] as const;
-
-      for (const [providerField, promptField] of aliasDirections) {
-        const providerUri = `${uriPrefix}/provider-${providerField}`;
-        const promptUri = `${uriPrefix}/prompt-${promptField}`;
         const result = await callVideoProviderWithPromptConfig(
           transport,
-          { [providerField]: providerUri },
-          { [promptField]: promptUri },
+          providerConfig,
+          promptConfig,
         );
 
         expect(result.error).toBeUndefined();
-        expect(getLastVideoCreateRequestBody(transport).instances[0].video).toEqual(
+        expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+      },
+    );
+
+    it.each(videoTransports)(
+      'treats prompt sourceVideo and extendVideoId as one owned alias pair on %s',
+      async (transport) => {
+        const uriPrefix =
           transport === 'Vertex'
-            ? { gcsUri: promptUri, mimeType: 'video/mp4' }
-            : { uri: promptUri },
-        );
-      }
-    });
+            ? 'gs://test-bucket'
+            : 'https://generativelanguage.googleapis.com/v1beta/files';
+        const aliasDirections = [
+          ['sourceVideo', 'extendVideoId'],
+          ['extendVideoId', 'sourceVideo'],
+        ] as const;
+
+        for (const [providerField, promptField] of aliasDirections) {
+          const providerUri = `${uriPrefix}/provider-${providerField}`;
+          const promptUri = `${uriPrefix}/prompt-${promptField}`;
+          const result = await callVideoProviderWithPromptConfig(
+            transport,
+            { [providerField]: providerUri },
+            { [promptField]: promptUri },
+          );
+
+          expect(result.error).toBeUndefined();
+          expect(getLastVideoCreateRequestBody(transport).instances[0].video).toEqual(
+            transport === 'Vertex'
+              ? { gcsUri: promptUri, mimeType: 'video/mp4' }
+              : { uri: promptUri },
+          );
+        }
+      },
+    );
 
     it('places Vertex generation controls in the top-level parameters object', () => {
       const provider = new GoogleVideoProvider('veo-3.1-generate-001');
@@ -511,17 +521,18 @@ describe('GoogleVideoProvider', () => {
       });
     });
 
-    it.each(
-      videoTransports,
-    )('forwards an output storage URI only for %s generation', async (transport) => {
-      const storageUri = 'gs://test-output-bucket/veo-results/';
-      const result = await callVideoProviderWithPromptConfig(transport, { storageUri }, {});
+    it.each(videoTransports)(
+      'forwards an output storage URI only for %s generation',
+      async (transport) => {
+        const storageUri = 'gs://test-output-bucket/veo-results/';
+        const result = await callVideoProviderWithPromptConfig(transport, { storageUri }, {});
 
-      expect(result.error).toBeUndefined();
-      expect(getLastVideoCreateRequestBody(transport).parameters?.storageUri).toBe(
-        transport === 'Vertex' ? storageUri : undefined,
-      );
-    });
+        expect(result.error).toBeUndefined();
+        expect(getLastVideoCreateRequestBody(transport).parameters?.storageUri).toBe(
+          transport === 'Vertex' ? storageUri : undefined,
+        );
+      },
+    );
   });
 
   describe('validateAspectRatio', () => {
@@ -571,16 +582,17 @@ describe('GoogleVideoProvider', () => {
       expect(result.message).toContain('Invalid duration');
     });
 
-    it.each(
-      durationConstrainedConfigs,
-    )('should require 8 seconds for Veo requests using %s', (_feature, config) => {
-      const result = validateDuration('veo-3.1-generate-preview', 6, config);
-      expect(result.valid).toBe(false);
-      expect(result.message).toContain('requires durationSeconds: 8');
-      expect(validateDuration('veo-3.1-generate-preview', 8, config)).toEqual({
-        valid: true,
-      });
-    });
+    it.each(durationConstrainedConfigs)(
+      'should require 8 seconds for Veo requests using %s',
+      (_feature, config) => {
+        const result = validateDuration('veo-3.1-generate-preview', 6, config);
+        expect(result.valid).toBe(false);
+        expect(result.message).toContain('requires durationSeconds: 8');
+        expect(validateDuration('veo-3.1-generate-preview', 8, config)).toEqual({
+          valid: true,
+        });
+      },
+    );
 
     it.each([
       ['reference images', { referenceImages: ['file://reference.png'] }],
@@ -655,17 +667,17 @@ describe('GoogleVideoProvider', () => {
       expect(result.message).toContain('Video extension requires 720p');
     });
 
-    it.each([
-      '1080p',
-      '4k',
-    ] as const)('should allow %s video extension on supported Vertex Veo 3.1 models', (resolution) => {
-      expect(
-        validateResolution('veo-3.1-generate-001', '16:9', resolution, {
-          extendVideoId: 'projects/test/operations/123',
-          vertexai: true,
-        }),
-      ).toEqual({ valid: true });
-    });
+    it.each(['1080p', '4k'] as const)(
+      'should allow %s video extension on supported Vertex Veo 3.1 models',
+      (resolution) => {
+        expect(
+          validateResolution('veo-3.1-generate-001', '16:9', resolution, {
+            extendVideoId: 'projects/test/operations/123',
+            vertexai: true,
+          }),
+        ).toEqual({ valid: true });
+      },
+    );
   });
 
   describe('generateVideoCacheKey', () => {
@@ -1093,24 +1105,25 @@ describe('GoogleVideoProvider', () => {
       expect(result.error).toContain('Invalid duration');
     });
 
-    it.each(
-      durationConstrainedConfigs,
-    )('should reject a 6-second Veo request using %s before network I/O', async (_feature, config) => {
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          ...config,
-          apiKey: 'test-api-key',
-          durationSeconds: 6,
-          vertexai: false,
-        },
-      });
+    it.each(durationConstrainedConfigs)(
+      'should reject a 6-second Veo request using %s before network I/O',
+      async (_feature, config) => {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: {
+            ...config,
+            apiKey: 'test-api-key',
+            durationSeconds: 6,
+            vertexai: false,
+          },
+        });
 
-      const result = await provider.callApi('Test prompt');
+        const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('requires durationSeconds: 8');
-      expect(mockRequest).not.toHaveBeenCalled();
-      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
-    });
+        expect(result.error).toContain('requires durationSeconds: 8');
+        expect(mockRequest).not.toHaveBeenCalled();
+        expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+      },
+    );
 
     it('should reject non-720p video extension before network I/O', async () => {
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {

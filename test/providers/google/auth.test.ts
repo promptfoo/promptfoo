@@ -399,22 +399,21 @@ describe('GoogleAuthManager', () => {
       );
     });
 
-    it.each([
-      'VERTEX_PROJECT_ID',
-      'GOOGLE_PROJECT_ID',
-      'GOOGLE_CLOUD_PROJECT',
-    ] as const)('should recognize provider-scoped %s as a Vertex project', (projectEnvName) => {
-      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
+    it.each(['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'] as const)(
+      'should recognize provider-scoped %s as a Vertex project',
+      (projectEnvName) => {
+        vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
 
-      GoogleAuthManager.validateAndWarn(
-        { vertexai: true },
-        { [projectEnvName]: 'provider-project' },
-      );
+        GoogleAuthManager.validateAndWarn(
+          { vertexai: true },
+          { [projectEnvName]: 'provider-project' },
+        );
 
-      expect(logger.debug).not.toHaveBeenCalledWith(
-        expect.stringContaining('Vertex AI mode enabled but no projectId'),
-      );
-    });
+        expect(logger.debug).not.toHaveBeenCalledWith(
+          expect.stringContaining('Vertex AI mode enabled but no projectId'),
+        );
+      },
+    );
 
     it('should log debug when both apiKey and credentials are set', () => {
       // When both are set, API key takes precedence (express mode is automatic)

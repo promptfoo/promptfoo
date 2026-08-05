@@ -542,41 +542,41 @@ describe('Plugins', () => {
       ]);
     });
 
-    it.each([
-      'coding-agent:core',
-      'coding-agent:all',
-    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(neverGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+    it.each(['coding-agent:core', 'coding-agent:all'])(
+      'should preserve %s canary-breaking strategy exclusions in metadata',
+      async (pluginId) => {
+        vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+          return true;
+        });
+        vi.mocked(neverGenerateRemote).mockImplementation(function () {
+          return false;
+        });
 
-      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+        const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+        vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === pluginId);
-      const result = await plugin?.action({
-        provider: mockProvider,
-        purpose: 'test',
-        injectVar: 'testVar',
-        n: 1,
-        config: { excludeStrategies: ['custom-strategy'] },
-        delayMs: 0,
-      });
+        const plugin = Plugins.find((p) => p.key === pluginId);
+        const result = await plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { excludeStrategies: ['custom-strategy'] },
+          delayMs: 0,
+        });
 
-      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
-      const requestBody = JSON.parse((callArgs[1] as any).body);
-      expect(requestBody.config.excludeStrategies).toEqual([
-        ...CANARY_BREAKING_STRATEGY_IDS,
-        'custom-strategy',
-      ]);
-      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
-        ...CANARY_BREAKING_STRATEGY_IDS,
-        'custom-strategy',
-      ]);
-    });
+        const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+        const requestBody = JSON.parse((callArgs[1] as any).body);
+        expect(requestBody.config.excludeStrategies).toEqual([
+          ...CANARY_BREAKING_STRATEGY_IDS,
+          'custom-strategy',
+        ]);
+        expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+          ...CANARY_BREAKING_STRATEGY_IDS,
+          'custom-strategy',
+        ]);
+      },
+    );
 
     it('should handle remote generation errors', async () => {
       // Mock shouldGenerateRemote to return true for this test

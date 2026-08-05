@@ -865,21 +865,21 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
 
-  it.each([
-    'google:video:veo-3.1-generate-preview',
-    'vertex:video:veo-3.1-generate-001',
-  ])('preserves an explicit basePath when loading %s', async (providerPath) => {
-    const provider = (await loadApiProvider(providerPath, {
-      basePath: '/config-directory',
-      options: {
-        config: {
-          basePath: '/explicit-media-directory',
+  it.each(['google:video:veo-3.1-generate-preview', 'vertex:video:veo-3.1-generate-001'])(
+    'preserves an explicit basePath when loading %s',
+    async (providerPath) => {
+      const provider = (await loadApiProvider(providerPath, {
+        basePath: '/config-directory',
+        options: {
+          config: {
+            basePath: '/explicit-media-directory',
+          },
         },
-      },
-    })) as GoogleVideoProvider;
+      })) as GoogleVideoProvider;
 
-    expect(provider.config.basePath).toBe('/explicit-media-directory');
-  });
+      expect(provider.config.basePath).toBe('/explicit-media-directory');
+    },
+  );
 
   it('loadApiProvider with replicate:modelname', async () => {
     const provider = await loadApiProvider('replicate:meta/llama3');

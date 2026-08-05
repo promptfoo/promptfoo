@@ -515,94 +515,88 @@ describe('xAI Chat Provider', () => {
       expect(result.body.max_completion_tokens).toBe(2048);
     });
 
-    it.each([
-      'grok-build-0.1',
-      'grok-code-fast-1',
-      'grok-code-fast',
-      'grok-code-fast-1-0825',
-    ])('uses max_tokens for Grok Build chat requests using %s', async (modelName) => {
-      for (const config of [
-        { max_tokens: 321 },
-        { passthrough: { max_tokens: 321 } },
-        { max_completion_tokens: 321 },
-        { passthrough: { max_completion_tokens: 321 } },
-      ]) {
+    it.each(['grok-build-0.1', 'grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'])(
+      'uses max_tokens for Grok Build chat requests using %s',
+      async (modelName) => {
+        for (const config of [
+          { max_tokens: 321 },
+          { passthrough: { max_tokens: 321 } },
+          { max_completion_tokens: 321 },
+          { passthrough: { max_completion_tokens: 321 } },
+        ]) {
+          const provider = createXAIProvider(`xai:${modelName}`) as any;
+          const result = await provider.getOpenAiBody('test prompt', {
+            prompt: {
+              config,
+            },
+          });
+
+          expect(result.body.max_tokens).toBe(321);
+          expect(result.body.max_completion_tokens).toBeUndefined();
+        }
+
+        vi.stubEnv('OPENAI_MAX_COMPLETION_TOKENS', '654');
         const provider = createXAIProvider(`xai:${modelName}`) as any;
-        const result = await provider.getOpenAiBody('test prompt', {
+        const result = await provider.getOpenAiBody('test prompt');
+
+        expect(result.body.max_tokens).toBe(654);
+        expect(result.body.max_completion_tokens).toBeUndefined();
+
+        const filteredResult = await provider.getOpenAiBody('test prompt', {
           prompt: {
-            config,
+            config: {
+              max_tokens: 321,
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['END'],
+            },
           },
         });
 
-        expect(result.body.max_tokens).toBe(321);
+        expect(filteredResult.body.max_tokens).toBe(321);
+        expect(filteredResult.body.presence_penalty).toBeUndefined();
+        expect(filteredResult.body.frequency_penalty).toBeUndefined();
+        expect(filteredResult.body.stop).toBeUndefined();
+      },
+    );
+
+    it.each(['grok-build-0.1', 'grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'])(
+      'preserves passthrough token-limit precedence for Grok Build chat requests using %s',
+      async (modelName) => {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              max_tokens: 111,
+              max_completion_tokens: 222,
+              passthrough: { max_completion_tokens: 333 },
+            },
+          },
+        });
+
+        expect(result.body.max_tokens).toBe(333);
         expect(result.body.max_completion_tokens).toBeUndefined();
-      }
+      },
+    );
 
-      vi.stubEnv('OPENAI_MAX_COMPLETION_TOKENS', '654');
-      const provider = createXAIProvider(`xai:${modelName}`) as any;
-      const result = await provider.getOpenAiBody('test prompt');
-
-      expect(result.body.max_tokens).toBe(654);
-      expect(result.body.max_completion_tokens).toBeUndefined();
-
-      const filteredResult = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            max_tokens: 321,
-            presence_penalty: 0.5,
-            frequency_penalty: 0.7,
-            stop: ['END'],
+    it.each(['grok-build-0.1', 'grok-code-fast-1', 'grok-code-fast', 'grok-code-fast-1-0825'])(
+      'keeps prompt token-limit precedence across aliases for Grok Build chat requests using %s',
+      async (modelName) => {
+        const provider = createXAIProvider(`xai:${modelName}`, {
+          config: { config: { max_tokens: 111 } },
+        }) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              max_completion_tokens: 222,
+            },
           },
-        },
-      });
+        });
 
-      expect(filteredResult.body.max_tokens).toBe(321);
-      expect(filteredResult.body.presence_penalty).toBeUndefined();
-      expect(filteredResult.body.frequency_penalty).toBeUndefined();
-      expect(filteredResult.body.stop).toBeUndefined();
-    });
-
-    it.each([
-      'grok-build-0.1',
-      'grok-code-fast-1',
-      'grok-code-fast',
-      'grok-code-fast-1-0825',
-    ])('preserves passthrough token-limit precedence for Grok Build chat requests using %s', async (modelName) => {
-      const provider = createXAIProvider(`xai:${modelName}`) as any;
-      const result = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            max_tokens: 111,
-            max_completion_tokens: 222,
-            passthrough: { max_completion_tokens: 333 },
-          },
-        },
-      });
-
-      expect(result.body.max_tokens).toBe(333);
-      expect(result.body.max_completion_tokens).toBeUndefined();
-    });
-
-    it.each([
-      'grok-build-0.1',
-      'grok-code-fast-1',
-      'grok-code-fast',
-      'grok-code-fast-1-0825',
-    ])('keeps prompt token-limit precedence across aliases for Grok Build chat requests using %s', async (modelName) => {
-      const provider = createXAIProvider(`xai:${modelName}`, {
-        config: { config: { max_tokens: 111 } },
-      }) as any;
-      const result = await provider.getOpenAiBody('test prompt', {
-        prompt: {
-          config: {
-            max_completion_tokens: 222,
-          },
-        },
-      });
-
-      expect(result.body.max_tokens).toBe(222);
-      expect(result.body.max_completion_tokens).toBeUndefined();
-    });
+        expect(result.body.max_tokens).toBe(222);
+        expect(result.body.max_completion_tokens).toBeUndefined();
+      },
+    );
 
     it('does not restore a provider token limit replaced by prompt passthrough', async () => {
       const provider = createXAIProvider('xai:grok-4.3', {

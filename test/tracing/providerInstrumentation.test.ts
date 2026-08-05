@@ -473,25 +473,25 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       { system: 'openrouter', model: 'openai/gpt-4' },
     ];
 
-    it.each(categoryAProviders)('should correctly instrument $system provider', async ({
-      system,
-      model,
-    }) => {
-      await withGenAISpan(
-        { system, operationName: 'chat', model, providerId: `${system}:${model}` },
-        async () => ({ output: 'test' }),
-        () => ({ tokenUsage: { prompt: 10, completion: 5, total: 15 } }),
-      );
+    it.each(categoryAProviders)(
+      'should correctly instrument $system provider',
+      async ({ system, model }) => {
+        await withGenAISpan(
+          { system, operationName: 'chat', model, providerId: `${system}:${model}` },
+          async () => ({ output: 'test' }),
+          () => ({ tokenUsage: { prompt: 10, completion: 5, total: 15 } }),
+        );
 
-      const span = memoryExporter.getFinishedSpans()[0];
+        const span = memoryExporter.getFinishedSpans()[0];
 
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
-      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
-      expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
-      expect(span.status.code).toBe(SpanStatusCode.OK);
+        expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+        expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
+        expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
+        expect(span.status.code).toBe(SpanStatusCode.OK);
 
-      memoryExporter.reset();
-    });
+        memoryExporter.reset();
+      },
+    );
 
     // Test Category B providers (inherit from OpenAI)
     const categoryBProviders = [
@@ -505,26 +505,27 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       'perplexity',
     ];
 
-    it.each(
-      categoryBProviders,
-    )('should support inherited instrumentation for %s (via OpenAI base)', async (system) => {
-      // Category B providers inherit from OpenAI and should work with the same pattern
-      await withGenAISpan(
-        {
-          system,
-          operationName: 'chat',
-          model: 'model-name',
-          providerId: `${system}:model-name`,
-        },
-        async () => ({ output: 'test' }),
-      );
+    it.each(categoryBProviders)(
+      'should support inherited instrumentation for %s (via OpenAI base)',
+      async (system) => {
+        // Category B providers inherit from OpenAI and should work with the same pattern
+        await withGenAISpan(
+          {
+            system,
+            operationName: 'chat',
+            model: 'model-name',
+            providerId: `${system}:model-name`,
+          },
+          async () => ({ output: 'test' }),
+        );
 
-      const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
-      expect(span.status.code).toBe(SpanStatusCode.OK);
+        const span = memoryExporter.getFinishedSpans()[0];
+        expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+        expect(span.status.code).toBe(SpanStatusCode.OK);
 
-      memoryExporter.reset();
-    });
+        memoryExporter.reset();
+      },
+    );
   });
 
   describe('Promptfoo Context Attributes', () => {

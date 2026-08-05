@@ -378,25 +378,25 @@ describe('NovaSonic Provider', () => {
         config: { profile: 'test-profile', apiKey: 'unused-api-key' },
         expectedCredentials: expect.any(Function),
       },
-    ])('should preserve $name when an API key is also configured', async ({
-      config,
-      expectedCredentials,
-    }) => {
-      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
-      const profileCredentials = vi.fn();
-      vi.mocked(fromSSO).mockReturnValue(profileCredentials);
-      const mixedCredentialsProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
-        config,
-      });
+    ])(
+      'should preserve $name when an API key is also configured',
+      async ({ config, expectedCredentials }) => {
+        vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+        const profileCredentials = vi.fn();
+        vi.mocked(fromSSO).mockReturnValue(profileCredentials);
+        const mixedCredentialsProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+          config,
+        });
 
-      await mixedCredentialsProvider.callApi('Test prompt');
+        await mixedCredentialsProvider.callApi('Test prompt');
 
-      expect(vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0]).toMatchObject({
-        authSchemePreference: ['sigv4'],
-        credentials: config.profile === undefined ? expectedCredentials : profileCredentials,
-      });
-      expect(mockSend).toHaveBeenCalled();
-    });
+        expect(vi.mocked(BedrockRuntimeClient).mock.calls.at(-1)?.[0]).toMatchObject({
+          authSchemePreference: ['sigv4'],
+          credentials: config.profile === undefined ? expectedCredentials : profileCredentials,
+        });
+        expect(mockSend).toHaveBeenCalled();
+      },
+    );
 
     it('should reject Nova 2 Sonic outside its published in-region endpoints', async () => {
       vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();

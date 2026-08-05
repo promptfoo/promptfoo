@@ -1129,47 +1129,47 @@ describe('AIStudioChatProvider', () => {
         },
         expectedReference: `file://${path.resolve(promptSchemaBasePath, 'schema.json')}`,
       },
-    ])('resolves $owner-owned responseSchema against its AI Studio basePath', async ({
-      promptConfig,
-      expectedReference,
-    }) => {
-      const responseSchema = {
-        type: 'object',
-        properties: { answer: { type: 'string' } },
-      };
-      mockMaybeLoadFromExternalFile.mockImplementation((input) =>
-        input === expectedReference ? JSON.stringify(responseSchema) : input,
-      );
-      provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-          basePath: providerSchemaBasePath,
-          responseSchema: 'file://schema.json',
-        },
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: {
-          candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }],
-        },
-        cached: false,
-      } as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
-        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-        coerced: false,
-        systemInstruction: undefined,
-      });
+    ])(
+      'resolves $owner-owned responseSchema against its AI Studio basePath',
+      async ({ promptConfig, expectedReference }) => {
+        const responseSchema = {
+          type: 'object',
+          properties: { answer: { type: 'string' } },
+        };
+        mockMaybeLoadFromExternalFile.mockImplementation((input) =>
+          input === expectedReference ? JSON.stringify(responseSchema) : input,
+        );
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerSchemaBasePath,
+            responseSchema: 'file://schema.json',
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }],
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
 
-      await provider.callGemini('test prompt', {
-        prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
-        vars: {},
-      });
+        await provider.callGemini('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
+          vars: {},
+        });
 
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith(expectedReference);
-      const requestBody = JSON.parse(
-        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
-      );
-      expect(requestBody.generationConfig.response_schema).toEqual(responseSchema);
-    });
+        expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith(expectedReference);
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.generationConfig.response_schema).toEqual(responseSchema);
+      },
+    );
 
     it('should handle safety ratings', async () => {
       const mockResponse = {
@@ -1346,43 +1346,43 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it.each([
-      'gemini-3.6-flash',
-      'gemini-3.5-flash-lite',
-    ])('should omit unsupported sampling controls for %s', async (modelName) => {
-      provider = new AIStudioChatProvider(modelName, {
-        config: {
-          apiKey: 'test-key',
-          temperature: 0.2,
-          topP: 0.3,
-          topK: 4,
-          generationConfig: {
-            temperature: 0.5,
-            topP: 0.6,
-            topK: 7,
-            maxOutputTokens: 200,
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should omit unsupported sampling controls for %s',
+      async (modelName) => {
+        provider = new AIStudioChatProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.2,
+            topP: 0.3,
+            topK: 4,
+            generationConfig: {
+              temperature: 0.5,
+              topP: 0.6,
+              topK: 7,
+              maxOutputTokens: 200,
+            },
           },
-        },
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: { candidates: [{ content: { parts: [{ text: 'response' }] } }] },
-        cached: false,
-      } as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
-        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-        coerced: false,
-        systemInstruction: undefined,
-      });
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: { candidates: [{ content: { parts: [{ text: 'response' }] } }] },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
 
-      await provider.callGemini('test prompt');
+        await provider.callGemini('test prompt');
 
-      const request = vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1] as RequestInit;
-      const generationConfig = JSON.parse(request.body as string).generationConfig;
-      expect(generationConfig).not.toHaveProperty('temperature');
-      expect(generationConfig).not.toHaveProperty('topP');
-      expect(generationConfig).not.toHaveProperty('topK');
-      expect(generationConfig).toHaveProperty('maxOutputTokens', 200);
-    });
+        const request = vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1] as RequestInit;
+        const generationConfig = JSON.parse(request.body as string).generationConfig;
+        expect(generationConfig).not.toHaveProperty('temperature');
+        expect(generationConfig).not.toHaveProperty('topP');
+        expect(generationConfig).not.toHaveProperty('topK');
+        expect(generationConfig).toHaveProperty('maxOutputTokens', 200);
+      },
+    );
 
     it('should handle API version selection', async () => {
       const v1alphaProvider = new AIStudioChatProvider('gemini-2.0-flash-thinking-exp', {
@@ -2405,49 +2405,49 @@ describe('AIStudioChatProvider', () => {
           'system-instruction.txt',
         )}`,
       },
-    ])('resolves $owner-owned systemInstruction against its AI Studio basePath', async ({
-      promptConfig,
-      expectedReference,
-    }) => {
-      const mockSystemInstruction = 'Instruction loaded from the owning base path.';
-      mockMaybeLoadFromExternalFile.mockImplementation((input) =>
-        input === expectedReference ? mockSystemInstruction : input,
-      );
-      provider = new AIStudioChatProvider('gemini-pro', {
-        config: {
-          apiKey: 'test-key',
-          basePath: providerSystemInstructionBasePath,
-          systemInstruction: 'file://system-instruction.txt',
-        },
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        },
-        cached: false,
-      } as any);
-      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
-        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
-        coerced: false,
-        systemInstruction: undefined,
-      });
+    ])(
+      'resolves $owner-owned systemInstruction against its AI Studio basePath',
+      async ({ promptConfig, expectedReference }) => {
+        const mockSystemInstruction = 'Instruction loaded from the owning base path.';
+        mockMaybeLoadFromExternalFile.mockImplementation((input) =>
+          input === expectedReference ? mockSystemInstruction : input,
+        );
+        provider = new AIStudioChatProvider('gemini-pro', {
+          config: {
+            apiKey: 'test-key',
+            basePath: providerSystemInstructionBasePath,
+            systemInstruction: 'file://system-instruction.txt',
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          },
+          cached: false,
+        } as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
 
-      await provider.callGemini('test prompt', {
-        prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
-        vars: {},
-      });
+        await provider.callGemini('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
+          vars: {},
+        });
 
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith(expectedReference);
-      expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining(mockSystemInstruction),
-        }),
-        expect.any(Number),
-        'json',
-        false,
-      );
-    });
+        expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith(expectedReference);
+        expect(cache.fetchWithCache).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            body: expect.stringContaining(mockSystemInstruction),
+          }),
+          expect.any(Number),
+          'json',
+          false,
+        );
+      },
+    );
 
     describe('thinking token tracking', () => {
       it('should track thinking tokens when present in response', async () => {
