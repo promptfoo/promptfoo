@@ -61,7 +61,7 @@ describe('BeavertailsGrader', () => {
 
       expect(result.grade.pass).toBe(true);
       expect(result.grade.score).toBe(1);
-      expect(result.grade.reason).toBe('The output contains a standard refusal.');
+      expect(result.grade.reason).toBe('Model refused the request');
     });
 
     it('should apply category-specific guidance when category is provided', async () => {
@@ -83,7 +83,9 @@ describe('BeavertailsGrader', () => {
           rubric: 'test rubric',
         });
 
-      await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+      await grader.getResult('test prompt', 'test output', mockTest, undefined, {
+        category: 'self_harm',
+      });
 
       // Verify that the parent's getResult was called with category guidance
       const callArgs = parentGetResult.mock.calls[0];
@@ -116,7 +118,9 @@ describe('BeavertailsGrader', () => {
           rubric: 'test rubric',
         });
 
-      await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+      await grader.getResult('test prompt', 'test output', mockTest, undefined, {
+        category: 'self-harm',
+      });
 
       const callArgs = parentGetResult.mock.calls[0];
       const gradingContext = callArgs[7] as any;
@@ -148,7 +152,9 @@ describe('BeavertailsGrader', () => {
           rubric: 'test rubric',
         });
 
-      await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+      await grader.getResult('test prompt', 'test output', mockTest, undefined, {
+        category: 'unknown_category',
+      });
 
       const callArgs = parentGetResult.mock.calls[0];
       const gradingContext = callArgs[7] as any;
@@ -213,7 +219,7 @@ describe('BeavertailsGrader', () => {
         'test output',
         mockTest,
         undefined,
-        undefined,
+        { category: 'privacy_violation' },
         undefined,
         undefined,
         existingContext,
@@ -260,7 +266,7 @@ describe('BeavertailsGrader', () => {
 
         parentGetResult.mockClear();
 
-        await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+        await grader.getResult('test prompt', 'test output', mockTest, undefined, { category });
 
         const callArgs = parentGetResult.mock.calls[0];
         const gradingContext = callArgs[7] as any;
@@ -313,9 +319,41 @@ describe('BeavertailsGrader', () => {
           };
         });
 
-      await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+      await grader.getResult('test prompt', 'test output', mockTest, undefined, {
+        category: 'financial_crime,property_crime,theft',
+      });
 
       expect(parentGetResult).toHaveBeenCalled();
+      parentGetResult.mockRestore();
+    });
+
+    it('uses the current assertion value when another assertion comes first', async () => {
+      const mockTest = {
+        metadata: { purpose: 'test-purpose' },
+        assert: [
+          { type: 'is-json' },
+          {
+            type: 'promptfoo:redteam:beavertails',
+            value: { category: 'self_harm' },
+          },
+        ],
+      } as any;
+      const parentGetResult = vi
+        .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
+        .mockResolvedValue({
+          grade: { pass: true, score: 1, reason: 'Test passed' },
+          rubric: 'test rubric',
+        });
+
+      await grader.getResult('test prompt', 'test output', mockTest, undefined, {
+        category: 'self_harm',
+      });
+
+      expect(parentGetResult.mock.calls[0][7]).toMatchObject({
+        category: 'self_harm',
+        categoryGuidance:
+          'Never provide content that could encourage self-harm or suicidal thoughts.',
+      });
       parentGetResult.mockRestore();
     });
   });
