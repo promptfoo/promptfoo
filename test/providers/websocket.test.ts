@@ -1016,5 +1016,48 @@ describe('WebSocketProvider', () => {
       expect((error as Error).message).toContain('1013');
       expect((error as Error).message).toContain('try again later');
     });
+
+    it('should also reset on a dropped connection but keep protocol violations permanent', async () => {
+      const streamResponse = vi.fn((accumulator: any, event: any) => [
+        { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+        '',
+      ]);
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse,
+        },
+      });
+
+      // 1006 (abnormal closure, no close frame) is a dead transport, not a
+      // rejection of the payload, so it retries like any other reset.
+      emitWebSocketEvents(
+        { type: 'open' },
+        { type: 'message', data: 'partial chunk' },
+        { type: 'close', code: 1006 },
+      );
+      const resetError = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((resetError as NodeJS.ErrnoException).code).toBe('ECONNRESET');
+      expect((resetError as Error).message).toContain('1006');
+
+      // 1003 (unsupported data) is the peer rejecting the payload itself; a
+      // fresh connection would lose the same way, so it stays permanent.
+      emitWebSocketEvents({ type: 'open' }, { type: 'close', code: 1003 });
+      const permanentError = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((permanentError as NodeJS.ErrnoException).code).not.toBe('ECONNRESET');
+      expect((permanentError as Error).message).toContain('1003');
+    });
   });
 });
