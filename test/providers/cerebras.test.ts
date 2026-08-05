@@ -265,6 +265,28 @@ describe('Cerebras provider', () => {
 
       expect(cost).toBeCloseTo(1.1, 10);
     });
+
+    it('gives prompt-level pricing overrides precedence over provider defaults', () => {
+      const provider = createCerebrasProvider('cerebras:gpt-oss-120b') as unknown as {
+        calculateResponseCost(
+          data: Record<string, unknown>,
+          config: Record<string, unknown>,
+          cached: boolean,
+        ): number | undefined;
+      };
+
+      const cost = provider.calculateResponseCost(
+        { usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 } },
+        {
+          inputCost: 3 / 1e6,
+          outputCost: 4 / 1e6,
+          passthrough: { inputCost: 1 / 1e6, outputCost: 2 / 1e6 },
+        },
+        false,
+      );
+
+      expect(cost).toBeCloseTo(7, 10);
+    });
   });
 
   describe('loadApiProvider', () => {

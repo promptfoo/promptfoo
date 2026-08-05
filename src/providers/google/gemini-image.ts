@@ -185,27 +185,26 @@ export class GeminiImageProvider implements ApiProvider {
         this.config.googleAuthOptions?.keyFilename ||
         this.config.googleAuthOptions?.credentials,
     );
+    const providerScopedRegion =
+      this.config.region || this.env?.VERTEX_REGION || this.env?.GOOGLE_CLOUD_LOCATION;
     const hasProviderScopedOAuthConfig = Boolean(
       this.config.projectId ||
-        this.config.region ||
         this.env?.VERTEX_PROJECT_ID ||
         this.env?.GOOGLE_PROJECT_ID ||
         this.env?.GOOGLE_CLOUD_PROJECT ||
-        this.env?.VERTEX_REGION ||
-        this.env?.GOOGLE_CLOUD_LOCATION,
+        (providerScopedRegion && providerScopedRegion !== 'global'),
     );
     const explicitlyRequestedExpress =
       this.config.expressMode === true ||
       Boolean(this.config.apiKey) ||
       (Boolean(this.env?.VERTEX_API_KEY || this.env?.GOOGLE_API_KEY) &&
         !hasProviderScopedOAuthConfig);
+    const effectiveRegion =
+      providerScopedRegion ||
+      getEnvString('VERTEX_REGION') ||
+      getEnvString('GOOGLE_CLOUD_LOCATION');
     const hasProjectScopedOAuthConfig = Boolean(
-      projectId ||
-        this.config.region ||
-        this.env?.VERTEX_REGION ||
-        this.env?.GOOGLE_CLOUD_LOCATION ||
-        getEnvString('VERTEX_REGION') ||
-        getEnvString('GOOGLE_CLOUD_LOCATION'),
+      projectId || (effectiveRegion && effectiveRegion !== 'global'),
     );
     const usesVertexExpress =
       this.config.vertexai === true &&

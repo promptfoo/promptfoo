@@ -760,10 +760,18 @@ function usesVertexExpressInteractions(
       config.googleAuthOptions?.keyFilename ||
       config.googleAuthOptions?.credentials,
   );
+  const providerScopedRegion = config.region || env?.VERTEX_REGION || env?.GOOGLE_CLOUD_LOCATION;
+  const hasProviderScopedOAuthConfig = Boolean(
+    config.projectId ||
+      env?.VERTEX_PROJECT_ID ||
+      env?.GOOGLE_PROJECT_ID ||
+      env?.GOOGLE_CLOUD_PROJECT ||
+      (providerScopedRegion && providerScopedRegion !== 'global'),
+  );
   const explicitlyRequestedExpress =
     config.expressMode === true ||
     Boolean(config.apiKey) ||
-    (Boolean(env?.VERTEX_API_KEY) && !config.projectId);
+    (Boolean(env?.VERTEX_API_KEY) && !hasProviderScopedOAuthConfig);
   const hasProjectScopedOAuthConfig = Boolean(
     config.projectId ||
       config.region ||

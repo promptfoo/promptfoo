@@ -83,10 +83,12 @@ export function createCerebrasProvider(
       const passthrough = (config.passthrough ?? {}) as Partial<OpenAiCompletionOptions> & {
         model?: unknown;
       };
-      const modelName = typeof passthrough.model === 'string' ? passthrough.model : this.modelName;
+      const effectiveConfig = { ...passthrough, ...config };
+      const modelName =
+        typeof effectiveConfig.model === 'string' ? effectiveConfig.model : this.modelName;
       return calculateCerebrasCost(
         modelName,
-        { ...config, ...passthrough },
+        effectiveConfig,
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       );

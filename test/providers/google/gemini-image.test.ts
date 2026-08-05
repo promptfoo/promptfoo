@@ -314,6 +314,31 @@ describe('GeminiImageProvider', () => {
     );
   });
 
+  it('should use provider-scoped global with VERTEX_API_KEY for Vertex Express', async () => {
+    const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
+      config: { vertexai: true },
+      env: {
+        VERTEX_API_KEY: 'provider-vertex-key',
+        GOOGLE_CLOUD_LOCATION: 'global',
+      },
+    });
+    mockSuccessfulImageResponse();
+
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toBeUndefined();
+    expect(mockGetGoogleClient).not.toHaveBeenCalled();
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('aiplatform.googleapis.com/v1/publishers/google/models/'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'x-goog-api-key': 'provider-vertex-key' }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
   it('should prefer a provider-scoped GOOGLE_API_KEY over a process VERTEX_API_KEY for Vertex Express', async () => {
     mockProcessEnv({ VERTEX_API_KEY: 'ambient-vertex-key' });
     mockProcessEnv({ GOOGLE_PROJECT_ID: 'ambient-project' });
@@ -535,7 +560,7 @@ describe('GeminiImageProvider', () => {
     it('should honor a scoped Vertex project and region over an unrelated Google API key', async () => {
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       mockResolveProjectId.mockImplementation(async (config, env) =>
-        Promise.resolve(config.projectId || env?.GOOGLE_CLOUD_PROJECT),
+        Promise.resolve(config.projectId || env?.GOOGLE_CLOUD_PROJECT || ''),
       );
       const provider = new GeminiImageProvider('gemini-2.5-flash-image', {
         config: { vertexai: true, region: 'europe-west1' },

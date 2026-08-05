@@ -119,4 +119,19 @@ describe('video cache utilities', () => {
       'https://cdn.example.com/video.mp4#view=preview',
     );
   });
+
+  it('scrubs all secret-named URL parameters from persisted source metadata', () => {
+    const sourceUri = 'https://cdn.example.com/video.mp4?session=private-value&view=preview';
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+    expect(sanitizeVideoSourceUri(sourceUri)).toBe(
+      'https://cdn.example.com/video.mp4?view=preview',
+    );
+  });
+
+  it('rejects bare credential fragments from persistent cache identities', () => {
+    const sourceUri = 'https://cdn.example.com/video.mp4#sk-proj-abcdefghijklmnopqrstuvwxyz';
+
+    expect(isVideoCacheReferenceUrlSafe(sourceUri)).toBe(false);
+  });
 });

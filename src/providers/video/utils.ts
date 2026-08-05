@@ -43,7 +43,11 @@ function scrubVideoUrlParams(params: URLSearchParams, removeCredentials: boolean
     const containsCredentialValue = values.some(
       (value) => value === REDACTED || isCredentialLikeVideoUrlValue(value),
     );
-    if (SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) || containsCredentialValue) {
+    if (
+      isSecretField(key) ||
+      SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) ||
+      containsCredentialValue
+    ) {
       if (removeCredentials) {
         params.delete(key);
       } else {
@@ -51,6 +55,24 @@ function scrubVideoUrlParams(params: URLSearchParams, removeCredentials: boolean
       }
     }
   }
+}
+
+function getDecodedVideoUrlFragment(hash: string): string {
+  const fragment = hash.startsWith('#') ? hash.slice(1) : hash;
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
+}
+
+function isCredentialLikeVideoUrlFragment(fragment: string): boolean {
+  const segments = fragment.split('/').filter(Boolean);
+  return (
+    isCredentialLikeVideoUrlValue(fragment) ||
+    segments.some(isCredentialLikeVideoUrlValue) ||
+    (segments.length > 1 && isSecretField(segments[0]))
+  );
 }
 
 function hasVideoUrlCredentialParams(params: URLSearchParams): boolean {
@@ -94,14 +116,19 @@ function scrubVideoReferenceUrl(
       safeUrl.searchParams.sort();
     }
 
-    if (safeUrl.hash.includes('=')) {
-      const fragmentParams = new URLSearchParams(safeUrl.hash.slice(1));
+    const decodedFragment = getDecodedVideoUrlFragment(safeUrl.hash);
+    if (safeUrl.hash.includes('=') || decodedFragment.includes('=')) {
+      const fragmentParams = new URLSearchParams(
+        safeUrl.hash.includes('=') ? safeUrl.hash.slice(1) : decodedFragment,
+      );
       scrubVideoUrlParams(fragmentParams, removeCredentials);
       if (!removeCredentials) {
         fragmentParams.sort();
       }
       const fragment = fragmentParams.toString();
       safeUrl.hash = fragment ? `#${fragment}` : '';
+    } else if (isCredentialLikeVideoUrlFragment(decodedFragment)) {
+      safeUrl.hash = removeCredentials ? '' : `#${encodeURIComponent(REDACTED)}`;
     }
     return safeUrl.toString();
   } catch {
@@ -152,11 +179,16 @@ export function isVideoCacheReferenceUrlSafe(reference: string): boolean {
       return false;
     }
 
-    if (referenceUrl.hash.includes('=')) {
-      const fragmentParams = new URLSearchParams(referenceUrl.hash.slice(1));
+    const decodedFragment = getDecodedVideoUrlFragment(referenceUrl.hash);
+    if (referenceUrl.hash.includes('=') || decodedFragment.includes('=')) {
+      const fragmentParams = new URLSearchParams(
+        referenceUrl.hash.includes('=') ? referenceUrl.hash.slice(1) : decodedFragment,
+      );
       if (hasVideoUrlCredentialParams(fragmentParams)) {
         return false;
       }
+    } else if (isCredentialLikeVideoUrlFragment(decodedFragment)) {
+      return false;
     }
 
     return !referenceUrl.pathname.split('/').some((segment) => {
