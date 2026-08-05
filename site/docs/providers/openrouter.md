@@ -18,9 +18,15 @@ OpenRouter's catalog changes quickly. These are popular model IDs that work well
 
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
-| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     |        1,050,000 | Highest-quality general evaluation |
+| [openai/gpt-5.6-sol](https://openrouter.ai/openai/gpt-5.6-sol)                                             |        1,050,000 | Complex reasoning and coding       |
+| [openai/gpt-5.6-sol-pro](https://openrouter.ai/openai/gpt-5.6-sol-pro)                                     |        1,050,000 | Sol with Pro reasoning mode        |
+| [openai/gpt-5.6-terra](https://openrouter.ai/openai/gpt-5.6-terra)                                         |        1,050,000 | Balanced GPT-5.6 workloads         |
+| [openai/gpt-5.6-terra-pro](https://openrouter.ai/openai/gpt-5.6-terra-pro)                                 |        1,050,000 | Terra with Pro reasoning mode      |
+| [openai/gpt-5.6-luna](https://openrouter.ai/openai/gpt-5.6-luna)                                           |        1,050,000 | Efficient GPT-5.6 workloads        |
+| [openai/gpt-5.6-luna-pro](https://openrouter.ai/openai/gpt-5.6-luna-pro)                                   |        1,050,000 | Luna with Pro reasoning mode       |
+| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     |        1,050,000 | Earlier flagship GPT-5 workflows   |
 | [anthropic/claude-opus-4.7](https://openrouter.ai/anthropic/claude-opus-4.7)                               |        1,000,000 | Long-running agentic workflows     |
-| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           |          400,000 | Fast, lower-cost GPT-5 workflows   |
+| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           |          400,000 | Earlier compact GPT-5 workflows    |
 | [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             |          200,000 | Lower-latency Claude runs          |
 | [google/gemini-2.5-pro](https://openrouter.ai/google/gemini-2.5-pro)                                       |        1,048,576 | Reasoning-heavy tasks              |
 | [google/gemini-2.5-flash](https://openrouter.ai/google/gemini-2.5-flash)                                   |        1,048,576 | Fast multimodal and general chat   |
@@ -35,9 +41,8 @@ For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https
 
 ```yaml
 providers:
-  - id: openrouter:openai/gpt-5.4
+  - id: openrouter:openai/gpt-5.6-sol
     config:
-      temperature: 0.7
       max_tokens: 1000
 
   - id: openrouter:anthropic/claude-opus-4.7
@@ -56,7 +61,7 @@ The same pattern applies to `apiKeyEnvar` — set it to read your API key from a
 
 ```yaml
 providers:
-  - id: openrouter:openai/gpt-5.4
+  - id: openrouter:openai/gpt-5.6-sol
     config:
       apiBaseUrl: https://proxy.example.com/openrouter/api/v1
       apiKeyEnvar: MY_PROXY_KEY # optional: read the Bearer token from $MY_PROXY_KEY

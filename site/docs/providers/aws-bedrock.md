@@ -1262,15 +1262,15 @@ as shown above.
 xAI's **Grok 4.3** (`xai.grok-4.3`) runs on the same Bedrock **Mantle** engine as the OpenAI
 frontier models and is served through the **OpenAI-compatible Responses API** on the regional
 mantle endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`) — not `InvokeModel` or
-`Converse`. It is offered in **`us-west-2`** (check the Bedrock model card for current regional
-availability) and authenticates with an **Amazon Bedrock API key** (set
+`Converse`. It is offered in **`us-east-1`**, **`us-east-2`**, and **`us-west-2`** (check the
+Bedrock model card for current regional availability) and authenticates with an **Amazon Bedrock API key** (set
 `AWS_BEARER_TOKEN_BEDROCK`, or `config.apiKey`).
 
 ```yaml
 providers:
   - id: bedrock:xai.grok-4.3
     config:
-      region: us-west-2 # Grok 4.3 is only available in us-west-2
+      region: us-west-2 # Also available in us-east-1 and us-east-2
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}' # or just export AWS_BEARER_TOKEN_BEDROCK
       reasoning_effort: low # Grok is reasoning-first: none | low | medium | high
       max_output_tokens: 4096
@@ -1283,9 +1283,10 @@ providers:
   `reasoning: { effort }`) and surfaces reasoning token counts in `tokenUsage`.
 - Grok accepts an explicit `temperature`. When you omit it, promptfoo does not inject the OpenAI
   provider default, so Bedrock uses Grok's model default instead.
-- **Cost is not reported** for Grok (`cost` is left undefined). The Responses
-  billing tables are keyed on OpenAI model names; refer to the
-  [Amazon Bedrock pricing page](https://aws.amazon.com/bedrock/pricing/) for Grok rates.
+- Grok 4.3 has a **1-million-token context window**. Promptfoo estimates cost using AWS's
+  published Bedrock rates: $1.25 per 1M input tokens, $0.20 per 1M cached input tokens, and $2.50
+  per 1M output tokens. Cost remains unset for non-Standard service tiers because AWS does not
+  publish those rates.
 
 :::
 

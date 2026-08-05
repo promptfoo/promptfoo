@@ -839,6 +839,49 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider as any).supportsTemperature()).toBe(true);
     });
 
+    it('uses the published Bedrock Grok 4.3 rates, including cached input', () => {
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          passthrough: { model: 'xai.grok-4.3' },
+        },
+      });
+      const billingModelName = (provider as any).getBillingModelName(provider.config);
+
+      expect(billingModelName).toBe('bedrock:grok-4.3');
+      expect(
+        calculateOpenAIUsageCost(
+          billingModelName,
+          provider.config,
+          {
+            input_tokens: 1_000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 200 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        ),
+      ).toBeCloseTo((800 * 1.25 + 200 * 0.2 + 500 * 2.5) / 1e6, 12);
+    });
+
+    it.each(['batch', 'flex', 'fast', 'priority'])(
+      'leaves Grok 4.3 %s-tier cost unset when AWS does not publish a rate',
+      (serviceTier) => {
+        expect(
+          calculateOpenAIUsageCost(
+            'bedrock:grok-4.3',
+            {},
+            {
+              input_tokens: 1_000,
+              output_tokens: 500,
+              input_tokens_details: { cached_tokens: 200 },
+            },
+            { serviceTier },
+          ),
+        ).toBeUndefined();
+      },
+    );
+
     it('omits the inherited temperature default when Grok temperature is not configured', async () => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',

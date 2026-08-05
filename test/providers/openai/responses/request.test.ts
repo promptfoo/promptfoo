@@ -121,7 +121,7 @@ describe('OpenAiResponsesProvider request building', () => {
       reasoning: { effort: 'high' },
     });
     expect(requestBody).not.toHaveProperty('temperature');
-    expect(result.cost).toBeCloseTo(11, 10);
+    expect(result.cost).toBeCloseTo(2.2, 10);
   });
 
   it('should bill a qualified passthrough model through a custom gateway', async () => {
@@ -161,7 +161,7 @@ describe('OpenAiResponsesProvider request building', () => {
     );
 
     expect(requestBody.model).toBe('openai/gpt-5.6-luna');
-    expect(result.cost).toBeCloseTo(11, 10);
+    expect(result.cost).toBeCloseTo(2.2, 10);
   });
 
   it('should not apply OpenAI pricing to another passthrough gateway namespace', async () => {

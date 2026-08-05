@@ -43,7 +43,7 @@ const BEDROCK_GPT_5_6_REGIONS: Record<string, readonly string[]> = {
   'openai.gpt-5.6-luna': ['us-east-1', 'us-east-2', 'us-west-2'],
 };
 
-/** Sole launch region for xAI Grok on Bedrock (us-west-2); used when none is configured. */
+/** Default region for xAI Grok on Bedrock; used when none is configured. */
 export const DEFAULT_BEDROCK_GROK_REGION = 'us-west-2';
 
 /**
@@ -76,26 +76,28 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
   }
 
   /**
-   * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
-   * detection and the OpenAI billing tables match. The request still sends the real
-   * `this.modelName` (e.g. `openai.gpt-5.6-sol`) as the model id. Only bare `openai.` ids reach
-   * this provider (see the routing predicates in `mantle.ts`), so no region prefix is expected.
+   * Normalize the Bedrock provider prefix so capability detection and billing tables match. The
+   * request still sends the real `this.modelName` (for example, `openai.gpt-5.6-sol`) as the model
+   * id. No region prefix is expected because mantle routing receives bare provider model IDs.
    */
   protected getCapabilityModelName(): string {
     return this.normalizeCapabilityModelName(this.modelName);
   }
 
   /**
-   * Keep Bedrock GPT-5.6 billing distinct even when `apiBaseUrl` points to a customer proxy.
-   * Older Bedrock-hosted OpenAI models still use the first-party OpenAI rate table.
+   * Keep Bedrock GPT-5.6 and Grok 4.3 billing distinct even when `apiBaseUrl` points to a
+   * customer proxy. Older Bedrock-hosted OpenAI models still use the first-party OpenAI rate
+   * table.
    */
   protected getBillingModelName(config: OpenAiCompletionOptions): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const modelName =
       typeof passthroughModel === 'string'
-        ? passthroughModel.replace(/^openai\./, '')
+        ? this.normalizeCapabilityModelName(passthroughModel)
         : this.getCapabilityModelName();
-    return /^gpt-5\.6(?:-|$)/.test(modelName) ? `bedrock:${modelName}` : modelName;
+    return /^gpt-5\.6(?:-|$)/.test(modelName) || modelName === 'grok-4.3'
+      ? `bedrock:${modelName}`
+      : modelName;
   }
 
   /**
@@ -158,8 +160,7 @@ export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
  *   the inherited OpenAI Responses temperature default is omitted when the caller does not set
  *   one.
  *
- * Cost is not computed for Grok: the Responses billing tables are keyed on OpenAI model names,
- * and `grok-4.3` is not present, so `cost` is left undefined rather than reported incorrectly.
+ * Grok billing uses AWS's Bedrock-specific rates rather than the direct xAI rate table.
  */
 export class BedrockGrokResponsesProvider extends BedrockOpenAiResponsesProvider {
   protected normalizeCapabilityModelName(modelName: string): string {

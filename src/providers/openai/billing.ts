@@ -62,8 +62,8 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.5) },
-  { models: ['gpt-5.6-terra'], rates: perMillion(0.25) },
-  { models: ['gpt-5.6-luna'], rates: perMillion(0.1) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.02) },
   { models: ['chat-latest'], rates: perMillion(0.5) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.25) },
@@ -185,8 +185,8 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
-  { models: ['gpt-5.6-terra'], rates: perMillion(0.5) },
-  { models: ['gpt-5.6-luna'], rates: perMillion(0.2) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.04) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
 ]);
@@ -244,19 +244,19 @@ const FAST_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6-terra'],
     rates: {
-      input: perMillion(5),
-      cachedInput: perMillion(0.5),
-      cacheWriteInput: perMillion(6.25),
-      output: perMillion(30),
+      input: perMillion(4),
+      cachedInput: perMillion(0.4),
+      cacheWriteInput: perMillion(5),
+      output: perMillion(24),
     },
   },
   {
     models: ['gpt-5.6-luna'],
     rates: {
-      input: perMillion(2),
-      cachedInput: perMillion(0.2),
-      cacheWriteInput: perMillion(2.5),
-      output: perMillion(12),
+      input: perMillion(0.4),
+      cachedInput: perMillion(0.04),
+      cacheWriteInput: perMillion(0.5),
+      output: perMillion(2.4),
     },
   },
   {
@@ -505,7 +505,7 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
 const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id, model]));
 
 const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
-const BEDROCK_MANTLE_GPT_5_6_TEXT_RATES = buildRateTable<OpenAITextRates>([
+const BEDROCK_MANTLE_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6', 'gpt-5.6-sol'],
     rates: {
@@ -531,6 +531,14 @@ const BEDROCK_MANTLE_GPT_5_6_TEXT_RATES = buildRateTable<OpenAITextRates>([
       cachedInput: perMillion(0.11),
       cacheWriteInput: perMillion(1.375),
       output: perMillion(6.6),
+    },
+  },
+  {
+    models: ['grok-4.3'],
+    rates: {
+      input: perMillion(1.25),
+      cachedInput: perMillion(0.2),
+      output: perMillion(2.5),
     },
   },
 ]);
@@ -564,11 +572,16 @@ function usesOpenAIRegionalProcessing(
 function getBedrockMantleTextRates(
   modelName: string,
   resolvedApiUrl: string | undefined,
+  tier: OpenAIProcessingTier,
 ): OpenAITextRates | undefined {
   const hasBedrockBillingMarker = modelName.startsWith('bedrock:');
   const billingModelName = modelName.replace(/^bedrock:/, '');
+  if (billingModelName === 'grok-4.3' && tier !== 'standard') {
+    // AWS publishes only Grok 4.3 Standard rates. Do not reuse them for other service tiers.
+    return undefined;
+  }
   if (hasBedrockBillingMarker) {
-    return BEDROCK_MANTLE_GPT_5_6_TEXT_RATES[billingModelName];
+    return BEDROCK_MANTLE_TEXT_RATES[billingModelName];
   }
 
   if (!resolvedApiUrl) {
@@ -578,7 +591,7 @@ function getBedrockMantleTextRates(
   try {
     const hostname = new URL(resolvedApiUrl).hostname.toLowerCase();
     if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
-      return BEDROCK_MANTLE_GPT_5_6_TEXT_RATES[billingModelName];
+      return BEDROCK_MANTLE_TEXT_RATES[billingModelName];
     }
   } catch {
     return undefined;
@@ -1013,7 +1026,7 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const bedrockMantleTextRates = getBedrockMantleTextRates(modelName, options.apiUrl);
+  const bedrockMantleTextRates = getBedrockMantleTextRates(modelName, options.apiUrl, tier);
   const catalogRates = bedrockMantleTextRates
     ? { text: bedrockMantleTextRates }
     : getModelRates(modelName, tier, usage.totalInputTokens);
