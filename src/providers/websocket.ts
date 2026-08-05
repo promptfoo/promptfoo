@@ -396,12 +396,20 @@ export class WebSocketProvider implements ApiProvider {
         // so without this the promise would sit until the request deadline.
         // Fail fast instead. Our own close() calls settle the promise first,
         // making this reject a no-op on every path we initiated. The two
-        // close codes that explicitly invite reconnecting (RFC 6455) keep the
-        // deadline armed instead, so the retryable timeout path still fires.
+        // close codes that explicitly invite reconnecting (RFC 6455) reject
+        // as a connection reset, so the retry policy fires its backoff right
+        // away instead of after the full deadline.
+        clearTimeout(timeout);
         if (event.code === 1012 || event.code === 1013) {
+          const transient = new Error(
+            `WebSocket closed mid-stream by the peer with code ${event.code} (${
+              event.code === 1012 ? 'service restart' : 'try again later'
+            })`,
+          ) as NodeJS.ErrnoException;
+          transient.code = 'ECONNRESET';
+          reject(transient);
           return;
         }
-        clearTimeout(timeout);
         reject(
           new Error(
             `WebSocket connection closed before the response completed (code ${event.code ?? 'unknown'})`,
