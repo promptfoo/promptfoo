@@ -772,19 +772,17 @@ function usesVertexExpressInteractions(
     config.expressMode === true ||
     Boolean(config.apiKey) ||
     (Boolean(env?.VERTEX_API_KEY) && !hasProviderScopedOAuthConfig);
+  const effectiveRegion =
+    providerScopedRegion || getEnvString('VERTEX_REGION') || getEnvString('GOOGLE_CLOUD_LOCATION');
   const hasProjectScopedOAuthConfig = Boolean(
     config.projectId ||
-      config.region ||
       env?.VERTEX_PROJECT_ID ||
       env?.GOOGLE_PROJECT_ID ||
       env?.GOOGLE_CLOUD_PROJECT ||
-      env?.VERTEX_REGION ||
-      env?.GOOGLE_CLOUD_LOCATION ||
       getEnvString('VERTEX_PROJECT_ID') ||
       getEnvString('GOOGLE_PROJECT_ID') ||
       getEnvString('GOOGLE_CLOUD_PROJECT') ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION'),
+      (effectiveRegion && effectiveRegion !== 'global'),
   );
   return (
     Boolean(apiKey) &&

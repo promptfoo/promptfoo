@@ -745,6 +745,12 @@ function getCompleteTextCostOverrides(config: OpenAIBillingConfig): OpenAITextRa
   return input === undefined || output === undefined ? undefined : { input, output };
 }
 
+function getCompleteAudioCostOverrides(config: OpenAIBillingConfig): OpenAIModalRates | undefined {
+  const input = config.audioInputCost ?? config.audioCost;
+  const output = config.audioOutputCost ?? config.audioCost;
+  return input === undefined || output === undefined ? undefined : { input, output };
+}
+
 function getModelRates(
   modelName: string,
   tier: OpenAIProcessingTier,
@@ -1012,9 +1018,17 @@ export function calculateOpenAIUsageCost(
     ? { text: bedrockMantleTextRates }
     : getModelRates(modelName, tier, usage.totalInputTokens);
   const explicitTextRates = getCompleteTextCostOverrides(config);
+  const explicitAudioRates = getCompleteAudioCostOverrides(config);
   // Complete explicit rates are authoritative when no catalog entry applies, including for
   // namespaced gateway models. Partial overrides cannot establish a safe fallback rate table.
-  const modelRates = catalogRates ?? (explicitTextRates ? { text: explicitTextRates } : undefined);
+  const modelRates =
+    catalogRates ??
+    (explicitTextRates
+      ? {
+          text: explicitTextRates,
+          ...(explicitAudioRates ? { audio: explicitAudioRates } : {}),
+        }
+      : undefined);
   if (!modelRates) {
     return undefined;
   }
@@ -1030,6 +1044,10 @@ export function calculateOpenAIUsageCost(
 
   if (options.cachedResponse) {
     return 0;
+  }
+
+  if (!rates.audio && (usage.audioInputTokens > 0 || usage.audioOutputTokens > 0)) {
+    return undefined;
   }
 
   const textInputCost = config.inputCost ?? config.cost ?? rates.text.input;

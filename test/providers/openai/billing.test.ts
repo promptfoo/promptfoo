@@ -717,6 +717,43 @@ describe('OpenAI billing helpers', () => {
     ).toBeUndefined();
   });
 
+  it('keeps unknown gateway multimodal usage unpriced without audio rates', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/gpt-4o',
+        { inputCost: 2 / 1e6, outputCost: 7 / 1e6 },
+        {
+          prompt_tokens: 30,
+          completion_tokens: 23,
+          prompt_tokens_details: { text_tokens: 21, audio_tokens: 9 },
+          completion_tokens_details: { text_tokens: 16, audio_tokens: 7 },
+        },
+        { apiUrl: 'https://gateway.example/v1' },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('uses complete explicit audio rates for unknown gateway multimodal usage', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'third-party/gpt-4o',
+        {
+          inputCost: 2 / 1e6,
+          outputCost: 7 / 1e6,
+          audioInputCost: 11 / 1e6,
+          audioOutputCost: 19 / 1e6,
+        },
+        {
+          prompt_tokens: 30,
+          completion_tokens: 23,
+          prompt_tokens_details: { text_tokens: 21, audio_tokens: 9 },
+          completion_tokens_details: { text_tokens: 16, audio_tokens: 7 },
+        },
+        { apiUrl: 'https://gateway.example/v1' },
+      ),
+    ).toBeCloseTo((21 * 2 + 9 * 11 + 16 * 7 + 7 * 19) / 1e6, 12);
+  });
+
   it('prices audio text and audio tokens separately', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-4o-mini-audio-preview',

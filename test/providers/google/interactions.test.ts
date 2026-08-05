@@ -2899,6 +2899,53 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
+  it.each([
+    {
+      apiKeyName: 'VERTEX_API_KEY',
+      apiKey: 'process-vertex-key',
+      regionName: 'VERTEX_REGION',
+    },
+    {
+      apiKeyName: 'GOOGLE_API_KEY',
+      apiKey: 'process-google-key',
+      regionName: 'GOOGLE_CLOUD_LOCATION',
+    },
+  ])(
+    'uses process-scoped $apiKeyName with process-scoped global $regionName for Vertex Express',
+    async ({ apiKeyName, apiKey, regionName }) => {
+      vi.stubEnv(apiKeyName, apiKey);
+      vi.stubEnv(regionName, 'global');
+      const oauthSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockRejectedValue(new Error('OAuth must not run for Vertex Express'));
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+        },
+        cached: false,
+      } as any);
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        id: 'vertex:gemini-robotics-er-2-preview',
+        config: { vertexai: true },
+      });
+
+      const result = await provider.callApi('Move the block.');
+
+      expect(result.error).toBeUndefined();
+      expect(oauthSpy).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'https://aiplatform.googleapis.com/v1beta1/interactions',
+        expect.objectContaining({
+          headers: expect.objectContaining({ 'x-goog-api-key': apiKey }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    },
+  );
+
   it('keeps an explicit project on Vertex OAuth despite provider-scoped VERTEX_API_KEY', async () => {
     const endpoint =
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions';
