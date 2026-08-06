@@ -928,6 +928,21 @@ describe('OpenAI assertions', () => {
       }
     });
 
+    it('should return pass:false instead of throwing when the provider returns null output', async () => {
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider: mockProvider,
+        assertion: toolsAssertion,
+        test: {} as AtomicTestCase,
+        // Providers can return malformed runtime values even though the public type excludes null.
+        providerResponse: { output: null as unknown as object },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toContain('OpenAI did not return a valid-looking tools response');
+    });
+
     it('should fail when tool call does not match schema', async () => {
       const toolsOutput = [
         {
