@@ -130,7 +130,8 @@ export function getRemoteVersionUrl(): string | null {
 export function getRemoteGenerationDisabledError(strategyName: string): string {
   return (
     `${strategyName} requires remote generation, which is currently disabled for this configuration. ` +
-    'To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
+    'To enable it, run with --remote, set PROMPTFOO_ENABLE_REMOTE_GENERATION=1 (useful in CI/CD when OPENAI_API_KEY is set for other providers), ' +
+    'set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
     'or log into Promptfoo Cloud with `promptfoo auth login`.'
   );
 }
@@ -178,8 +179,10 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
     (options?.canUseCodexDefaultProvider &&
       !options?.requireEmbeddingProvider &&
       hasCodexDefaultCredentials());
+  const forceRemote =
+    getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION') || (cliState.remote ?? false);
 
-  return !hasLocalCredentials || (cliState.remote ?? false);
+  return forceRemote || !hasLocalCredentials;
 }
 
 /**
