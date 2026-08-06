@@ -721,16 +721,15 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(true);
       });
 
-      it.each([
-        'gpt-5.6-sol',
-        'gpt-5.6-terra',
-        'gpt-5.6-luna',
-      ])('should auto-detect %s by deployment name', (model) => {
-        const provider = new AzureChatCompletionProvider(model, {
-          config: {},
-        });
-        expect((provider as any).isReasoningModel()).toBe(true);
-      });
+      it.each(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+        'should auto-detect %s by deployment name',
+        (model) => {
+          const provider = new AzureChatCompletionProvider(model, {
+            config: {},
+          });
+          expect((provider as any).isReasoningModel()).toBe(true);
+        },
+      );
 
       it('should not detect non-reasoning models', () => {
         const provider = new AzureChatCompletionProvider('gpt-4o', {
