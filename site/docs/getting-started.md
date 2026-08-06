@@ -49,6 +49,8 @@ Most providers need authentication. For OpenAI:
 export OPENAI_API_KEY=sk-abc123
 ```
 
+This export only applies to the current terminal session. If you want the key to be available in future sessions on a local, trusted machine, you can add the same export line to your shell's startup file (for example, your shell profile or rc file). Avoid committing it to source control, and consider a secret manager or your operating system's keychain for longer-term secret storage.
+
 Then navigate to the example directory, run the eval, and view results:
 
 <Tabs groupId="promptfoo-command">
