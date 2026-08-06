@@ -2184,6 +2184,8 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    isRedteam={isRedteam}
+                    testVars={info.row.original.test?.vars}
                   />
                 </ErrorBoundary>
               ) : (

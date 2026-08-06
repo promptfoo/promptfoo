@@ -418,6 +418,9 @@ export interface EvaluateTableOutput {
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;
   id: string;
+  evalId?: string;
+  /** True when large fields were removed from the table response and must be fetched on demand. */
+  isTruncated?: boolean;
   latencyMs: number;
   metadata?: Record<string, any>;
   namedScores: Record<string, number>;

@@ -84,7 +84,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
@@ -621,6 +621,23 @@ export function createServerOpenApiRegistry() {
     },
     responses: {
       200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
+      400: validationError(),
+      404: notFound('Result or evaluation not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{evalId}/results/{resultId}/detail',
+    operationId: 'getEvalResultDetail',
+    tags: ['Eval'],
+    summary: 'Fetch expanded details for one evaluation result',
+    request: {
+      params: params('GetEvalResultDetailParams', EvalSchemas.ResultDetail.Params),
+    },
+    responses: {
+      200: jsonResponse('GetEvalResultDetailResponse', EvalSchemas.ResultDetail.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
       500: serverError(),
