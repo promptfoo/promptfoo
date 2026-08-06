@@ -4,7 +4,7 @@ import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import type {
   EvalTableDTO,
   EvaluateTable,
@@ -96,6 +96,7 @@ function createMockOutput(hasHumanRating: boolean): EvaluateTableOutput {
 }
 
 const initialTableStoreState = useTableStore.getState();
+const initialResultsViewSettingsState = useResultsViewSettingsStore.getState();
 
 describe('useTableStore', () => {
   beforeEach(() => {
@@ -2617,5 +2618,46 @@ describe('useTableStore', () => {
         timers.restore({ runPending: true });
       }
     });
+  });
+});
+
+describe('useResultsViewSettingsStore', () => {
+  beforeEach(() => {
+    localStorage.removeItem('eval-settings');
+    act(() => {
+      useResultsViewSettingsStore.setState(initialResultsViewSettingsState, true);
+    });
+  });
+
+  it('defaults chart visibility to auto mode until the user toggles it', () => {
+    expect(useResultsViewSettingsStore.getState().showCharts).toBeNull();
+
+    act(() => {
+      useResultsViewSettingsStore.getState().toggleShowCharts(false);
+    });
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(true);
+  });
+
+  it('toggles repeatedly against the latest explicit preference', () => {
+    expect(useResultsViewSettingsStore.getState().showCharts).toBeNull();
+
+    act(() => {
+      useResultsViewSettingsStore.getState().toggleShowCharts(true);
+      useResultsViewSettingsStore.getState().toggleShowCharts(true);
+    });
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(true);
+  });
+
+  it('rehydrates an explicit chart preference from persisted settings', async () => {
+    localStorage.setItem(
+      'eval-settings',
+      JSON.stringify({ state: { showCharts: false }, version: 2 }),
+    );
+
+    await act(async () => {
+      await useResultsViewSettingsStore.persist.rehydrate();
+    });
+
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(false);
   });
 });
