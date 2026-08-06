@@ -326,11 +326,11 @@ describe('OpenAI billing helpers', () => {
   });
 
   it.each([
-    'gpt-5.6',
-    'gpt-5.6-sol',
-    'gpt-5.6-terra',
-    'gpt-5.6-luna',
-  ])('omits %s cost when raw usage lacks cache-write tokens', (model) => {
+    ['gpt-5.6', 5, 0.5, 30],
+    ['gpt-5.6-sol', 5, 0.5, 30],
+    ['gpt-5.6-terra', 2.5, 0.25, 15],
+    ['gpt-5.6-luna', 1, 0.1, 6],
+  ])('prices %s when raw usage omits cache-write tokens', (model, inputRate, cachedRate, outputRate) => {
     expect(
       calculateOpenAIUsageCost(
         model,
@@ -341,7 +341,7 @@ describe('OpenAI billing helpers', () => {
           input_tokens_details: { cached_tokens: 500 },
         },
       ),
-    ).toBeUndefined();
+    ).toBeCloseTo((1_500 * inputRate + 500 * cachedRate + 1_000 * outputRate) / 1e6, 10);
   });
 
   it('uses a custom GPT-5.6 input cost when cache-write tokens are unavailable', () => {
@@ -466,14 +466,24 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
-  it('omits GPT-5.6 cost when summarized usage lacks cache-write tokens', () => {
+  it.each([
+    ['gpt-5.6', 5, 0.5, 30],
+    ['gpt-5.6-sol', 5, 0.5, 30],
+    ['gpt-5.6-terra', 2.5, 0.25, 15],
+    ['gpt-5.6-luna', 1, 0.1, 6],
+    ['openai.gpt-5.6-sol', 5, 0.5, 30],
+    ['openai.gpt-5.6-terra', 2.5, 0.25, 15],
+    ['openai.gpt-5.6-luna', 1, 0.1, 6],
+    ['openai.gpt-5.5', 5, 0.5, 30],
+    ['openai.gpt-5.4', 2.5, 0.25, 15],
+  ])('prices summarized usage for %s without cache-write tokens', (model, inputRate, cachedRate, outputRate) => {
     expect(
-      calculateOpenAIUsageCostFromTokenUsage('gpt-5.6-sol', {
+      calculateOpenAIUsageCostFromTokenUsage(model, {
         prompt: 2_000,
         completion: 1_000,
         cached: 500,
       }),
-    ).toBeUndefined();
+    ).toBeCloseTo((1_500 * inputRate + 500 * cachedRate + 1_000 * outputRate) / 1e6, 10);
   });
 
   it('prices GPT-5.6 summarized usage when cache-write tokens are known', () => {

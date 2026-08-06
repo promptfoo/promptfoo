@@ -881,7 +881,7 @@ describe('OpenAICodexAppServerProvider', () => {
     try {
       const provider = new OpenAICodexAppServerProvider({
         config: {
-          model: 'openai.gpt-5.5',
+          model: 'openai.gpt-5.6-sol',
           model_provider: 'amazon-bedrock',
           thread_cleanup: 'none',
         },
@@ -914,6 +914,16 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       });
       server.send({
+        method: 'thread/tokenUsage/updated',
+        params: {
+          threadId: 'thr_bedrock_noleak',
+          turnId: 'turn_bedrock_noleak',
+          tokenUsage: {
+            last: { inputTokens: 2_000, cachedInputTokens: 500, outputTokens: 1_000 },
+          },
+        },
+      });
+      server.send({
         method: 'turn/completed',
         params: {
           threadId: 'thr_bedrock_noleak',
@@ -921,7 +931,9 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       });
 
-      await expect(resultPromise).resolves.toMatchObject({ output: 'On Bedrock' });
+      const result = await resultPromise;
+      expect(result.output).toBe('On Bedrock');
+      expect(result.cost).toBeCloseTo(0.03775, 10);
 
       const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
       expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();

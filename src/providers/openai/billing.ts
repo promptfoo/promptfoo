@@ -581,13 +581,11 @@ export function calculateOpenAIUsageCostFromTokenUsage(
     return undefined;
   }
 
+  const billingModelName = modelName.replace(/^openai\./, '');
   const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
-  if (GPT_5_6_MODELS.has(modelName) && cacheWriteTokens === undefined) {
-    return undefined;
-  }
 
   return calculateOpenAIUsageCost(
-    modelName,
+    billingModelName,
     {},
     {
       prompt_tokens: tokenUsage.prompt,
@@ -935,16 +933,6 @@ export function calculateOpenAIUsageCost(
 
   if (options.cachedResponse) {
     return 0;
-  }
-
-  const textInputCost = config.inputCost ?? config.cost ?? rates.text.input;
-  const cacheWriteInputCost =
-    config.inputCost ?? config.cost ?? rates.text.cacheWriteInput ?? textInputCost;
-  if (
-    cacheWriteInputCost !== textInputCost &&
-    getOpenAICacheWriteInputTokens(usageParts.usage) === undefined
-  ) {
-    return undefined;
   }
 
   const { hasOutputBreakdown } = usageParts;

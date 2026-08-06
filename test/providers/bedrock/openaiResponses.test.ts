@@ -301,7 +301,11 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
+    it.each([
+      ['openai.gpt-5.6-sol', 5, 0.5, 30],
+      ['openai.gpt-5.6-terra', 2.5, 0.25, 15],
+      ['openai.gpt-5.6-luna', 1, 0.1, 6],
+    ])('prices %s when cache-write usage is missing', (modelId, input, cachedInput, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
@@ -312,7 +316,7 @@ describe('bedrock openaiResponses helper', () => {
           output_tokens: 500,
           input_tokens_details: { cached_tokens: 200 },
         }),
-      ).toBeUndefined();
+      ).toBeCloseTo((800 * input + 200 * cachedInput + 500 * output) / 1e6, 10);
     });
 
     it.each([
