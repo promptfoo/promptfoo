@@ -488,15 +488,18 @@ describe('OpenAI billing helpers', () => {
     ['openai.gpt-5.6-luna', 1, 0.1, 6],
     ['openai.gpt-5.5', 5, 0.5, 30],
     ['openai.gpt-5.4', 2.5, 0.25, 15],
-  ])('prices summarized usage for %s without cache-write tokens', (model, inputRate, cachedRate, outputRate) => {
-    expect(
-      calculateOpenAIUsageCostFromTokenUsage(model, {
-        prompt: 2_000,
-        completion: 1_000,
-        cached: 500,
-      }),
-    ).toBeCloseTo((1_500 * inputRate + 500 * cachedRate + 1_000 * outputRate) / 1e6, 10);
-  });
+  ])(
+    'prices summarized usage for %s without cache-write tokens',
+    (model, inputRate, cachedRate, outputRate) => {
+      expect(
+        calculateOpenAIUsageCostFromTokenUsage(model, {
+          prompt: 2_000,
+          completion: 1_000,
+          cached: 500,
+        }),
+      ).toBeCloseTo((1_500 * inputRate + 500 * cachedRate + 1_000 * outputRate) / 1e6, 10);
+    },
+  );
 
   it('prices GPT-5.6 summarized usage when cache-write tokens are known', () => {
     expect(
