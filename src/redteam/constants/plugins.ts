@@ -425,6 +425,7 @@ export const ADDITIONAL_PLUGINS = [
   'vlguard',
   'vlsu',
   'wordplay',
+  'xss-output',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
