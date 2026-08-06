@@ -698,6 +698,20 @@ describe('App component target selector rendering', () => {
     expect(dropdown).toBeNull();
   });
 
+  it('should preserve an explicit zero probe count for a fully cached report', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    evalData.prompts![0].metrics!.tokenUsage!.numRequests = 0;
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByText('Depth:')).toHaveTextContent('Depth:');
+    expect(screen.getByText('Depth:').parentElement).toHaveTextContent('0 probes');
+  });
+
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);

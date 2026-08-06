@@ -469,6 +469,96 @@ describe('TrueFoundry', () => {
         });
       });
 
+      it('should recognize published TrueFoundry guardrail key names', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: { type: 'guardrail_checks_failed' },
+              message: 'Guardrail violation detected',
+              guardrail_checks: {
+                llm_input_guardrails: [],
+                input_guardrails: [{ name: 'safety/prompt-injection' }],
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: true, flaggedOutput: false });
+      });
+
+      it('should ignore passed input guardrails when an output guardrail fails', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: { type: 'guardrail_checks_failed' },
+              message: 'Output Guardrail checks failed',
+              guardrail_checks: {
+                input_guardrails: [
+                  {
+                    guardrail_integration: 'demo/input',
+                    verdict: true,
+                    data: { score: 0.98 },
+                  },
+                ],
+                output_guardrails: [
+                  {
+                    guardrail_integration: 'demo/output',
+                    data: { verdict: false },
+                  },
+                ],
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: false, flaggedOutput: true });
+      });
+
+      it('should honor boolean guardrail results when determining block direction', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: { type: 'guardrail_checks_failed' },
+              message: 'Output Guardrail checks failed',
+              guardrail_checks: {
+                input_guardrails: [{ guardrail_integration: 'demo/input', result: true }],
+                output_guardrails: [{ guardrail_integration: 'demo/output', result: false }],
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: false, flaggedOutput: true });
+      });
+
+      it('should prefer the structured Azure prompt parameter over ambiguous error text', async () => {
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              error: {
+                message: 'The response was filtered.',
+                code: 'content_filter',
+                param: 'prompt',
+              },
+            }),
+            { status: 400, statusText: 'Bad Request' },
+          ),
+        );
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.guardrails).toMatchObject({ flaggedInput: true, flaggedOutput: false });
+      });
+
       it('should not guess a direction for ambiguous downstream safety blocks', async () => {
         const guardrailResponse = {
           error: {
