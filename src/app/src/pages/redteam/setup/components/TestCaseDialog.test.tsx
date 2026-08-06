@@ -3,8 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { TestCaseDialog, TestCaseGenerateButton } from './TestCaseDialog';
-import type { ApiHealthResult } from '@app/hooks/useApiHealth';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthQueryResult } from '@app/hooks/useApiHealth';
 
 // Helper to render with TooltipProvider
 const renderWithTooltipProvider = (ui: React.ReactElement) => {
@@ -21,7 +20,7 @@ vi.mock('@app/hooks/useApiHealth', () => ({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+      }) as unknown as ApiHealthQueryResult,
   ),
 }));
 
