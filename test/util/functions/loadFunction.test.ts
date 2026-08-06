@@ -308,7 +308,15 @@ describe('parseFileUrl', () => {
     });
   });
 
-  it('should handle standard Windows file URLs on Windows', () => {
+  it('should handle relative paths', () => {
+    const result = parseFileUrl('file://./path/to/file.js:functionName');
+    expect(result).toEqual({
+      filePath: './path/to/file.js',
+      functionName: 'functionName',
+    });
+  });
+
+  it('should normalize standard Windows file URLs on Windows', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
 
@@ -328,7 +336,7 @@ describe('parseFileUrl', () => {
     }
   });
 
-  it('should preserve standard Windows-looking file URLs as POSIX paths on POSIX', () => {
+  it('should preserve Windows-looking file URLs as POSIX paths on POSIX', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
 
@@ -344,42 +352,101 @@ describe('parseFileUrl', () => {
     }
   });
 
-  it('should handle relative paths', () => {
-    const result = parseFileUrl('file://./path/to/file.js:functionName');
-    expect(result).toEqual({
-      filePath: './path/to/file.js',
-      functionName: 'functionName',
+  it('should handle Windows drive-letter paths without function name', () => {
+    expect(parseFileUrl('file://C:\\repo\\assert.js')).toEqual({
+      filePath: 'C:\\repo\\assert.js',
     });
   });
 
-  it('should parse Python file URLs with function names', () => {
-    const result = parseFileUrl('file://./path/to/file.py:function_name');
-    expect(result).toEqual({
-      filePath: './path/to/file.py',
-      functionName: 'function_name',
+  it('should handle Windows drive-letter paths with function name', () => {
+    expect(parseFileUrl('file://C:\\repo\\assert.js:myFunc')).toEqual({
+      filePath: 'C:\\repo\\assert.js',
+      functionName: 'myFunc',
+    });
+  });
+
+  it('should handle paths with multiple dots', () => {
+    expect(parseFileUrl('file://my.test.assert.js:validate')).toEqual({
+      filePath: 'my.test.assert.js',
+      functionName: 'validate',
+    });
+  });
+
+  it.each([
+    ['ts', 'assert.ts', 'myFunc'],
+    ['mjs', 'assert.mjs', 'myFunc'],
+    ['rb', 'assert.rb', 'check'],
+    ['py', 'script.py', 'validate'],
+  ])('should handle .%s files with function names', (_extension, filePath, functionName) => {
+    expect(parseFileUrl(`file://${filePath}:${functionName}`)).toEqual({
+      filePath,
+      functionName,
+    });
+  });
+
+  it('should handle colons in filenames when suffix is not an identifier', () => {
+    expect(parseFileUrl('file:///tmp/assert:one.js')).toEqual({
+      filePath: '/tmp/assert:one.js',
+    });
+  });
+
+  it('should handle colons in filenames with a function suffix', () => {
+    expect(parseFileUrl('file:///tmp/assert:one.js:myFunc')).toEqual({
+      filePath: '/tmp/assert:one.js',
+      functionName: 'myFunc',
     });
   });
 
   it('should preserve colons in default-export file paths', () => {
-    const result = parseFileUrl('file://./path/to/file:default.js');
-    expect(result).toEqual({
+    expect(parseFileUrl('file://./path/to/file:default.js')).toEqual({
       filePath: './path/to/file:default.js',
-    });
-  });
-
-  it('should parse named exports from file paths that contain colons', () => {
-    const result = parseFileUrl('file://./path/to/file:default.js:functionName');
-    expect(result).toEqual({
-      filePath: './path/to/file:default.js',
-      functionName: 'functionName',
     });
   });
 
   it('should parse named exports from directory paths that contain colons', () => {
-    const result = parseFileUrl('file://path:with:colons/hooks.js:functionName');
-    expect(result).toEqual({
+    expect(parseFileUrl('file://path:with:colons/hooks.js:functionName')).toEqual({
       filePath: 'path:with:colons/hooks.js',
       functionName: 'functionName',
+    });
+  });
+
+  it('should handle dotted class method references', () => {
+    expect(parseFileUrl('file://prompt.py:Prompt.prompt')).toEqual({
+      filePath: 'prompt.py',
+      functionName: 'Prompt.prompt',
+    });
+  });
+
+  it('should handle dotted namespace function references', () => {
+    expect(parseFileUrl('file://assert.js:validators.checkLength')).toEqual({
+      filePath: 'assert.js',
+      functionName: 'validators.checkLength',
+    });
+  });
+
+  it('should handle Ruby namespace method references', () => {
+    expect(parseFileUrl('file://assert.rb:MyModule::Nested.check')).toEqual({
+      filePath: 'assert.rb',
+      functionName: 'MyModule::Nested.check',
+    });
+  });
+
+  it.each([
+    'valid?',
+    'check!',
+    'Validators::valid?',
+    'Validators::check!',
+  ])('should handle Ruby predicate and bang method reference %s', (functionName) => {
+    expect(parseFileUrl(`file://assert.rb:${functionName}`)).toEqual({
+      filePath: 'assert.rb',
+      functionName,
+    });
+  });
+
+  it('should handle colons in Ruby filenames with a namespace method suffix', () => {
+    expect(parseFileUrl('file:///tmp/assert:one.rb:MyModule::Nested.check')).toEqual({
+      filePath: '/tmp/assert:one.rb',
+      functionName: 'MyModule::Nested.check',
     });
   });
 });
