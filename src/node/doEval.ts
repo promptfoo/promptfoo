@@ -59,7 +59,12 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  createNamedMetricsPreservationGuard,
+  deleteErrorResults,
+  getErrorResultIds,
+  recalculatePromptMetrics,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
 
@@ -846,6 +851,9 @@ export async function doEval(
 
     // Run the evaluation!!!!!!
     let ret;
+    const canPreserveNamedMetrics = retryErrors
+      ? createNamedMetricsPreservationGuard(evalRecord)
+      : undefined;
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
@@ -860,8 +868,15 @@ export async function doEval(
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
-          await deleteErrorResults(errorResultIds);
-          await recalculatePromptMetrics(ret);
+          const deletion = await deleteErrorResults(errorResultIds, {
+            reportNamedScores: true,
+          });
+          await recalculatePromptMetrics(ret, {
+            preserveNamedMetrics:
+              deletion.allRequestedDeleted &&
+              !deletion.hadNamedScores &&
+              canPreserveNamedMetrics?.(ret, testSuite.derivedMetrics) === true,
+          });
           logger.debug(
             `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
           );
