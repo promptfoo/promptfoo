@@ -87,8 +87,7 @@
         "@swc/jest",
         // Transitive pins for the Docusaurus build; never imported directly.
         "dompurify",
-        "langium",
-        "webpack"
+        "langium"
       ]
     },
     "code-scan-action": {

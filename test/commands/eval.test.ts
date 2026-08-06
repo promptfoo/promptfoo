@@ -1014,44 +1014,44 @@ describe('evalCommand', () => {
     },
   ];
 
-  it.each(resumeRetryValidationCases)('throws EvalRunError for library callers: $name', async ({
-    cmdObj,
-    message,
-  }) => {
-    const previousExitCode = process.exitCode;
-    process.exitCode = undefined;
+  it.each(resumeRetryValidationCases)(
+    'throws EvalRunError for library callers: $name',
+    async ({ cmdObj, message }) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
 
-    try {
-      await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toEqual(
-        expect.objectContaining<EvalRunError>({ name: 'EvalRunError', exitCode: 1, message }),
-      );
-      expect(process.exitCode).toBeUndefined();
-    } finally {
-      process.exitCode = previousExitCode;
-    }
-  });
+      try {
+        await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toEqual(
+          expect.objectContaining<EvalRunError>({ name: 'EvalRunError', exitCode: 1, message }),
+        );
+        expect(process.exitCode).toBeUndefined();
+      } finally {
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
 
-  it.each(resumeRetryValidationCases)('logs to CLI and sets exitCode for: $name', async ({
-    cmdObj,
-    messageFragment,
-  }) => {
-    const previousExitCode = process.exitCode;
-    process.exitCode = undefined;
-    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+  it.each(resumeRetryValidationCases)(
+    'logs to CLI and sets exitCode for: $name',
+    async ({ cmdObj, messageFragment }) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
+      const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    try {
-      const result = await doEval(cmdObj, defaultConfig, defaultConfigPath, {
-        eventSource: 'cli',
-      });
+      try {
+        const result = await doEval(cmdObj, defaultConfig, defaultConfigPath, {
+          eventSource: 'cli',
+        });
 
-      expect(result.persisted).toBe(false);
-      expect(process.exitCode).toBe(1);
-      expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining(messageFragment));
-    } finally {
-      loggerErrorSpy.mockRestore();
-      process.exitCode = previousExitCode;
-    }
-  });
+        expect(result.persisted).toBe(false);
+        expect(process.exitCode).toBe(1);
+        expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining(messageFragment));
+      } finally {
+        loggerErrorSpy.mockRestore();
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
 
   it('throws EvalRunError with all missing keys joined for library callers', async () => {
     const previousExitCode = process.exitCode;

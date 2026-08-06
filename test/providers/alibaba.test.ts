@@ -77,16 +77,14 @@ describe('Alibaba Cloud Provider', () => {
       );
     });
 
-    it.each([
-      'qwen3.6-plus',
-      'qwen3.5-flash',
-      'qwen3-coder-next',
-      'deepseek-v3.2',
-    ])('should recognize refreshed model id %s', (modelName) => {
-      new AlibabaChatCompletionProvider(modelName, {});
+    it.each(['qwen3.6-plus', 'qwen3.5-flash', 'qwen3-coder-next', 'deepseek-v3.2'])(
+      'should recognize refreshed model id %s',
+      (modelName) => {
+        new AlibabaChatCompletionProvider(modelName, {});
 
-      expect(logger.warn).not.toHaveBeenCalled();
-    });
+        expect(logger.warn).not.toHaveBeenCalled();
+      },
+    );
 
     it('should throw error when no model specified', () => {
       expect(() => new AlibabaChatCompletionProvider('')).toThrow('Alibaba modelName is required');
