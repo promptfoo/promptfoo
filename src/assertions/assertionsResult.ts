@@ -1,7 +1,11 @@
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types/index';
-
-import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
+import {
+  type AssertionSet,
+  type GradingResult,
+  isGradingResult,
+  type ScoringFunction,
+  setNonstandardScoringBaseline,
+} from '../types/internal';
 
 export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
 
@@ -229,6 +233,13 @@ export class AssertionsResult {
         this.result.score = 0;
         this.result.reason = `Scoring function error: ${(err as Error).message}`;
       }
+      // Function-valued test-case fields are intentionally stripped before persistence. Attach
+      // only an in-memory aggregate for the persistence layer to move into private provenance;
+      // never serialize or re-execute the scoring function itself.
+      setNonstandardScoringBaseline(this.result, {
+        pass: this.result.pass,
+        score: this.result.score,
+      });
     }
 
     return this.result;

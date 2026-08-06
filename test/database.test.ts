@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -9,6 +10,45 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
+
+function createWriteLockWorker(url: string, holdMs: number) {
+  const worker = new Worker(
+    `
+      const { parentPort, workerData } = require('node:worker_threads');
+      const { createClient } = require('@libsql/client/node');
+      (async () => {
+        const client = createClient({ url: workerData.url });
+        const transaction = await client.transaction('write');
+        await transaction.execute("INSERT INTO transaction_lock_probe VALUES ('holder')");
+        parentPort.postMessage('locked');
+        setTimeout(async () => {
+          await transaction.commit();
+          client.close();
+          parentPort.postMessage('released');
+        }, workerData.holdMs);
+      })().catch((error) => {
+        parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) });
+      });
+    `,
+    { eval: true, workerData: { holdMs, url } },
+  );
+  const waitForMessage = (expected: 'locked' | 'released') =>
+    new Promise<void>((resolve, reject) => {
+      worker.once('error', reject);
+      worker.on('message', (message) => {
+        if (message === expected) {
+          resolve();
+        } else if (message && typeof message === 'object' && 'error' in message) {
+          reject(new Error(String(message.error)));
+        }
+      });
+    });
+  return {
+    locked: waitForMessage('locked'),
+    released: waitForMessage('released'),
+    worker,
+  };
+}
 
 describe('database WAL mode', () => {
   let tempDir: string;
@@ -190,5 +230,54 @@ describe('database WAL mode', () => {
     };
     // Keep brief lock contention from failing immediately with SQLITE_BUSY.
     expect(busyTimeout.timeout).toBe(5000);
+  });
+
+  it('waits for brief transaction contention and restores connection settings', async () => {
+    const database = await import('../src/database');
+    const db = await database.getDb();
+    await db.run('CREATE TABLE transaction_lock_probe (id TEXT PRIMARY KEY)');
+
+    // Complete one transaction first so libSQL releases its configured connection. A later
+    // transaction may then acquire a fresh logical connection without the PRAGMA timeout.
+    await db.transaction(async (tx) => {
+      await tx.run("INSERT INTO transaction_lock_probe VALUES ('warm')");
+    });
+
+    const lock = createWriteLockWorker(pathToFileURL(database.getDbPath()).href, 1500);
+    try {
+      await lock.locked;
+
+      const startedAt = Date.now();
+      const transactionOutcome = db
+        .transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_lock_probe VALUES ('retried')");
+        })
+        .then(
+          () => ({ ok: true as const }),
+          (error) => ({ ok: false as const, error }),
+        );
+
+      expect(await transactionOutcome).toEqual({ ok: true });
+      expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1000);
+      await expect(db.all('SELECT id FROM transaction_lock_probe ORDER BY id')).resolves.toEqual([
+        { id: 'holder' },
+        { id: 'retried' },
+        { id: 'warm' },
+      ]);
+      await expect(db.get(sql`PRAGMA foreign_keys;`)).resolves.toEqual({ foreign_keys: 1 });
+      await expect(db.get(sql`PRAGMA busy_timeout;`)).resolves.toEqual({ timeout: 5000 });
+      await expect(db.get(sql`PRAGMA synchronous;`)).resolves.toEqual({ synchronous: 1 });
+    } finally {
+      await lock.worker.terminate();
+    }
+  });
+
+  it('does not retry SQLITE_BUSY after the native busy timeout', async () => {
+    const database = await import('../src/database');
+    const busyError = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
+    const operation = vi.fn().mockRejectedValue(busyError);
+
+    await expect(database.withTransientLockRetry(operation)).rejects.toBe(busyError);
+    expect(operation).toHaveBeenCalledOnce();
   });
 });
