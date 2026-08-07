@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
@@ -1000,45 +1000,48 @@ describe('evaluateOptions behavior', () => {
     it.each([
       ['commandLineOptions', { commandLineOptions: { filterRange: '1:2' } }],
       ['evaluateOptions', { evaluateOptions: { filterRange: '1:2' } }],
-    ])('should restore legacy %s.filterRange when resuming evals without persisted runtime options', async (_source, legacyConfig) => {
-      const resumeEval = new Eval(
-        {
-          ...legacyConfig,
-          providers: ['echo'],
-          prompts: ['Hello {{name}}'],
-          tests: [
-            { vars: { name: 'Alice' } },
-            { vars: { name: 'Bob' } },
-            { vars: { name: 'Carol' } },
-          ],
-        },
-        {
-          id: 'eval-resume-without-filter-range',
-          persisted: true,
-        },
-      );
-      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
-
-      try {
-        await doEval(
+    ])(
+      'should restore legacy %s.filterRange when resuming evals without persisted runtime options',
+      async (_source, legacyConfig) => {
+        const resumeEval = new Eval(
           {
-            table: false,
-            resume: 'eval-resume-without-filter-range',
-          } as any,
-          {},
-          undefined,
+            ...legacyConfig,
+            providers: ['echo'],
+            prompts: ['Hello {{name}}'],
+            tests: [
+              { vars: { name: 'Alice' } },
+              { vars: { name: 'Bob' } },
+              { vars: { name: 'Carol' } },
+            ],
+          },
           {
-            filterRange: '0:1',
+            id: 'eval-resume-without-filter-range',
+            persisted: true,
           },
         );
+        const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
 
-        expect(evaluateMock).toHaveBeenCalled();
-        const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
-        expect(options.filterRange).toBe('1:2');
-      } finally {
-        findByIdSpy.mockRestore();
-      }
-    });
+        try {
+          await doEval(
+            {
+              table: false,
+              resume: 'eval-resume-without-filter-range',
+            } as any,
+            {},
+            undefined,
+            {
+              filterRange: '0:1',
+            },
+          );
+
+          expect(evaluateMock).toHaveBeenCalled();
+          const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+          expect(options.filterRange).toBe('1:2');
+        } finally {
+          findByIdSpy.mockRestore();
+        }
+      },
+    );
 
     it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
       const resumeEval = new Eval(

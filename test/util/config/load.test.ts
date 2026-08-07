@@ -3,7 +3,7 @@ import os from 'os';
 import * as path from 'path';
 
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { getEnvBool, isCI } from '../../../src/envars';
@@ -1566,6 +1566,32 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
+  it('should include YAML location when an inline test references a missing prompt', async () => {
+    const configText = [
+      'providers:',
+      '  - echo',
+      'prompts:',
+      '  - raw: Hello',
+      '    label: Existing Prompt',
+      'tests:',
+      '  - description: Missing prompt',
+      '    prompts:',
+      '      - Missing Prompt',
+    ].join('\n');
+
+    vi.mocked(fs.readFileSync).mockReturnValue(configText);
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Hello', label: 'Existing Prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+
+    await expect(resolveConfigs({ config: ['config.yaml'] }, {})).rejects.toThrow(
+      /config\.yaml:9:9: Test #1 \("Missing prompt"\) references prompt "Missing Prompt" which does not exist/,
+    );
+  });
+
   it('should return the provider configs selected by a target filter', async () => {
     const providers = [
       { id: 'promptfoo://provider/excluded-target', config: { label: 'excluded' } },
@@ -2184,28 +2210,27 @@ describe('readConfig', () => {
     expect(result.commandLineOptions?.filterSampleSeed).toBe(42);
   });
 
-  it.each([
-    'named-seed',
-    1.5,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])('should reject invalid configured filter sample seed %p', async (filterSampleSeed) => {
-    const mockConfig = {
-      providers: ['openai:gpt-4o'],
-      prompts: ['Hello, world!'],
-      commandLineOptions: {
-        filterSampleSeed,
-      },
-    };
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
-    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+  it.each(['named-seed', 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'should reject invalid configured filter sample seed %p',
+    async (filterSampleSeed) => {
+      const mockConfig = {
+        providers: ['openai:gpt-4o'],
+        prompts: ['Hello, world!'],
+        commandLineOptions: {
+          filterSampleSeed,
+        },
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
 
-    await expect(readConfig('config.yaml')).rejects.toMatchObject({
-      name: 'ConfigResolutionError',
-      message: expect.stringContaining(
-        'Invalid commandLineOptions in configuration file config.yaml',
-      ),
-    });
-  });
+      await expect(readConfig('config.yaml')).rejects.toMatchObject({
+        name: 'ConfigResolutionError',
+        message: expect.stringContaining(
+          'Invalid commandLineOptions in configuration file config.yaml',
+        ),
+      });
+    },
+  );
 
   it('should read JavaScript config file', async () => {
     const mockConfig = {
@@ -2432,7 +2457,6 @@ describe('readConfig', () => {
   it('should handle empty YAML file by defaulting to empty object', async () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue('');
     vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as path.ParsedPath);
-    vi.spyOn(yaml, 'load').mockReturnValue(null);
     mockDereference.mockResolvedValueOnce({});
 
     const result = await readConfig('empty.yaml');

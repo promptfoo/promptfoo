@@ -108,7 +108,7 @@ async function generateGcgPrompts(
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/GCG`,
+          metric: assertion.metric ? `${assertion.metric}/GCG` : assertion.metric,
         })),
         metadata: {
           ...testCase.metadata,

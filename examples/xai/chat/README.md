@@ -21,7 +21,7 @@ This example requires the following environment variable:
 # Set your API key
 export XAI_API_KEY=your_api_key_here
 
-# Run the main evaluation
+# Run the main evaluation (EU-safe defaults)
 promptfoo eval
 
 # View results in the web interface
@@ -32,7 +32,7 @@ promptfoo view
 
 This example includes configurations to test different Grok capabilities:
 
-- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with the current Grok 4.3 and Grok 4.20 families
+- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with Grok 4.3 and Grok 4.20, plus an opt-in Grok 4.5 provider
 - **Image Generation** (`promptfooconfig.images.yaml`) - Artistic image creation using Grok's image models
 - **Search Tools** (`promptfooconfig.search.yaml`) - Real-time web and X search using the Responses API
 - **Agent Tools (Responses API)** (`promptfooconfig.responses.yaml`) - Autonomous web and X search using Agent Tools
@@ -59,13 +59,23 @@ promptfoo eval -c promptfooconfig.promptfoo-search.yaml
 
 ## Featured Models
 
+### Grok 4.5
+
+xAI's flagship model for coding, agentic tasks, and knowledge work (500K context):
+
+- `xai:grok-4.5` - Flagship reasoning model recommended by xAI's catalog
+- `reasoning_effort` - Supports `low`, `medium`, and `high` in chat configs (defaults to `high`; `none` is not accepted)
+- `xai:responses:grok-4.5` - Recommended form for server-side tools
+
+xAI currently excludes Grok 4.5 from the EU API Console, so its provider block is commented out by default. Non-EU users can opt in by uncommenting that block in `promptfooconfig.yaml`; EU users can run the example unchanged with the included Grok 4.3 and Grok 4.20 providers.
+
 ### Grok 4.3
 
-The recommended starting point for general text workflows:
+A general-purpose alternative for text workflows:
 
 - `xai:grok-4.3` - General-purpose reasoning model
 - `reasoning_effort` - Supports `none`, `low`, `medium`, and `high` in chat configs
-- `xai:responses:grok-4.3` - Recommended form for server-side tools
+- `xai:responses:grok-4.3` - Responses API form for server-side tools
 
 ### Grok 4.20
 
@@ -75,7 +85,7 @@ The recommended starting point for general text workflows:
 
 ### Legacy Model Note
 
-xAI periodically retires older model slugs and may keep them working through redirects to newer replacements. This example uses Grok 4.3 plus alias-style Grok 4.20 family IDs, matching xAI's guidance for configs that should track the current release within a family.
+xAI periodically retires older model slugs and may keep them working through redirects to newer replacements. This example uses Grok 4.5 and Grok 4.3 plus alias-style Grok 4.20 family IDs, matching xAI's guidance for configs that should track the current release within a family.
 
 ### Agent Tools (Responses API)
 

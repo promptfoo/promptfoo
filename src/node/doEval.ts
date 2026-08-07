@@ -964,7 +964,7 @@ export async function doEval(
         cmdObj.tableCellMaxLength ?? commandLineOptions?.tableCellMaxLength,
       );
 
-      logger.info('\n' + outputTable.toString());
+      logger.info('\n' + outputTable);
       if (table.body.length > 25) {
         const rowsLeft = table.body.length - 25;
         logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);

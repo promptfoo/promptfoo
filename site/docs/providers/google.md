@@ -278,15 +278,20 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
+- `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release
+- `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
+- `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
+- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
+- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
 
 ### Embedding Models
 
@@ -294,6 +299,7 @@ Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to
 
 - `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
 - `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
+- `google:embedding:gemini-embedding-2-preview` - Preview alias for Gemini Embedding 2 ($0.20/1M input tokens)
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
@@ -309,9 +315,13 @@ Imagen models are available through both **Google AI Studio** and **Vertex AI**.
 
 #### Imagen 4 Models (Available in both Google AI Studio and Vertex AI)
 
-- `google:image:imagen-4.0-ultra-generate-preview-06-06` - Ultra quality ($0.06/image)
-- `google:image:imagen-4.0-generate-preview-06-06` - Standard quality ($0.04/image)
-- `google:image:imagen-4.0-fast-generate-preview-06-06` - Fast generation ($0.02/image)
+- `google:image:imagen-4.0-ultra-generate-001` - Ultra quality ($0.06/image)
+- `google:image:imagen-4.0-generate-001` - Standard quality ($0.04/image)
+- `google:image:imagen-4.0-fast-generate-001` - Fast generation ($0.02/image)
+
+:::warning
+Google has deprecated the Imagen 4 models with an August 17, 2026 shutdown and recommends [`gemini-3.1-flash-image`](#gemini-native-image-generation-models) as the replacement. The earlier `imagen-4.0-*-preview-06-06` ids are already shut down.
+:::
 
 #### Imagen 3 Models (Vertex AI only)
 
@@ -364,18 +374,21 @@ See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main
 
 Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
 
-- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
-- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+- `google:gemini-3.1-flash-lite-image` - Gemini 3.1 Flash-Lite (Nano Banana 2 Lite) for the fastest, lowest-cost image generation (~$0.034/image at 1K; 1K only; no Google Search grounding)
+- `google:gemini-3.1-flash-image` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K, more at higher resolutions)
+- `google:gemini-3-pro-image` - Gemini 3 Pro (Nano Banana Pro) for advanced image generation (~$0.134/image at 1K/2K, ~$0.24 at 4K)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash (Nano Banana) with image generation (~$0.039/image)
+
+Use the GA ids above; Google shut down the `gemini-3.1-flash-image-preview` and `gemini-3-pro-image-preview` aliases on June 25, 2026. Nano Banana 2 Lite never had a `-preview` alias.
 
 Configuration options:
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image-preview
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
-      imageSize: '2K' # 512px (3.1 only), 1K, 2K, 4K
+      imageSize: '2K' # 512px, 1K, 2K, 4K on this model; flash-lite is 1K only, pro is 1K/2K/4K
       temperature: 0.7
 ```
 
@@ -383,16 +396,16 @@ Key differences from Imagen:
 
 - Uses same namespace as Gemini chat (`google:model-name`)
 - More aspect ratio options (includes 1:4, 1:8, 2:3, 3:2, 4:1, 4:5, 5:4, 8:1, 21:9)
-- Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
+- Resolution control via `imageSize`: `512px`/`1K`/`2K`/`4K` on `gemini-3.1-flash-image`, `1K`/`2K`/`4K` on `gemini-3-pro-image`; `gemini-3.1-flash-lite-image` is `1K` only
 - Can return both text and images in the same response
 - Uses same authentication as Gemini chat models
-- Supports Google Search grounding via `tools`
+- Supports Google Search grounding via `tools` (on `gemini-3.1-flash-image` and `gemini-3-pro-image`; **not** `gemini-3.1-flash-lite-image`)
 
-Google Search grounding lets the model use real-time search results to inform image generation:
+Google Search grounding lets the model use real-time search results to inform image generation. It is supported by `gemini-3.1-flash-image` and `gemini-3-pro-image`, but not by Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`):
 
 ```yaml
 providers:
-  - id: google:gemini-3.1-flash-image-preview
+  - id: google:gemini-3.1-flash-image
     config:
       imageAspectRatio: '16:9'
       tools:
@@ -400,6 +413,23 @@ providers:
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
+
+### Video Generation Models (Gemini Omni Flash)
+
+Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools.
+
+```yaml
+providers:
+  - id: google:gemini-omni-flash-preview
+    config:
+      aspectRatio: '9:16'
+      store: true
+
+prompts:
+  - 'Generate a short video of {{subject}}'
+```
+
+Video output is billed at $17.50/1M tokens (about $0.10/second at 720p); text and thinking output use the $9/1M rate.
 
 ### Video Generation Models (Veo)
 
@@ -1054,6 +1084,8 @@ providers:
       timeoutMs: 10000
 ```
 
+Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+
 ### Key Features
 
 - **Real-time bidirectional communication**: Uses WebSockets for faster responses
@@ -1173,7 +1205,7 @@ promptfoo init --example google-live-audio
 ### Limitations
 
 - Sessions are limited to 15 minutes for audio or 2 minutes of audio and video
-- Token counting is not supported
+- Token usage and cost are reported when the API returns `usageMetadata`
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 

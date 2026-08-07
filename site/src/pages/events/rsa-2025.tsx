@@ -211,14 +211,14 @@ export default function RSA2025(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>See You at RSA 2026</h2>
+              <h2 className={styles.ctaTitle}>We Were Back for RSA 2026</h2>
               <p className={styles.ctaText}>
-                We'll be back at RSA Conference 2026. Check out our plans and stay connected for
-                updates on booth location and demos.
+                Promptfoo returned to RSA Conference 2026 in March. See what we showed on the floor,
+                or get in touch for a walkthrough.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/events/rsa-2026" className={styles.primaryCta}>
-                  RSA 2026 Details
+                  RSA 2026 Recap
                 </Link>
                 <Link to="/contact" className={styles.secondaryCta}>
                   Get in Touch

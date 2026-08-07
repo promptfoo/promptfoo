@@ -19,7 +19,7 @@ cd google-vertex
 
 - Google Cloud account with Vertex AI API enabled
 - API credentials
-- Node.js 20+
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 
 ## Environment Variables
 

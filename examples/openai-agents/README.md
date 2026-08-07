@@ -27,7 +27,7 @@ The tracing path is important: the example installs a custom OpenAI Agents traci
 ## Requirements
 
 - Python 3.10+
-- Node.js 20+
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 - `OPENAI_API_KEY`
 
 ## Setup

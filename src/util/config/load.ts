@@ -6,7 +6,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -46,8 +45,12 @@ import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProv
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
-import { validateTestPromptReferences } from '../validateTestPromptReferences';
+import {
+  type PromptReferenceSource,
+  validateTestPromptReferences,
+} from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 const KNOWN_TOP_LEVEL_CONFIG_KEYS: ReadonlySet<string> = new Set([
@@ -504,7 +507,7 @@ async function readConfigWithDiagnostics(
   const unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
+    const rawConfig = loadYaml(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
 
     // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
@@ -657,6 +660,30 @@ export async function maybeReadConfig(
     }
     throw error;
   }
+}
+
+async function readPromptReferenceSources(configPaths: string[]): Promise<PromptReferenceSource[]> {
+  const sources: PromptReferenceSource[] = [];
+  for (const configPath of configPaths) {
+    const resolvedPath = path.resolve(process.cwd(), configPath);
+    const globPaths =
+      globSync(resolvedPath, {
+        windowsPathsNoEscape: true,
+      }) ?? [];
+
+    for (const globPath of globPaths) {
+      const ext = path.parse(globPath).ext;
+      if (ext !== '.yaml' && ext !== '.yml') {
+        continue;
+      }
+      sources.push({
+        path: globPath,
+        content: await fsPromises.readFile(globPath, 'utf-8'),
+      });
+    }
+  }
+
+  return sources;
 }
 
 /**
@@ -1065,10 +1092,12 @@ export async function resolveConfigs(
   let unknownConfigKeyDiagnostics: UnknownConfigKeyDiagnostic[] = [];
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
+  let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
     const combined = await combineConfigsWithDiagnostics(configPaths, true);
     fileConfig = combined.config;
     unknownConfigKeyDiagnostics = combined.unknownConfigKeyDiagnostics;
+    promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   } else {
@@ -1378,6 +1407,7 @@ export async function resolveConfigs(
     testSuite.tests || [],
     testSuite.prompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    { promptReferenceSources },
   );
 
   cliState.config = config;

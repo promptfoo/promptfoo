@@ -26,7 +26,6 @@ vi.mock('../src/util/fetch/index.ts', () => ({
 vi.mock('../src/version', () => ({
   VERSION: '0.11.0',
   POSTHOG_KEY: '',
-  ENGINES: { node: '>=20.0.0' },
 }));
 
 import logger from '../src/logger';
@@ -37,6 +36,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
+import { getUpdateCommands } from '../src/updates/updateCommands';
 import { fetchWithTimeout } from '../src/util/fetch/index';
 import { VERSION } from '../src/version';
 
@@ -71,6 +71,40 @@ describe('getLatestVersion', () => {
   });
 });
 
+describe('getUpdateCommands', () => {
+  it('separates official images, custom containers, and package installs', () => {
+    expect(
+      getUpdateCommands({ isContainer: false, isOfficialDockerImage: true, isNpx: false }),
+    ).toEqual({
+      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
+      alternative: null,
+      commandType: 'docker',
+    });
+    expect(
+      getUpdateCommands({ isContainer: true, isOfficialDockerImage: false, isNpx: false }),
+    ).toEqual({
+      primary: '',
+      alternative: null,
+      commandType: 'npm',
+      isCustomContainer: true,
+    });
+    expect(
+      getUpdateCommands({ isContainer: false, isOfficialDockerImage: false, isNpx: true }),
+    ).toEqual({
+      primary: 'npx promptfoo@latest',
+      alternative: 'npm install -g promptfoo@latest',
+      commandType: 'npx',
+    });
+    expect(
+      getUpdateCommands({ isContainer: false, isOfficialDockerImage: false, isNpx: false }),
+    ).toEqual({
+      primary: 'npm install -g promptfoo@latest',
+      alternative: 'npx promptfoo@latest',
+      commandType: 'npm',
+    });
+  });
+});
+
 describe('checkForUpdates', () => {
   let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
   let restoreEnv: () => void;
@@ -85,6 +119,59 @@ describe('checkForUpdates', () => {
   afterEach(() => {
     loggerInfoSpy.mockRestore();
     restoreEnv();
+  });
+
+  it('should skip the update check when PROMPTFOO_DISABLE_UPDATE is set', async () => {
+    const restoreDisableUpdate = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+    try {
+      expect(await checkForUpdates()).toBe(false);
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(loggerInfoSpy).not.toHaveBeenCalled();
+    } finally {
+      restoreDisableUpdate();
+    }
+  });
+
+  it('should tell official-image users to pull a new image', async () => {
+    const restoreDocker = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: 'true',
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    try {
+      await expect(checkForUpdates()).resolves.toBe(true);
+    } finally {
+      restoreDocker();
+    }
+
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('docker pull ghcr.io/promptfoo/promptfoo:latest'),
+    );
+  });
+
+  it('should require a source update before rebuilding a custom container', async () => {
+    const restoreContainer = mockProcessEnv({
+      PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,
+      PROMPTFOO_RUNNING_IN_DOCKER: 'true',
+    });
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ latestVersion: '1.1.0' }),
+    } as never);
+
+    try {
+      await expect(checkForUpdates()).resolves.toBe(true);
+    } finally {
+      restoreContainer();
+    }
+
+    expect(loggerInfoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Update the Promptfoo source, dependency, or parent image'),
+    );
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {

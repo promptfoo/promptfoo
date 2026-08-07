@@ -1,7 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import { loadFromJavaScriptFile } from '../assertions/utils';
 import cliState from '../cliState';
 import { getEnvBool, getEnvInt } from '../envars';
@@ -13,6 +12,7 @@ import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
@@ -668,7 +668,7 @@ function appendImagesToChatPrompt(
   const trimmedPrompt = renderedPrompt.trim();
   if (trimmedPrompt.startsWith('- role:')) {
     try {
-      parsed = yaml.load(renderedPrompt) as ChatMessageLike[] | undefined;
+      parsed = loadYaml(renderedPrompt) as ChatMessageLike[] | undefined;
     } catch (err) {
       throw new Error(
         `Chat Completion prompt is not a valid YAML string: ${err}\n\n${renderedPrompt}`,

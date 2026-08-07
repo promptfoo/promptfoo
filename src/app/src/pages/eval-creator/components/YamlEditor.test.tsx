@@ -3,7 +3,7 @@ import React from 'react';
 import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
 
@@ -12,6 +12,13 @@ vi.mock('react-router-dom', () => ({
     <a href={to}>{children}</a>
   ),
 }));
+
+// js-yaml v5 is native ESM with a sealed namespace, so vi.spyOn cannot patch it.
+// Wrap dump in a spy-able mock that keeps the real implementation.
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn(actual.dump) };
+});
 
 // Mock useToast
 const mockShowToast = vi.fn();
@@ -135,11 +142,9 @@ describe('YamlEditor', () => {
       providers: [{ id: 'test-provider' }],
     };
 
-    const dumpSpy = vi.spyOn(yaml, 'dump');
-
     render(<YamlEditorComponent initialConfig={initialConfig} />);
 
-    expect(dumpSpy).toHaveBeenCalledWith(initialConfig);
+    expect(vi.mocked(yaml.dump)).toHaveBeenCalledWith(initialConfig);
   });
 
   it('includes evaluateOptions from store in YAML', () => {

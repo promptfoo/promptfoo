@@ -41,6 +41,8 @@ When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Prompt
 1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
 2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
 
+Set `CLAUDE_CONFIG_DIR` to read the credential from a different Claude Code profile — the same environment variable the Claude Code CLI itself uses to relocate `~/.claude`. It can be set in your shell, in the config's top-level `env:` block, or in a provider's `env:` block (the provider-scoped value wins). On macOS, where Claude Code stores credentials in the system keychain, Promptfoo mirrors the CLI's profile-specific keychain entry: when `CLAUDE_CONFIG_DIR` is set, the credential is looked up under that profile's keychain service (derived from the configured directory) rather than the default one, so evals authenticate as the profile you selected.
+
 Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
 
 If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
@@ -55,8 +57,10 @@ The `anthropic` provider supports the following models via the messages API:
 | -------------------------------------------------------------------------- | ---------------------- |
 | `anthropic:messages:claude-fable-5`                                        | Claude Fable 5         |
 | `anthropic:messages:claude-mythos-5`                                       | Claude Mythos 5        |
+| `anthropic:messages:claude-opus-5`                                         | Claude Opus 5          |
 | `anthropic:messages:claude-opus-4-8`                                       | Claude 4.8 Opus        |
 | `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
+| `anthropic:messages:claude-sonnet-5`                                       | Claude Sonnet 5        |
 | `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
 | `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
 | `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
@@ -80,8 +84,10 @@ Claude models are available across multiple platforms. Here's how the model name
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
 | Claude Fable 5    | claude-fable-5                                        | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                       | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
+| Claude Opus 5     | claude-opus-5                                         | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
 | Claude 4.8 Opus   | claude-opus-4-8                                       | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
 | Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
+| Claude Sonnet 5   | claude-sonnet-5                                       | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
@@ -535,6 +541,63 @@ Both models use a 1M-token context window, support up to 128K output tokens, and
 priced at $10 per million input tokens and $50 per million output tokens. Mythos 5
 access is limited through Project Glasswing and may require provider approval. Both
 model IDs are pinned; Anthropic does not publish `-latest` aliases for them.
+
+### Claude Opus 5 notes
+
+Opus 5 is the Opus-tier Claude 5 model, aimed at complex agentic coding and long-horizon
+work. It keeps Opus 4.8's request surface and pricing, with two behavior changes promptfoo
+handles for you:
+
+- **Thinking is on by default.** Unlike Opus 4.7/4.8 — where omitting `thinking` meant no
+  extended thinking — an omitted `thinking` block on Opus 5 runs adaptive thinking. Because
+  `max_tokens` caps thinking _plus_ response text, promptfoo sizes its default `max_tokens`
+  with thinking headroom (2048 instead of 1024) so responses aren't truncated mid-answer.
+  Set `max_tokens` explicitly for anything longer.
+- **Disabling thinking is effort-gated.** `thinking: { type: 'disabled' }` is only accepted
+  at `effort` `high` or below; pairing it with `xhigh` or `max` returns a 400. Promptfoo
+  drops the rejected `thinking: { type: 'disabled' }` (keeping your `effort`) and logs a
+  one-time warning. Lower `effort` to `high` if you actually need thinking off.
+- **Sampling controls are managed for you.** Like Opus 4.7/4.8, Opus 5 rejects
+  `temperature`, `top_p`, and `top_k` with a 400; promptfoo omits all three from every
+  request, including its built-in `temperature: 0` default. A legacy
+  `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
+  `thinking: { type: 'adaptive' }`.
+- **The full `low` → `max` effort ladder is available.** Start at `xhigh` for coding and
+  agentic work, then sweep downward — `low` and `medium` are unusually strong on this model
+  and are the main cost and latency lever. See the [Effort Level](#effort-level) section.
+
+Opus 5 uses a 1M-token context window (both the default and the maximum) billed at a flat
+**$5 per million input / $25 per million output** — the same list rates as Opus 4.8, with no
+long-context surcharge above 200K tokens. Anthropic's fast mode ($10 / $50, Claude API only)
+is a separate research-preview rate that promptfoo does not encode. To track it, set
+`inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
+rates, because it is applied as both the input and the output per-token price.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-opus-5
+    config:
+      effort: xhigh
+      max_tokens: 8192
+```
+
+### Claude Sonnet 5 notes
+
+Sonnet 5 is the most agentic Sonnet model, with a 1M-token context window and support
+for [effort levels](#effort-level) (`low` through `xhigh`). Unlike Sonnet 4.5/4.6 —
+but like the Opus 4.7/4.8 and Fable 5 generation — it deprecates manual sampling
+controls at the model level:
+
+- **Sampling controls are managed for you.** Sonnet 5 rejects `temperature`, `top_p`,
+  and `top_k` with a 400; promptfoo omits all three from every request (including its
+  built-in `temperature: 0` default). Setting any of them in config or
+  `ANTHROPIC_TEMPERATURE` logs a one-time heads-up. This suppression also applies when
+  you reach Sonnet 5 through AWS Bedrock, GCP Vertex, or Azure AI Foundry.
+- **Manual thinking budgets convert to adaptive.** A legacy
+  `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
+  `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
+
+Sonnet 5 uses a 1M-token context window billed at a flat **$3 per million input / $15 per million output** — the full context window bills at the standard rate, with no long-context surcharge above 200K tokens (a 900K-token request bills at the same per-token rate as a 9K-token request). Anthropic's launch introductory pricing ($2 / $10 through Aug 31, 2026) is not encoded in promptfoo's cost calculation; set `inputCost: 2 / 1e6` and `outputCost: 10 / 1e6` to track the introductory rate (a single `cost` is applied as both the input and output rate, so it cannot express the two).
 
 ### Claude Opus 4.8 notes
 
