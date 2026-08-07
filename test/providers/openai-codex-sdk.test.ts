@@ -2320,6 +2320,23 @@ describe('OpenAICodexSDKProvider', () => {
         }
       });
 
+      it('canonicalizes the final process environment after adding tracing defaults', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            deep_tracing: true,
+            cli_env: { Z_FLAG: 'last' },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        const env = MockCodex.mock.calls.at(-1)?.[0].env as Record<string, string>;
+        expect(env.OTEL_SERVICE_NAME).toBe('codex-cli');
+        expect(Object.keys(env)).toEqual([...Object.keys(env)].sort());
+      });
+
       it('should propagate promptfoo trace resource attributes for deep tracing', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const traceId = '0af7651916cd43dd8448eb211c80319c';

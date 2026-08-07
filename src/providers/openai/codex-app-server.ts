@@ -1,11 +1,9 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'child_process';
 import crypto from 'crypto';
-import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
-import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
@@ -21,10 +19,19 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
-import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
-import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
+import { shouldInjectApiKey } from './codexApiKeyGating';
+import {
+  codexBaseConfigShape,
+  findCodexGitRepositoryRoot,
+  getIgnoredCodexProviderEnvKeys,
+  getOmittedCodexProcessEnvKeys,
+  prepareCodexProcessEnv,
+  resolveCodexWorkingDirectory,
+  sortCodexProcessEnv,
+  validateCodexWorkingDirectory,
+} from './codexConfig';
 import {
   buildCodexSkillMetadata,
   getCodexSkillMetadataFields,
@@ -40,35 +47,6 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 
-export type CodexAppServerSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
-export interface CodexAppServerGranularApprovalPolicy {
-  granular: {
-    sandbox_approval: boolean;
-    rules: boolean;
-    skill_approval: boolean;
-    request_permissions: boolean;
-    mcp_elicitations: boolean;
-  };
-}
-export type CodexAppServerApprovalPolicy =
-  | 'never'
-  | 'on-request'
-  | 'on-failure'
-  | 'untrusted'
-  | CodexAppServerGranularApprovalPolicy;
-export type CodexAppServerReasoningEffort =
-  | 'none'
-  | 'minimal'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'xhigh'
-  | 'max'
-  | 'ultra';
-export type CodexAppServerReasoningSummary = 'auto' | 'concise' | 'detailed' | 'none';
-export type CodexAppServerServiceTier = 'fast' | 'flex';
-export type CodexAppServerPersonality = 'none' | 'friendly' | 'pragmatic';
-
 function redactAppServerText(value: string): string {
   return value
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED)
@@ -81,15 +59,6 @@ function redactAppServerText(value: string): string {
       (_match, key, separator, spacing, quote) =>
         `${key}${separator}${spacing}${quote}${REDACTED}${quote}`,
     );
-}
-
-export interface CodexAppServerCollaborationMode {
-  mode: 'plan' | 'default';
-  settings: {
-    model: string;
-    reasoning_effort: CodexAppServerReasoningEffort | null;
-    developer_instructions: string | null;
-  };
 }
 
 type CodexAppServerCommandExecutionApprovalDecision =
@@ -179,7 +148,6 @@ type CodexAppServerUserInput =
       path: string;
     };
 
-type CodexAppServerThreadCleanup = 'unsubscribe' | 'archive' | 'none';
 type CodexAppServerUserInputPolicy = 'empty' | 'first-option' | Record<string, string | string[]>;
 
 export interface CodexAppServerDynamicToolResponse {
@@ -201,57 +169,6 @@ export interface CodexAppServerRequestPolicy {
   user_input?: CodexAppServerUserInputPolicy;
   mcp_elicitation?: CodexAppServerMcpElicitationPolicy;
   dynamic_tools?: Record<string, CodexAppServerDynamicToolResponse>;
-}
-
-export interface CodexAppServerConfig {
-  basePath?: string;
-  prefix?: string;
-  suffix?: string;
-  provider?: unknown;
-  linkedTargetId?: string;
-
-  apiKey?: string;
-  base_url?: string;
-  working_dir?: string;
-  additional_directories?: string[];
-  skip_git_repo_check?: boolean;
-  codex_path_override?: string;
-
-  model?: string;
-  model_provider?: string;
-  service_tier?: CodexAppServerServiceTier;
-  sandbox_mode?: CodexAppServerSandboxMode;
-  sandbox_policy?: Record<string, unknown>;
-  network_access_enabled?: boolean;
-  approval_policy?: CodexAppServerApprovalPolicy;
-  approvals_reviewer?: 'user' | 'auto_review' | 'guardian_subagent';
-  model_reasoning_effort?: CodexAppServerReasoningEffort;
-  reasoning_summary?: CodexAppServerReasoningSummary;
-  personality?: CodexAppServerPersonality;
-  base_instructions?: string;
-  developer_instructions?: string;
-  collaboration_mode?: CodexAppServerCollaborationMode;
-  output_schema?: Record<string, unknown>;
-
-  thread_id?: string;
-  persist_threads?: boolean;
-  thread_pool_size?: number;
-  thread_cleanup?: CodexAppServerThreadCleanup;
-  ephemeral?: boolean;
-  persist_extended_history?: boolean;
-  experimental_raw_events?: boolean;
-  experimental_api?: boolean;
-  include_raw_events?: boolean;
-
-  cli_config?: Record<string, unknown>;
-  cli_env?: Record<string, string | number | boolean>;
-  inherit_process_env?: boolean;
-  reuse_server?: boolean;
-  deep_tracing?: boolean;
-  request_timeout_ms?: number;
-  startup_timeout_ms?: number;
-  turn_timeout_ms?: number;
-  server_request_policy?: CodexAppServerRequestPolicy;
 }
 
 interface JsonRpcMessage {
@@ -351,41 +268,6 @@ interface ThreadHandle {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
-
-const MINIMAL_CLI_ENV_KEYS = [
-  'PATH',
-  'Path',
-  'HOME',
-  'USER',
-  'USERNAME',
-  'USERPROFILE',
-  'TMPDIR',
-  'TMP',
-  'TEMP',
-  'SHELL',
-  'COMSPEC',
-  'SystemRoot',
-  'PATHEXT',
-  'LANG',
-  'LC_ALL',
-  'TERM',
-] as const;
-
-const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
-  'CODEX_HOME',
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'SSL_CERT_FILE',
-  'SSL_CERT_DIR',
-  'REQUESTS_CA_BUNDLE',
-  'NODE_EXTRA_CA_CERTS',
-  'SSH_AUTH_SOCK',
-  'GIT_SSH_COMMAND',
-] as const;
-
-const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
 
 const CodexAppServerReasoningEffortSchema = z.enum([
   'none',
@@ -507,23 +389,9 @@ const ServerRequestPolicySchema = z
   .strict();
 
 const CodexAppServerConfigShape = {
-  basePath: z.string().optional(),
-  prefix: z.string().optional(),
-  suffix: z.string().optional(),
-  provider: z.unknown().optional(),
-  linkedTargetId: z.string().optional(),
-  apiKey: z.string().min(1).optional(),
-  base_url: z.string().min(1).optional(),
-  working_dir: z.string().min(1).optional(),
-  additional_directories: z.array(z.string().min(1)).optional(),
-  skip_git_repo_check: z.boolean().optional(),
-  codex_path_override: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  model_provider: z.string().min(1).optional(),
+  ...codexBaseConfigShape,
   service_tier: z.enum(['fast', 'flex']).optional(),
-  sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
   sandbox_policy: z.record(z.string(), z.unknown()).optional(),
-  network_access_enabled: z.boolean().optional(),
   approval_policy: CodexAppServerApprovalPolicySchema.optional(),
   approvals_reviewer: z.enum(['user', 'auto_review', 'guardian_subagent']).optional(),
   model_reasoning_effort: CodexAppServerReasoningEffortSchema.optional(),
@@ -532,21 +400,13 @@ const CodexAppServerConfigShape = {
   base_instructions: z.string().min(1).optional(),
   developer_instructions: z.string().min(1).optional(),
   collaboration_mode: CollaborationModeSchema.optional(),
-  output_schema: z.record(z.string(), z.unknown()).optional(),
-  thread_id: z.string().min(1).optional(),
-  persist_threads: z.boolean().optional(),
-  thread_pool_size: z.number().int().positive().optional(),
   thread_cleanup: z.enum(['unsubscribe', 'archive', 'none']).optional(),
   ephemeral: z.boolean().optional(),
   persist_extended_history: z.boolean().optional(),
   experimental_raw_events: z.boolean().optional(),
   experimental_api: z.boolean().optional(),
   include_raw_events: z.boolean().optional(),
-  cli_config: z.record(z.string(), z.unknown()).optional(),
-  cli_env: z.record(z.string(), CodexCliEnvValueSchema).optional(),
-  inherit_process_env: z.boolean().optional(),
   reuse_server: z.boolean().optional(),
-  deep_tracing: z.boolean().optional(),
   request_timeout_ms: z.number().int().positive().optional(),
   startup_timeout_ms: z.number().int().positive().optional(),
   turn_timeout_ms: z.number().int().positive().optional(),
@@ -555,6 +415,7 @@ const CodexAppServerConfigShape = {
 
 export const CodexAppServerConfigSchema = z.object(CodexAppServerConfigShape).strict();
 const CodexAppServerMergedPromptConfigSchema = z.object(CodexAppServerConfigShape).strip();
+export type CodexAppServerConfig = z.input<typeof CodexAppServerConfigSchema>;
 
 function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -651,17 +512,6 @@ function mergeCodexAppServerConfig(
       override.server_request_policy,
     ),
   };
-}
-
-function getMinimalProcessEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const key of MINIMAL_CLI_ENV_KEYS) {
-    const value = process.env[key];
-    if (typeof value === 'string' && value.length > 0) {
-      env[key] = value;
-    }
-  }
-  return env;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1117,7 +967,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private threadRunQueues = new Map<string, Promise<void>>();
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
   private activeTurnsByTurn = new Map<string, CodexAppServerTurnState>();
-  private validatedWorkingDirs = new Set<string>();
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
   private deepTracingWarningShown = false;
@@ -1167,8 +1016,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.activeTurnsByThread.clear();
     this.activeTurnsByTurn.clear();
     this.protectedThreadCounts.clear();
-    this.validatedWorkingDirs.clear();
-
     const connections = Array.from(
       new Set([...this.connections.values(), ...this.initializingConnections]),
     );
@@ -1312,9 +1159,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     let localConnection: CodexAppServerConnection | undefined;
 
     try {
-      this.validateWorkingDirectory(
+      validateCodexWorkingDirectory(
         resolvedConfig.working_dir as string,
         resolvedConfig.skip_git_repo_check,
+        'Codex app-server',
       );
       this.warnOnceForDeepTracingThreadOptions(resolvedConfig);
 
@@ -1411,10 +1259,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
   private resolveWorkingDirectory(config: CodexAppServerConfig): string {
     const basePath = config.basePath || cliState.basePath || process.cwd();
-    if (!config.working_dir) {
-      return process.cwd();
-    }
-    return resolveAgenticWorkingDir(config.working_dir, basePath) ?? process.cwd();
+    return resolveCodexWorkingDirectory(config.working_dir, basePath);
   }
 
   private resolveAdditionalDirectories(config: CodexAppServerConfig): string[] | undefined {
@@ -1430,21 +1275,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     traceparent?: string,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, string> {
-    const inheritProcessEnv = config.inherit_process_env === true;
-    const cliEnv = Object.fromEntries(
-      Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
-    );
-    const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (process.env as Record<string, string>) : getMinimalProcessEnv()),
-      ...cliEnv,
-    };
-
-    const ignoredProviderEnvKeys = Object.keys(this.env ?? {})
-      .filter(
-        (key) =>
-          key !== 'OPENAI_API_KEY' && key !== 'CODEX_API_KEY' && !(key in (config.cli_env ?? {})),
-      )
-      .sort();
+    const env = prepareCodexProcessEnv(config, apiKey);
+    const ignoredProviderEnvKeys = getIgnoredCodexProviderEnvKeys(this.env, config);
 
     if (ignoredProviderEnvKeys.length > 0 && !this.ignoredProviderEnvWarningShown) {
       logger.warn(
@@ -1455,8 +1287,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       this.ignoredProviderEnvWarningShown = true;
     }
 
-    if (!inheritProcessEnv && !this.omittedProcessEnvWarningShown) {
-      const omittedProcessEnvKeys = this.getOmittedOptionalProcessEnvKeys(config, env);
+    if (!config.inherit_process_env && !this.omittedProcessEnvWarningShown) {
+      const omittedProcessEnvKeys = getOmittedCodexProcessEnvKeys(
+        env,
+        config.network_access_enabled === true,
+      );
       if (omittedProcessEnvKeys.length > 0) {
         logger.warn(
           '[CodexAppServer] Optional Codex app-server process env vars are not inherited by default. ' +
@@ -1467,54 +1302,32 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
     }
 
-    const sortedEnv: Record<string, string> = {};
-    for (const key of Object.keys(env).sort()) {
-      if (env[key] !== undefined) {
-        sortedEnv[key] = env[key];
-      }
-    }
-
-    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
-
     if (config.base_url) {
-      sortedEnv.OPENAI_BASE_URL = config.base_url;
-      sortedEnv.OPENAI_API_BASE_URL = config.base_url;
+      env.OPENAI_BASE_URL = config.base_url;
+      env.OPENAI_API_BASE_URL = config.base_url;
     }
 
     if (config.deep_tracing) {
-      if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+      if (!env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+        env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
       }
-      if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+      if (!env.OTEL_EXPORTER_OTLP_PROTOCOL) {
+        env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
       }
-      if (!sortedEnv.OTEL_SERVICE_NAME) {
-        sortedEnv.OTEL_SERVICE_NAME = 'codex-app-server';
+      if (!env.OTEL_SERVICE_NAME) {
+        env.OTEL_SERVICE_NAME = 'codex-app-server';
       }
-      if (!sortedEnv.OTEL_TRACES_EXPORTER) {
-        sortedEnv.OTEL_TRACES_EXPORTER = 'otlp';
+      if (!env.OTEL_TRACES_EXPORTER) {
+        env.OTEL_TRACES_EXPORTER = 'otlp';
       }
       if (traceparent) {
-        sortedEnv.TRACEPARENT = traceparent;
+        env.TRACEPARENT = traceparent;
       }
     } else {
-      delete sortedEnv.TRACEPARENT;
+      delete env.TRACEPARENT;
     }
 
-    return sortedEnv;
-  }
-
-  private getOmittedOptionalProcessEnvKeys(
-    config: CodexAppServerConfig,
-    env: Record<string, string>,
-  ): string[] {
-    const shouldWarnForSshEnv = config.network_access_enabled === true;
-    return COMMON_OPTIONAL_PROCESS_ENV_KEYS.filter(
-      (key) =>
-        typeof process.env[key] === 'string' &&
-        !(key in env) &&
-        (shouldWarnForSshEnv || (key !== 'SSH_AUTH_SOCK' && key !== 'GIT_SSH_COMMAND')),
-    );
+    return sortCodexProcessEnv(env);
   }
 
   private buildAppServerArgs(config: CodexAppServerConfig): string[] {
@@ -3137,56 +2950,6 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return counts;
   }
 
-  private validateWorkingDirectory(workingDir: string, skipGitCheck = false): void {
-    const cacheKey = `${workingDir}:${skipGitCheck}`;
-    if (this.validatedWorkingDirs.has(cacheKey)) {
-      return;
-    }
-
-    let stats: fs.Stats;
-    try {
-      stats = fs.statSync(workingDir);
-    } catch (err: any) {
-      throw new Error(
-        `Working directory ${workingDir} does not exist or isn't accessible: ${err.message}`,
-      );
-    }
-
-    if (!stats.isDirectory()) {
-      throw new Error(`Working directory ${workingDir} is not a directory`);
-    }
-
-    if (!skipGitCheck && !this.isInsideGitRepository(workingDir)) {
-      throw new Error(
-        dedent`Working directory ${workingDir} is not inside a Git repository.
-
-        Codex app-server requires a Git repository by default to prevent unrecoverable errors.
-
-        To bypass this check, set skip_git_repo_check: true in your provider config.`,
-      );
-    }
-
-    this.validatedWorkingDirs.add(cacheKey);
-  }
-
-  private isInsideGitRepository(workingDir: string): boolean {
-    return this.findGitRepositoryRoot(workingDir) !== undefined;
-  }
-
-  private findGitRepositoryRoot(workingDir: string): string | undefined {
-    let currentDir = path.resolve(workingDir);
-    while (true) {
-      if (fs.existsSync(path.join(currentDir, '.git'))) {
-        return currentDir;
-      }
-      const parentDir = path.dirname(currentDir);
-      if (parentDir === currentDir) {
-        return undefined;
-      }
-      currentDir = parentDir;
-    }
-  }
-
   private warnOnceForDeepTracingThreadOptions(config: CodexAppServerConfig): void {
     if (
       !config.deep_tracing ||
@@ -3402,7 +3165,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return getCodexSkillRootPrefixes({
       codexHome: appServerEnv.CODEX_HOME,
       gitRepositoryRoot: resolvedWorkingDir
-        ? this.findGitRepositoryRoot(resolvedWorkingDir)
+        ? findCodexGitRepositoryRoot(resolvedWorkingDir)
         : undefined,
       homeDir: appServerEnv.HOME || appServerEnv.USERPROFILE,
       workingDir: resolvedWorkingDir,
