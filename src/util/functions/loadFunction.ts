@@ -109,23 +109,25 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  let separatorIndex = urlWithoutProtocol.lastIndexOf(':');
 
-  if (lastColonIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
+  while (separatorIndex > 1) {
+    const candidateFilePath = urlWithoutProtocol.slice(0, separatorIndex);
 
-    // Only executable function files support a :functionName suffix. This preserves
-    // colons that are part of a valid file or directory name on POSIX systems.
-    if (!isJavascriptFile(candidateFilePath) && !candidateFilePath.endsWith('.py')) {
+    // Only executable function files support a :functionName suffix. Scanning
+    // backward preserves colons in paths and Ruby namespace separators.
+    if (
+      isJavascriptFile(candidateFilePath) ||
+      candidateFilePath.endsWith('.py') ||
+      candidateFilePath.endsWith('.rb')
+    ) {
       return {
-        filePath: normalizeFilePath(urlWithoutProtocol),
+        filePath: normalizeFilePath(candidateFilePath),
+        functionName: urlWithoutProtocol.slice(separatorIndex + 1),
       };
     }
 
-    return {
-      filePath: normalizeFilePath(candidateFilePath),
-      functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
-    };
+    separatorIndex = urlWithoutProtocol.lastIndexOf(':', separatorIndex - 1);
   }
 
   return {

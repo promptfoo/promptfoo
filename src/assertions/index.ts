@@ -35,12 +35,14 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
+import { getResolvedAssertionAlias } from './aliases';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
@@ -152,7 +154,9 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionUsesTrace);
   }
 
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  return TRACE_AWARE_ASSERTION_TYPES.has(
+    getResolvedAssertionAlias(assertion)?.type ?? getAssertionBaseType(assertion),
+  );
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
@@ -317,6 +321,19 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+function renderAliasCallSiteValue(
+  value: AssertionValue,
+  vars: Record<string, VarValue>,
+): AssertionValue {
+  if (typeof value === 'string') {
+    return nunjucks.renderString(value, vars);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => nunjucks.renderString(item, vars));
+  }
+  return value;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -430,6 +447,7 @@ export async function runAssertion({
 
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
+  const assertionAlias = getResolvedAssertionAlias(assertion);
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
 
@@ -452,6 +470,14 @@ export async function runAssertion({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
+  const renderedAliasCallSiteValue =
+    assertionAlias?.value === undefined
+      ? undefined
+      : renderAliasCallSiteValue(assertionAlias.value, resolvedVars);
+  if (renderedAliasCallSiteValue !== undefined) {
+    context.value = renderedAliasCallSiteValue;
+  }
+
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion)) {
     try {
@@ -472,22 +498,13 @@ export async function runAssertion({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
+  let renderedValue = assertionAlias?.script ?? assertion.value;
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const { filePath: parsedPath, functionName } = parseFileUrl(renderedValue);
+      const filePath = path.resolve(basePath, parsedPath);
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
@@ -561,7 +578,7 @@ export async function runAssertion({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
+  const baseType = assertionAlias?.type ?? getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
@@ -621,11 +638,11 @@ export async function runAssertion({
 
   const assertionParams: AssertionParams = {
     assertion,
-    baseType: getAssertionBaseType(assertion),
+    baseType,
     providerCallContext,
     assertionValueContext: context,
     cost,
-    inverse: isAssertionInverse(assertion),
+    inverse: assertionAlias ? false : isAssertionInverse(assertion),
     latencyMs,
     logProbs,
     output,
@@ -649,13 +666,14 @@ export async function runAssertion({
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
+    const renderedAssertionValue = assertionAlias ? renderedAliasCallSiteValue : renderedValue;
     if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
+      renderedAssertionValue !== undefined &&
+      renderedAssertionValue !== assertion.value &&
+      typeof renderedAssertionValue === 'string'
     ) {
       result.metadata = result.metadata || {};
-      result.metadata.renderedAssertionValue = renderedValue;
+      result.metadata.renderedAssertionValue = renderedAssertionValue;
     }
 
     // If weight is 0, treat this as a metric-only assertion that can't fail

@@ -7,6 +7,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import { z } from 'zod';
+import { resolveAssertionAliases } from '../../assertions/aliases';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -439,6 +440,14 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     }
     ret.prompts = ['{{prompt}}'];
   }
+  if (ret.assertionAliases) {
+    ret.assertionAliases = ret.assertionAliases.map((alias) => ({
+      ...alias,
+      script: alias.script.startsWith('file://')
+        ? `file://${path.resolve(path.dirname(configPath), alias.script.slice('file://'.length))}`
+        : alias.script,
+    }));
+  }
   return ret;
 }
 
@@ -724,6 +733,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
       return prev;
     }, undefined),
+    ...(configs.some((config) => config.assertionAliases?.length)
+      ? {
+          assertionAliases: configs.flatMap((config) => config.assertionAliases || []),
+        }
+      : {}),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
@@ -853,6 +867,11 @@ export async function resolveConfigs(
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
+    ...(fileConfig.assertionAliases || defaultConfig.assertionAliases
+      ? {
+          assertionAliases: fileConfig.assertionAliases || defaultConfig.assertionAliases,
+        }
+      : {}),
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
       ...(cmdObj.extension || []),
@@ -952,9 +971,9 @@ export async function resolveConfigs(
     env: config.env,
     basePath,
   });
-  const parsedTests: TestCase[] = await readTests(
-    config.tests || [],
-    cmdObj.tests ? undefined : basePath,
+  const parsedTests = resolveAssertionAliases(
+    await readTests(config.tests || [], cmdObj.tests ? undefined : basePath),
+    config.assertionAliases,
   );
 
   // Parse testCases for each scenario
@@ -982,7 +1001,10 @@ export async function resolveConfigs(
           scenario.tests,
           cmdObj.tests ? undefined : basePath,
         );
-        scenario.tests = parsedScenarioTests;
+        scenario.tests = resolveAssertionAliases(parsedScenarioTests, config.assertionAliases);
+      }
+      if (typeof scenario === 'object' && Array.isArray(scenario.config)) {
+        scenario.config = resolveAssertionAliases(scenario.config, config.assertionAliases);
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(
@@ -1021,17 +1043,22 @@ export async function resolveConfigs(
     failConfigResolution(message);
   }
 
-  const defaultTest: TestCase = {
-    metadata: config.metadata,
-    options: {
-      prefix: cmdObj.promptPrefix,
-      suffix: cmdObj.promptSuffix,
-      provider: cmdObj.grader,
-      // rubricPrompt
-      ...(processedDefaultTest?.options || {}),
-    },
-    ...(processedDefaultTest || {}),
-  };
+  const [defaultTest] = resolveAssertionAliases(
+    [
+      {
+        metadata: config.metadata,
+        options: {
+          prefix: cmdObj.promptPrefix,
+          suffix: cmdObj.promptSuffix,
+          provider: cmdObj.grader,
+          // rubricPrompt
+          ...(processedDefaultTest?.options || {}),
+        },
+        ...(processedDefaultTest || {}),
+      },
+    ],
+    config.assertionAliases,
+  );
 
   const testSuite: TestSuite = {
     description: config.description,
