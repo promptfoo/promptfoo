@@ -1541,9 +1541,18 @@ The Responses API uses the flattened format:
     },
     "required": ["event_name", "date", "location"],
     "additionalProperties": false
-  }
+  },
+  "strict": true
 }
 ```
+
+`strict` is optional and defaults to `true`. Set it to `false` when your schema uses
+JSON Schema keywords that [strict mode does not support](https://platform.openai.com/docs/guides/structured-outputs#supported-schemas)
+(for example `minimum`/`maximum`, `pattern`, or omitting `additionalProperties: false`).
+An explicit `false` is passed through to the API rather than being forced to `true`. The
+nested `json_schema.strict` form is also honored and takes precedence over a top-level
+`strict`. This applies to the `openai:responses`, `azure:responses`, and `xai:responses`
+providers.
 
 You can also use nested file references for the schema itself, which is useful for sharing schemas across multiple response formats:
 
