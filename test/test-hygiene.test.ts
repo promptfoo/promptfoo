@@ -139,6 +139,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     linePattern: /const itPy = PYTHON_PATH \? it : it\.skip;/,
     reason: 'LangChain example subprocess coverage requires an available Python interpreter',
   },
+  {
+    file: 'examples/integrationGitlabCi.test.ts',
+    kind: 'skip',
+    linePattern: /process\.platform === 'win32' \? describe\.skip : describe/,
+    reason: 'GitLab CI integration coverage executes POSIX shell scripts unavailable on Windows',
+  },
 ];
 
 const legacyHoistedPersistentMockFiles = new Set<string>();
