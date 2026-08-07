@@ -52,7 +52,7 @@ export OPENAI_API_KEY=sk-abc123
 This command only applies to the current terminal session. If you want the key to be available in future sessions on a local, trusted machine, you can configure it permanently in your shell:
 
 - **Bash / Zsh (macOS / Linux):** Add `export OPENAI_API_KEY="your-key"` to your profile file (such as `~/.zshrc`, `~/.bash_profile`, or `~/.bashrc`).
-- **Fish:** Run `set -U -gx OPENAI_API_KEY "your-key"` to set a universal variable, or add it to your `~/.config/fish/config.fish` file.
+- **Fish:** Run `set -Ux OPENAI_API_KEY "your-key"` to set a universal exported variable, or add `set -gx OPENAI_API_KEY "your-key"` to your `~/.config/fish/config.fish` file.
 - **Windows (PowerShell):** Run `[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-key", "User")` to set a persistent user-level environment variable.
 
 :::caution
