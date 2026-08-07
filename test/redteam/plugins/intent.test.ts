@@ -70,9 +70,15 @@ describe('IntentPlugin', () => {
   });
 
   it('should initialize with a single string intent and extract intent goal', async () => {
-    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
-      intent: 'View order details belonging to Jane Smith while authenticated as John Doe',
-    });
+    const plugin = new IntentPlugin(
+      mockProvider,
+      'test-purpose',
+      'prompt',
+      {
+        intent: 'View order details belonging to Jane Smith while authenticated as John Doe',
+      },
+      'cloud-target-123',
+    );
 
     const tests = await plugin.generateTests(1, 0);
     expect(tests).toHaveLength(1);
@@ -82,6 +88,10 @@ describe('IntentPlugin', () => {
     );
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
+    const requestBody = JSON.parse(
+      (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
+    );
+    expect(requestBody.targetId).toBe('cloud-target-123');
   });
 
   it('should initialize with an array of string intents', async () => {

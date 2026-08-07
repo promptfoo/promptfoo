@@ -68,7 +68,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
-import { isNonTransientHttpStatus } from './util/fetch/errors';
+import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -82,10 +82,12 @@ import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMe
 import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
+  getProviderIdentifier,
   isAnthropicProvider,
   isGoogleProvider,
   isOpenAiProvider,
   isProviderAllowed,
+  sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
@@ -431,6 +433,12 @@ function getRepeatCacheNamespace(
   return undefined;
 }
 
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
+}
+
 function hasGeneratedRedteamMetadata(test: AtomicTestCase): boolean {
   return (
     typeof test.metadata?.pluginId === 'string' &&
@@ -586,16 +594,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
 
-function isAbortShapedError(error: unknown): boolean {
-  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
-}
-
 function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
   const errorAsError = error instanceof Error ? error : undefined;
   // Require both signals: a third-party SDK that throws `AbortError` during a
   // non-aborted run is a real bug, and a real SyntaxError caught microseconds
   // after an unrelated abort is also a real bug.
-  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+  const aborted = Boolean(abortSignal?.aborted) && isAbortError(error);
 
   if (aborted) {
     // Skip stack serialization on the abort path — debug logs usually go
@@ -653,22 +657,41 @@ interface ProviderCallResult {
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
 }
 
+function mergeProviderPromptConfig(
+  promptConfig: Prompt['config'],
+  testOptions: AtomicTestCase['options'],
+): Prompt['config'] {
+  const { repeat: _repeat, ...providerOptions } = testOptions ?? {};
+  return {
+    ...(promptConfig ?? {}),
+    ...providerOptions,
+  };
+}
+
 function createRunEvalState({
   provider,
   prompt,
+  promptIndex,
   test,
-}: Pick<RunEvalOptions, 'provider' | 'prompt' | 'test'>): RunEvalState {
+}: Pick<RunEvalOptions, 'provider' | 'prompt' | 'test'> & {
+  promptIndex: number;
+}): RunEvalState {
   const vars = structuredClone(test.vars || {});
   const fileMetadata = collectFileMetadata(vars);
-  const conversationKey = `${provider.label || provider.id()}:${prompt.id}${test.metadata?.conversationId ? `:${test.metadata.conversationId}` : ''}`;
+  // Provider identifiers and prompt ids can both collide, but every result-table
+  // column has a unique index. Encode the components as a tuple because identifiers
+  // can contain separators that would make concatenated keys ambiguous.
+  const conversationKey = JSON.stringify([
+    getProviderIdentifier(provider),
+    prompt.id,
+    promptIndex,
+    test.metadata?.conversationId,
+  ]);
 
   const setup = createRunEvalSetup({
     provider,
     prompt,
-    promptConfig: {
-      ...(prompt.config ?? {}),
-      ...(test.options ?? {}),
-    },
+    promptConfig: mergeProviderPromptConfig(prompt.config, test.options),
     vars,
   });
 
@@ -807,10 +830,7 @@ async function renderRunEvalPrompt({
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
   }
-  const promptConfig = {
-    ...(promptForRender.config ?? {}),
-    ...(test.options ?? {}),
-  };
+  const promptConfig = mergeProviderPromptConfig(promptForRender.config, test.options);
   const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
   setup.prompt.raw = renderedPrompt;
   return {
@@ -914,7 +934,7 @@ async function callActiveProvider({
     isApiProvider(test.provider) ? test.provider : originalProvider,
     test,
   );
-  logger.debug(`Provider type: ${activeProvider.id()}`);
+  logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
@@ -1426,7 +1446,7 @@ async function runEvalInternal({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  const state = createRunEvalState({ provider, prompt, test });
+  const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
     conversationKey: state.conversationKey,
@@ -2027,13 +2047,38 @@ function buildExistingPromptsMap(store: EvaluationStore) {
   return existingPromptsMap;
 }
 
-function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): CompletedPrompt[] {
+/**
+ * The results-table columns owned by one provider, in table order. `promptIdx` is the
+ * column's position in the table, which is how results are addressed everywhere else.
+ */
+type ProviderColumns = {
+  provider: ApiProvider;
+  columns: { promptIdx: number; prompt: Prompt }[];
+};
+
+/**
+ * Builds the results-table columns, one per (provider, prompt) pair, and returns them
+ * both flattened (for the table header) and grouped by provider (for scheduling work).
+ *
+ * Callers must derive a result's column from `columns` rather than looking one up by
+ * `providerKey:promptId`, because neither component is unique: two providers can share
+ * a label (or resolve to the same id), and two prompts can share a label, which is what
+ * `generateIdFromPrompt` hashes. Resolving by identity collapses duplicates into a
+ * single column and silently drops the other columns' results.
+ */
+function buildCompletedPrompts(
+  testSuite: TestSuite,
+  store: EvaluationStore,
+): { prompts: CompletedPrompt[]; columnsByProvider: ProviderColumns[] } {
   const prompts: CompletedPrompt[] = [];
+  const columnsByProvider: ProviderColumns[] = [];
   const existingPromptsMap = buildExistingPromptsMap(store);
 
   for (const provider of testSuite.providers) {
+    const providerKey = getProviderIdentifier(provider);
+    const columns: ProviderColumns['columns'] = [];
+
     for (const prompt of testSuite.prompts) {
-      const providerKey = provider.label || provider.id();
       if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
         continue;
       }
@@ -2044,25 +2089,26 @@ function buildCompletedPrompts(testSuite: TestSuite, store: EvaluationStore): Co
         backfillNamedScoreWeights(existingPrompt.metrics);
       }
 
+      columns.push({ promptIdx: prompts.length, prompt });
       prompts.push({
         ...prompt,
         id: promptId,
         provider: providerKey,
         label: prompt.label,
-        metrics: existingPrompt?.metrics || createDefaultPromptMetrics(),
+        // `existingPromptsMap` is still keyed by identity, so duplicate providers resolve
+        // to the same stored prompt. Clone its metrics so the columns do not accumulate
+        // into one shared object. (Resume has deeper duplicate-provider problems; see
+        // `doEval`, which rebuilds `testSuite.prompts` from the previous run's columns.)
+        metrics: existingPrompt?.metrics
+          ? structuredClone(existingPrompt.metrics)
+          : createDefaultPromptMetrics(),
       });
     }
+
+    columnsByProvider.push({ provider, columns });
   }
 
-  return prompts;
-}
-
-function buildPromptIndexMap(prompts: CompletedPrompt[]) {
-  const promptIndexMap = new Map<string, number>();
-  for (let i = 0; i < prompts.length; i++) {
-    promptIndexMap.set(`${prompts[i].provider}:${prompts[i].id}`, i);
-  }
-  return promptIndexMap;
+  return { prompts, columnsByProvider };
 }
 
 function resolveAssertionProviderReferences(
@@ -2173,6 +2219,7 @@ function mergeScenarioTest(
     },
     options: {
       ...(defaultTest?.options || {}),
+      ...data.options,
       ...test.options,
     },
     assert: [...(data.assert || []), ...(test.assert || [])],
@@ -2236,7 +2283,7 @@ async function buildRunEvalOptions({
   conversations,
   evalId,
   options,
-  promptIndexMap,
+  columnsByProvider,
   providerAbortSignal,
   rateLimitRegistry,
   registers,
@@ -2247,7 +2294,7 @@ async function buildRunEvalOptions({
   conversations: EvalConversations;
   evalId: string;
   options: InternalEvaluateOptions;
-  promptIndexMap: Map<string, number>;
+  columnsByProvider: ProviderColumns[];
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
@@ -2255,11 +2302,7 @@ async function buildRunEvalOptions({
   tests: AtomicTestCase[];
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
-  const promptIdCache = new Map<Prompt, string>();
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
-  for (const prompt of testSuite.prompts) {
-    promptIdCache.set(prompt, generateIdFromPrompt(prompt));
-  }
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
@@ -2272,8 +2315,7 @@ async function buildRunEvalOptions({
       evalId,
       nextTestIdx: testIdx,
       options,
-      promptIdCache,
-      promptIndexMap,
+      columnsByProvider,
       providerAbortSignal,
       rateLimitRegistry,
       registers,
@@ -2359,8 +2401,7 @@ function appendRunEvalOptionsForTestCase({
   evalId,
   nextTestIdx,
   options,
-  promptIdCache,
-  promptIndexMap,
+  columnsByProvider,
   providerAbortSignal,
   rateLimitRegistry,
   registers,
@@ -2373,8 +2414,7 @@ function appendRunEvalOptionsForTestCase({
   evalId: string;
   nextTestIdx: number;
   options: InternalEvaluateOptions;
-  promptIdCache: Map<Prompt, string>;
-  promptIndexMap: Map<string, number>;
+  columnsByProvider: ProviderColumns[];
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
@@ -2389,15 +2429,20 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
-  for (let repeatIndex = 0; repeatIndex < (options.repeat || 1); repeatIndex++) {
+  const globalRepeat = normalizeRepeatCount(options.repeat);
+  const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
+  const effectiveOptions = {
+    ...options,
+    repeat: testRepeat,
+  };
+  for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
     for (const vars of varCombinations) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
         evalId,
-        options,
-        promptIdCache,
-        promptIndexMap,
+        options: effectiveOptions,
+        columnsByProvider,
         promptPrefix,
         promptSuffix,
         providerAbortSignal,
@@ -2422,8 +2467,7 @@ function appendRunEvalOptionsForVars({
   conversations,
   evalId,
   options,
-  promptIdCache,
-  promptIndexMap,
+  columnsByProvider,
   promptPrefix,
   promptSuffix,
   providerAbortSignal,
@@ -2440,8 +2484,7 @@ function appendRunEvalOptionsForVars({
   conversations: EvalConversations;
   evalId: string;
   options: InternalEvaluateOptions;
-  promptIdCache: Map<Prompt, string>;
-  promptIndexMap: Map<string, number>;
+  columnsByProvider: ProviderColumns[];
   promptPrefix: string;
   promptSuffix: string;
   providerAbortSignal?: AbortSignal;
@@ -2454,17 +2497,16 @@ function appendRunEvalOptionsForVars({
   testSuite: TestSuite;
   vars: Vars | undefined;
 }) {
-  for (const provider of testSuite.providers) {
+  for (const { provider, columns } of columnsByProvider) {
     if (!isProviderAllowed(provider, testCase.providers)) {
       continue;
     }
     appendRunEvalOptionsForProvider({
+      columns,
       concurrency,
       conversations,
       evalId,
       options,
-      promptIdCache,
-      promptIndexMap,
       promptPrefix,
       promptSuffix,
       provider,
@@ -2482,12 +2524,11 @@ function appendRunEvalOptionsForVars({
 }
 
 function appendRunEvalOptionsForProvider({
+  columns,
   concurrency,
   conversations,
   evalId,
   options,
-  promptIdCache,
-  promptIndexMap,
   promptPrefix,
   promptSuffix,
   provider,
@@ -2501,12 +2542,11 @@ function appendRunEvalOptionsForProvider({
   testSuite,
   vars,
 }: {
+  columns: ProviderColumns['columns'];
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
   options: InternalEvaluateOptions;
-  promptIdCache: Map<Prompt, string>;
-  promptIndexMap: Map<string, number>;
   promptPrefix: string;
   promptSuffix: string;
   provider: ApiProvider;
@@ -2520,17 +2560,8 @@ function appendRunEvalOptionsForProvider({
   testSuite: TestSuite;
   vars: Vars | undefined;
 }) {
-  const providerKey = provider.label || provider.id();
-  for (const prompt of testSuite.prompts) {
-    if (!shouldRunPromptForTest(prompt, providerKey, testCase, testSuite)) {
-      continue;
-    }
-
-    const promptIdx = promptIndexMap.get(`${providerKey}:${promptIdCache.get(prompt)!}`);
-    if (promptIdx === undefined) {
-      logger.warn(
-        `Could not find prompt index for ${providerKey}:${promptIdCache.get(prompt)}, skipping`,
-      );
+  for (const { promptIdx, prompt } of columns) {
+    if (!isAllowedPrompt(prompt, testCase.prompts)) {
       continue;
     }
 
@@ -2556,18 +2587,6 @@ function appendRunEvalOptionsForProvider({
       }),
     );
   }
-}
-
-function shouldRunPromptForTest(
-  prompt: Prompt,
-  providerKey: string,
-  testCase: AtomicTestCase,
-  testSuite: TestSuite,
-) {
-  return (
-    isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey]) &&
-    isAllowedPrompt(prompt, testCase.prompts)
-  );
 }
 
 function createRunEvalOption({
@@ -3298,7 +3317,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }: ProcessEvalStepOptions,
     context: EvalProcessingContext,
   ) {
-    return withCacheNamespace(
+    return await withCacheNamespace(
       getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
       async () => {
         const rows =
@@ -3478,7 +3497,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
-      return this.processEvalStep(evalStep, index, { deferGrading, providerCallQueue }, context);
+      return await this.processEvalStep(
+        evalStep,
+        index,
+        { deferGrading, providerCallQueue },
+        context,
+      );
     }
 
     const abortController = new AbortController();
@@ -4518,7 +4542,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     // Add abort checks at key points
     checkAbort();
 
-    const prompts: CompletedPrompt[] = [];
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
@@ -4533,8 +4556,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return this.store.evaluation;
     }
 
-    prompts.push(...buildCompletedPrompts(testSuite, this.store));
-    const promptIndexMap = buildPromptIndexMap(prompts);
+    const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
 
     await this.store.appendPrompts(prompts);
 
@@ -4554,7 +4576,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       conversations: this.conversations,
       evalId: this.store.id,
       options,
-      promptIndexMap,
+      columnsByProvider,
       providerAbortSignal,
       rateLimitRegistry: this.rateLimitRegistry,
       registers: this.registers,
@@ -4797,7 +4819,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           const metrics = this.rateLimitRegistry.getMetrics();
           for (const [key, m] of Object.entries(metrics)) {
             if (m.totalRequests > 0) {
-              logger.debug(`[Scheduler] Final metrics for ${key}`, {
+              logger.debug(`[Scheduler] Final metrics for ${sanitizeProviderIdForLog(key)}`, {
                 totalRequests: m.totalRequests,
                 completedRequests: m.completedRequests,
                 failedRequests: m.failedRequests,
@@ -4828,12 +4850,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           // Only surface a writer-close failure when nothing else failed, so the original
           // evaluation/cleanup error is never masked by a secondary I/O error.
           if (evaluationError === undefined && cleanupError === undefined) {
-            throw writerCloseErrors.length === 1
-              ? writerCloseErrors[0]
-              : new AggregateError(
-                  writerCloseErrors,
-                  'Multiple JSONL output writers failed to close',
-                );
+            // When results persisted to the database, that copy is authoritative and the
+            // post-run rewrite (writeMultipleOutputs) regenerates the JSONL artifact from
+            // it, so a close error (e.g. a delayed fd-close writeback failure) is recoverable
+            // — log it rather than failing an otherwise-successful run. Only when persistence
+            // failed is the streamed JSONL the sole copy whose truncation must be surfaced.
+            if (this.store.resultPersistenceFailed) {
+              throw writerCloseErrors.length === 1
+                ? writerCloseErrors[0]
+                : new AggregateError(
+                    writerCloseErrors,
+                    'Multiple JSONL output writers failed to close',
+                  );
+            }
+            logger.warn(
+              `JSONL output writer reported a close error after results persisted; the output file will be regenerated from the database. ${writerCloseErrors.map((error) => (error instanceof Error ? error.message : String(error))).join('; ')}`,
+            );
           }
         }
       }

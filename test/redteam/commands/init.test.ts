@@ -4,7 +4,7 @@ import confirm from '@inquirer/confirm';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';

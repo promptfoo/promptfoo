@@ -1,5 +1,6 @@
-import { WebClient } from '@slack/web-api';
+import { WebAPIPlatformError, WebAPIRateLimitedError, WebClient } from '@slack/web-api';
 import logger from '../logger';
+import { fetchWithProviderProxy } from './fetch';
 
 import type {
   ApiProvider,
@@ -59,7 +60,14 @@ export class SlackProvider implements ApiProvider {
       throw new Error('Slack provider requires a channel ID');
     }
 
-    this.client = new WebClient(token);
+    this.client = new WebClient(token, {
+      fetch: (url, options) => {
+        const headers = new Headers(options?.headers);
+        headers.set('x-promptfoo-silent', 'true');
+
+        return fetchWithProviderProxy(url.toString(), { ...options, headers });
+      },
+    });
   }
 
   id(): string {
@@ -139,11 +147,15 @@ export class SlackProvider implements ApiProvider {
         output: responseText,
         metadata: responseMetadata,
       };
-    } catch (error: any) {
+    } catch (error) {
       logger.error(`Slack provider error: ${error}`);
 
+      if (error instanceof WebAPIRateLimitedError) {
+        return { error: 'Slack API rate limit exceeded. Please try again later.' };
+      }
+
       // Handle specific Slack API errors
-      if (error?.data?.error) {
+      if (error instanceof WebAPIPlatformError) {
         const slackError = error.data.error;
         switch (slackError) {
           case 'channel_not_found':
@@ -282,17 +294,4 @@ export class SlackProvider implements ApiProvider {
 
     return responses.join('\n\n');
   }
-}
-
-// Export convenience function for creating from provider string
-export function createSlackProvider(
-  channel: string,
-  options?: Omit<SlackProviderOptions, 'config'>,
-): SlackProvider {
-  return new SlackProvider({
-    ...options,
-    config: {
-      channel,
-    },
-  });
 }

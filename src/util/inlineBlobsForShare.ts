@@ -1,5 +1,7 @@
-import { getBlobByHash } from '../blobs';
+import { getShareAuthorizedBlob } from '../blobs';
 import {
+  BLOB_SCAN_MAX_DEPTH,
+  BLOB_SCAN_MAX_STRING_LENGTH,
   BLOB_URI_REGEX,
   collectBlobHashes,
   extractBlobHashesFromValue,
@@ -8,8 +10,8 @@ import {
 import { BLOB_SCHEME } from '../blobs/constants';
 import logger from '../logger';
 
-const MAX_DEPTH = 8;
-const MAX_STRING_LENGTH_TO_SCAN = 100_000;
+const MAX_DEPTH = BLOB_SCAN_MAX_DEPTH;
+const MAX_STRING_LENGTH_TO_SCAN = BLOB_SCAN_MAX_STRING_LENGTH;
 
 type BlobPayload = {
   base64: string;
@@ -30,7 +32,11 @@ function extractHashFromBlobRef(value: unknown): string | null {
   return extractBlobHashesFromValue(value, MAX_STRING_LENGTH_TO_SCAN)[0] ?? null;
 }
 
-async function ensureBlobPayloads(hashes: Set<string>, cache: BlobInlineCache): Promise<void> {
+async function ensureBlobPayloads(
+  hashes: Set<string>,
+  cache: BlobInlineCache,
+  localEvalId: string,
+): Promise<void> {
   const missing = Array.from(hashes).filter((hash) => !cache.has(hash));
   if (missing.length === 0) {
     return;
@@ -39,7 +45,14 @@ async function ensureBlobPayloads(hashes: Set<string>, cache: BlobInlineCache): 
   await Promise.all(
     missing.map(async (hash) => {
       try {
-        const blob = await getBlobByHash(hash);
+        // Result text may contain copied blob URIs; only refs with trusted provenance
+        // for this eval authorize reading local bytes (same gate as the upload path).
+        const blob = await getShareAuthorizedBlob(hash, localEvalId);
+        if (!blob) {
+          cache.set(hash, null);
+          return;
+        }
+
         const base64 = blob.data.toString('base64');
         const mimeType = blob.metadata.mimeType || 'application/octet-stream';
         cache.set(hash, {
@@ -122,11 +135,15 @@ export function createBlobInlineCache(): BlobInlineCache {
   return new Map();
 }
 
-export async function inlineBlobRefsForShare<T>(value: T, cache: BlobInlineCache): Promise<T> {
+export async function inlineBlobRefsForShare<T>(
+  value: T,
+  cache: BlobInlineCache,
+  localEvalId: string,
+): Promise<T> {
   const hashes = collectBlobHashes(value, {
     maxDepth: MAX_DEPTH,
     maxStringLength: MAX_STRING_LENGTH_TO_SCAN,
   });
-  await ensureBlobPayloads(hashes, cache);
+  await ensureBlobPayloads(hashes, cache, localEvalId);
   return (await inlineValue(value, cache, new WeakSet(), 0)) as T;
 }

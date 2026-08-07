@@ -1,4 +1,6 @@
+import { EventEmitter } from 'node:events';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import fs from 'fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
@@ -111,6 +113,12 @@ const createMockUsage = (input = 0, output = 0): MockUsage => ({
     ephemeral_1h_input_tokens: 0,
     ephemeral_5m_input_tokens: 0,
   },
+  // @anthropic-ai/sdk 0.115.0 added `fallback_credit` to BetaUsage, and
+  // NonNullableUsage makes every field required. These mocks never present a
+  // fallback-credit token, so the neutral outcome is "not applied".
+  fallback_credit: {
+    status: { type: 'not_applied', reason: 'not_enabled' },
+  },
   server_tool_use: {
     web_search_requests: 0,
     web_fetch_requests: 0,
@@ -145,6 +153,7 @@ const createMockBetaMessage = (
     cache_creation_input_tokens: null,
     cache_read_input_tokens: null,
     cache_creation: null,
+    fallback_credit: null,
     inference_geo: null,
     iterations: null,
     server_tool_use: null,
@@ -312,6 +321,33 @@ describe('ClaudeCodeSDKProvider', () => {
 
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
 
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not warn about comma-separated fallback models that are all known', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022' },
+      });
+
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+    });
+
+    it('should warn only about the unknown entries in a comma-separated fallback list', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+      new ClaudeCodeSDKProvider({
+        config: { fallback_model: 'claude-3-5-sonnet-20241022,unknown-fallback' },
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
         'Using unknown model for Claude Agent SDK fallback: unknown-fallback',
       );
@@ -1087,7 +1123,7 @@ describe('ClaudeCodeSDKProvider', () => {
       });
     });
 
-    describe('assistant errors and api_error_status (SDK >= 0.3.144)', () => {
+    describe('assistant errors and api_error_status', () => {
       const buildAssistantMessage = (
         error: SDKAssistantMessageError | undefined,
         opts: { uuid?: string; request_id?: string; subagent_type?: string } = {},
@@ -1214,50 +1250,53 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata).not.toHaveProperty('assistantErrors');
       });
 
-      it('annotates error result message with the last assistant error code', async () => {
-        // Verifies the model_not_found path the SDK formalized in 0.3.144 is
-        // promoted from a dropped detail to part of the error string and
-        // metadata, so consumers can distinguish it from an unrelated turn-
-        // limit failure that happens to share the same `subtype`.
-        mockQuery.mockReturnValue(
-          createMockQuery([
-            buildAssistantMessage('model_not_found', {
-              uuid: '33333333-3333-3333-3333-333333333333',
-            }),
+      it.each(['model_not_found', 'overloaded'] as const)(
+        'annotates error result messages with the %s assistant error code',
+        async (assistantError) => {
+          // The SDK formalized model_not_found in 0.3.144 and overloaded in
+          // 0.3.161. Both should be promoted from a dropped detail to the error
+          // string and metadata so consumers can distinguish the upstream cause
+          // from the generic terminal subtype.
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              buildAssistantMessage(assistantError, {
+                uuid: '33333333-3333-3333-3333-333333333333',
+              }),
+              {
+                type: 'result',
+                subtype: 'error_during_execution',
+                session_id: 'error-session',
+                uuid: '87654321-4321-4321-4321-210987654321' as `${string}-${string}-${string}-${string}-${string}`,
+                usage: createMockUsage(10, 0),
+                total_cost_usd: 0,
+                duration_ms: 500,
+                duration_api_ms: 400,
+                is_error: true,
+                num_turns: 1,
+                permission_denials: [],
+                modelUsage: {},
+                errors: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe(
+            `Claude Agent SDK call failed: error_during_execution (${assistantError})`,
+          );
+          expect(result.metadata?.assistantErrors).toEqual([
             {
-              type: 'result',
-              subtype: 'error_during_execution',
-              session_id: 'error-session',
-              uuid: '87654321-4321-4321-4321-210987654321' as `${string}-${string}-${string}-${string}-${string}`,
-              usage: createMockUsage(10, 0),
-              total_cost_usd: 0,
-              duration_ms: 500,
-              duration_api_ms: 400,
-              is_error: true,
-              num_turns: 1,
-              permission_denials: [],
-              modelUsage: {},
-              errors: [],
+              error: assistantError,
+              uuid: '33333333-3333-3333-3333-333333333333',
+              parentToolUseId: null,
             },
-          ]),
-        );
-
-        const provider = new ClaudeCodeSDKProvider({
-          env: { ANTHROPIC_API_KEY: 'test-api-key' },
-        });
-        const result = await provider.callApi('Test prompt');
-
-        expect(result.error).toBe(
-          'Claude Agent SDK call failed: error_during_execution (model_not_found)',
-        );
-        expect(result.metadata?.assistantErrors).toEqual([
-          {
-            error: 'model_not_found',
-            uuid: '33333333-3333-3333-3333-333333333333',
-            parentToolUseId: null,
-          },
-        ]);
-      });
+          ]);
+        },
+      );
     });
 
     describe('checkProviderApiKeys pre-check', () => {
@@ -1319,9 +1358,130 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
       });
+
+      // Regression for the Meta Model API recipe: a suite-level
+      // ANTHROPIC_BASE_URL (e.g. an Anthropic gateway) must not out-rank the
+      // recipe's provider-level pin — otherwise the explicitly supplied Meta
+      // credential would be sent to that gateway URL.
+      it('keeps a provider-level ANTHROPIC_BASE_URL pin ahead of suite-level env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+        const { loadApiProvider } = await import('../../src/providers/index');
+
+        const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+          options: {
+            config: {
+              apiKey: 'meta-model-api-key',
+              env: {
+                ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+                ANTHROPIC_CUSTOM_HEADERS: '',
+              },
+            },
+            env: {
+              ANTHROPIC_BASE_URL: 'https://api.meta.ai',
+              ANTHROPIC_CUSTOM_HEADERS: '',
+            } as EnvOverrides,
+          },
+          env: { ANTHROPIC_BASE_URL: 'https://anthropic-gateway.example' } as EnvOverrides,
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.ANTHROPIC_BASE_URL).toBe('https://api.meta.ai');
+        expect(callArgs.options.env.ANTHROPIC_CUSTOM_HEADERS).toBe('');
+        expect(callArgs.options.env.ANTHROPIC_API_KEY).toBe('meta-model-api-key');
+      });
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      it('preserves the previous five-level subagent nesting default', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('5');
+      });
+
+      it('forwards configured subagent depth and concurrency limits', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            max_subagent_spawn_depth: 8,
+            max_concurrent_subagents: 40,
+          },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('8');
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('40');
+      });
+
+      it('lets explicit subagent limit options override config.env and provider env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+            CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '2',
+            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '80',
+          } as EnvOverrides,
+          config: {
+            max_subagent_spawn_depth: 8,
+            max_concurrent_subagents: 40,
+            env: {
+              CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '3',
+              CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '60',
+            },
+          },
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('8');
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('40');
+      });
+
+      it('preserves environment-configured subagent limits without explicit options', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: {
+            ANTHROPIC_API_KEY: 'test-api-key',
+            CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '3',
+            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '60',
+          } as EnvOverrides,
+        });
+        await provider.callApi('prompt');
+
+        const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH).toBe('3');
+        expect(callArgs.options.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS).toBe('60');
+      });
+
+      it.each([
+        ['max_subagent_spawn_depth', 0],
+        ['max_subagent_spawn_depth', -1],
+        ['max_subagent_spawn_depth', 1.5],
+        ['max_concurrent_subagents', 0],
+        ['max_concurrent_subagents', Number.POSITIVE_INFINITY],
+      ])('rejects invalid %s value %s', async (option, value) => {
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: { [option]: value },
+        });
+
+        await expect(provider.callApi('prompt')).rejects.toThrow(
+          `${option} must be a positive safe integer`,
+        );
+        expect(mockQuery).not.toHaveBeenCalled();
+      });
+
       it('should forward config.env entries to the SDK subprocess env', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 
@@ -2150,12 +2310,282 @@ describe('ClaudeCodeSDKProvider', () => {
           });
           await provider.callApi('Test prompt');
 
-          expect(mockQuery).toHaveBeenCalledWith({
-            prompt: 'Test prompt',
-            options: expect.objectContaining({
-              hooks,
-            }),
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks.PreToolUse).toBe(hooks.PreToolUse);
+          expect(callArgs.options.hooks.PostToolUse).toEqual([
+            expect.objectContaining({ matcher: 'TaskOutput' }),
+          ]);
+        });
+
+        it('redacts raw TaskOutput before the main agent receives the tool result', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
           });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          const matcher = callArgs.options.hooks.PostToolUse[0];
+          expect(matcher.matcher).toBe('TaskOutput');
+
+          const result = await matcher.hooks[0](
+            {
+              hook_event_name: 'PostToolUse',
+              tool_name: 'TaskOutput',
+              tool_input: { task_id: 'background-task-1' },
+              tool_response: {
+                retrieval_status: 'success',
+                task: {
+                  task_id: 'background-task-1',
+                  task_type: 'local_agent',
+                  output: 'SYSTEM SECRET and hidden reasoning',
+                  result: 'SYSTEM SECRET and hidden reasoning',
+                  isRawTranscript: true,
+                },
+              },
+              tool_use_id: 'background-task-output',
+            },
+            'background-task-output',
+            { signal: new AbortController().signal },
+          );
+
+          expect(result).toEqual({
+            hookSpecificOutput: {
+              hookEventName: 'PostToolUse',
+              updatedToolOutput: {
+                retrieval_status: 'success',
+                task: {
+                  task_id: 'background-task-1',
+                  task_type: 'local_agent',
+                  output:
+                    '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+                  result:
+                    '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+                  isRawTranscript: false,
+                },
+              },
+            },
+          });
+          expect(JSON.stringify(result)).not.toContain('SYSTEM SECRET');
+        });
+
+        it('prevents a model from echoing raw TaskOutput through the real SDK hook bridge', async () => {
+          const secretTranscript = 'SYSTEM SECRET and hidden reasoning';
+          const realSdk = await vi.importActual<typeof import('@anthropic-ai/claude-agent-sdk')>(
+            '@anthropic-ai/claude-agent-sdk',
+          );
+          vi.mocked(importModule).mockResolvedValue({ query: realSdk.query });
+
+          const stdin = new PassThrough();
+          const stdout = new PassThrough();
+          const childEvents = new EventEmitter();
+          const childProcess = Object.assign(childEvents, {
+            stdin,
+            stdout,
+            killed: false,
+            exitCode: null as number | null,
+            kill(signal: NodeJS.Signals) {
+              this.killed = true;
+              this.exitCode = 0;
+              childEvents.emit('exit', 0, signal);
+              return true;
+            },
+          });
+          const spawnClaudeCodeProcess = vi.fn(() => childProcess);
+          const rawToolResponse = {
+            retrieval_status: 'success',
+            task: {
+              task_id: 'background-task-1',
+              task_type: 'local_agent',
+              output: secretTranscript,
+              result: secretTranscript,
+              isRawTranscript: true,
+            },
+          };
+          type HookControlResponse = {
+            hookEventName: string;
+            updatedToolOutput: typeof rawToolResponse;
+          };
+          type ControlMessage = {
+            type: string;
+            request_id?: string;
+            request?: {
+              subtype?: string;
+              hooks?: { PostToolUse?: Array<{ hookCallbackIds: string[] }> };
+            };
+            response?: {
+              request_id?: string;
+              response?: { hookSpecificOutput?: HookControlResponse };
+            };
+          };
+          let hookControlResponse: HookControlResponse | undefined;
+          let bufferedInput = '';
+
+          const send = (message: unknown) => {
+            stdout.write(JSON.stringify(message) + '\n');
+          };
+
+          const respondToInitialization = (message: ControlMessage) => {
+            const callbackId = message.request?.hooks?.PostToolUse?.[0]?.hookCallbackIds[0];
+            if (!callbackId) {
+              stdout.destroy(new Error('SDK did not register the TaskOutput hook'));
+              return;
+            }
+
+            queueMicrotask(() => {
+              send({
+                type: 'control_response',
+                response: {
+                  subtype: 'success',
+                  request_id: message.request_id,
+                  response: {},
+                },
+              });
+              send({
+                type: 'control_request',
+                request_id: 'hook-request-1',
+                request: {
+                  subtype: 'hook_callback',
+                  callback_id: callbackId,
+                  input: {
+                    hook_event_name: 'PostToolUse',
+                    tool_name: 'TaskOutput',
+                    tool_input: { task_id: 'background-task-1' },
+                    tool_response: rawToolResponse,
+                    tool_use_id: 'background-task-output',
+                  },
+                  tool_use_id: 'background-task-output',
+                },
+              });
+            });
+          };
+
+          const respondToHook = (message: ControlMessage) => {
+            hookControlResponse = message.response?.response?.hookSpecificOutput;
+            if (!hookControlResponse) {
+              stdout.destroy(new Error('SDK did not return the TaskOutput hook response'));
+              return;
+            }
+
+            const modelVisibleOutput = hookControlResponse.updatedToolOutput.task.output;
+            queueMicrotask(() => {
+              send({
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'The background agent said: ' + modelVisibleOutput,
+                usage: createMockUsage(100, 200),
+                total_cost_usd: 0.01,
+                duration_ms: 1000,
+                duration_api_ms: 800,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              });
+              stdout.end();
+              childProcess.exitCode = 0;
+              childProcess.emit('exit', 0, null);
+            });
+          };
+
+          stdin.on('data', (chunk: Buffer) => {
+            bufferedInput += chunk.toString();
+            const lines = bufferedInput.split('\n');
+            bufferedInput = lines.pop() ?? '';
+
+            for (const line of lines) {
+              if (!line) {
+                continue;
+              }
+              const message = JSON.parse(line) as ControlMessage;
+              if (message.type === 'control_request' && message.request?.subtype === 'initialize') {
+                respondToInitialization(message);
+              } else if (
+                message.type === 'control_response' &&
+                message.response?.request_id === 'hook-request-1'
+              ) {
+                respondToHook(message);
+              }
+            }
+          });
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              path_to_claude_code_executable: '/tmp/mock-claude',
+              spawn_claude_code_process: spawnClaudeCodeProcess,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Repeat the background task output exactly');
+          const expectedOutput =
+            '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
+
+          expect(hookControlResponse).toEqual({
+            hookEventName: 'PostToolUse',
+            updatedToolOutput: {
+              ...rawToolResponse,
+              task: {
+                ...rawToolResponse.task,
+                output: expectedOutput,
+                result: expectedOutput,
+                isRawTranscript: false,
+              },
+            },
+          });
+          expect(result.output).toContain(expectedOutput);
+          expect(JSON.stringify(result)).not.toContain(secretTranscript);
+          expect(spawnClaudeCodeProcess).toHaveBeenCalledTimes(1);
+        });
+
+        it('preserves ordinary TaskOutput results and user-defined PostToolUse hooks', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const userHook = vi.fn().mockResolvedValue({ continue: true });
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              hooks: {
+                PostToolUse: [{ matcher: 'Bash', hooks: [userHook] }],
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks.PostToolUse).toHaveLength(2);
+          expect(callArgs.options.hooks.PostToolUse[1]).toEqual({
+            matcher: 'Bash',
+            hooks: [userHook],
+          });
+
+          const privacyHook = callArgs.options.hooks.PostToolUse[0].hooks[0];
+          await expect(
+            privacyHook(
+              {
+                hook_event_name: 'PostToolUse',
+                tool_name: 'TaskOutput',
+                tool_response: {
+                  task: { output: 'safe summarized output', isRawTranscript: false },
+                },
+              },
+              undefined,
+              { signal: new AbortController().signal },
+            ),
+          ).resolves.toEqual({});
+        });
+
+        it('does not install transcript redaction hooks when full forwarding is enabled', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { forward_subagent_text: true },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls.at(-1)?.[0];
+          expect(callArgs.options.hooks).toBeUndefined();
         });
 
         it('with ask_user_question configuration creates canUseTool callback', async () => {
@@ -2184,6 +2614,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
           const provider = new ClaudeCodeSDKProvider({
             config: {
+              append_allowed_tools: ['AskUserQuestion', 'Read'],
               ask_user_question: { behavior: 'first_option' },
             },
             env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -2210,8 +2641,10 @@ describe('ClaudeCodeSDKProvider', () => {
                 },
               ],
             },
-            { signal: new AbortController().signal, toolUseID: 'test-id' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
           );
+
+          expect(callArgs.options.allowedTools).toEqual(['Read']);
 
           expect(result).toEqual({
             behavior: 'allow',
@@ -2265,13 +2698,42 @@ describe('ClaudeCodeSDKProvider', () => {
           await callArgs.options.canUseTool(
             'Read',
             { file_path: '/tmp/test.txt' },
-            { signal: new AbortController().signal, toolUseID: 'test-id' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
           );
 
           expect(canUseTool).toHaveBeenCalledWith(
             'Read',
             { file_path: '/tmp/test.txt' },
-            { signal: expect.any(AbortSignal), toolUseID: 'test-id' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id', requestId: 'request-id' },
+          );
+        });
+
+        it('preserves out-of-band can_use_tool responses for non-question tools', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async () => null);
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+              // @ts-ignore Intentionally exercise an out-of-band null permission response across SDK versions.
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          const result = await callArgs.options.canUseTool(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: new AbortController().signal, toolUseID: 'test-id', requestId: 'request-id' },
+          );
+
+          expect(result).toBeNull();
+          expect(canUseTool).toHaveBeenCalledWith(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id', requestId: 'request-id' },
           );
         });
 
@@ -2328,6 +2790,25 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               permissionMode: 'dontAsk',
+            }),
+          });
+        });
+
+        it('normalizes the manual permission mode alias to default', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'manual',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'default',
             }),
           });
         });
@@ -3691,6 +4172,109 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('tool call tracking', () => {
+      it.each([false, true])(
+        'only forwards raw TaskOutput subagent transcripts when explicitly enabled: %s',
+        async (forwardSubagentText) => {
+          const rawTranscript = 'SYSTEM SECRET and hidden subagent reasoning';
+          const taskOutput = `<output>${rawTranscript}</output>`;
+          const emittedToolSpans: Array<Record<string, unknown>> = [];
+          vi.spyOn(genaiTracer, 'getGenAITracer').mockReturnValue({
+            startSpan: vi.fn((name: string, options: { attributes?: Record<string, unknown> }) => {
+              if (name === 'tool TaskOutput') {
+                emittedToolSpans.push(options.attributes ?? {});
+              }
+              return { setStatus: vi.fn(), end: vi.fn() };
+            }),
+          } as any);
+
+          mockQuery.mockReturnValue(
+            createMockQuery([
+              {
+                type: 'assistant',
+                parent_tool_use_id: null,
+                message: createMockBetaMessage([
+                  {
+                    type: 'tool_use',
+                    id: 'background-task-output',
+                    name: 'TaskOutput',
+                    input: { task_id: 'background-task-1' },
+                  },
+                ]),
+                session_id: 'test-session',
+              },
+              {
+                type: 'user',
+                parent_tool_use_id: null,
+                tool_use_result: {
+                  retrieval_status: 'success',
+                  task: {
+                    task_id: 'background-task-1',
+                    task_type: 'local_agent',
+                    output: rawTranscript,
+                    isRawTranscript: true,
+                  },
+                },
+                message: {
+                  role: 'user',
+                  content: [
+                    {
+                      type: 'tool_result',
+                      tool_use_id: 'background-task-output',
+                      content: taskOutput,
+                    },
+                  ],
+                },
+                session_id: 'test-session',
+              },
+              {
+                type: 'result',
+                subtype: 'success',
+                session_id: 'test-session',
+                uuid: '12345678-1234-1234-1234-123456789abc',
+                result: 'Background task completed',
+                usage: createMockUsage(100, 200),
+                total_cost_usd: 0.01,
+                duration_ms: 1000,
+                duration_api_ms: 800,
+                is_error: false,
+                num_turns: 1,
+                permission_denials: [],
+              },
+            ]),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { forward_subagent_text: forwardSubagentText },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Collect background output');
+
+          expect(result.metadata?.toolCalls).toEqual([
+            expect.objectContaining({
+              name: 'TaskOutput',
+              output: forwardSubagentText
+                ? taskOutput
+                : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+            }),
+          ]);
+
+          expect(emittedToolSpans).toHaveLength(1);
+          expect(emittedToolSpans[0]?.['tool.output']).toBe(
+            forwardSubagentText
+              ? taskOutput
+              : '[Subagent transcript omitted; set forward_subagent_text: true to include it]',
+          );
+
+          if (!forwardSubagentText) {
+            expect(JSON.stringify(result)).not.toContain(rawTranscript);
+
+            const cachedResult = await provider.callApi('Collect background output');
+            expect(JSON.stringify(cachedResult)).not.toContain(rawTranscript);
+            expect(mockQuery).toHaveBeenCalledTimes(1);
+          }
+        },
+      );
+
       it('should capture tool calls in response metadata', async () => {
         mockQuery.mockReturnValue(
           createMockQuery([

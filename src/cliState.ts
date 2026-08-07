@@ -7,6 +7,7 @@ import type { UnifiedConfig } from './types/index';
 interface CliState {
   basePath?: string;
   config?: Partial<UnifiedConfig>;
+  selectedProviderConfigs?: Partial<UnifiedConfig>['providers'];
 
   // Forces remote inference wherever possible
   remote?: boolean;

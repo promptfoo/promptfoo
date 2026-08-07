@@ -365,10 +365,12 @@ Use [red team plugins](/docs/red-team/) to test whether your workflow is vulnera
 ```yaml
 redteam:
   plugins:
-    - prompt-injection
+    - ascii-smuggling
     - hijacking
+    - prompt-extraction
   strategies:
     - jailbreak
+    - jailbreak-templates
 
 providers:
   - openai:chatkit:wf_xxxxx

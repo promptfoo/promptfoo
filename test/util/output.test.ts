@@ -2,7 +2,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -215,56 +215,56 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits nested response metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-          metadata: {
-            transformedRequest: {
-              headers: {
-                Authorization: 'Bearer nested-secret',
+  ])(
+    'omits nested response metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+            metadata: {
+              transformedRequest: {
+                headers: {
+                  Authorization: 'Bearer nested-secret',
+                },
               },
             },
           },
-        },
-        vars: {},
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {},
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          vars: {},
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.response.metadata).toBeUndefined();
-      expect(written).not.toContain('nested-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.response.metadata).toBeUndefined();
+        expect(written).not.toContain('nested-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     {
@@ -275,69 +275,69 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_STRIP_METADATA: 'true',
-      PROMPTFOO_STRIP_TEST_VARS: 'true',
-    });
+  ])(
+    'omits test-case metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_METADATA: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
 
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          customerEmail: 'secret@example.com',
-        },
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
           vars: {
             customerEmail: 'secret@example.com',
           },
-          metadata: {
-            goal: 'goal testcase-secret',
-            pluginConfig: {
-              policy: 'policy testcase-secret',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: {
+              customerEmail: 'secret@example.com',
             },
-            inputMaterialization: {
-              source: 'source testcase-secret',
+            metadata: {
+              goal: 'goal testcase-secret',
+              pluginConfig: {
+                policy: 'policy testcase-secret',
+              },
+              inputMaterialization: {
+                source: 'source testcase-secret',
+              },
             },
           },
-        },
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.testCase.metadata).toBeUndefined();
-      expect(result.testCase.vars).toBeUndefined();
-      expect(written).not.toContain('testcase-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.testCase.metadata).toBeUndefined();
+        expect(result.testCase.vars).toBeUndefined();
+        expect(written).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it('omits trace vars from JSON output when test variable stripping is enabled', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
@@ -520,27 +520,27 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    'yaml',
-    'txt',
-  ])('sanitizes runtime options before writing %s output for in-memory evals', async (extension) => {
-    const eval_ = new Eval(
-      {},
-      {
-        runtimeOptions: {
-          cache: false,
-          abortSignal: new AbortController().signal,
-          progressCallback: vi.fn(),
+  it.each(['yaml', 'txt'])(
+    'sanitizes runtime options before writing %s output for in-memory evals',
+    async (extension) => {
+      const eval_ = new Eval(
+        {},
+        {
+          runtimeOptions: {
+            cache: false,
+            abortSignal: new AbortController().signal,
+            progressCallback: vi.fn(),
+          },
         },
-      },
-    );
+      );
 
-    await writeOutput(`output.${extension}`, eval_, null);
+      await writeOutput(`output.${extension}`, eval_, null);
 
-    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-    const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
-    expect(parsed.runtimeOptions).toEqual({ cache: false });
-  });
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
+      expect(parsed.runtimeOptions).toEqual({ cache: false });
+    },
+  );
 
   it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';

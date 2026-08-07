@@ -14,6 +14,11 @@ import logger from '../logger';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
 
+export {
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
+} from './resourceAttributes';
+
 const TRACER_NAME = 'promptfoo.providers';
 const TRACER_VERSION = '1.0.0';
 

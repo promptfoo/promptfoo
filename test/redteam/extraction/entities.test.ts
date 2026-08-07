@@ -76,7 +76,10 @@ describe('Entities Extractor', () => {
       cached: false,
     });
 
-    const result = await extractEntities(provider, ['prompt1', 'prompt2']);
+    const result = await extractEntities(provider, ['prompt1', 'prompt2'], {
+      providerTargetIds: ['file://local-provider.ts'],
+      cloudTargetId: 'cloud-target-123',
+    });
 
     expect(result).toEqual(['Apple', 'Google']);
     expect(fetchWithCache).toHaveBeenCalledWith(
@@ -88,6 +91,7 @@ describe('Entities Extractor', () => {
           prompts: ['prompt1', 'prompt2'],
           version: VERSION,
           email: null,
+          targetId: 'cloud-target-123',
         }),
       }),
       expect.any(Number),

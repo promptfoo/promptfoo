@@ -137,9 +137,11 @@ describe('Scanner fork PR auth rejection', () => {
     vi.doUnmock('../../../src/codeScan/scanner/output');
 
     const stdoutSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
     const cliState = (await import('../../../src/cliState')).default;
+    const logger = (await import('../../../src/logger')).default;
 
     await executeScan('/test/repo', {
       format: 'sarif',
@@ -150,6 +152,10 @@ describe('Scanner fork PR auth rejection', () => {
     await cliState.postActionCallback?.();
 
     expect(stdoutSpy).not.toHaveBeenCalled();
+    expect(stderrSpy).toHaveBeenCalledWith(
+      `Scan skipped: ${SKIP_MESSAGE} SARIF output was not generated because the scan did not complete.`,
+    );
+    expect(logger.error).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);
   });
 

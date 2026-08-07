@@ -20,6 +20,7 @@ import {
   materializeInputVariablesWithMetadata,
 } from '../inputVariables';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -66,6 +67,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -127,6 +129,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  targetId,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -142,6 +145,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  targetId?: string;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -349,6 +353,7 @@ export async function runRedteamConversation({
         perTurnLayers,
         Strategies,
         {
+          targetId,
           evaluationId: context?.evaluationId,
           testCaseId: test?.metadata?.testCaseId as string | undefined,
           purpose: test?.metadata?.purpose as string | undefined,
@@ -529,21 +534,11 @@ export async function runRedteamConversation({
           ? computedTraceSummary
           : undefined;
 
-        // Build grading context with exfil tracking data
-        let gradingContext:
-          | {
-              traceContext?: TraceContextData | null;
-              traceSummary?: string;
-              wasExfiltrated?: boolean;
-              exfilCount?: number;
-              exfilRecords?: Array<{
-                timestamp: string;
-                ip: string;
-                userAgent: string;
-                queryParams: Record<string, string>;
-              }>;
-            }
-          | undefined;
+        // Build grading context with image outputs and exfil tracking data.
+        let gradingContext: RedteamGradingContext | undefined = {
+          providerResponse: targetResponse,
+          ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
+        };
 
         // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
         // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
@@ -566,6 +561,7 @@ export async function runRedteamConversation({
             const exfilData = await checkExfilTracking(webPageUuid, evalId);
             if (exfilData) {
               gradingContext = {
+                ...(gradingContext ?? {}),
                 ...(tracingOptions.includeInGrading
                   ? { traceContext, traceSummary: graderTraceSummary }
                   : {}),
@@ -583,9 +579,13 @@ export async function runRedteamConversation({
         }
 
         // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-        if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+        if (
+          gradingContext?.wasExfiltrated === undefined &&
+          targetResponse.metadata?.wasExfiltrated !== undefined
+        ) {
           logger.debug('[Iterative] Using exfil data from provider response metadata (fallback)');
           gradingContext = {
+            ...(gradingContext ?? {}),
             ...(tracingOptions.includeInGrading
               ? { traceContext, traceSummary: graderTraceSummary }
               : {}),
@@ -597,8 +597,12 @@ export async function runRedteamConversation({
         }
 
         // Fallback to just tracing context if no exfil data found
-        if (!gradingContext && tracingOptions.includeInGrading) {
-          gradingContext = { traceContext, traceSummary: graderTraceSummary };
+        if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
+          gradingContext = {
+            ...gradingContext,
+            traceContext,
+            traceSummary: graderTraceSummary,
+          };
         }
 
         const { grade, rubric } = await grader.getResult(
@@ -855,11 +859,13 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'judge',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(config.targetId),
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        ...remoteGenerationContextPayload(config.targetId),
         // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
@@ -915,6 +921,7 @@ class RedteamIterativeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }
 }
