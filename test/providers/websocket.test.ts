@@ -444,67 +444,66 @@ describe('WebSocketProvider', () => {
       expectedMessage: 'WebSocket connection failed (EPROTO)',
       expectedRateLimitHits: 0,
     },
-  ])('should retry $description without exposing rendered WebSocket URL values', async ({
-    createError,
-    expectedMessage,
-    expectedRateLimitHits,
-  }) => {
-    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
-    const renderedUrl =
-      'ws://runtime-secret-tenant.invalid/sessions/private-session-123?token=runtime-query-secret';
-    provider = new WebSocketProvider('ws://test.com', {
-      config: {
-        url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
-        messageTemplate: '{{ prompt }}',
-        timeoutMs: 1000,
-        maxRetries: 2,
-      },
-    });
-    emitWebSocketEvents({ type: 'error', error: createError(renderedUrl) });
-
-    const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
-    const callApi = vi.fn(() =>
-      provider.callApi('test prompt', {
-        prompt: { raw: 'test prompt', label: 'test prompt' },
-        vars: {
-          tenant: 'runtime-secret-tenant',
-          sessionId: 'private-session-123',
-          token: 'runtime-query-secret',
+  ])(
+    'should retry $description without exposing rendered WebSocket URL values',
+    async ({ createError, expectedMessage, expectedRateLimitHits }) => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      const renderedUrl =
+        'ws://runtime-secret-tenant.invalid/sessions/private-session-123?token=runtime-query-secret';
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          url: 'ws://{{ tenant }}.invalid/sessions/{{ sessionId }}?token={{ token }}',
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 1000,
+          maxRetries: 2,
         },
-      }),
-    );
+      });
+      emitWebSocketEvents({ type: 'error', error: createError(renderedUrl) });
 
-    try {
-      const error = await registry
-        .execute(provider, callApi, {
-          isRateLimited: isProviderResponseRateLimited,
-          getRetryAfter: () => 0,
-        })
-        .catch((caughtError: Error) => caughtError);
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 100 });
+      const callApi = vi.fn(() =>
+        provider.callApi('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test prompt' },
+          vars: {
+            tenant: 'runtime-secret-tenant',
+            sessionId: 'private-session-123',
+            token: 'runtime-query-secret',
+          },
+        }),
+      );
 
-      if (!(error instanceof Error)) {
-        throw new Error('Expected the WebSocket provider call to fail');
+      try {
+        const error = await registry
+          .execute(provider, callApi, {
+            isRateLimited: isProviderResponseRateLimited,
+            getRetryAfter: () => 0,
+          })
+          .catch((caughtError: Error) => caughtError);
+
+        if (!(error instanceof Error)) {
+          throw new Error('Expected the WebSocket provider call to fail');
+        }
+        expect(callApi).toHaveBeenCalledTimes(3);
+        expect(error.message).toBe(expectedMessage);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          retriedRequests: 2,
+          rateLimitHits: expectedRateLimitHits,
+          failedRequests: 1,
+        });
+
+        const observableError = JSON.stringify({
+          message: error.message,
+          logs: errorSpy.mock.calls,
+          metrics: registry.getMetrics(),
+        });
+        expect(observableError).not.toContain('runtime-secret-tenant');
+        expect(observableError).not.toContain('private-session-123');
+        expect(observableError).not.toContain('runtime-query-secret');
+      } finally {
+        registry.dispose();
       }
-      expect(callApi).toHaveBeenCalledTimes(3);
-      expect(error.message).toBe(expectedMessage);
-      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
-        retriedRequests: 2,
-        rateLimitHits: expectedRateLimitHits,
-        failedRequests: 1,
-      });
-
-      const observableError = JSON.stringify({
-        message: error.message,
-        logs: errorSpy.mock.calls,
-        metrics: registry.getMetrics(),
-      });
-      expect(observableError).not.toContain('runtime-secret-tenant');
-      expect(observableError).not.toContain('private-session-123');
-      expect(observableError).not.toContain('runtime-query-secret');
-    } finally {
-      registry.dispose();
-    }
-  });
+    },
+  );
 
   it('should retry transient TLS failures when the rendered URL contains certificate text', async () => {
     const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
