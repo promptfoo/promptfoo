@@ -3,6 +3,13 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
+
+import type { TraceData } from '../../src/types/tracing';
+
+vi.mock('../../src/redteam/strategies/indirectWebPwn', () => ({
+  checkExfilTracking: vi.fn(),
+}));
 
 describe('handleRedteam', () => {
   afterEach(() => {
@@ -262,6 +269,271 @@ describe('handleRedteam', () => {
       ...assertion,
       // The handleRedteam function adds the rubric as the value to the assertion
       value: mockGraderResult.rubric,
+    });
+  });
+
+  it('propagates provider trace context into redteam grading', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'foo',
+      },
+    };
+    const providerResponse = {};
+    const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Mock test result',
+      },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerCallContext: {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        traceparent: '00-trace-id-span-id-01',
+      },
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(graderSpy.mock.calls[0]?.[7]).toMatchObject({
+      traceparent: '00-trace-id-span-id-01',
+    });
+  });
+
+  it('includes captured assertion trace data in redteam grading context', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'foo',
+      },
+    };
+    const providerResponse = {};
+    const trace: TraceData = {
+      traceId: 'trace-id',
+      evaluationId: 'eval-id',
+      testCaseId: 'test-case-id',
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'lookup_customer',
+          },
+        },
+      ],
+    };
+    const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Mock test result',
+      },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(graderSpy.mock.calls[0]?.[7]).toMatchObject({
+      traceData: trace,
+      traceSummary: expect.any(String),
+    });
+  });
+
+  it('adds exfil tracking metadata from indirect web pwn responses', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'foo',
+      },
+    };
+    const providerResponse = {
+      metadata: {
+        webPageUuid: 'page-uuid',
+        webPageUrl: '/dynamic-pages/eval-from-url/page-uuid',
+      },
+    };
+    const trackingResult = {
+      wasExfiltrated: true,
+      exfilCount: 2,
+      exfilRecords: [
+        {
+          timestamp: '2026-05-16T00:00:00.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test-agent',
+          queryParams: { record: '1' },
+        },
+        {
+          timestamp: '2026-05-16T00:00:01.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test-agent',
+          queryParams: { record: '2' },
+        },
+      ],
+    };
+    vi.mocked(checkExfilTracking).mockResolvedValue(trackingResult);
+    const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Mock test result',
+      },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(checkExfilTracking).toHaveBeenCalledWith('page-uuid', 'eval-from-url');
+    expect(graderSpy.mock.calls[0]?.[7]).toMatchObject(trackingResult);
+  });
+
+  it('returns stored grader results and preserves incomplete grading metadata', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+      value: 'fallback rubric',
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'harmful:hate',
+      },
+    };
+    const providerResponse = {
+      metadata: {
+        redteamHistory: [{ graderError: 'Remote grading failed' }, {}],
+        storedGraderResult: {
+          pass: false,
+          score: 0,
+          reason: 'stored failure',
+          assertion: {
+            ...assertion,
+            value: 'stored rubric',
+          },
+          metadata: {
+            source: 'stored',
+          },
+        },
+      },
+    };
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(grade.assertion?.value).toBe('stored rubric');
+    expect(grade.metadata).toMatchObject({
+      gradingIncomplete: true,
+      source: 'stored',
     });
   });
 

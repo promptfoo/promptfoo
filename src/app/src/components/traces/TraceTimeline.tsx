@@ -5,6 +5,7 @@ import { Collapsible, CollapsibleContent } from '@app/components/ui/collapsible'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { formatDuration, formatTimestamp, getSpanStatus } from './utils';
 import type { TraceData, TraceSpan } from '@promptfoo/types';
 
 // Use TraceSpan from base types
@@ -20,44 +21,6 @@ interface ProcessedSpan extends SpanData {
   depth: number;
   children: ProcessedSpan[];
 }
-
-const getSpanStatus = (
-  statusCode?: number,
-): { bgClass: string; textClass: string; label: string } => {
-  // From SpanStatusCode in @opentelemetry/api
-  if (statusCode === 1) {
-    return {
-      bgClass: 'bg-emerald-500',
-      textClass: 'text-emerald-600 dark:text-emerald-400',
-      label: 'OK',
-    };
-  } else if (statusCode === 2) {
-    return {
-      bgClass: 'bg-red-500',
-      textClass: 'text-red-600 dark:text-red-400',
-      label: 'ERROR',
-    };
-  }
-  return { bgClass: 'bg-primary', textClass: 'text-foreground', label: 'UNSET' };
-};
-
-// Duration values are stored in milliseconds (both LocalSpanExporter and OTLPReceiver
-// convert to milliseconds before storing in the database)
-const formatDuration = (milliseconds: number): string => {
-  if (milliseconds < 1) {
-    return `<1ms`;
-  } else if (milliseconds < 1000) {
-    return `${Math.round(milliseconds)}ms`;
-  } else {
-    return `${(milliseconds / 1000).toFixed(2)}s`;
-  }
-};
-
-// Timestamps are stored in milliseconds (Unix epoch ms)
-const formatTimestamp = (ms: number): string => {
-  const date = new Date(ms);
-  return date.toISOString();
-};
 
 export default function TraceTimeline({ trace }: TraceTimelineProps) {
   const [expandedSpans, setExpandedSpans] = useState<Set<string>>(new Set());

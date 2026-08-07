@@ -669,7 +669,7 @@ export class CrescendoProvider implements ApiProvider {
               getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined,
-              gradingContext,
+              { ...gradingContext, iteration: roundNum, traceparent: context?.traceparent },
             );
 
             graderPassed = grade.pass;
@@ -957,7 +957,7 @@ export class CrescendoProvider implements ApiProvider {
     vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
-    _roundNum: number,
+    roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
     tracingOptions?: RedteamTracingOptions,
@@ -1007,7 +1007,7 @@ export class CrescendoProvider implements ApiProvider {
           currentInputVars!,
           this.config.inputs,
           {
-            materializationIndex: _roundNum,
+            materializationIndex: roundNum,
             pluginId: 'crescendo',
             provider: await this.getRedTeamProvider(),
             purpose: context?.test?.metadata?.purpose as string | undefined,
@@ -1169,6 +1169,7 @@ export class CrescendoProvider implements ApiProvider {
     const targetContext = context
       ? {
           ...context,
+          iteration: roundNum,
           vars: {
             ...vars,
             ...(currentRenderInputVars || {}),
@@ -1214,6 +1215,9 @@ export class CrescendoProvider implements ApiProvider {
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
 
         if (traceContext) {

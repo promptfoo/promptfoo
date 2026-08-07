@@ -5,11 +5,6 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import {
-  extractProviderResponseAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
@@ -28,6 +23,13 @@ import {
   transformToolChoice,
   transformTools,
 } from '../shared';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
 import {
@@ -438,33 +440,47 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: this.getGenAISystem(),
-      operationName: 'chat',
-      model: this.modelName,
+    // Set up outer target span context (service name based on context label)
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: this.config.max_tokens,
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      stopSequences: this.config.stop,
-      // Promptfoo context from test case if available
+      traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
-      traceparent: context?.traceparent,
-      // Request body for debugging/observability
-      requestBody: prompt,
+      iteration: context?.iteration,
     };
 
-    // Wrap the API call in a span
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
-      extractProviderResponseAttributes,
-    );
+    return withTargetSpan(targetSpanContext, async () => {
+      // Set up inner GenAI span context (provider-specific service name)
+      const spanContext: GenAISpanContext = {
+        system: this.getGenAISystem(),
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        // Optional request parameters
+        maxTokens: this.config.max_tokens,
+        temperature: this.config.temperature,
+        topP: this.config.top_p,
+        stopSequences: this.config.stop,
+        // Promptfoo context from test case if available
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        iteration: context?.iteration,
+        // W3C Trace Context for linking to evaluation trace
+        traceparent: context?.traceparent,
+        // Request body for debugging/observability
+        requestBody: prompt,
+      };
+
+      // Wrap the API call in a GenAI span (inner span with provider-specific service name)
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context, callApiOptions),
+        extractProviderResponseAttributes,
+      );
+    });
   }
 
   /**

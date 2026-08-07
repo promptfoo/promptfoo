@@ -1,9 +1,15 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { getRequestTimeoutMs } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from './tracing';
 
 import type {
   ApiProvider,
@@ -193,27 +199,38 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       return this.getChatProvider().callApi(prompt, context);
     }
 
-    // Set up tracing context for Inference API
-    const spanContext: GenAISpanContext = {
-      system: 'huggingface',
-      operationName: 'completion',
-      model: this.modelName,
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.max_new_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor (Huggingface doesn't return token usage by default)
-    const resultExtractor = (_response: ProviderResponse): GenAISpanResult => {
-      return {};
-    };
+    return withTargetSpan(targetSpanContext, async () => {
+      const spanContext: GenAISpanContext = {
+        system: 'huggingface',
+        operationName: 'completion',
+        model: this.modelName,
+        providerId: this.id(),
+        temperature: this.config.temperature,
+        topP: this.config.top_p,
+        maxTokens: this.config.max_new_tokens,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        traceparent: context?.traceparent,
+      };
 
-    return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
+      const resultExtractor = (_response: ProviderResponse): GenAISpanResult => {
+        return {};
+      };
+
+      return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
+    });
   }
 
   async cleanup(): Promise<void> {

@@ -29,9 +29,9 @@ import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
-import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -432,7 +432,7 @@ class RedteamProviderManager {
 export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
-  traceContext?: TraceContextData | null;
+  traceContext?: RedteamGradingContext['traceContext'];
   traceSummary?: string;
   image?: {
     data?: string;
@@ -701,11 +701,12 @@ export async function createIterationContext({
     }
   }
 
-  // Create iteration-specific context with updated vars
+  // Create iteration-specific context with updated vars and iteration number
   const iterationContext = context
     ? {
         ...context,
         vars: iterationVars,
+        iteration: iterationNumber,
       }
     : undefined;
 
