@@ -189,7 +189,7 @@ strategies:
 
 :::note
 
-There's also a global red team configuration option `excludeTargetOutputFromAgenticAttackGeneration` that prevents the AI from seeing target responses when generating follow-up attacks. This applies to all strategies, not just custom.
+The global `excludeTargetOutputFromAgenticAttackGeneration` option removes target responses from the main follow-up attack prompt across strategies, not just custom. GOAT failure extraction, optional unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`), and remote graders can still send target responses remotely. For sensitive targets, disable unblocking, avoid GOAT, and use a strategy and grader that both run locally.
 
 :::
 
