@@ -24,6 +24,12 @@ export type { MediaData };
  */
 export type LayerConfig = string | { id: string; config?: Record<string, unknown> };
 
+export interface RuntimeTransformDiagnostic {
+  component: 'indirect-web-pwn';
+  stage: 'create-page' | 'update-page';
+  outcome: 'degraded';
+}
+
 /**
  * Result of runtime transform, including original prompt and any media data.
  */
@@ -42,6 +48,28 @@ export interface TransformResult {
   displayVars?: Record<string, string>;
   /** Metadata from the transform (e.g., webPageUuid, webPageUrl from indirect-web-pwn) */
   metadata?: Record<string, unknown>;
+  /** Content-free diagnostics from child transforms that degraded but continued. */
+  diagnostics?: RuntimeTransformDiagnostic[];
+}
+
+function getRuntimeTransformDiagnostics(metadata: Record<string, unknown> | undefined) {
+  const value = metadata?.runtimeTransformDiagnostics;
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const diagnostics = value
+    .slice(0, 10)
+    .filter(
+      (item): item is RuntimeTransformDiagnostic =>
+        item !== null &&
+        typeof item === 'object' &&
+        item.component === 'indirect-web-pwn' &&
+        (item.stage === 'create-page' || item.stage === 'update-page') &&
+        item.outcome === 'degraded',
+    )
+    .map(({ component, stage, outcome }) => ({ component, stage, outcome }));
+  return diagnostics.length > 0 ? diagnostics : undefined;
 }
 
 /**
@@ -207,6 +235,7 @@ export async function applyRuntimeTransforms(
     ...(Object.keys(displayVars).length > 0 && { displayVars }),
     // Include metadata from the transform (e.g., webPageUuid from indirect-web-pwn)
     metadata: testCase.metadata,
+    diagnostics: getRuntimeTransformDiagnostics(testCase.metadata),
   };
 
   // Check for storage keys in metadata (set by strategies that store to file system)

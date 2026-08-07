@@ -115,10 +115,17 @@ export function getRemoteMaterializationUpgradeError(operation: string): string 
   );
 }
 
+const remoteMaterializationUpgradeErrors = new WeakSet<object>();
+
+export function createRemoteMaterializationUpgradeError(operation: string): Error {
+  const error = new Error(getRemoteMaterializationUpgradeError(operation));
+  remoteMaterializationUpgradeErrors.add(error);
+  return error;
+}
+
 export function isRemoteMaterializationUpgradeError(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    error.message.includes('requires remote multi-input materialization support from a newer')
+    typeof error === 'object' && error !== null && remoteMaterializationUpgradeErrors.has(error)
   );
 }
 
@@ -129,5 +136,5 @@ export function assertRemoteMaterializationHandled(
   if (response?.materializationHandled === true) {
     return;
   }
-  throw new Error(getRemoteMaterializationUpgradeError(operation));
+  throw createRemoteMaterializationUpgradeError(operation);
 }

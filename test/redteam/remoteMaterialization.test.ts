@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
+  isRemoteMaterializationUpgradeError,
 } from '../../src/redteam/remoteMaterialization';
 
 import type { Inputs } from '../../src/types/shared';
@@ -167,8 +168,25 @@ describe('remoteMaterialization', () => {
   });
 
   it('throws a server upgrade error when materialization was not handled remotely', () => {
-    expect(() => assertRemoteMaterializationHandled(undefined, 'Remote plugin generation')).toThrow(
+    let error: unknown;
+    try {
+      assertRemoteMaterializationHandled(undefined, 'Remote plugin generation');
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(
       /Remote plugin generation requires remote multi-input materialization support/,
     );
+    expect(isRemoteMaterializationUpgradeError(error)).toBe(true);
+  });
+
+  it('does not identify provider-controlled messages as upgrade errors', () => {
+    const spoofedError = new Error(
+      'private data requires remote multi-input materialization support from a newer server',
+    );
+
+    expect(isRemoteMaterializationUpgradeError(spoofedError)).toBe(false);
   });
 });
