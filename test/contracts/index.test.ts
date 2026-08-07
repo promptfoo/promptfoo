@@ -96,6 +96,16 @@ describe('contracts leaf surface', () => {
       }
     });
 
+    it('preserves PROMPTFOO_STRICT_CONFIG for suite-scoped API evaluation', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        PROMPTFOO_STRICT_CONFIG: 'true',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.PROMPTFOO_STRICT_CONFIG).toBe('true');
+      }
+    });
+
     it('strips unknown keys at parse time (strict z.object)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
         OPENAI_API_KEY: 'sk-known',

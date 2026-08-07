@@ -33,16 +33,10 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
   const resolved = await resolveConfigs(
     {
       config: [configPath],
+      envPath: options.envPath,
     },
     options.defaultConfig,
   );
-
-  if ((!options.envPath || options.envPath.length === 0) && resolved.commandLineOptions?.envPath) {
-    logger.debug(
-      `Loading additional environment from config: ${resolved.commandLineOptions.envPath}`,
-    );
-    setupEnv(resolved.commandLineOptions.envPath);
-  }
 
   telemetry.record('command_used', {
     name: 'optimize - started',
@@ -56,6 +50,7 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
   const result = await optimizePromptTestSuite(resolved.config, resolved.testSuite, {
     promptIndex: options.promptIndex ?? 0,
     providerIndex: options.providerIndex ?? 0,
+    strictConfigEnabled: resolved.strictConfigEnabled,
     validationSplit: options.validationSplit,
   });
 

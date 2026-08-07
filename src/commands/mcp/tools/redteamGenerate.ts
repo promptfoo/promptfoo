@@ -177,7 +177,9 @@ export function registerRedteamGenerateTool(server: McpServer) {
         let defaultConfig;
         let defaultConfigPath;
         try {
-          const result = await loadDefaultConfig();
+          const result = await loadDefaultConfig(undefined, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
           defaultConfig = result.defaultConfig;
           defaultConfigPath = result.defaultConfigPath;
         } catch (error) {

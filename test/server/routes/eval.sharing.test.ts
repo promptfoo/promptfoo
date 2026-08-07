@@ -291,4 +291,25 @@ describe('Eval Routes - Sharing behavior', () => {
     const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
+
+  it('marks replay evaluations as intentionally assertion-free', async () => {
+    mockedEvalFindById.mockResolvedValueOnce({ config: { providers: ['echo'] } } as never);
+    mockedEvaluateWithSource.mockResolvedValueOnce({
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [{ response: { output: 'replayed output' } }],
+      }),
+    } as any);
+
+    const response = await api.post('/api/eval/replay').send({
+      evaluationId: 'eval-source',
+      prompt: 'Replay me',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.output).toBe('replayed output');
+    expect(mockedEvaluateWithSource).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ skipStrictAssertionValidation: true }),
+    );
+  });
 });
