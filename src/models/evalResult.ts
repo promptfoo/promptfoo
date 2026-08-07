@@ -21,6 +21,10 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
+import {
+  addStoredRepeatPassRateMetadata,
+  removeStoredRepeatPassRateMetadata,
+} from '../util/repeatPassRateMetadata';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -675,7 +679,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizeForDb(addStoredRepeatPassRateMetadata(persistedMetadata, result)),
       failureReason,
     };
     if (persist) {
@@ -727,7 +731,11 @@ export default class EvalResult {
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
             metadata: sanitizeForDb(
-              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+              persistTraceMetadata(
+                addStoredRepeatPassRateMetadata(result.metadata, result),
+                result.traceId,
+                result.evaluationId,
+              ),
             ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
@@ -843,21 +851,21 @@ export default class EvalResult {
         break;
       }
 
-      offset = nextResult.testIdx;
+      const lowerBound = nextResult.testIdx;
       const results = await db
         .select()
         .from(evalResultsTable)
         .where(
           and(
             eq(evalResultsTable.evalId, evalId),
-            gte(evalResultsTable.testIdx, offset),
-            lt(evalResultsTable.testIdx, offset + batchSize),
+            gte(evalResultsTable.testIdx, lowerBound),
+            lt(evalResultsTable.testIdx, lowerBound + batchSize),
           ),
         )
         .all();
 
       yield results.map((result) => new EvalResult({ ...result, persisted: true }));
-      offset += batchSize;
+      offset = lowerBound + batchSize;
     }
   }
 
@@ -1015,7 +1023,7 @@ export default class EvalResult {
       testIdx: this.testIdx,
       tokenUsage,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      metadata: shouldStripMetadata ? {} : removeStoredRepeatPassRateMetadata(this.metadata),
       failureReason: this.failureReason,
     };
   }

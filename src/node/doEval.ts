@@ -55,6 +55,10 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
+import {
+  findRepeatPassRateViolations,
+  formatRepeatPassRateViolation,
+} from '../util/repeatPassRateThreshold';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -98,6 +102,12 @@ function runtimeTagsForEval(
   };
 
   return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
 }
 
 async function resolveReplayConfigs(
@@ -1168,20 +1178,58 @@ export async function doEval(
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+      const repeatPassRateThreshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
 
+      const aggregateThresholdViolated =
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+
+      // Mirror the evaluator's effective per-test repeat resolution
+      // (defaultTest options merge with test options, falling back to the global repeat).
+      const defaultTestRepeat =
+        typeof testSuite?.defaultTest === 'object'
+          ? normalizeRepeatCount(testSuite.defaultTest.options?.repeat)
+          : 1;
+      const anyTestRepeated = (testSuite?.tests ?? []).some((test) => {
+        const testRepeat = normalizeRepeatCount(test.options?.repeat, defaultTestRepeat);
+        return testRepeat > 1;
+      });
+
+      let repeatViolations: Awaited<ReturnType<typeof findRepeatPassRateViolations>> = [];
       if (
         isCliInvocation &&
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
+        (repeat > 1 || anyTestRepeated) &&
+        repeatPassRateThreshold !== undefined &&
+        Number.isFinite(repeatPassRateThreshold)
       ) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+        repeatViolations = await findRepeatPassRateViolations(evalRecord, repeatPassRateThreshold);
+      }
+
+      if (isCliInvocation && (aggregateThresholdViolated || repeatViolations.length > 0)) {
+        if (
+          aggregateThresholdViolated &&
+          getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined
+        ) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
             ),
           );
         }
+        if (repeatViolations.length > 0 && repeatPassRateThreshold !== undefined) {
+          logger.info(
+            chalk.white(
+              `${chalk.red.bold(repeatViolations.length)} test${repeatViolations.length === 1 ? '' : 's'} below per-test repeat pass-rate threshold of ${chalk.red.bold(repeatPassRateThreshold)}${chalk.red('%')}:`,
+            ),
+          );
+          for (const violation of repeatViolations) {
+            logger.info(
+              chalk.white(
+                `  - ${formatRepeatPassRateViolation(violation, repeatPassRateThreshold)}`,
+              ),
+            );
+          }
+        }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
       }
     }
     if (testSuite.redteam) {

@@ -41,6 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../util/repeatPassRateMetadata';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -236,6 +237,7 @@ export class EvalQueries {
             AND json_valid(metadata)
           LIMIT 10000
         ) t, json_each(t.metadata) j
+        WHERE j.key != ${REPEAT_PASS_RATE_GROUP_METADATA_KEY}
         ORDER BY j.key
         LIMIT 1000
       `;
@@ -261,7 +263,7 @@ export class EvalQueries {
   static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
     const db = await getDb();
     const trimmedKey = key.trim();
-    if (!trimmedKey) {
+    if (!trimmedKey || trimmedKey === REPEAT_PASS_RATE_GROUP_METADATA_KEY) {
       return [];
     }
     // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
@@ -780,6 +782,15 @@ export default class Eval {
 
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'testIdx' | 'promptIdx'>) {
     return this.failedResults.has(getResultIndexKey(result));
+  }
+
+  /**
+   * Raw rows that failed to persist to the database. `fetchResultsBatched()` streams only
+   * rows found in the DB, so consumers that need the full result set (e.g. per-test repeat
+   * pass-rate checks) must merge these back in to see a failed-to-persist attempt.
+   */
+  getFailedResults(): EvaluateResult[] {
+    return Array.from(this.failedResults.values());
   }
 
   // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
