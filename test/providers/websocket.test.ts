@@ -51,6 +51,7 @@ describe('WebSocketProvider', () => {
       | { type: 'open' }
       | { type: 'message'; data: unknown }
       | { type: 'error'; error?: Error; message?: string }
+      | { type: 'close'; code?: number }
     >
   ) => {
     websocketMocks.setFactory(() => {
@@ -61,6 +62,14 @@ describe('WebSocketProvider', () => {
             ws.onopen?.({ type: 'open', target: ws } as WebSocket.Event);
           } else if (event.type === 'message') {
             ws.onmessage?.({ data: event.data } as WebSocket.MessageEvent);
+          } else if (event.type === 'close') {
+            ws.onclose?.({
+              type: 'close',
+              code: event.code ?? 1000,
+              reason: '',
+              wasClean: true,
+              target: ws,
+            } as WebSocket.CloseEvent);
           } else {
             const error = event.error ?? new Error(event.message ?? 'connection failed');
             ws.onerror?.({
@@ -936,6 +945,118 @@ describe('WebSocketProvider', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('should reject promptly when the server closes the connection mid-stream', async () => {
+      vi.useFakeTimers();
+      try {
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 60000,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents(
+          { type: 'open' },
+          { type: 'message', data: 'partial chunk' },
+          { type: 'close', code: 1001 },
+        );
+
+        const responsePromise = provider.callApi('close test');
+        // The close settles the promise on its own; nothing is left waiting
+        // on the 60s request deadline.
+        await vi.advanceTimersByTimeAsync(0);
+        await expect(responsePromise).rejects.toThrow(
+          'WebSocket connection closed before the response completed (code 1001)',
+        );
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should reject as a connection reset when the close code invites a reconnect', async () => {
+      const streamResponse = vi.fn((accumulator: any, event: any) => [
+        { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+        '',
+      ]);
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse,
+        },
+      });
+
+      emitWebSocketEvents(
+        { type: 'open' },
+        { type: 'message', data: 'partial chunk' },
+        { type: 'close', code: 1013 },
+      );
+
+      // 1013 (try again later) explicitly invites a reconnect, so it rejects
+      // as ECONNRESET: the retry policy matches that code and fires its
+      // backoff right away instead of after the full request deadline.
+      const error = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((error as NodeJS.ErrnoException).code).toBe('ECONNRESET');
+      expect((error as Error).message).toContain('1013');
+      expect((error as Error).message).toContain('try again later');
+    });
+
+    it('should also reset on a dropped connection but keep protocol violations permanent', async () => {
+      const streamResponse = vi.fn((accumulator: any, event: any) => [
+        { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+        '',
+      ]);
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse,
+        },
+      });
+
+      // 1006 (abnormal closure, no close frame) is a dead transport, not a
+      // rejection of the payload, so it retries like any other reset.
+      emitWebSocketEvents(
+        { type: 'open' },
+        { type: 'message', data: 'partial chunk' },
+        { type: 'close', code: 1006 },
+      );
+      const resetError = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((resetError as NodeJS.ErrnoException).code).toBe('ECONNRESET');
+      expect((resetError as Error).message).toContain('1006');
+
+      // 1003 (unsupported data) is the peer rejecting the payload itself; a
+      // fresh connection would lose the same way, so it stays permanent.
+      emitWebSocketEvents({ type: 'open' }, { type: 'close', code: 1003 });
+      const permanentError = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((permanentError as NodeJS.ErrnoException).code).not.toBe('ECONNRESET');
+      expect((permanentError as Error).message).toContain('1003');
     });
   });
 });
