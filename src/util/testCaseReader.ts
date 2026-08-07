@@ -476,7 +476,13 @@ function agentSkillsEvalToTestCase(
     description: idValue == null ? `Row #${idx + 1}` : `eval ${idValue}`,
     vars,
     assert: assertions,
-    options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+    options: {
+      // Keep multiple declared files together as a single var value. Only
+      // disable expansion when needed so that any defaultTest.vars arrays
+      // inherited by this test case still expand into their own variants.
+      ...(files.length > 1 ? { disableVarExpansion: true } : {}),
+      skipRenderVars: ['prompt'],
+    },
   };
   if (metadata) {
     testCase.metadata = metadata;

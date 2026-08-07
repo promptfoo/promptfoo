@@ -353,7 +353,7 @@ describe('readStandaloneTestsFile', () => {
           vars: { prompt: 'Summarize the quarterly trends.' },
           assert: [{ type: 'llm-rubric', value: 'Mentions Q1 through Q4' }],
           metadata: { id: 'inv-2', skill_name: 'csv-analyzer' },
-          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+          options: { skipRenderVars: ['prompt'] },
         },
       ]);
     });
@@ -442,7 +442,7 @@ describe('readStandaloneTestsFile', () => {
           vars: { prompt: 'hello' },
           assert: [{ type: 'llm-rubric', value: 'greets the user' }],
           metadata: { skill_name: 'greeter' },
-          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+          options: { skipRenderVars: ['prompt'] },
         },
       ]);
     });
@@ -463,7 +463,7 @@ describe('readStandaloneTestsFile', () => {
         vars: { prompt: 'good entry' },
         assert: [{ type: 'llm-rubric', value: 'must answer' }],
         metadata: { skill_name: 'mixed' },
-        options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+        options: { skipRenderVars: ['prompt'] },
       });
     });
 
@@ -1661,7 +1661,7 @@ describe('readTests', () => {
         },
         assert: [{ type: 'llm-rubric', value: 'Is concise' }],
         metadata: { id: 'case-1', skill_name: 'summarizer' },
-        options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+        options: { skipRenderVars: ['prompt'] },
       },
     ]);
   });
