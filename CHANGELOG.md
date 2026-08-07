@@ -6,15 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.122.1](https://github.com/promptfoo/promptfoo/compare/0.122.0...0.122.1) (2026-08-07)
 
-
 ### Bug Fixes
 
-* **assertions:** correct inverse JSON failure messages ([#9824](https://github.com/promptfoo/promptfoo/issues/9824)) ([d1d8de3](https://github.com/promptfoo/promptfoo/commit/d1d8de31470b0dc238f67cf2de0a926bc0ed3416))
-* **assertions:** reject out-of-range trace-span-duration percentile ([#10089](https://github.com/promptfoo/promptfoo/issues/10089)) ([49c0f6d](https://github.com/promptfoo/promptfoo/commit/49c0f6d77496c022c6d32e362522993bb0d72d42))
-* **assertions:** score tokenless GLEU inputs as zero ([#9850](https://github.com/promptfoo/promptfoo/issues/9850)) ([cc8c0c6](https://github.com/promptfoo/promptfoo/commit/cc8c0c65f1378d80166b2a209747cd9c1a6302c2))
-* **deps:** bundle the runtime cache dependency ([#10302](https://github.com/promptfoo/promptfoo/issues/10302)) ([b5f8ea3](https://github.com/promptfoo/promptfoo/commit/b5f8ea3b0a307adb91c31ed4e13a3d6896902841))
-* **deps:** update dependency chalk to v6 ([#10309](https://github.com/promptfoo/promptfoo/issues/10309)) ([1c30e18](https://github.com/promptfoo/promptfoo/commit/1c30e183c4a464d953898398399dc6aa69786471))
-* **providers:** update GPT model costs ([#10319](https://github.com/promptfoo/promptfoo/issues/10319)) ([9988fcb](https://github.com/promptfoo/promptfoo/commit/9988fcb02b1dc0b6aee11e4c2266b21c54c9a1da))
+- **assertions:** correct inverse JSON failure messages ([#9824](https://github.com/promptfoo/promptfoo/issues/9824)) ([d1d8de3](https://github.com/promptfoo/promptfoo/commit/d1d8de31470b0dc238f67cf2de0a926bc0ed3416))
+- **assertions:** reject out-of-range trace-span-duration percentile ([#10089](https://github.com/promptfoo/promptfoo/issues/10089)) ([49c0f6d](https://github.com/promptfoo/promptfoo/commit/49c0f6d77496c022c6d32e362522993bb0d72d42))
+- **assertions:** score tokenless GLEU inputs as zero ([#9850](https://github.com/promptfoo/promptfoo/issues/9850)) ([cc8c0c6](https://github.com/promptfoo/promptfoo/commit/cc8c0c65f1378d80166b2a209747cd9c1a6302c2))
+- **deps:** bundle the runtime cache dependency ([#10302](https://github.com/promptfoo/promptfoo/issues/10302)) ([b5f8ea3](https://github.com/promptfoo/promptfoo/commit/b5f8ea3b0a307adb91c31ed4e13a3d6896902841))
+- **deps:** update dependency chalk to v6 ([#10309](https://github.com/promptfoo/promptfoo/issues/10309)) ([1c30e18](https://github.com/promptfoo/promptfoo/commit/1c30e183c4a464d953898398399dc6aa69786471))
+- **providers:** update GPT model costs ([#10319](https://github.com/promptfoo/promptfoo/issues/10319)) ([9988fcb](https://github.com/promptfoo/promptfoo/commit/9988fcb02b1dc0b6aee11e4c2266b21c54c9a1da))
 
 ## [0.122.0](https://github.com/promptfoo/promptfoo/compare/0.121.20...0.122.0) (2026-08-04)
 
