@@ -155,16 +155,22 @@ export function getAvailableProviders(): ProviderOptions[] {
       continue;
     }
 
-    // Ensure id is present (required for providers even though schema makes it optional)
-    if (!result.data.id) {
-      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
+    // Ensure id contains non-whitespace text (required for providers even though
+    // the schema allows other shapes) so one bad entry cannot break the catalog.
+    if (typeof result.data.id !== 'string' || result.data.id.trim().length === 0) {
+      logger.warn('Provider missing required string "id" field in ui-providers.yaml, skipping', {
         providerIndex: i,
         provider: normalized,
       });
       continue;
     }
 
-    validatedProviders.push(result.data);
+    const validatedProvider = { ...result.data };
+    if (typeof validatedProvider.label !== 'string') {
+      delete validatedProvider.label;
+    }
+
+    validatedProviders.push(validatedProvider);
   }
 
   if (validatedProviders.length < config.providers.length) {
