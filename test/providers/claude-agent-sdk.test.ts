@@ -946,6 +946,56 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(JSON.parse(result.raw as string).session_id).toBe('main-session');
       });
 
+      it('preserves a scheduled-trigger result when a background task finishes afterward', async () => {
+        const scheduledResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'scheduled-session',
+          uuid: '11111111-2222-4333-8444-555555555555',
+          result: 'Scheduled task final answer',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: {
+            kind: 'task-notification',
+            subkind: 'scheduled-trigger',
+          },
+        };
+        const lateSubAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'background-session',
+          uuid: '66666666-7777-4888-8999-000000000000',
+          result: 'Background task summary',
+          usage: createMockUsage(2, 3),
+          total_cost_usd: 0.0001,
+          duration_ms: 100,
+          duration_api_ms: 80,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'task-notification' },
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([scheduledResult, lateSubAgentResult]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Scheduled task prompt');
+
+        expect(result.output).toBe('Scheduled task final answer');
+        expect(result.sessionId).toBe('scheduled-session');
+        expect(result.metadata?.numTurns).toBe(4);
+        expect(JSON.parse(result.raw as string).session_id).toBe('scheduled-session');
+      });
+
       it('should not warn about truncation when origin identifies the main result without terminal_reason', async () => {
         // With SDK >= 0.2.126 the `origin` field is authoritative. If the
         // human-origin result has no terminal_reason, that's the legitimate
