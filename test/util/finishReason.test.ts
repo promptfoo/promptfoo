@@ -74,7 +74,7 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('custom_stop')).toBe('custom_stop');
     });
 
-    it('should preserve case for unknown reasons after normalization', () => {
+    it('should lowercase unknown reasons after normalization', () => {
       expect(normalizeFinishReason('CUSTOM_REASON')).toBe('custom_reason');
     });
   });

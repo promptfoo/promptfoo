@@ -140,4 +140,40 @@ describe('Nscale request construction', () => {
     expect(body).not.toHaveProperty('passthrough');
     expect(body.chat_template_kwargs).toEqual({ thinking: true });
   });
+
+  it('uses image-provider environment overrides and custom endpoints on the wire', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        created: 1234567890,
+        data: [{ b64_json: 'aW1hZ2U=' }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const provider = createNscaleProvider('nscale:image:black-forest-labs/FLUX.1-schnell', {
+      config: {
+        config: {
+          apiBaseUrl: 'https://private.nscale.example/v1',
+        },
+      },
+      env: {
+        NSCALE_SERVICE_TOKEN: 'image-service-token',
+      },
+    });
+
+    const result = await provider.callApi('Draw a landscape');
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0] as any;
+    const body = JSON.parse(request.body);
+
+    expect(result.error).toBeUndefined();
+    expect(url).toBe('https://private.nscale.example/v1/images/generations');
+    expect(request.headers.Authorization).toBe('Bearer image-service-token');
+    expect(body).toMatchObject({
+      model: 'black-forest-labs/FLUX.1-schnell',
+      prompt: 'Draw a landscape',
+    });
+    expect(request.body).not.toContain('image-service-token');
+  });
 });
