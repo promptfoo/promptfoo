@@ -397,8 +397,8 @@ describe('calculateOpenAICost', () => {
   it.each([
     ['gpt-5.6', 5, 30],
     ['gpt-5.6-sol', 5, 30],
-    ['gpt-5.6-terra', 2.5, 15],
-    ['gpt-5.6-luna', 1, 6],
+    ['gpt-5.6-terra', 2, 12],
+    ['gpt-5.6-luna', 0.2, 1.2],
   ])('should calculate cost correctly for %s', (model, inputRate, outputRate) => {
     const cost = calculateOpenAICost(model, {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * inputRate + 500 * outputRate) / 1e6, 6);
@@ -407,8 +407,8 @@ describe('calculateOpenAICost', () => {
   it.each([
     ['gpt-5.6', 5, 30, 10, 45],
     ['gpt-5.6-sol', 5, 30, 10, 45],
-    ['gpt-5.6-terra', 2.5, 15, 5, 22.5],
-    ['gpt-5.6-luna', 1, 6, 2, 9],
+    ['gpt-5.6-terra', 2, 12, 4, 18],
+    ['gpt-5.6-luna', 0.2, 1.2, 0.4, 1.8],
   ])(
     'should apply long-context pricing above 272K for %s',
     (model, baseInputRate, baseOutputRate, longInputRate, longOutputRate) => {

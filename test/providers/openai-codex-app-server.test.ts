@@ -933,7 +933,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
       const result = await resultPromise;
       expect(result.output).toBe('On Bedrock');
-      expect(result.cost).toBeCloseTo(0.03775, 10);
+      expect(result.cost).toBeCloseTo(0.041525, 10);
 
       const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
       expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();

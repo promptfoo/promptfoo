@@ -2876,11 +2876,11 @@ describe('OpenAICodexSDKProvider', () => {
 
       it.each([
         ['gpt-5.6-sol', 5, 0.5, 30],
-        ['gpt-5.6-terra', 2.5, 0.25, 15],
-        ['gpt-5.6-luna', 1, 0.1, 6],
-        ['openai.gpt-5.6-sol', 5, 0.5, 30],
-        ['openai.gpt-5.6-terra', 2.5, 0.25, 15],
-        ['openai.gpt-5.6-luna', 1, 0.1, 6],
+        ['gpt-5.6-terra', 2, 0.2, 12],
+        ['gpt-5.6-luna', 0.2, 0.02, 1.2],
+        ['openai.gpt-5.6-sol', 5.5, 0.55, 33],
+        ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
+        ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
       ])(
         'should calculate %s cost without cache-write tokens',
         async (model, input, cachedInput, output) => {

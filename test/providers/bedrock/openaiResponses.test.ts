@@ -276,11 +276,11 @@ describe('bedrock openaiResponses helper', () => {
     );
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
+      ['openai.gpt-5.6-sol', 5.5, 33],
+      ['openai.gpt-5.6-terra', 2.2, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 1.32],
     ])(
-      'applies first-party-equivalent cache read/write and output rates to %s',
+      'applies the published Bedrock regional cache read/write and output rates to %s',
       (modelId, input, output) => {
         const provider = createBedrockOpenAiResponsesProvider(modelId, {
           config: { apiKey: 'bedrock-key' },
@@ -304,9 +304,9 @@ describe('bedrock openaiResponses helper', () => {
     );
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 0.5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 0.25, 15],
-      ['openai.gpt-5.6-luna', 1, 0.1, 6],
+      ['openai.gpt-5.6-sol', 5.5, 0.55, 33],
+      ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
     ])('prices %s when cache-write usage is missing', (modelId, input, cachedInput, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
@@ -321,12 +321,22 @@ describe('bedrock openaiResponses helper', () => {
       ).toBeCloseTo((800 * input + 200 * cachedInput + 500 * output) / 1e6, 10);
     });
 
+    it('applies Bedrock regional rates through a custom proxy', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+        config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 2.2 + 5 * 13.2) / 1e6, 10);
+    });
+
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
+      ['openai.gpt-5.6-sol', 5.5, 33],
+      ['openai.gpt-5.6-terra', 2.2, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 1.32],
     ])(
-      'applies the long-context rates without a first-party regional uplift to %s',
+      'applies Bedrock long-context rates with the AWS regional-processing uplift to %s',
       (modelId, input, output) => {
         const provider = createBedrockOpenAiResponsesProvider(modelId, {
           config: { apiKey: 'bedrock-key', region: 'us-east-1' },
