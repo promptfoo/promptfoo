@@ -1,7 +1,9 @@
 import type { Server } from 'node:http';
 
+import express from 'express';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mediaRouter } from '../../../src/server/routes/media';
 import { createApp } from '../../../src/server/server';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
@@ -103,6 +105,43 @@ describe('Media Routes', () => {
     });
   });
 
+  it.each([
+    '/api/media/info/audio/%FF',
+    '/api/media/audio/%E0%A4%A',
+    '/api/media/audio/../../../%FF',
+    '/api/media/info/audio/../../../%FF',
+    '/api/media/audio/%2e%2e/%2e%2e/%2e%2e/%FF',
+    '/%FF',
+    '/api/%FF/media',
+  ])('should safely reject malformed path encoding for %s', async (path) => {
+    const response = await api.get(path).set('Origin', 'https://attacker.example');
+
+    expect(response.status).toBe(400);
+    expect(response.type).toBe('application/json');
+    expect(response.body).toEqual({ error: 'Invalid request path' });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.text).not.toContain('/home/');
+    expect(mockedMediaExists).not.toHaveBeenCalled();
+    expect(mockedGetMediaStorage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    '/api/media/%FF',
+    '/api/media/audio/%FF/extra',
+    '/api/media/foo/bar/%FF',
+    '/api/media/%',
+  ])('should contain malformed paths that do not match a media route for %s', async (path) => {
+    const response = await api.get(path).set('Origin', 'https://attacker.example');
+
+    expect(response.status).toBe(404);
+    expect(response.type).toBe('application/json');
+    expect(response.body).toEqual({ error: 'Media route not found' });
+    expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.text).not.toContain('/home/');
+    expect(mockedMediaExists).not.toHaveBeenCalled();
+    expect(mockedGetMediaStorage).not.toHaveBeenCalled();
+  });
+
   describe('GET /api/media/info/:type/:filename', () => {
     beforeEach(() => {
       vi.resetAllMocks();
@@ -114,6 +153,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('type');
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it('should return 400 when path segments resolve to invalid type and filename', async () => {
@@ -150,13 +190,19 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Media not found',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
-    it('should return info when media file exists', async () => {
+    it.each([
+      'https://storage.example.com/audio/abcdef123456.mp3',
+      '//storage.example.com/audio/abcdef123456.mp3',
+      '/media/audio/abcdef123456.mp3',
+      'media/audio/abcdef123456.mp3',
+    ])('should preserve browser-safe provider URL %s', async (providerUrl) => {
       const mockStorage = {
         providerId: 'local-fs',
-        getUrl: vi.fn().mockResolvedValue('/media/audio/abcdef123456.mp3'),
+        getUrl: vi.fn().mockResolvedValue(providerUrl),
       } as unknown as MediaStorageProvider;
 
       mockedMediaExists.mockResolvedValue(true);
@@ -170,11 +216,103 @@ describe('Media Routes', () => {
         data: {
           key: 'audio/abcdef123456.mp3',
           exists: true,
-          url: '/media/audio/abcdef123456.mp3',
+          url: providerUrl,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+    });
+
+    it.each([
+      'file:///Users/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'FILE:///C:/Users/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://fileserver/promptfoo/audio/abcdef123456.mp3',
+      '  file:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\0file:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\u00a0file:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\ufefffile:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'f\tile:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'fi\nle:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'fil\re:///home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://%ZZ/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\0file://%ZZ/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      '\u00a0\0\ufefffile://%ZZ/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://[invalid/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+      'file://user:pass@/home/test-user/.promptfoo/media/audio/abcdef123456.mp3',
+    ])('should replace local file URL %s with the API URL', async (providerUrl) => {
+      const mockStorage = {
+        providerId: 'local',
+        getUrl: vi.fn().mockResolvedValue(providerUrl),
+      } as unknown as MediaStorageProvider;
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue(mockStorage);
+
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          key: 'audio/abcdef123456.mp3',
+          exists: true,
+          url: '/api/media/audio/abcdef123456.mp3',
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
+        },
+      });
+      expect(JSON.stringify(response.body)).not.toContain(providerUrl);
+      expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+    });
+
+    it('should return API access when provider URL generation fails', async () => {
+      const mockStorage = {
+        providerId: 'custom-storage',
+        getUrl: vi.fn().mockRejectedValue(new Error('Signed URL service unavailable')),
+      } as unknown as MediaStorageProvider;
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue(mockStorage);
+
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          key: 'audio/abcdef123456.mp3',
+          exists: true,
+          url: null,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
+        },
+      });
+      expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+    });
+
+    it('should include the Express mount path in the API URL', async () => {
+      const mockStorage = {
+        providerId: 'local',
+        getUrl: vi.fn().mockResolvedValue(null),
+      } as unknown as MediaStorageProvider;
+      const prefixedApp = express();
+      prefixedApp.use('/promptfoo/api/media', mediaRouter);
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue(mockStorage);
+
+      const response = await request(prefixedApp).get(
+        '/promptfoo/api/media/info/audio/abcdef123456.mp3',
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.apiUrl).toBe('/promptfoo/api/media/audio/abcdef123456.mp3');
+
+      mockedRetrieveMedia.mockResolvedValue(Buffer.from('mounted media'));
+      const mediaResponse = await request(prefixedApp).get(response.body.data.apiUrl);
+
+      expect(mediaResponse.status).toBe(200);
+      expect(mediaResponse.body).toEqual(Buffer.from('mounted media'));
     });
 
     it('should return info when URL generation is unsupported', async () => {
@@ -195,6 +333,7 @@ describe('Media Routes', () => {
           key: 'audio/abcdef123456.mp3',
           exists: true,
           url: null,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
@@ -226,6 +365,21 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Failed to get media info',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
+    });
+
+    it.each([
+      '%2e%2e%2fetc%2fpasswd',
+      '%252e%252e%252fetc%252fpasswd',
+      '%2fetc%2fpasswd',
+      'C%3a%5cWindows%5cwin.ini',
+      'abcdef123456.mp3%00',
+    ])('should reject encoded or absolute filename %s before storage access', async (filename) => {
+      const response = await api.get(`/api/media/info/audio/${filename}`);
+
+      expect(response.status).toBe(400);
+      expect(mockedMediaExists).not.toHaveBeenCalled();
+      expect(mockedGetMediaStorage).not.toHaveBeenCalled();
     });
   });
 
@@ -240,6 +394,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).toContain('type');
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it('should return 400 for invalid filename', async () => {
@@ -260,6 +415,7 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Media not found',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
@@ -274,7 +430,8 @@ describe('Media Routes', () => {
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe('audio/wav');
       expect(response.headers['content-length']).toBe(String(mockData.length));
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.headers['cache-control']).toBe('private, max-age=31536000, immutable');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
       expect(response.body).toEqual(mockData);
       expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/abcdef123456.wav');
     });
@@ -324,6 +481,7 @@ describe('Media Routes', () => {
       expect(response.body).toEqual({
         error: 'Failed to serve media',
       });
+      expect(response.headers['cache-control']).toBe('private, no-store');
     });
 
     it.each([
