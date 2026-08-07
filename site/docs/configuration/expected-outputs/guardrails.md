@@ -16,8 +16,9 @@ The guardrails assertion is currently supported on:
 
 - AWS Bedrock with [Amazon Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-create.html) enabled
 - Azure OpenAI with [Content Filters](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/content-filter?tabs=warning%2Cuser-prompt%2Cpython-new) enabled
+- OpenAI-compatible chat providers that surface a `refusal` message or `finish_reason: content_filter`, including [OpenAI](/docs/providers/openai/), [OpenRouter](/docs/providers/openrouter/), and [Snowflake Cortex](/docs/providers/snowflake/). These report `flagged: true` when the model refuses or the response is filtered.
 
-Other providers do not currently support this assertion type. The assertion will pass with a score of 0 for unsupported providers.
+Providers that never populate a `guardrails` object are treated as unflagged, so the assertion passes with a score of 1.
 
 ::::note
 If you are using Promptfoo's built-in Azure OpenAI (with Content Filters) or AWS Bedrock (with Amazon Guardrails) providers, Promptfoo automatically maps provider responses to the top-level `guardrails` object. You do not need to implement a response transform for these built-in integrations. The mapping guidance below is only necessary for custom HTTP targets or other non-built-in providers.

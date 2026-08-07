@@ -2,7 +2,15 @@ import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import {
+  calculateSafeOpenAICost,
+  formatOpenAiError,
+  getChatCompletionRefusal,
+  getTokenUsageWithRequestCount,
+  parseChatCompletionJsonOutput,
+  type ValidatedChatCompletionMessage,
+  validateChatCompletionMessage,
+} from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -13,6 +21,23 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+
+function getSnowflakeErrorCode(
+  data: { code?: unknown; error_code?: unknown } | null | undefined,
+): string | undefined {
+  const value = data?.code ?? data?.error_code;
+  return (typeof value === 'number' || typeof value === 'string') &&
+    /^[A-Za-z0-9_.-]{1,64}$/.test(String(value))
+    ? String(value)
+    : undefined;
+}
+
+function getSnowflakeOutput(message: ValidatedChatCompletionMessage): string | object {
+  if (message.functionCall || message.toolCalls) {
+    return message.functionCall ?? message.toolCalls!;
+  }
+  return typeof message.content === 'string' && message.content.trim() ? message.content : '';
+}
 
 /**
  * Snowflake Cortex provider extends OpenAI chat completion provider
@@ -115,10 +140,14 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     }
 
     type SnowflakeCortexResponse = OpenAI.ChatCompletion & {
+      code?: number | string;
       error?: {
         code?: string;
         message?: string;
       };
+      error_code?: number | string;
+      message?: string;
+      request_id?: string;
     };
 
     let data: SnowflakeCortexResponse;
@@ -126,9 +155,10 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     let statusText: string;
     let latencyMs: number | undefined;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
 
     try {
-      ({ data, cached, status, statusText, latencyMs } =
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
         await fetchWithCache<SnowflakeCortexResponse>(
           `${this.getApiUrl()}/api/v2/cortex/inference:complete`,
           {
@@ -157,57 +187,83 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
-    // Process the response (should be OpenAI-compatible)
-    const message = data.choices[0].message;
-    const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
+    const choice = Array.isArray(data?.choices) ? data.choices[0] : undefined;
+    const finishReason = normalizeFinishReason(choice?.finish_reason);
+    const tokenUsage = getTokenUsageWithRequestCount(data, cached);
+    const cost = calculateSafeOpenAICost(this.modelName, config, data);
 
-    // Handle tool calls and content
-    let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-
-    if (hasFunctionCall || hasToolCalls) {
-      // Tool calls always take priority
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
-      output = message.content;
+    if (finishReason === 'error') {
+      await deleteFromCache?.();
+      return {
+        error: 'API error: Snowflake provider returned a generation error',
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        finishReason,
+      };
     }
 
-    // Handle structured output
-    if (config.response_format?.type === 'json_schema') {
-      const jsonCandidate =
-        typeof message?.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
+    const snowflakeErrorCode = getSnowflakeErrorCode(data);
+    if (!choice && typeof data?.message === 'string' && snowflakeErrorCode) {
+      await deleteFromCache?.();
+      return {
+        error: `API error: Snowflake provider returned error code ${snowflakeErrorCode}`,
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        metadata: { snowflakeErrorCode },
+      };
+    }
 
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          logger.warn(`[Snowflake Cortex] Failed to parse JSON output: ${String(error)}`);
-        }
-      }
+    // Process the response (should be OpenAI-compatible)
+    const message = validateChatCompletionMessage(choice?.message, { finishReason });
+    if (!message) {
+      await deleteFromCache?.();
+      return {
+        error: 'Malformed response data: expected choices[0].message',
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        ...(finishReason && { finishReason }),
+      };
+    }
+
+    const refusal = getChatCompletionRefusal(message, finishReason);
+    if (refusal) {
+      return {
+        ...refusal,
+        tokenUsage,
+        cached,
+        latencyMs,
+        cost,
+        ...(finishReason && { finishReason }),
+      };
+    }
+
+    let output = getSnowflakeOutput(message);
+    if (config.response_format?.type === 'json_schema') {
+      output = parseChatCompletionJsonOutput(
+        message,
+        output,
+        '[Snowflake Cortex] Failed to parse JSON output',
+      );
     }
 
     return {
       output,
-      tokenUsage: getTokenUsage(data, cached),
+      tokenUsage,
       cached,
       latencyMs,
-      cost: calculateOpenAICost(
-        this.modelName,
-        config,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      ),
+      cost,
       ...(finishReason && { finishReason }),
     };
   }
