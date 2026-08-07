@@ -937,5 +937,136 @@ describe('WebSocketProvider', () => {
         vi.useRealTimers();
       }
     });
+
+    it('keeps an active stream alive past the initial timeout', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse: (accumulator: any, event: any) =>
+              event.data === 'done'
+                ? [accumulator, true]
+                : [{ output: (accumulator.output ?? '') + event.data }, false],
+          },
+        });
+        emitWebSocketEvents({ type: 'open' });
+
+        const responsePromise = provider.callApi('streaming test').then(
+          (response) => ({ response }),
+          (error: Error) => ({ error: error.message }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+
+        for (const data of ['first ', 'second ', 'third ']) {
+          await vi.advanceTimersByTimeAsync(75);
+          mockWs.onmessage?.({ data } as WebSocket.MessageEvent);
+        }
+
+        expect(mockWs.close).not.toHaveBeenCalled();
+        mockWs.onmessage?.({ data: 'done' } as WebSocket.MessageEvent);
+
+        await expect(responsePromise).resolves.toEqual({
+          response: { output: 'first second third ' },
+        });
+        expect(mockWs.close).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('restarts the stall deadline after a partial stream message', async () => {
+      vi.useFakeTimers();
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            streamResponse: (accumulator: any, event: any) => [
+              { output: (accumulator.output ?? '') + event.data },
+              false,
+            ],
+          },
+        });
+        emitWebSocketEvents({ type: 'open' });
+
+        const onResolved = vi.fn();
+        const onRejected = vi.fn();
+        const responsePromise = provider.callApi('late partial chunk').then(onResolved, onRejected);
+        await vi.advanceTimersByTimeAsync(75);
+        mockWs.onmessage?.({ data: 'partial' } as WebSocket.MessageEvent);
+
+        await vi.advanceTimersByTimeAsync(50);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(50);
+        expect(onResolved).not.toHaveBeenCalled();
+        expect(onRejected).toHaveBeenCalledOnce();
+        expect(onRejected.mock.calls[0][0].message).toBe('WebSocket request timed out after 100ms');
+        await responsePromise;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries a stalled stream and succeeds when the next attempt completes', async () => {
+      vi.useFakeTimers();
+      const registry = new RateLimitRegistry({ maxConcurrency: 1, queueTimeoutMs: 1_000 });
+      try {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 100,
+            maxRetries: 1,
+            streamResponse: (_accumulator: any, event: any) => [
+              { output: event.data === 'done' ? 'recovered' : 'partial' },
+              event.data === 'done',
+            ],
+          },
+        });
+
+        let attempts = 0;
+        websocketMocks.setFactory(() => {
+          const attempt = ++attempts;
+          const ws = mockWs;
+          queueMicrotask(() => {
+            ws.onopen?.({ type: 'open', target: ws } as WebSocket.Event);
+            ws.onmessage?.({
+              data: attempt === 1 ? 'partial' : 'done',
+            } as WebSocket.MessageEvent);
+          });
+          return ws;
+        });
+
+        const callApi = vi.fn(() => provider.callApi('recover stalled stream'));
+        const responsePromise = registry
+          .execute(provider, callApi, {
+            isRateLimited: isProviderResponseRateLimited,
+            getRetryAfter: () => 0,
+          })
+          .then(
+            (response) => ({ response }),
+            (error: Error) => ({ error: error.message }),
+          );
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(callApi).toHaveBeenCalledOnce();
+
+        await vi.runAllTimersAsync();
+
+        await expect(responsePromise).resolves.toEqual({ response: { output: 'recovered' } });
+        expect(callApi).toHaveBeenCalledTimes(2);
+        expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+          retriedRequests: 1,
+          completedRequests: 1,
+          failedRequests: 0,
+        });
+      } finally {
+        registry.dispose();
+        vi.useRealTimers();
+      }
+    });
   });
 });
