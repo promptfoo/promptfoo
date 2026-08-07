@@ -114,6 +114,7 @@ describe('index.ts exports', () => {
     'isProviderOptions',
     'isResultFailureReason',
     'isTransformFunction',
+    'isTransformReturnWithTestResult',
     'loadApiProvider',
     'loadApiProviders',
     'normalizeInputDefinition',

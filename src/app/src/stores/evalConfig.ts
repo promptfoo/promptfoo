@@ -689,6 +689,7 @@ const PROVIDER_OPTION_KEYS = new Set([
   'config',
   'prompts',
   'transform',
+  'transformCanSetTestResult',
   'delay',
   'env',
   'inputs',

@@ -191,6 +191,7 @@ export const OutputConfigSchema = z.object({
    */
   postprocess: StringOrFunctionSchema.optional(),
   transform: StringOrFunctionSchema.optional(),
+  transformCanSetTestResult: z.boolean().optional(),
   transformVars: StringOrFunctionSchema.optional(),
 
   // The name of the variable to store the output of this test case
@@ -198,6 +199,94 @@ export const OutputConfigSchema = z.object({
 });
 
 export type OutputConfig = z.infer<typeof OutputConfigSchema>;
+
+/**
+ * Output transforms can return this special object to control test outcomes when
+ * `transformCanSetTestResult` is enabled.
+ *
+ * @example
+ * ```javascript
+ * module.exports = (output, context) => {
+ *   if (!context.metadata?.guardrails?.flagged) {
+ *     return {
+ *       testResult: {
+ *         pass: false,
+ *         score: 0,
+ *         reason: 'Guardrails did not block harmful input'
+ *       },
+ *       output: output
+ *     };
+ *   }
+ *   return output;
+ * };
+ * ```
+ */
+export interface TransformTestResult {
+  /** Whether the test should pass */
+  pass: boolean;
+
+  /** Test score (typically 0-1) */
+  score: number;
+
+  /** Reason for the pass/fail decision */
+  reason: string;
+
+  /** Optional named scores for metrics */
+  namedScores?: Record<string, number>;
+
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Special return type for output transforms that want to control test outcomes.
+ * With `transformCanSetTestResult` enabled, the test result is determined by the
+ * `testResult` field instead of running assertions.
+ */
+export interface TransformReturnWithTestResult {
+  /** Special key that signals transform is controlling test outcome */
+  testResult: TransformTestResult;
+
+  /** Optional output for display purposes */
+  output?: string | object;
+}
+
+/**
+ * Runtime check for a valid transform-controlled test result.
+ */
+export function isTransformReturnWithTestResult(
+  value: unknown,
+): value is TransformReturnWithTestResult {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !Object.prototype.hasOwnProperty.call(value, 'testResult')
+  ) {
+    return false;
+  }
+  const testResult = (value as { testResult?: unknown }).testResult;
+  if (typeof testResult !== 'object' || testResult === null) {
+    return false;
+  }
+  const candidate = testResult as Partial<TransformTestResult>;
+  return (
+    typeof candidate.pass === 'boolean' &&
+    typeof candidate.score === 'number' &&
+    Number.isFinite(candidate.score) &&
+    typeof candidate.reason === 'string' &&
+    (candidate.namedScores === undefined ||
+      (typeof candidate.namedScores === 'object' &&
+        candidate.namedScores !== null &&
+        !Array.isArray(candidate.namedScores) &&
+        Object.values(candidate.namedScores).every(
+          (score) => typeof score === 'number' && Number.isFinite(score),
+        ))) &&
+    (candidate.metadata === undefined ||
+      (typeof candidate.metadata === 'object' &&
+        candidate.metadata !== null &&
+        !Array.isArray(candidate.metadata)))
+  );
+}
 
 export type EvalConversations = Record<
   string,
@@ -537,6 +626,9 @@ export interface GradingResult {
   // Record of tokens usage for this assertion
   tokensUsed?: TokenUsage;
 
+  // Whether this result should count as an assertion request. Defaults to true.
+  countAsAssertionRequest?: boolean;
+
   // List of results for each component of the assertion
   componentResults?: GradingResult[];
 
@@ -584,6 +676,8 @@ export function isGradingResult(result: any): result is GradingResult {
     (typeof result.namedScoreWeights === 'undefined' ||
       typeof result.namedScoreWeights === 'object') &&
     (typeof result.tokensUsed === 'undefined' || typeof result.tokensUsed === 'object') &&
+    (typeof result.countAsAssertionRequest === 'undefined' ||
+      typeof result.countAsAssertionRequest === 'boolean') &&
     (typeof result.componentResults === 'undefined' || Array.isArray(result.componentResults)) &&
     (typeof result.assertion === 'undefined' ||
       result.assertion === null ||

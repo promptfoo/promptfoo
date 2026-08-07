@@ -984,14 +984,15 @@ export default class EvalResult {
       stripVars: shouldStripTestVars,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
-    // request even when it reports no token usage, and a grading result counts as one
-    // assertion request (with its tokens folded in when present).
+    // request even when it reports no token usage, and ordinary grading results count as
+    // one assertion request (with their tokens folded in when present).
     const tokenUsage = createEmptyTokenUsage();
     if (this.response) {
       accumulateResponseTokenUsage(tokenUsage, this.response);
     }
-    if (this.gradingResult) {
-      accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed);
+    const gradingResult = this.gradingResult;
+    if (gradingResult && gradingResult.countAsAssertionRequest !== false) {
+      accumulateGradingRequest(tokenUsage.assertions, gradingResult.tokensUsed);
     }
 
     return {
