@@ -58,16 +58,16 @@ export function getBedrockMantleChatBaseUrl(region: string, modelName?: string):
  * configured mantle `apiBaseUrl`.
  */
 export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
-  protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^(openai|xai)\./, '');
+  protected getCapabilityModelName(modelName = this.modelName): string {
+    return modelName.replace(/^(openai|xai)\./, '');
   }
 
-  protected isReasoningModel(): boolean {
-    return isBedrockGrokModel(this.modelName) || super.isReasoningModel();
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return isBedrockGrokModel(modelName) || super.isReasoningModel(modelName);
   }
 
-  protected supportsTemperature(): boolean {
-    return isBedrockGrokModel(this.modelName) || super.supportsTemperature();
+  protected supportsTemperature(modelName = this.modelName): boolean {
+    return isBedrockGrokModel(modelName) || super.supportsTemperature(modelName);
   }
 
   async getOpenAiBody(
