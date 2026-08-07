@@ -407,4 +407,3 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 /**
  * Default exports for the base module.
  */
-export default GoogleGenericProvider;

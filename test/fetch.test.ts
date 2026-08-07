@@ -59,6 +59,8 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
     getApiKey: vi.fn(),
+    getCurrentOrganizationId: vi.fn(),
+    getCurrentTeamId: vi.fn(),
   },
 }));
 
@@ -1249,6 +1251,17 @@ describe('computeRateLimitWaitMs', () => {
     expect(wait).toBeGreaterThanOrEqual(2_900);
     expect(wait).toBeLessThanOrEqual(3_100);
   });
+
+  it('falls back to Retry-After when a reset header is non-finite', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'X-RateLimit-Reset': 'Infinity',
+        'Retry-After': '7',
+      }),
+    });
+
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
+  });
 });
 
 describe('fetchWithRetries', () => {
@@ -1593,6 +1606,111 @@ describe('fetchWithRetries', () => {
 
       // Should not retry on abort
       expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve AbortError semantics when a signal uses a custom Error reason', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockImplementationOnce(async () => {
+        controller.abort(new Error('caller cancelled'));
+        throw controller.signal.reason;
+      });
+
+      await expect(
+        fetchWithRetries('https://example.com', { signal: controller.signal }, 1000, 3),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled' });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('should stop promptly when a request is aborted during exponential backoff', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('temporary network failure'));
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        'https://example.com',
+        { signal: controller.signal },
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('caller cancelled backoff'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'caller cancelled backoff' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    });
+
+    it('should stop promptly when a request is aborted during Retry-After backoff', async () => {
+      const controller = new AbortController();
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        createMockResponse({ status: 429, headers: new Headers({ 'Retry-After': '60' }) }),
+      );
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        'https://example.com',
+        { signal: controller.signal },
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('caller cancelled rate limit'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'caller cancelled rate limit' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+    });
+
+    it.each([
+      ['exponential backoff', new Error('temporary network failure')],
+      [
+        'Retry-After backoff',
+        createMockResponse({ status: 429, headers: new Headers({ 'Retry-After': '60' }) }),
+      ],
+    ])('should honor a Request-embedded signal during %s', async (_kind, responseOrError) => {
+      const controller = new AbortController();
+      if (responseOrError instanceof Error) {
+        vi.mocked(global.fetch).mockRejectedValueOnce(responseOrError);
+      } else {
+        vi.mocked(global.fetch).mockResolvedValueOnce(responseOrError);
+      }
+      vi.mocked(sleep).mockImplementationOnce(() => new Promise(() => {}));
+
+      const pending = fetchWithRetries(
+        new Request('https://example.com', { signal: controller.signal }),
+        {},
+        1000,
+        2,
+      );
+      await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce());
+      controller.abort(new Error('embedded request cancelled'));
+      const result = await Promise.race([
+        pending.then(
+          () => 'resolved',
+          (error: Error) => error,
+        ),
+        new Promise<'unbounded'>((resolve) => setTimeout(() => resolve('unbounded'), 100)),
+      ]);
+
+      expect(result).toMatchObject({ name: 'AbortError', message: 'embedded request cancelled' });
+      expect(global.fetch).toHaveBeenCalledOnce();
+      vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
     });
   });
 

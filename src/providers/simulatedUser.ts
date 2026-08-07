@@ -1,7 +1,8 @@
-import logger from '../logger';
+import logger, { isDebugEnabled } from '../logger';
 import { getSessionId } from '../redteam/util';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
+import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -13,6 +14,7 @@ import type {
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
+  RemoteGenerationContext,
   TokenUsage,
 } from '../types/index';
 
@@ -20,6 +22,16 @@ export type Message = {
   role: 'user' | 'assistant' | 'system';
   content: string;
 };
+
+function providerOutputToString(output: unknown): string {
+  if (output == null) {
+    return '';
+  }
+  if (typeof output === 'string') {
+    return output;
+  }
+  return safeJsonStringify(output) ?? String(output);
+}
 
 type AgentProviderOptions = ProviderOptions & {
   config?: {
@@ -33,6 +45,9 @@ type AgentProviderOptions = ProviderOptions & {
      * Useful for testing specific conversation states or reproducing bugs.
      */
     initialMessages?: Message[] | string;
+    /** Cloud target database ID used to resolve target-owned redteam task context. */
+    targetId?: string;
+    redteamGenerationContext?: RemoteGenerationContext;
   };
 };
 
@@ -44,6 +59,7 @@ export class SimulatedUser implements ApiProvider {
   private readonly identifier: string;
   private readonly maxTurns: number;
   private readonly rawInstructions: string;
+  private readonly redteamGenerationContext?: RemoteGenerationContext;
   private readonly stateful: boolean;
   private readonly configInitialMessages?: Message[] | string;
 
@@ -57,6 +73,9 @@ export class SimulatedUser implements ApiProvider {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
     this.rawInstructions = config.instructions || '{{instructions}}';
+    this.redteamGenerationContext =
+      config.redteamGenerationContext ??
+      (config.targetId ? { providerTargetIds: [], cloudTargetId: config.targetId } : undefined);
     this.stateful = config.stateful ?? false;
     this.configInitialMessages = config.initialMessages;
   }
@@ -199,9 +218,10 @@ export class SimulatedUser implements ApiProvider {
       };
     }
 
-    logger.debug(`User: ${response.output}`);
+    const content = providerOutputToString(response.output);
+    logger.debug(`User: ${content}`);
     return {
-      messages: [...messages, { role: 'user', content: String(response.output || '') }],
+      messages: [...messages, { role: 'user', content }],
       tokenUsage: response.tokenUsage,
     };
   }
@@ -246,7 +266,9 @@ export class SimulatedUser implements ApiProvider {
       await sleep(targetProvider.delay);
     }
 
-    logger.debug(`[SimulatedUser] Agent: ${response.output}`);
+    if (isDebugEnabled()) {
+      logger.debug(`[SimulatedUser] Agent: ${providerOutputToString(response.output)}`);
+    }
     return response;
   }
 
@@ -260,7 +282,10 @@ export class SimulatedUser implements ApiProvider {
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
-    const userProvider = new PromptfooSimulatedUserProvider({ instructions }, this.taskId);
+    const userProvider = new PromptfooSimulatedUserProvider(
+      { instructions, redteamGenerationContext: this.redteamGenerationContext },
+      this.taskId,
+    );
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 
@@ -305,7 +330,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
@@ -353,7 +378,7 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
+      messages.push({ role: 'assistant', content: providerOutputToString(agentResponse.output) });
 
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }

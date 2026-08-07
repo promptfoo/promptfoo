@@ -13,7 +13,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
-import { OpenAiGenericProvider } from '.';
+import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
@@ -247,10 +247,24 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    // When the caller supplies an OpenAI-Organization header override (any case), drop
+    // the SDK `organization` option so only the override is sent. The current SDK's
+    // Headers-based merge already lets defaultHeaders beat the organization option
+    // case-insensitively; doing this explicitly keeps the intent visible and independent
+    // of the SDK's merge semantics.
+    const orgHeaderOverridden = hasHeaderOverride(
+      this.assistantConfig.headers,
+      OPENAI_ORGANIZATION_HEADER,
+    );
+    const apiUrl = new URL(this.getApiUrl());
+    const defaultQuery = Object.fromEntries(apiUrl.searchParams.entries());
+    apiUrl.search = '';
+    apiUrl.hash = '';
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
+      organization: orgHeaderOverridden ? undefined : this.getOrganization(),
+      baseURL: apiUrl.toString(),
+      defaultQuery,
       maxRetries: 3,
       timeout: getRequestTimeoutMs(),
       defaultHeaders: this.getOpenAiRequestHeaders(this.assistantConfig.headers),

@@ -408,9 +408,13 @@ describe('importCommand', () => {
 
         const db = await getDb();
         const references = (await db.all(
-          sql`SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = ${hash}`,
-        )) as Array<{ blob_hash: string; eval_id: string }>;
-        expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
+          sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+        )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
+        expect(references).toContainEqual({
+          blob_hash: hash,
+          eval_id: sampleData.evalId,
+          location: 'import',
+        });
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);

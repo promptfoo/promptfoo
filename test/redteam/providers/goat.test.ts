@@ -218,6 +218,22 @@ describe('RedteamGoatProvider', () => {
     expect(lastCallBody.messages).toBeDefined();
   });
 
+  it('should include target context in remote agentic task requests', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      targetId: 'cloud-target-123',
+    });
+
+    await provider.callApi('test prompt', createMockContext(createMockTargetProvider()));
+
+    const requestBody = JSON.parse((mockFetch.mock.calls[0][1] as { body: string }).body);
+    expect(requestBody).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'goat',
+    });
+  });
+
   it('should not dereference file:// paths in remote attacker messages', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -1212,6 +1228,50 @@ describe('RedteamGoatProvider', () => {
       prompt: expect.any(String),
       response: expect.any(String),
     });
+  });
+
+  it('should grade image-only target responses', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+    });
+
+    const targetProvider = createMockTargetProvider('', undefined, {
+      images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+    });
+
+    const graderResult = {
+      pass: false,
+      score: 0,
+      reason: 'Visual policy failure detected',
+    };
+    (mockGrader.getResult as any).mockResolvedValue({
+      grade: graderResult,
+      rubric: 'rendered rubric',
+    });
+
+    const testConfig = {
+      vars: {},
+      assert: [{ type: 'harmful:test' }],
+      metadata: { pluginId: 'harmful:test', goal: 'test goal' },
+    } as unknown as AtomicTestCase;
+
+    const context = createMockContext(targetProvider, { goal: 'test goal' }, testConfig);
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(mockGrader.getResult).toHaveBeenCalledOnce();
+    expect(mockGrader.getResult.mock.calls[0][1]).toBe(
+      '[Image output attached. Inspect the attached image directly for visual grading.]',
+    );
+    expect(mockGrader.getResult.mock.calls[0][7]).toMatchObject({
+      providerResponse: {
+        images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+      },
+      imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
+    });
+    expect(result.metadata?.storedGraderResult).toMatchObject(graderResult);
+    expect(result.metadata?.stopReason).toBe('Grader failed');
   });
 
   describe('Token Counting', () => {

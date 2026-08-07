@@ -5,11 +5,37 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
+import { JsonProviderOptionsWithIdSchema } from './providers';
 
 import type { Plugin, Strategy } from '../../redteam/constants';
 
 // POST /api/redteam/generate-test
+
+function normalizePreviewGenerationProvider(provider: unknown): unknown {
+  if (typeof provider === 'string') {
+    const id = provider.trim();
+    return id || undefined;
+  }
+
+  if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
+    const providerObject = provider as Record<string, unknown>;
+    if (typeof providerObject.id !== 'string') {
+      return undefined;
+    }
+
+    const id = providerObject.id.trim();
+    return id ? { ...providerObject, id } : undefined;
+  }
+
+  return provider;
+}
+
+const PreviewGenerationProviderSchema = z.preprocess(
+  normalizePreviewGenerationProvider,
+  z.union([z.string().min(1), JsonProviderOptionsWithIdSchema]).optional(),
+);
 
 export const TestCaseGenerationSchema = z.object({
   plugin: z.object({
@@ -29,6 +55,7 @@ export const TestCaseGenerationSchema = z.object({
       purpose: z.string().nullable().optional(),
     }),
   }),
+  provider: PreviewGenerationProviderSchema.optional(),
   turn: z.int().min(0).optional().prefault(0),
   maxTurns: z.int().min(1).optional(),
   history: z.array(ConversationMessageSchema).optional().prefault([]),
@@ -51,6 +78,7 @@ export const TestCaseGenerationResponseSchema = z.union([
   z.object({
     testCases: z.array(GeneratedTestCaseResponseSchema),
     count: z.number().int().nonnegative(),
+    tokenUsage: BaseTokenUsageSchema.optional(),
   }),
 ]);
 

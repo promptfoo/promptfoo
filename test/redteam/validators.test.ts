@@ -127,10 +127,16 @@ describe('redteamGenerateOptionsSchema', () => {
       maxConcurrency: 5,
       maxCharsPerMessage: 125,
       delay: 1000,
+      filterProviders: 'openai',
+      filterTargets: 'target-team-b',
     };
 
     const result = RedteamGenerateOptionsSchema.safeParse(options);
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.filterProviders).toBe('openai');
+      expect(result.data.filterTargets).toBe('target-team-b');
+    }
   });
 
   it('should reject invalid plugin names', () => {

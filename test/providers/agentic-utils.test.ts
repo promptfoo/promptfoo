@@ -46,6 +46,8 @@ describe('agentic-utils', () => {
       'openai:codex-desktop',
       'anthropic:claude-agent-sdk',
       'anthropic:claude-code:sonnet',
+      'openinterpreter',
+      'openinterpreter:gpt-5.4',
       'opencode',
       'opencode:sdk',
     ])('recognizes %s as a coding-agent provider', (id) => {

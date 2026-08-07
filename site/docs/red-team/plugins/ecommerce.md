@@ -145,7 +145,7 @@ redteam:
     - ecommerce:price-manipulation
   strategies:
     - jailbreak
-    - prompt-injection
+    - jailbreak-templates
 ```
 
 ## Related Plugins

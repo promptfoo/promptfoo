@@ -242,6 +242,34 @@ describe('extractGoalFromPrompt', () => {
     );
   });
 
+  it('should include targetId when provided', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      data: { intent: 'target-scoped goal' },
+      deleteFromCache: async () => {},
+    });
+
+    const result = await extractGoalFromPrompt(
+      'test prompt',
+      'test purpose',
+      undefined,
+      undefined,
+      'target-123',
+    );
+    expect(result).toBe('target-scoped goal');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"targetId":"target-123"'),
+      }),
+      expect.any(Number),
+    );
+  });
+
   it('should skip remote call when remote generation is disabled', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     try {

@@ -20,7 +20,7 @@ You can set this in a `.env` file or directly in your environment.
 ## Prerequisites
 
 - Python 3.9-3.12 tested
-- Node.js v22 LTS or newer
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 - OpenAI API access (for GPT-4o, GPT-4o-mini, and OpenAI's forthcoming o3 mini once released)
 - An OpenAI API key
 

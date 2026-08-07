@@ -1,7 +1,7 @@
 # openai-codex-sdk/bedrock (Codex SDK on Amazon Bedrock)
 
 Runs OpenAI's Codex coding agent against OpenAI frontier models hosted on **Amazon Bedrock**
-(`openai.gpt-5.5` / `openai.gpt-5.4`) instead of the OpenAI Platform.
+(`openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, and `openai.gpt-5.6-luna`) instead of the OpenAI Platform.
 
 You can run this example with:
 
@@ -14,12 +14,12 @@ npx promptfoo@latest init --example openai-codex-sdk/bedrock
 1. Install the Codex SDK:
 
    ```bash
-   npm install @openai/codex-sdk
+   npm install @openai/codex-sdk@^0.144.0
    ```
 
 2. Request access to the OpenAI frontier models in a supported AWS Region:
-   - GPT-5.5: `us-east-2`
-   - GPT-5.4: `us-east-2`, `us-west-2`
+   - GPT-5.6 Sol: `us-east-1`, `us-east-2`
+   - GPT-5.6 Terra and Luna: `us-east-1`, `us-east-2`, `us-west-2`
 
 3. Export AWS credentials (the Codex CLI reads them from its environment):
 
@@ -31,8 +31,10 @@ npx promptfoo@latest init --example openai-codex-sdk/bedrock
 ## How it works
 
 - `model_provider: amazon-bedrock` routes Codex through Bedrock's OpenAI-compatible
-  endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1`).
-- `model: openai.gpt-5.5` uses the Bedrock model id (note the `openai.` prefix).
+  Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`).
+- `model: openai.gpt-5.6-sol` uses the Bedrock model ID (note the `openai.` prefix).
+- Sol, Terra, and Luna support `max` reasoning with a current Codex CLI. Codex `ultra`
+  is a multi-agent mode for supported models, not an API reasoning-effort value.
 - AWS credentials and `AWS_REGION` are forwarded to the Codex CLI via `cli_env` because
   promptfoo runs the CLI with a minimal environment by default. You may instead set
   `AWS_BEARER_TOKEN_BEDROCK` (a Bedrock API key), `AWS_PROFILE`, or
@@ -50,10 +52,10 @@ npx promptfoo@latest init --example openai-codex-sdk/bedrock
 
 For direct (non-agentic) inference against the same models, use the
 [`bedrock:` provider](https://www.promptfoo.dev/docs/providers/aws-bedrock/#openai-models)
-(`bedrock:openai.gpt-5.5`).
+(`bedrock:openai.gpt-5.6-sol`).
 
 ## Run it
 
 ```bash
-promptfoo eval -c examples/openai-codex-sdk/bedrock/promptfooconfig.yaml
+promptfoo eval -c examples/openai-codex-sdk/bedrock/promptfooconfig.yaml --no-cache
 ```
