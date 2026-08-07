@@ -17,6 +17,7 @@ const BASE_ASSERTION_TYPES = [
   'context-relevance',
   'conversation-relevance',
   'cost',
+  'correctover',
   'equals',
   'factuality',
   'finish-reason',

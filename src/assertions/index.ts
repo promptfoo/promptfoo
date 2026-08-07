@@ -56,6 +56,7 @@ import {
 import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
 import { handleContextRelevance } from './contextRelevance';
+import { handleCorrectover } from './correctover';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
@@ -242,6 +243,7 @@ const ASSERTION_HANDLERS: Record<
   'context-recall': handleContextRecall,
   'context-relevance': handleContextRelevance,
   'conversation-relevance': handleConversationRelevance,
+  correctover: handleCorrectover,
   cost: handleCost,
   equals: handleEquals,
   factuality: handleFactuality,
