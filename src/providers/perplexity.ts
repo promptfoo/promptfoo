@@ -1,4 +1,4 @@
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -101,6 +101,24 @@ interface PerplexityProviderOptions extends ProviderOptions {
   };
 }
 
+const PERPLEXITY_PASSTHROUGH_FIELDS = [
+  'search_domain_filter',
+  'search_recency_filter',
+  'return_related_questions',
+  'return_images',
+  'search_after_date_filter',
+  'search_before_date_filter',
+  'web_search_options',
+] as const;
+
+function normalizePerplexityCitations(citations: unknown[]): unknown[] {
+  return citations.map((citation) =>
+    typeof citation === 'string' && /^https?:\/\//i.test(citation)
+      ? { url: citation, content: citation }
+      : citation,
+  );
+}
+
 /**
  * Perplexity API provider
  *
@@ -138,6 +156,89 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
     this.usageTier = normalizedOptions.config?.usage_tier || 'medium';
   }
 
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const resolvedConfig = result.config as Record<string, any>;
+    const resolvedPassthrough = resolvedConfig.passthrough as Record<string, any> | undefined;
+    const promptConfig = context?.prompt?.config as Record<string, any> | undefined;
+    const promptPassthrough = promptConfig?.passthrough as Record<string, any> | undefined;
+
+    for (const field of PERPLEXITY_PASSTHROUGH_FIELDS) {
+      if (promptPassthrough && Object.prototype.hasOwnProperty.call(promptPassthrough, field)) {
+        result.body[field] = promptPassthrough[field];
+        continue;
+      }
+
+      const value =
+        promptPassthrough?.[field] ??
+        promptConfig?.[field] ??
+        resolvedPassthrough?.[field] ??
+        resolvedConfig[field];
+      if (value !== undefined) {
+        result.body[field] = value;
+      }
+    }
+
+    return result;
+  }
+
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData & {
+      usage?: OpenAiChatCompletionCostData['usage'] & {
+        cost?: {
+          total_cost?: unknown;
+        };
+      };
+    },
+    _config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return 0;
+    }
+
+    if (data.usage == null) {
+      return undefined;
+    }
+
+    const totalCost = data.usage?.cost?.total_cost;
+    if (typeof totalCost === 'number' && Number.isFinite(totalCost) && totalCost >= 0) {
+      return totalCost;
+    }
+
+    return calculatePerplexityCost(
+      this.modelName,
+      data.usage?.prompt_tokens,
+      data.usage?.completion_tokens,
+      this.usageTier,
+    );
+  }
+
+  protected override getProviderResponseMetadata(data: unknown): Record<string, unknown> {
+    if (!data || typeof data !== 'object') {
+      return {};
+    }
+
+    const raw = data as Record<string, unknown>;
+    const perplexity: Record<string, unknown> = {};
+    for (const field of ['citations', 'search_results', 'images', 'related_questions'] as const) {
+      if (Array.isArray(raw[field])) {
+        perplexity[field] = raw[field];
+      }
+    }
+
+    return {
+      ...(Array.isArray(raw.citations)
+        ? { citations: normalizePerplexityCitations(raw.citations) }
+        : {}),
+      ...(Object.keys(perplexity).length > 0 ? { perplexity } : {}),
+    };
+  }
+
   /**
    * Override callApi to use our custom cost calculation
    */
@@ -156,8 +257,16 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
 
     // Replace the cost calculation with our own
     if (response.tokenUsage) {
+      if (Object.keys(response.tokenUsage).length === 0) {
+        return response;
+      }
+
       if (response.cached) {
         // For cached responses, don't recalculate cost
+        return response;
+      }
+
+      if (typeof response.cost === 'number') {
         return response;
       }
 

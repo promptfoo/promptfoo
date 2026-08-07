@@ -1,6 +1,6 @@
 # provider-cerebras (Cerebras Example (High-Performance LLM Inference))
 
-This example demonstrates how to use the Cerebras provider with promptfoo to evaluate Cerebras Inference API models, which offer high-performance inference for Llama and other LLM models.
+This example demonstrates how to use the Cerebras provider with promptfoo to evaluate models on the high-performance Cerebras Inference API.
 
 You can run this example with:
 
@@ -90,20 +90,27 @@ promptfoo eval -c promptfooconfig-tools.yaml
 
 ## Model Capabilities
 
-Cerebras supports several powerful models:
+Cerebras currently supports these models on its public endpoints:
 
-- `llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model with 16 expert MoE (featured in examples)
-- `llama3.1-8b` - Llama 3.1 8B model
-- `llama-3.3-70b` - Llama 3.3 70B model
-- `deepSeek-r1-distill-llama-70B` (private preview)
+- `gpt-oss-120b` - Production model
+- `gemma-4-31b` - Preview model
+- `zai-glm-4.7` - Preview model scheduled for deprecation on August 17, 2026
+
+The preview lineup can change on short notice. Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for the current list.
 
 ## Pricing & Usage
 
-Cerebras Inference API offers competitive pricing compared to other inference services. Check the [official pricing page](https://docs.cerebras.ai) for the most current rates. Usage is billed based on input and output tokens.
+Cerebras Inference API usage is billed based on input and output tokens:
+
+- `gpt-oss-120b`: $0.35 input / $0.75 output per 1M tokens
+- `gemma-4-31b`: $0.99 input / $1.49 output per 1M tokens
+- `zai-glm-4.7`: $2.25 input / $2.75 output per 1M tokens
+
+Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for current pricing.
 
 ## Learn More
 
 - [Cerebras Provider Documentation](https://promptfoo.dev/docs/providers/cerebras)
-- [Cerebras API Reference](https://docs.cerebras.ai/)
-- [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/)
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/)
+- [Cerebras API Reference](https://inference-docs.cerebras.ai/)
+- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs/)
+- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use/)

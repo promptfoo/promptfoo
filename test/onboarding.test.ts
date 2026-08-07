@@ -202,8 +202,8 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-5-mini');
-    expect(config.providers).toContain('openai:gpt-5');
+    expect(config.providers).toContain('openai:gpt-5.4-mini');
+    expect(config.providers).toContain('openai:gpt-5.6');
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {
@@ -255,6 +255,23 @@ describe('createDummyFiles', () => {
     expect(mockSelect).toHaveBeenCalledTimes(3);
     expect(mockCheckbox).toHaveBeenCalledTimes(0);
     expect(mockConfirm).toHaveBeenCalledTimes(0);
+  });
+
+  it('should offer current Cohere direct API models', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls[1][0];
+    const cohereChoice = providerPrompt.choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Cohere]'),
+    );
+    expect(cohereChoice).toEqual({
+      name: '[Cohere] Command A+, Command A, ...',
+      value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
+    });
   });
 
   it('should prompt for confirmation when files exist', async () => {

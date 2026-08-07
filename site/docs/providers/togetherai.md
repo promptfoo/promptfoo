@@ -15,10 +15,9 @@ Together AI's API is compatible with OpenAI's API, which means all parameters av
 
 Configure a Together AI model in your promptfoo configuration:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - id: togetherai:meta-llama/Llama-4-Scout-Instruct
+  - id: togetherai:deepseek-ai/DeepSeek-V4-Flash-0731
     config:
       temperature: 0.7
 ```
@@ -58,70 +57,40 @@ config:
   response_format: { type: 'json_object' }
 ```
 
-## Popular Models
+## Current Serverless Models
 
-Together AI offers over 200 models. Here are some of the most popular models by category:
+Together AI's serverless catalog changes frequently. These selected current chat model IDs are
+useful starting points:
 
-### Llama 4 Models
+| Model ID                                  | Context (tokens) |
+| ----------------------------------------- | ---------------: |
+| `moonshotai/Kimi-K3`                      |        1,000,000 |
+| `deepseek-ai/DeepSeek-V4-Pro`             |          512,000 |
+| `deepseek-ai/DeepSeek-V4-Flash-0731`      |        1,000,000 |
+| `Qwen/Qwen3.6-Plus`                       |        1,000,000 |
+| `thinkingmachines/Inkling`                |          524,288 |
+| `moonshotai/Kimi-K2.7-Code`               |          262,144 |
+| `zai-org/GLM-5.2`                         |          262,144 |
+| `MiniMaxAI/MiniMax-M3`                    |          524,288 |
+| `Qwen/Qwen3.5-9B`                         |          262,144 |
+| `openai/gpt-oss-120b`                     |          128,000 |
+| `meta-llama/Llama-3.3-70B-Instruct-Turbo` |          131,072 |
 
-- **Llama 4 Maverick**: `meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8` (524,288 context length, FP8)
-- **Llama 4 Scout**: `meta-llama/Llama-4-Scout-17B-16E-Instruct` (327,680 context length, FP16)
-
-### DeepSeek Models
-
-- **DeepSeek R1**: `deepseek-ai/DeepSeek-R1` (128,000 context length, FP8)
-- **DeepSeek R1 Distill Llama 70B**: `deepseek-ai/DeepSeek-R1-Distill-Llama-70B` (131,072 context length, FP16)
-- **DeepSeek R1 Distill Qwen 14B**: `deepseek-ai/DeepSeek-R1-Distill-Qwen-14B` (131,072 context length, FP16)
-- **DeepSeek V3**: `deepseek-ai/DeepSeek-V3` (16,384 context length, FP8)
-
-### Llama 3 Models
-
-- **Llama 3.3 70B Instruct Turbo**: `meta-llama/Llama-3.3-70B-Instruct-Turbo` (131,072 context length, FP8)
-- **Llama 3.1 70B Instruct Turbo**: `meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo` (131,072 context length, FP8)
-- **Llama 3.1 405B Instruct Turbo**: `meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo` (130,815 context length, FP8)
-- **Llama 3.1 8B Instruct Turbo**: `meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo` (131,072 context length, FP8)
-- **Llama 3.2 3B Instruct Turbo**: `meta-llama/Llama-3.2-3B-Instruct-Turbo` (131,072 context length, FP16)
-
-### Mixtral Models
-
-- **Mixtral-8x7B Instruct**: `mistralai/Mixtral-8x7B-Instruct-v0.1` (32,768 context length, FP16)
-- **Mixtral-8x22B Instruct**: `mistralai/Mixtral-8x22B-Instruct-v0.1` (65,536 context length, FP16)
-- **Mistral Small 3 Instruct (24B)**: `mistralai/Mistral-Small-24B-Instruct-2501` (32,768 context length, FP16)
-
-### Qwen Models
-
-- **Qwen 2.5 72B Instruct Turbo**: `Qwen/Qwen2.5-72B-Instruct-Turbo` (32,768 context length, FP8)
-- **Qwen 2.5 7B Instruct Turbo**: `Qwen/Qwen2.5-7B-Instruct-Turbo` (32,768 context length, FP8)
-- **Qwen 2.5 Coder 32B Instruct**: `Qwen/Qwen2.5-Coder-32B-Instruct` (32,768 context length, FP16)
-- **QwQ-32B**: `Qwen/QwQ-32B` (32,768 context length, FP16)
-
-### Vision Models
-
-- **Llama 3.2 Vision**: `meta-llama/Llama-3.2-11B-Vision-Instruct-Turbo` (131,072 context length, FP16)
-- **Qwen 2.5 Vision Language 72B**: `Qwen/Qwen2.5-VL-72B-Instruct` (32,768 context length, FP8)
-- **Qwen 2 VL 72B**: `Qwen/Qwen2-VL-72B-Instruct` (32,768 context length, FP16)
-
-### Free Endpoints
-
-Together AI offers free tiers with reduced rate limits:
-
-- `meta-llama/Llama-3.3-70B-Instruct-Turbo-Free`
-- `meta-llama/Llama-Vision-Free`
-- `deepseek-ai/DeepSeek-R1-Distill-Llama-70B-Free`
-
-For a complete list of all 200+ available models and their specifications, refer to the [Together AI Models page](https://docs.together.ai/docs/inference-models).
+Check Together AI's [recommended models](https://docs.together.ai/docs/inference/recommended-models),
+[live serverless catalog](https://docs.together.ai/docs/serverless/models), and
+[deprecation history](https://docs.together.ai/docs/deprecations) before pinning a model in a
+long-lived configuration.
 
 ## Example Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.jsons
+```yaml
 providers:
-  - id: togetherai:meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  - id: togetherai:deepseek-ai/DeepSeek-V4-Flash-0731
     config:
       temperature: 0.7
       max_tokens: 4096
 
-  - id: togetherai:deepseek-ai/DeepSeek-R1
+  - id: togetherai:moonshotai/Kimi-K3
     config:
       temperature: 0.0
       response_format: { type: 'json_object' }

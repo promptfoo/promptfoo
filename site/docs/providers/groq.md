@@ -5,7 +5,7 @@ description: Configure Groq's ultra-fast LLM inference API for high-performance 
 
 # Groq
 
-[Groq](https://groq.com) is an extremely fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
+[Groq](https://groq.com) is a fast inference API compatible with all the options provided by Promptfoo's [OpenAI provider](/docs/providers/openai/). See openai specific documentation for configuration details.
 
 Groq provides access to a wide range of models including reasoning models with chain-of-thought capabilities, compound models with built-in tools, and standard chat models. See the [Groq Models documentation](https://console.groq.com/docs/models) for the current list of available models.
 
@@ -75,6 +75,7 @@ Key configuration options:
 - `seed`: For deterministic sampling (best effort)
 - `frequency_penalty`: Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far
 - `parallel_tool_calls`: Whether to enable parallel function calling during tool use (default: true)
+- `service_tier`: Groq Chat Completions accepts `auto`, `on_demand` (the default), `flex`, or `performance`. `null` also uses Groq's default selection.
 - `reasoning_format`: For reasoning models, controls how reasoning is presented. Options: `'parsed'` (separate field), `'raw'` (with think tags), `'hidden'` (no reasoning shown). Note: `parsed` or `hidden` required when using JSON mode or tool calls.
 - `include_reasoning`: For GPT-OSS models, set to `false` to hide reasoning output (default: `true`)
 - `reasoning_effort`: For reasoning models, controls the level of reasoning effort. Options: `'low'`, `'medium'`, `'high'` for GPT-OSS models; `'none'`, `'default'` for Qwen models
@@ -103,10 +104,11 @@ The `groq:` and `groq:responses:` prefixes route to Groq's Chat Completions and 
 | `openai/gpt-oss-20b`           | Reasoning / general-purpose, tool use        | Production |
 | `groq/compound`                | Agentic system (web search + code execution) | Production |
 | `groq/compound-mini`           | Agentic system (lower latency)               | Production |
+| `minimaxai/minimax-m2.7`       | Reasoning, tool use, structured outputs      | Preview¹   |
 | `qwen/qwen3.6-27b`             | Multimodal (reasoning + vision)              | Preview    |
 | `openai/gpt-oss-safeguard-20b` | Safety / content moderation (chat-based)     | Preview    |
 
-Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on.
+Preview models are intended for evaluation and may be discontinued at short notice; prefer Production models for anything you depend on. ¹ MiniMax M2.7 is available to Enterprise customers through Groq sales.
 
 ### Other Groq models
 
@@ -118,7 +120,7 @@ Groq hosts additional models that use audio or classification endpoints, so they
 
 See the [Groq Models page](https://console.groq.com/docs/models) for these models' specifications.
 
-**Being retired:** Groq has deprecated its Llama chat models (`llama-3.3-70b-versatile`, `llama-3.1-8b-instant`) along with `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct`. See the [deprecations page](https://console.groq.com/docs/deprecations) for shutdown dates, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
+**Lifecycle notice:** Groq deprecated `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` on June 17, 2026, with shutdown scheduled for August 16, 2026 on the Free and Developer tiers; committed-spend Enterprise customers are unaffected. The older `qwen/qwen3-32b` and `meta-llama/llama-4-scout-17b-16e-instruct` models shut down on July 17, 2026. See the [deprecations page](https://console.groq.com/docs/deprecations) for current status, and migrate to `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, or the multimodal `qwen/qwen3.6-27b`.
 
 ### Using Groq Models
 
@@ -145,8 +147,7 @@ Check the [Groq Console](https://console.groq.com/docs/models) for the full list
 
 Groq supports tool use, allowing models to call predefined functions. Configure tools in your provider settings:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: groq:openai/gpt-oss-120b
     config:
@@ -329,7 +330,7 @@ Combine with the `stop` parameter for precise output control.
 
 ## Responses API
 
-Groq's Responses API provides a structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API. Note: This API is currently in beta.
+Groq's Responses API provides a structured approach to conversational AI, with built-in support for tools, structured outputs, and reasoning. Use the `groq:responses:` prefix to access this API. Note: This API is in beta.
 
 ### Basic Usage
 
@@ -345,7 +346,7 @@ providers:
 
 ### Structured Outputs
 
-The Responses API makes it easy to get structured JSON outputs:
+The Responses API can produce structured JSON outputs:
 
 ```yaml
 providers:
@@ -383,6 +384,10 @@ prompts:
       {"role": "user", "content": "What is the capital of France?"}
     ]
 ```
+
+Responses has a different service-tier contract from Chat Completions: set `service_tier` to
+`auto` (the default), `default`, or `flex`. Promptfoo validates the endpoint-specific values before
+sending the request. See [Groq service tiers](https://console.groq.com/docs/service-tiers).
 
 ### Key Differences from Chat Completions API
 

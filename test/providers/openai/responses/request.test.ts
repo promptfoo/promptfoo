@@ -76,6 +76,169 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]).not.toHaveProperty('cacheScope');
   });
 
+  it('should use the effective passthrough model for capabilities and billing', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_effective_model',
+        object: 'response',
+        status: 'completed',
+        model: 'gpt-5.6-luna',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Effective model response' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000_000,
+          input_tokens_details: { cache_write_tokens: 0 },
+          output_tokens: 1_000_000,
+          total_tokens: 2_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('computer-use-preview', {
+      config: {
+        apiKey: 'test-key',
+        omitDefaults: true,
+        passthrough: { model: 'gpt-5.6-luna' },
+        reasoning_effort: 'high',
+        temperature: 0,
+      },
+    });
+
+    const result = await provider.callApi('Use the effective model');
+    const requestBody = JSON.parse(
+      String(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]?.body),
+    );
+
+    expect(requestBody).toMatchObject({
+      model: 'gpt-5.6-luna',
+      reasoning: { effort: 'high' },
+    });
+    expect(requestBody).not.toHaveProperty('temperature');
+    expect(result.cost).toBeCloseTo(2.2, 10);
+  });
+
+  it('should bill a qualified passthrough model through a custom gateway', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_openai_gateway',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Gateway response' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000_000,
+          input_tokens_details: { cache_write_tokens: 0 },
+          output_tokens: 1_000_000,
+          total_tokens: 2_000_000,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('computer-use-preview', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKey: 'test-key',
+        passthrough: { model: 'openai/gpt-5.6-luna' },
+      },
+    });
+
+    const result = await provider.callApi('Use the OpenAI gateway route');
+    const requestBody = JSON.parse(
+      String(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]?.body),
+    );
+
+    expect(requestBody.model).toBe('openai/gpt-5.6-luna');
+    expect(result.cost).toBeCloseTo(2.2, 10);
+  });
+
+  it('should not apply OpenAI pricing to another passthrough gateway namespace', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_custom_gateway',
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Gateway response' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000,
+          input_tokens_details: { cache_write_tokens: 0 },
+          output_tokens: 500,
+          total_tokens: 1_500,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const provider = new OpenAiResponsesProvider('computer-use-preview', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKey: 'test-key',
+        passthrough: { model: 'vendor/gpt-5.6-luna' },
+      },
+    });
+
+    const result = await provider.callApi('Use the custom gateway');
+    const requestBody = JSON.parse(
+      String(vi.mocked(cache.fetchWithCache).mock.calls[0]?.[1]?.body),
+    );
+
+    expect(requestBody.model).toBe('vendor/gpt-5.6-luna');
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('should serialize the effective service tier with prompt and passthrough precedence', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-5.6', {
+      config: {
+        apiKey: 'test-key',
+        service_tier: 'flex',
+        passthrough: { service_tier: 'priority' },
+      },
+    });
+
+    const { body: providerBody } = await provider.getOpenAiBody('Use the provider tier');
+    const { body: promptBody, config: promptConfig } = await provider.getOpenAiBody(
+      'Use the prompt tier',
+      {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any,
+    );
+    const { body: passthroughBody, config: passthroughConfig } = await provider.getOpenAiBody(
+      'Use the passthrough tier',
+      {
+        prompt: {
+          config: {
+            service_tier: 'flex',
+            passthrough: { service_tier: 'fast' },
+          },
+        },
+      } as any,
+    );
+
+    expect(providerBody.service_tier).toBe('priority');
+    expect(promptBody.service_tier).toBe('flex');
+    expect(promptConfig.service_tier).toBe('flex');
+    expect(passthroughBody.service_tier).toBe('priority');
+    expect(passthroughConfig.service_tier).toBe('fast');
+  });
+
   it('should let lowercase Authorization replace the default Responses credential', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: { status: 'completed', output: [], usage: null },

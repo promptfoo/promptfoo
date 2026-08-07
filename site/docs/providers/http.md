@@ -659,7 +659,7 @@ tests:
 
 The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
 
-Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+Setting `transformToolsFormat` is important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
 
 ### Basic Configuration
 

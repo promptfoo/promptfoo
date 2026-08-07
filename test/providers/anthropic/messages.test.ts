@@ -1188,6 +1188,27 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('prices the actual response inference geography from workspace defaults', async () => {
+      const provider = createProvider('claude-opus-4-8');
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 1_000_000,
+          output_tokens: 1_000_000,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+          inference_geo: 'us',
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBeCloseTo(33, 10);
+    });
+
     it('should forward cache tokens from cached responses', async () => {
       const provider = createProvider('claude-3-5-sonnet-20241022');
 
@@ -1519,6 +1540,74 @@ describe('AnthropicMessagesProvider', () => {
         total: 26,
         completionDetails: { reasoning: 5 },
       });
+    });
+
+    it('preserves cache TTL usage across MCP continuation rounds for billing', async () => {
+      provider = createProvider('claude-opus-4-8', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            cache_read_input_tokens: 2,
+            cache_creation_input_tokens: 7,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 3,
+              ephemeral_1h_input_tokens: 4,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar matches your query.' }],
+          stop_reason: 'end_turn',
+          usage: {
+            input_tokens: 7,
+            output_tokens: 4,
+            cache_read_input_tokens: 1,
+            cache_creation_input_tokens: 5,
+            cache_creation: {
+              ephemeral_5m_input_tokens: 2,
+              ephemeral_1h_input_tokens: 3,
+            },
+            server_tool_use: null,
+          },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 32,
+        completion: 9,
+        total: 41,
+        completionDetails: {
+          cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 12,
+        },
+      });
+      expect(result.cost).toBeCloseTo(0.00041275, 10);
     });
 
     it('does not cache MCP continuation results by default', async () => {

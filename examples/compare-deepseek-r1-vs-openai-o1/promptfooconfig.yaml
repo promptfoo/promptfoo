@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'DeepSeek-R1 vs o1 comparison on MMLU reasoning tasks'
+description: 'DeepSeek V4 Pro vs GPT-5.6 comparison on MMLU reasoning tasks'
 
 prompts:
   - |
@@ -16,8 +16,13 @@ prompts:
     Think through this step by step, then provide your final answer in the format "Therefore, the answer is A/B/C/D."
 
 providers:
-  - openai:o1
-  - deepseek:deepseek-reasoner
+  - openai:chat:gpt-5.6
+  - id: deepseek:deepseek-v4-pro
+    config:
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
 
 defaultTest:
   assert:

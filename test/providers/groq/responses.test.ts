@@ -112,6 +112,40 @@ describe('GroqResponsesProvider', () => {
   });
 
   describe('callApi', () => {
+    it('accepts Groq Responses service tiers and rejects Chat-only tiers', async () => {
+      for (const service_tier of ['auto', 'default', 'flex'] as const) {
+        const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+          config: { service_tier },
+        });
+
+        expect((await provider.getOpenAiBody('Test prompt')).body.service_tier).toBe(service_tier);
+      }
+
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: { service_tier: 'performance' as any },
+      });
+      await expect(provider.getOpenAiBody('Test prompt')).rejects.toThrow(
+        'Invalid Groq Responses service_tier "performance"',
+      );
+    });
+
+    it('uses the passthrough model for Groq reasoning capabilities', async () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          passthrough: { model: 'openai/gpt-oss-20b' },
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.model).toBe('openai/gpt-oss-20b');
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.max_output_tokens).toBeUndefined();
+    });
+
     it('preserves temperature for Groq reasoning models', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
         config: {

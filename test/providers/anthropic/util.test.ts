@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateAnthropicCost,
   claudeThinkingConsumesTokens,
@@ -40,6 +40,10 @@ type AnthropicTestMessage = Anthropic.Messages.Message & {
 
 describe('Anthropic utilities', () => {
   describe('calculateAnthropicCost', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should calculate cost for valid input and output tokens', () => {
       const cost = calculateAnthropicCost('claude-3-5-sonnet-20241022', { cost: 0.015 }, 100, 200);
       expect(cost).toBe(4.5); // (0.003 * 100) + (0.015 * 200)
@@ -62,11 +66,6 @@ describe('Anthropic utilities', () => {
 
     it('should calculate cost for Claude Sonnet 4 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-20250514', { cost: 0.02 }, 100, 200);
-      expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
-    });
-
-    it('should calculate cost for Claude Sonnet 4 latest model', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-latest', { cost: 0.02 }, 100, 200);
       expect(cost).toBe(6); // (0.02 * 100) + (0.02 * 200) - when config.cost is provided, it's used for both
     });
 
@@ -95,8 +94,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
     });
 
-    it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
-      const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
+    it('should calculate default cost for the Claude Haiku 4.5 alias', () => {
+      const cost = calculateAnthropicCost('claude-haiku-4-5', {}, 100, 200);
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
     });
 
@@ -112,6 +111,50 @@ describe('Anthropic utilities', () => {
       const expected =
         100 * (5 / 1e6) + 50 * (5 / 1e6) * 0.1 + 30 * (5 / 1e6) * 1.25 + 200 * (25 / 1e6);
       expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('prices mixed 5-minute and 1-hour cache writes at their published multipliers', () => {
+      const cost = calculateAnthropicCost(
+        'claude-opus-4-8',
+        {},
+        1_000_000,
+        1_000_000,
+        1_000_000,
+        2_000_000,
+        1_000_000,
+      );
+
+      // $5 uncached + $0.50 cache read + $6.25 5m write + $10 1h write + $25 output
+      expect(cost).toBeCloseTo(46.75, 10);
+    });
+
+    it('applies US-only inference pricing to every Claude 4.6+ token category', () => {
+      const cost = calculateAnthropicCost(
+        'claude-opus-4-8',
+        { extra_body: { inference_geo: 'us' } },
+        1_000_000,
+        1_000_000,
+        1_000_000,
+        2_000_000,
+        1_000_000,
+      );
+
+      expect(cost).toBeCloseTo(46.75 * 1.1, 10);
+    });
+
+    it('uses the actual response inference geography for workspace defaults', () => {
+      const cost = calculateAnthropicCost(
+        'claude-opus-4-8',
+        {},
+        1_000_000,
+        1_000_000,
+        1_000_000,
+        2_000_000,
+        1_000_000,
+        'us',
+      );
+
+      expect(cost).toBeCloseTo(46.75 * 1.1, 10);
     });
 
     it('should return undefined for claude-opus-4-8-latest (alias does not exist)', () => {
@@ -164,18 +207,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeUndefined();
     });
 
-    it('should calculate default cost for Claude Opus 4.6 latest model', () => {
-      const cost = calculateAnthropicCost('claude-opus-4-6-latest', {}, 100, 200);
-      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
-    });
-
     it('should calculate default cost for Claude Sonnet 4.6 model', () => {
       const cost = calculateAnthropicCost('claude-sonnet-4-6', {}, 100, 200);
-      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
-    });
-
-    it('should calculate default cost for Claude Sonnet 4.6 latest model', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 100, 200);
       expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
     });
 
@@ -184,9 +217,36 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
     });
 
-    it('should calculate default cost for Claude Opus 4.5 latest model', () => {
-      const cost = calculateAnthropicCost('claude-opus-4-5-latest', {}, 100, 200);
+    it('should calculate default cost for the Claude Opus 4.5 alias', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-5', {}, 100, 200);
       expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it.each([
+      'claude-opus-4-6-latest',
+      'claude-sonnet-4-6-latest',
+      'claude-opus-4-5-latest',
+      'claude-sonnet-4-5-latest',
+      'claude-haiku-4-5-latest',
+      'claude-opus-4-latest',
+      'claude-sonnet-4-latest',
+    ])('should leave unpublished first-party alias %s unpriced', (model) => {
+      expect(calculateAnthropicCost(model, {}, 100, 200)).toBeUndefined();
+    });
+
+    it.each([
+      'claude-opus-4-6-latest',
+      'claude-sonnet-4-6-latest',
+      'claude-opus-4-5-latest',
+      'claude-sonnet-4-5-latest',
+      'claude-haiku-4-5-latest',
+      'claude-opus-4-latest',
+      'claude-sonnet-4-latest',
+    ])('should honor explicit pricing for compatibility alias %s', (model) => {
+      expect(calculateAnthropicCost(model, { cost: 0.02 }, 100, 200)).toBe(6);
+      expect(calculateAnthropicCost(model, { inputCost: 0.01, outputCost: 0.03 }, 100, 200)).toBe(
+        7,
+      );
     });
 
     it('bills Claude Sonnet 4.5 at the standard rate below 200k tokens', () => {
@@ -201,8 +261,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
     });
 
-    it('bills the Claude Sonnet 4.5 latest alias at the standard rate above 200k tokens', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-5-latest', {}, 300_000, 20_000);
+    it('bills the Claude Sonnet 4.5 alias at the standard rate above 200k tokens', () => {
+      const cost = calculateAnthropicCost('claude-sonnet-4-5', {}, 300_000, 20_000);
       expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
     });
 
@@ -218,11 +278,6 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(1.2); // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2
     });
 
-    it('bills the Claude Sonnet 4.6 latest alias at the standard rate above 200k tokens', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-4-6-latest', {}, 250_000, 10_000);
-      expect(cost).toBe(0.9); // (3/1e6 * 250,000) + (15/1e6 * 10,000) = 0.75 + 0.15 = 0.9
-    });
-
     it('should calculate default cost for Claude Opus 5 model', () => {
       const cost = calculateAnthropicCost('claude-opus-5', {}, 100, 200);
       expect(cost).toBe(0.0055); // (5/1e6 * 100) + (25/1e6 * 200) - $5/MTok input, $25/MTok output
@@ -235,27 +290,50 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(2);
     });
 
-    it('should calculate default cost for Claude Sonnet 5 model', () => {
-      const cost = calculateAnthropicCost('claude-sonnet-5', {}, 100, 200);
-      expect(cost).toBe(0.0033); // (0.000003 * 100) + (0.000015 * 200) - $3/MTok input, $15/MTok output
+    it('switches Claude Sonnet 5 pricing at the September 1 boundary and preserves overrides', () => {
+      const now = vi.spyOn(Date, 'now');
+
+      now.mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+      expect(calculateAnthropicCost('claude-sonnet-5', {}, 1_000_000, 1_000_000)).toBe(12);
+
+      now.mockReturnValue(Date.parse('2026-09-01T00:00:00.000Z'));
+      expect(calculateAnthropicCost('claude-sonnet-5', {}, 1_000_000, 1_000_000)).toBe(18);
+      expect(
+        calculateAnthropicCost(
+          'us.anthropic.claude-sonnet-5',
+          { inputCost: 1 / 1e6, outputCost: 4 / 1e6 },
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBe(5);
+      expect(
+        calculateAnthropicCost(
+          'us.anthropic.claude-sonnet-5',
+          { cost: 7 / 1e6 },
+          1_000_000,
+          1_000_000,
+        ),
+      ).toBe(14);
     });
 
-    it('should calculate standard cost for Claude Sonnet 5 at or below 200k tokens', () => {
+    it('should calculate promotional cost for Claude Sonnet 5 at or below 200k tokens', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 150_000, 10_000);
-      expect(cost).toBe(0.6); // (3/1e6 * 150,000) + (15/1e6 * 10,000) = 0.45 + 0.15 = 0.6
+      expect(cost).toBe(0.4); // (2/1e6 * 150,000) + (10/1e6 * 10,000) = 0.3 + 0.1 = 0.4
     });
 
-    it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-      // Per Anthropic pricing, Sonnet 5 bills its full 1M context at the standard rate —
+    it('bills Claude Sonnet 5 at the promotional rate above 200k tokens', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+      // Sonnet 5 bills its full 1M context at the same promotional rate —
       // there is no >200K surcharge.
       const cost = calculateAnthropicCost('claude-sonnet-5', {}, 300_000, 20_000);
-      // (3/1e6 * 300,000) + (15/1e6 * 20,000) = 0.9 + 0.3 = 1.2 (no >200K surcharge applies)
-      expect(cost).toBe(1.2);
+      // (2/1e6 * 300,000) + (10/1e6 * 20,000) = 0.6 + 0.2 = 0.8
+      expect(cost).toBe(0.8);
     });
 
     it('should use base pricing for other Claude Sonnet 4 models', () => {
       // Other Sonnet 4 models bill at the same standard rate
-      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0', 'claude-sonnet-4-latest'];
+      const models = ['claude-sonnet-4-20250514', 'claude-sonnet-4-0'];
 
       models.forEach((model) => {
         const cost = calculateAnthropicCost(model, {}, 300_000, 20_000);
@@ -2049,6 +2127,8 @@ describe('Anthropic utilities', () => {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
         // ...but is NOT always-on adaptive thinking (thinking can still be disabled).
         expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        // Omitting the field still runs adaptive thinking on Sonnet 5.
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
       }
     });
 
@@ -2088,7 +2168,7 @@ describe('Anthropic utilities', () => {
       }
       // Opus 4.7/4.8 keep their own warning name and are not thinking-on-by-default.
       expect(isThinkingOnByDefaultClaudeModel('claude-opus-4-8')).toBe(false);
-      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(false);
+      expect(isThinkingOnByDefaultClaudeModel('claude-sonnet-5')).toBe(true);
     });
 
     it('rejects disabled thinking on Opus 5 only above effort "high"', () => {
@@ -2167,7 +2247,7 @@ describe('Anthropic utilities', () => {
       expect(claudeThinkingConsumesTokens('claude-opus-5', undefined)).toBe(true);
       expect(claudeThinkingConsumesTokens('claude-opus-5', null)).toBe(true);
       expect(claudeThinkingConsumesTokens('claude-opus-4-8', undefined)).toBe(false);
-      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(false);
+      expect(claudeThinkingConsumesTokens('claude-sonnet-5', undefined)).toBe(true);
       // Explicitly disabled never consumes tokens (except on always-on models, where the
       // API rejects `disabled` and normalization strips it before this is called).
       expect(claudeThinkingConsumesTokens('claude-opus-5', { type: 'disabled' })).toBe(false);

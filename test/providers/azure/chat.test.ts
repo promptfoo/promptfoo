@@ -825,6 +825,27 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it.each(['gpt-chat-latest', 'gpt-chat-latest-2026-06-24'])(
+      'uses reasoning request fields for Azure Chat alias %s',
+      async (deploymentName) => {
+        const provider = new AzureChatCompletionProvider(deploymentName, {
+          config: {
+            max_tokens: 1_000,
+            max_completion_tokens: 2_000,
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+        expect(body).toHaveProperty('max_completion_tokens', 2_000);
+        expect(body).toHaveProperty('reasoning_effort', 'high');
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
     it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
       const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
         config: {

@@ -6,6 +6,8 @@ import { hasHeaderOverride, OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  isOpenAiFirstPartyApiUrl,
   NON_CONVERSATIONAL_REALTIME_MODELS,
   OPENAI_REALTIME_MODELS,
 } from './util';
@@ -504,7 +506,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
+    super(modelName, options);
+    this.config = options.config || {};
+    const apiUrl = this.getApiUrl();
+    if (isOpenAiFirstPartyApiUrl(apiUrl) && NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
         `OpenAI ${modelName} is not a conversational Realtime model and cannot be used as ` +
           `openai:realtime:${modelName}. ` +
@@ -516,8 +521,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (!OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown OpenAI realtime model: ${modelName}`);
     }
-    super(modelName, options);
-    this.config = options.config || {};
+    assertOpenAiApiModel(modelName, apiUrl);
 
     // Enable maintainContext by default
     if (this.config.maintainContext === undefined) {

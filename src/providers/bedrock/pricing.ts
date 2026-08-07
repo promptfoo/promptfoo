@@ -1,6 +1,7 @@
 import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
+  getClaudeSonnet5PricingPerMillion,
   isClaudeFableOrMythos5Model,
   isClaudeOpus5Model,
   isClaudeRegionalPremiumModel,
@@ -8,7 +9,7 @@ import {
 } from '../anthropic/util';
 
 export type BedrockServiceTier = {
-  type: 'priority' | 'default' | 'flex';
+  type: 'priority' | 'default' | 'flex' | 'reserved';
 };
 
 type BedrockPricing = { input: number; output: number };
@@ -29,8 +30,9 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'anthropic.claude-opus-4-5': { input: 5, output: 25 },
   // Claude Opus 4/4.1
   'anthropic.claude-opus-4': { input: 15, output: 75 },
-  // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
-  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
+  // Claude Sonnet 5 introductory baseline; getBedrockPricing switches to $3/$15 at runtime
+  // on Sep 1, 2026.
+  'anthropic.claude-sonnet-5': { input: 2, output: 10 },
   // Claude Sonnet 4/4.5
   'anthropic.claude-sonnet-4': { input: 3, output: 15 },
   // Claude Haiku 4.5
@@ -46,8 +48,8 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 10 },
-  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
-  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
+  // Amazon Nova 2
+  'amazon.nova-2-lite': { input: 0.3, output: 2.5 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
   'amazon.titan-text-express': { input: 0.8, output: 1.6 },
@@ -249,6 +251,8 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
 };
 
 const US_GOV_PRICING: Record<string, BedrockPricing> = {
+  // AWS publishes GovCloud rates directly; do not apply the commercial regional premium again.
+  'anthropic.claude-opus-4-8': { input: 6, output: 30 },
   'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
   'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
   'nemotron-nano': { input: 0.072, output: 0.276 },
@@ -318,6 +322,19 @@ const BEDROCK_REGION_PRICING: Record<string, Record<string, BedrockPricing>> = {
   'us-gov-west-1': US_GOV_PRICING,
 };
 
+function getBedrockRegionPricing(
+  normalizedModelId: string,
+  region?: string,
+): Record<string, BedrockPricing> | undefined {
+  if (region) {
+    return BEDROCK_REGION_PRICING[region.toLowerCase()];
+  }
+  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.includes('/us-gov.')) {
+    return US_GOV_PRICING;
+  }
+  return undefined;
+}
+
 function getBedrockPricing(normalizedModelId: string, region?: string): BedrockPricing | undefined {
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
@@ -332,7 +349,7 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
     return undefined;
   }
 
-  const regionPricing = region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
+  const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
   if (regionPricing) {
     for (const [modelPrefix, pricing] of Object.entries(regionPricing)) {
       if (normalizedModelId.includes(modelPrefix)) {
@@ -346,12 +363,23 @@ function getBedrockPricing(normalizedModelId: string, region?: string): BedrockP
     }
   }
 
+  if (normalizedModelId.includes('anthropic.claude-sonnet-5')) {
+    return getClaudeSonnet5PricingPerMillion();
+  }
+
   for (const [modelPrefix, pricing] of Object.entries(BEDROCK_PRICING)) {
     if (normalizedModelId.includes(modelPrefix)) {
       return pricing;
     }
   }
   return undefined;
+}
+
+function hasPublishedRegionalPricing(normalizedModelId: string, region?: string): boolean {
+  const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
+  return regionPricing
+    ? Object.keys(regionPricing).some((modelPrefix) => normalizedModelId.includes(modelPrefix))
+    : false;
 }
 
 const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
@@ -375,8 +403,14 @@ export function calculateBedrockCost(
   cacheWriteTokens = 0,
   region?: string,
   serviceTier?: BedrockServiceTier,
+  cacheWrite1hTokens = 0,
 ): number | undefined {
   if (promptTokens === undefined || completionTokens === undefined) {
+    return undefined;
+  }
+  // Reserved throughput is billed as fixed monthly capacity per reserved TPM, not per token.
+  // The token-only response shape cannot represent that contract without inventing a rate.
+  if (serviceTier?.type === 'reserved') {
     return undefined;
   }
 
@@ -391,7 +425,9 @@ export function calculateBedrockCost(
   const isGlobalEndpoint =
     normalizedModelId.startsWith('global.') || normalizedModelId.includes('/global.');
   const endpointMultiplier =
-    isClaudeRegionalPremiumModel(normalizedModelId) && !isGlobalEndpoint
+    isClaudeRegionalPremiumModel(normalizedModelId) &&
+    !isGlobalEndpoint &&
+    !hasPublishedRegionalPricing(normalizedModelId, region)
       ? CLAUDE_REGIONAL_ENDPOINT_PREMIUM
       : 1;
   const serviceTierMultiplier =
@@ -399,7 +435,13 @@ export function calculateBedrockCost(
   const pricingMultiplier = endpointMultiplier * serviceTierMultiplier;
   const inputRate = (pricing.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
-    ? calculateCacheInputCost(inputRate, promptTokens, cacheReadTokens, cacheWriteTokens)
+    ? calculateCacheInputCost(
+        inputRate,
+        promptTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+        cacheWrite1hTokens,
+      )
     : promptTokens * inputRate;
   const outputCost = (completionTokens / 1_000_000) * pricing.output * pricingMultiplier;
   return inputCost + outputCost;
@@ -413,9 +455,9 @@ export function calculateBedrockCost(
  * reported Claude 5 cost. Keep that fail-closed behavior for legacy Runtime models instead of
  * emitting a plausible but incorrect cost.
  *
- * Claude 5 models (Fable 5, Mythos 5, Opus 5, and Sonnet 5) have verified Runtime rates, so they
- * report cost on the default `bedrock:` InvokeModel path — without this, `bedrock:anthropic.claude-opus-5`
- * reports token usage but `cost: 0`. Legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
+ * Claude 5 models have verified Runtime rates, so supported Runtime inference profiles report
+ * cost on InvokeModel. Bare Opus 5 routes through the Anthropic-compatible Messages endpoint;
+ * legacy Claude (e.g. Sonnet/Opus 4.x) stays fail-closed.
  */
 export function calculateBedrockInvokeModelCost(
   modelId: string,
@@ -424,6 +466,7 @@ export function calculateBedrockInvokeModelCost(
   cacheReadTokens = 0,
   cacheWriteTokens = 0,
   region?: string,
+  cacheWrite1hTokens = 0,
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
   if (
@@ -442,5 +485,7 @@ export function calculateBedrockInvokeModelCost(
     cacheReadTokens,
     cacheWriteTokens,
     region,
+    undefined,
+    cacheWrite1hTokens,
   );
 }

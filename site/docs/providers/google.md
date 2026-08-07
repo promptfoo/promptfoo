@@ -1,6 +1,6 @@
 ---
 sidebar_label: Google AI / Gemini
-description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for comprehensive multimodal LLM testing and evaluation
+description: Configure Google's Gemini models with support for text, images, and video inputs through Google AI Studio API for multimodal LLM testing and evaluation
 ---
 
 # Google AI / Gemini
@@ -110,7 +110,8 @@ prompt and completion pricing. The legacy `cost` option remains the shared fallb
 
 Create a simple `promptfooconfig.yaml`:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - google:gemini-2.5-flash
@@ -133,11 +134,11 @@ promptfoo eval
 
 ### 2. Comparing Models
 
-Compare different Gemini and Gemma models:
+Compare different Gemini models:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
   - google:gemini-3.5-flash
@@ -263,7 +264,7 @@ providers:
 
 # After (Vertex AI)
 providers:
-  - vertex:gemini-2.5-pro
+  - id: vertex:gemini-2.5-pro
     config:
       projectId: my-project-id
       region: us-central1
@@ -275,37 +276,70 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Chat and Multimodal Models
 
+- `google:gemini-3.6-flash` - Gemini 3.6 Flash GA model for efficient agentic and multimodal tasks ($1.50/1M input, $7.50/1M output)
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
-- `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.5-flash` - Gemini 3.5 Flash, a frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-3.5-flash-lite` - Gemini 3.5 Flash-Lite GA model for low-latency, high-volume automation ($0.30/1M input, $2.50/1M output)
+- `google:live:gemini-3.5-live-translate-preview` - Gemini 3.5 Live Translate for real-time audio-to-audio translation with text transcripts ($3.50/1M audio input, $21/1M audio output)
 - `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
+- `google:gemini-robotics-er-2-preview` - Gemini Robotics ER 2 through the Interactions API ($2/1M input, $10/1M output, $0.20/1M cached input)
+- `google:live:gemini-robotics-er-2-streaming-preview` - Gemini Robotics ER 2 Streaming through the Live API ($2/1M input, $10/1M text output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
+- `google:gemini-3.1-flash-tts-preview` - Current Gemini text-to-speech preview ($1/1M text input, $20/1M audio output)
 - `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
 - `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
 - `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
 - `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
 
+:::warning Gemini 2.5 shutdown
+
+Google will shut down the Gemini API endpoints for `gemini-2.5-pro`, `gemini-2.5-flash`, and
+`gemini-2.5-flash-lite` on October 16, 2026. Migrate respectively to
+`gemini-3.1-pro-preview`, `gemini-3.6-flash`, and `gemini-3.1-flash-lite`. These dates apply to
+Google AI Studio; check the separate [Vertex AI model lifecycle](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions)
+for Vertex deployments.
+
+:::
+
+Google has deprecated both Gemini 2.5 TTS preview models and recommends
+`gemini-3.1-flash-tts-preview` as their replacement. See Google's
+[model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations) for shutdown dates.
+
+This list describes current endpoints. Promptfoo may retain pricing for retired model IDs so saved
+evaluations can still be scored; historical pricing data does not mean that Google still serves an
+endpoint. Check Google's [model lifecycle page](https://ai.google.dev/gemini-api/docs/deprecations)
+before starting new work with an older ID.
+
+Google has announced May 7, 2027 as the earliest shutdown date for `gemini-3.1-flash-lite` and
+recommends `gemini-3.5-flash-lite` as its replacement. For Gemini 3.6 Flash and 3.5 Flash-Lite,
+Google documents a 1M-token input context, 64K maximum output, multimodal input, and its full set of
+built-in tools. Remove the deprecated `temperature`, `top_p`, and `top_k` sampling controls when
+migrating an existing configuration. See Google's
+[latest-model migration guide](https://ai.google.dev/gemini-api/docs/latest-model) for the complete
+behavior changes.
+
 ### Embedding Models
 
 Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
 
-- `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
-- `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
-- `google:embedding:gemini-embedding-2-preview` - Preview alias for Gemini Embedding 2 ($0.20/1M input tokens)
+- `google:embedding:gemini-embedding-2` - Recommended current Gemini API model. Multimodal upstream, with up to 8,192 text tokens and 3,072 output dimensions
+- `google:embedding:gemini-embedding-001` - Supported text-only model, with up to 2,048 input tokens and 3,072 output dimensions; scheduled to shut down May 14, 2028
+- `google:embedding:embedding-2-preview` - Deprecated preview ($0.20/1M input tokens); scheduled to shut down August 10, 2026 in favor of `gemini-embedding-2`
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
-- `taskType` - one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
 - `outputDimensionality` - truncates the returned vector (useful for storage cost)
-- `title` - document title, only applied with `taskType: RETRIEVAL_DOCUMENT`
+- `taskType` - `gemini-embedding-001` only; one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`. Gemini Embedding 2 uses task instructions in the input instead.
+- `title` - `gemini-embedding-001` only; document title applied with `taskType: RETRIEVAL_DOCUMENT`
 
 If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
 
@@ -359,13 +393,13 @@ Configuration options:
 
 ```yaml
 providers:
-  - google:image:imagen-3.0-generate-002
+  - id: google:image:imagen-3.0-generate-002
     config:
-      projectId: 'your-project-id'  # Or set GOOGLE_PROJECT_ID
-      region: 'us-central1'          # Optional, defaults to us-central1
+      projectId: 'your-project-id' # Or set GOOGLE_PROJECT_ID
+      region: 'us-central1' # Optional, defaults to us-central1
       aspectRatio: '16:9'
       seed: 42
-      addWatermark: false            # Must be false when using seed
+      addWatermark: false # Must be false when using seed
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
@@ -431,30 +465,85 @@ prompts:
 
 Video output is billed at $17.50/1M tokens (about $0.10/second at 720p); text and thinking output use the $9/1M rate.
 
+### Gemini Robotics ER
+
+Gemini Robotics ER 2 has separate standard and streaming endpoints. Both accept text, image, video,
+and audio input with 131,072 input tokens and 65,536 output tokens, but they expose different
+capabilities:
+
+| Promptfoo provider                                   | API          | Output | Supported model capabilities                                                          |
+| ---------------------------------------------------- | ------------ | ------ | ------------------------------------------------------------------------------------- |
+| `google:gemini-robotics-er-2-preview`                | Interactions | Text   | Caching, batch, code execution, file search, Maps/Search grounding, JSON, URL context |
+| `google:live:gemini-robotics-er-2-streaming-preview` | Live         | Text   | Real-time streaming, function calling, Search grounding, thinking                     |
+
+Promptfoo automatically routes the standard ID to the Interactions API. Managed Interactions-native
+tools can be supplied through `passthrough.tools`:
+
+```yaml
+providers:
+  - id: google:gemini-robotics-er-2-preview
+    config:
+      passthrough:
+        tools:
+          - type: google_search
+
+prompts:
+  - 'Locate the requested objects and return normalized [y, x] coordinates.'
+```
+
+Promptfoo does not currently execute custom function or computer-use tools for the Interactions
+route because those calls require a follow-up `requires_action` exchange. Tools with `type: function`
+or `type: computer_use` are rejected instead of returning an incomplete result; managed tools such
+as `google_search` remain supported.
+
+The standard endpoint costs $2/1M input tokens and $10/1M output tokens, including thinking. Cached
+input is $0.20/1M; batch processing is $1/1M input, $5/1M output, and $0.10/1M cached input. The
+streaming endpoint costs $2/1M input and $10/1M output and does not support caching or batch.
+
+:::warning
+Google will shut down `gemini-robotics-er-1.6-preview` on August 31, 2026. Replace it with
+`gemini-robotics-er-2-preview`, or use `google:live:gemini-robotics-er-2-streaming-preview` for
+low-latency streaming. `gemini-robotics-er-1.5-preview` shut down on April 30, 2026.
+:::
+
+See Google's [Gemini Robotics ER documentation](https://ai.google.dev/gemini-api/docs/robotics-overview)
+for capability details and safety guidance.
+
 ### Video Generation Models (Veo)
 
 Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix with `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google AI Studio. For explicit Vertex AI routing, use the `vertex:video:` prefix instead.
 
 #### Available Models
 
-| Model                                   | Description                                       | Duration Support |
-| --------------------------------------- | ------------------------------------------------- | ---------------- |
-| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 4, 6, 8 seconds  |
-| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                                | 4, 6, 8 seconds  |
-| `google:video:veo-3-generate`           | Veo 3.0 standard model                            | 4, 6, 8 seconds  |
-| `google:video:veo-3-fast`               | Veo 3.0 fast model                                | 4, 6, 8 seconds  |
-| `google:video:veo-2-generate`           | Veo 2.0 model                                     | 5, 6, 8 seconds  |
+| Model                                        | Description                                                                                               |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `google:video:veo-3.1-generate-preview`      | Veo 3.1 model ($0.40/second at 720p or 1080p; $0.60/second at 4k)                                         |
+| `google:video:veo-3.1-fast-generate-preview` | Fast Veo 3.1 model ($0.10/second at 720p, $0.12/second at 1080p, or $0.30/second at 4k)                   |
+| `google:video:veo-3.1-lite-generate-preview` | Lite Veo 3.1 model ($0.05/second at 720p or $0.08/second at 1080p; no 4k, reference images, or extension) |
+
+Promptfoo reports Veo 3.1 cost using Google's default video-with-audio rate for the generated
+duration and resolution. Google charges only when video generation succeeds.
+
+:::warning Retired Veo IDs
+
+Google shut down `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, and
+`veo-2.0-generate-001` on June 30, 2026. Migrate the standard and Veo 2 IDs to
+`veo-3.1-generate-preview`, and the Fast ID to `veo-3.1-fast-generate-preview`. Promptfoo still
+recognizes the retired IDs for configuration compatibility, but Google no longer serves them.
+
+:::
 
 #### Basic Usage
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
       # Uses GOOGLE_API_KEY / GEMINI_API_KEY by default
       aspectRatio: '16:9' # or '9:16'
-      resolution: '720p' # or '1080p'
-      durationSeconds: 6 # 4, 6, or 8 for Veo 3.x; 5, 6, or 8 for Veo 2
+      resolution: '720p' # 1080p/4k require 8 seconds
+      durationSeconds: 6 # 4, 6, or 8 seconds
 
 prompts:
   - 'Generate a video of {{subject}}'
@@ -465,23 +554,24 @@ tests:
 ```
 
 :::note
-`google:video:*` uses Google AI Studio by default and can auto-detect Vertex AI when project-based auth is configured. Existing project-based `google:video:*` configs remain compatible, but `vertex:video:*` is the recommended explicit path for Vertex-only flows like `extendVideoId`.
+`google:video:*` uses Google AI Studio by default and can auto-detect Vertex AI when project-based auth is configured. Existing project-based `google:video:*` configs remain compatible; use `vertex:video:*` when you want explicit Vertex AI routing.
 :::
 
 #### Configuration Options
 
-| Option             | Type   | Description                                                                                                 |
-| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------- |
-| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                              |
-| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                               |
-| `durationSeconds`  | number | Video duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2                                                      |
-| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                       |
-| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                    |
-| `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)                                              |
-| `image`            | string | Source image for image-to-video generation                                                                  |
-| `lastImage`        | string | End frame for interpolation (requires `image`)                                                              |
-| `extendVideoId`    | string | Operation ID from a previous Vertex Veo generation (Veo 3.1 only)                                           |
-| `sourceVideo`      | string | Source video input. In Google AI Studio use base64 or `file://`; in Vertex you can also use an operation ID |
+| Option             | Type   | Description                                                                                                                                                                                                                                                                                                                       |
+| ------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                                                                                                                                                                                                                                                    |
+| `resolution`       | string | `720p` (default), `1080p`, or `4k`; 4k support is model-specific. Google AI Studio extension is 720p-only. On Vertex, Veo 3.1 extension supports 1080p and, for 4k-capable models, 4k                                                                                                                                             |
+| `durationSeconds`  | number | Veo 3.x: 4, 6, or 8 seconds; Veo 2: 5, 6, or 8. Extension and reference images require 8 seconds. Google AI Studio also requires 8 seconds for 1080p/4k; Vertex permits 4 or 6 seconds at 1080p                                                                                                                                   |
+| `personGeneration` | string | Model-, mode-, and region-specific person generation control. For Gemini API Veo 3.1, use `allow_all` for text-to-video and extension, or `allow_adult` for image-to-video, interpolation, and reference images. In the EU, UK, Switzerland, and MENA, Veo 3 and 3.1 support only `allow_adult`. Veo 2 also supports `dont_allow` |
+| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                                                                                                                                                                                                                                          |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or objects; Veo 3.1 and 3.1 Fast, not Lite)                                                                                                                                                                                                                                                  |
+| `image`            | string | Source image for image-to-video generation                                                                                                                                                                                                                                                                                        |
+| `lastImage`        | string | End frame for interpolation (requires `image`)                                                                                                                                                                                                                                                                                    |
+| `extendVideoId`    | string | Deprecated alias for `sourceVideo`; despite the legacy name, pass the source video's URI rather than an operation ID                                                                                                                                                                                                              |
+| `sourceVideo`      | string | Source video input for Veo 3.1 extension. The Google AI Studio preview Lite model (`google:video:veo-3.1-lite-generate-preview`) does not support extension; the Preview Vertex model ID `vertex:video:veo-3.1-lite-generate-001` does. Use the prior generation's Gemini URI with AI Studio, or its `gs://` URI on Vertex AI     |
+| `storageUri`       | string | Vertex AI only. Cloud Storage destination for generated videos, in the form `gs://bucket/prefix/`. Promptfoo downloads the returned video into its blob store and exposes the exact returned `gcsUri` as `metadata.sourceVideoUri` for extension                                                                                  |
 
 #### Image-to-Video Generation
 
@@ -521,15 +611,16 @@ prompts:
 
 #### Video Extension (Veo 3.1 Only)
 
-Extend a previously generated Veo video using its operation ID:
+Extend a previously generated Veo video using its original Gemini API URI:
 
 ```yaml
 providers:
-  - id: vertex:video:veo-3.1-generate-preview
+  - id: google:video:veo-3.1-generate-preview
     config:
-      # Use the operation ID from a previous Veo generation
-      extendVideoId: projects/my-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/abc123
-      durationSeconds: 6
+      vertexai: false
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video
+      resolution: '720p'
+      durationSeconds: 8
 
 prompts:
   - 'Continue this video with {{continuation}}'
@@ -540,12 +631,37 @@ tests:
 ```
 
 :::note
-`extendVideoId` is a Vertex AI flow and requires an operation ID from a previous Veo generation. For Google AI Studio, pass base64 or a `file://` video via `sourceVideo` instead. Older `google:video:*` configs with project-based auth still work through Vertex auto-detection, but `vertex:video:*` is the clearer form.
+This example requires `GOOGLE_API_KEY` or `GEMINI_API_KEY` and explicitly uses the Google AI
+Studio route. The Gemini API only extends videos generated by Veo. Pass the prior video as
+`metadata.sourceVideoUri` when that field is present. Promptfoo includes it only when the
+completed generation exposes a reusable Gemini Files URI. Responses containing only inline
+bytes or a signed download URL are still saved to blob storage, but they cannot be extended
+and omit this field. Downloaded files, base64 bytes, and operation IDs are not accepted on this
+route. Gemini retains generated video URIs for two days, and referencing one for extension
+resets that retention window.
 :::
+
+For Vertex AI, set `storageUri` when generating the source video so Veo writes it to Cloud
+Storage:
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-001
+    config:
+      projectId: my-gcp-project
+      region: us-central1
+      storageUri: gs://my-video-bucket/veo-output/
+      durationSeconds: 8
+```
+
+Promptfoo downloads the generated video into its blob store as usual and returns the raw
+`gs://` object URI in `metadata.sourceVideoUri`. Use that value as `sourceVideo` in a subsequent
+`vertex:video:*` generation to extend the video. The configured Google Cloud identity must be
+able to access the destination bucket.
 
 #### Reference Images
 
-Use up to 3 reference images to guide video style (Veo 3.1 only):
+Use up to 3 reference images to guide video style (Veo 3.1 and 3.1 Fast, not Lite):
 
 ```yaml
 providers:
@@ -556,7 +672,7 @@ providers:
         - file://assets/style-ref-1.jpg
         - file://assets/style-ref-2.jpg
       aspectRatio: '16:9'
-      durationSeconds: 6
+      durationSeconds: 8
 ```
 
 You can also use the object format to specify the reference type:
@@ -728,7 +844,7 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ### Gemini 3.5 Flash
 
-The latest frontier Flash model, tuned for agentic and coding workloads:
+A frontier Flash model, tuned for agentic and coding workloads:
 
 ```yaml
 providers:
@@ -835,7 +951,7 @@ You can override providers in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -846,7 +962,7 @@ defaultTest:
           temperature: 0.7
       # Override embedding provider for similarity comparisons
       embedding:
-        id: google:embedding:gemini-embedding-001
+        id: google:embedding:gemini-embedding-2
 ```
 
 2. For individual assertions:
@@ -857,7 +973,7 @@ assert:
     value: Expected response
     threshold: 0.8
     provider:
-      id: google:embedding:gemini-embedding-001
+      id: google:embedding:gemini-embedding-2
 ```
 
 3. For specific tests:
@@ -871,7 +987,7 @@ tests:
         text:
           id: google:gemini-2.5-flash
         embedding:
-          id: google:embedding:gemini-embedding-001
+          id: google:embedding:gemini-embedding-2
     assert:
       - type: similar
         value: The answer is 4
@@ -1068,7 +1184,7 @@ For complete working examples of the search grounding, code execution, and url c
 
 ## Google Live API
 
-Promptfoo now supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
+Promptfoo supports Google's WebSocket-based Live API, which enables low-latency bidirectional voice and video interactions with Gemini models. This API provides real-time interactive capabilities beyond what's available in the standard REST API.
 
 ### Using the Live Provider
 
@@ -1085,6 +1201,54 @@ providers:
 ```
 
 Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+
+### Gemini Robotics ER 2 Streaming
+
+The Robotics streaming endpoint uses `v1beta` and returns text rather than generated audio:
+
+```yaml
+providers:
+  - id: google:live:gemini-robotics-er-2-streaming-preview
+    config:
+      generationConfig:
+        response_modalities: ['text']
+      timeoutMs: 30000
+```
+
+It supports text, image, video-frame, and raw PCM audio input plus function calling, Search grounding,
+and thinking. It does not support caching, code execution, computer use, file search, Maps grounding,
+structured output, or URL context.
+
+### Gemini 3.5 Live Translate
+
+Live Translate is an audio-only interpreter model. It requires `translationConfig`, uses the `v1beta`
+Live endpoint, and returns translated audio plus an optional transcript. Supply raw little-endian,
+16-bit mono PCM at 16 kHz; returned audio is 24 kHz. Text, images, video, tools, instructions,
+thinking, grounding, caching, batch, flex, and priority inference are not supported.
+
+```yaml
+providers:
+  - id: google:live:gemini-3.5-live-translate-preview
+    config:
+      generationConfig:
+        response_modalities: ['audio']
+        inputAudioTranscription: {}
+        outputAudioTranscription: {}
+        translationConfig:
+          targetLanguageCode: pl
+          echoTargetLanguage: true
+      timeoutMs: 30000
+
+prompts:
+  - |
+    [{"role":"user","parts":[{"inline_data":{"mime_type":"audio/pcm;rate=16000","data":"{{audio_base64}}"}}]}]
+```
+
+The model supports more than 70 languages with a 131,072-token input limit and 65,536-token output
+limit. Pricing is $3.50/1M audio input tokens and $21/1M audio output tokens, approximately $0.0368
+per minute at Google's stated 25 audio tokens per second. See Google's
+[Live Translation guide](https://ai.google.dev/gemini-api/docs/live-api/live-translate) for supported
+language codes and streaming details.
 
 ### Key Features
 
@@ -1139,7 +1303,7 @@ Where `tools.json` contains function declarations and built-in tools:
 
 ### Built-in Tools
 
-The current Google Live API model supports built-in Google Search:
+The Google Live API model supports built-in Google Search:
 
 1. **Google Search**: Perform real-time web searches
    ```json

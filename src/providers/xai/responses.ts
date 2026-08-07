@@ -8,16 +8,19 @@ import {
   renderVarsInObject,
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs } from '../shared';
 import {
+  assertXAIServiceTier,
   calculateXAICost,
   GROK_4_MODELS,
   GROK_45_MODELS,
   getXAICostInUsd,
   hasXAICostOverrides,
   type XAICostConfig,
+  type XAIServiceTier,
 } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -158,6 +161,8 @@ export interface XAIResponsesConfig extends XAICostConfig {
   stream?: boolean;
   /** Store response for later retrieval */
   store?: boolean;
+  /** Processing tier. Omitted and 'default' use standard processing; 'priority' requests priority processing. */
+  service_tier?: XAIServiceTier;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
   /** Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models */
@@ -210,7 +215,7 @@ export class XAIResponsesProvider implements ApiProvider {
       modelName: this.modelName,
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName, usage, config) => {
+      costCalculator: (modelName, usage, config, responseData) => {
         const reportedCost = hasXAICostOverrides(config) ? undefined : getXAICostInUsd(usage);
         return (
           reportedCost ??
@@ -223,6 +228,9 @@ export class XAIResponsesProvider implements ApiProvider {
               usage?.completion_tokens_details?.reasoning_tokens,
             usage?.input_tokens_details?.cached_tokens ??
               usage?.prompt_tokens_details?.cached_tokens,
+            {
+              serviceTier: responseData?.service_tier === 'priority' ? 'priority' : undefined,
+            },
           )
         );
       },
@@ -274,10 +282,12 @@ export class XAIResponsesProvider implements ApiProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ) {
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     // Parse input - can be string or array of messages
     let input;
@@ -332,8 +342,12 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.service_tier === undefined ? {} : { service_tier: config.service_tier }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined ? {} : { service_tier: effectiveServiceTier }),
     };
+
+    assertXAIServiceTier(body.service_tier);
 
     if (body.reasoning !== undefined) {
       body.reasoning = renderVarsInObject(body.reasoning, context?.vars);
@@ -362,6 +376,7 @@ export class XAIResponsesProvider implements ApiProvider {
       body,
       config: {
         ...config,
+        service_tier: effectiveServiceTier,
         tools: loadedTools,
         response_format: responseFormat,
       },

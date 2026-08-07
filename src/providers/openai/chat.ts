@@ -33,7 +33,10 @@ import { calculateOpenAIUsageCost } from './billing';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
+  normalizeOpenAiBillingModelName,
+  normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
 } from './util';
@@ -81,10 +84,14 @@ function getChatSearchCitations(
 }
 
 function getChatSearchSurcharge(modelName: string): number {
-  if (/(?:^|\/)gpt-5-search-api(?:-|$)/.test(modelName)) {
+  const billingModelName = normalizeOpenAiBillingModelName(modelName);
+  if (billingModelName.includes('/')) {
+    return 0;
+  }
+  if (/^gpt-5-search-api(?:-|$)/.test(billingModelName)) {
     return 0.01;
   }
-  if (/(?:^|\/)gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(modelName)) {
+  if (/^gpt-4o(?:-mini)?-search-preview(?:-|$)/.test(billingModelName)) {
     return 0.025;
   }
   return 0;
@@ -243,10 +250,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     // Merge configs from the provider and the prompt
+    const promptConfig = context?.prompt?.config;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     };
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -357,6 +366,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? {}
         : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
+      ...(effectiveServiceTier === undefined
+        ? {}
+        : {
+            service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
+          }),
       ...(capabilityModelName.includes('audio')
         ? {
             modalities: config.modalities || ['text', 'audio'],
@@ -378,9 +392,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
 
     // Add other basic parameters
-    if (config.service_tier) {
-      body.service_tier = config.service_tier;
-    }
     if (config.user) {
       body.user = config.user;
     }
@@ -398,7 +409,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       delete body.max_tokens;
     }
 
-    return { body, config };
+    return {
+      body,
+      config: {
+        ...config,
+        service_tier: effectiveServiceTier,
+      },
+    };
   }
 
   /**
@@ -415,7 +432,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const modelName =
       typeof passthroughModel === 'string' ? passthroughModel : this.getBillingModelName(config);
-    const billingModelName = modelName.split('/').pop() ?? modelName;
+    const billingModelName = normalizeOpenAiBillingModelName(modelName);
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
@@ -424,6 +441,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);
 
     return tokenCost === undefined ? searchCost || undefined : tokenCost + searchCost;
+  }
+
+  /**
+   * Extract provider-specific fields while the raw OpenAI-compatible response is still available.
+   */
+  protected getProviderResponseMetadata(_data: unknown): Record<string, unknown> {
+    return {};
   }
 
   async callApi(
@@ -613,6 +637,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
+      const providerMetadata = this.getProviderResponseMetadata(data);
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
@@ -628,6 +653,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -651,6 +677,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             flagged: true,
           },
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -800,6 +827,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             cost,
             guardrails: { flagged: contentFiltered },
             metadata: {
+              ...providerMetadata,
               http: {
                 status,
                 statusText,
@@ -837,6 +865,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           cost,
           guardrails: { flagged: contentFiltered },
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -858,6 +887,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         cost,
         guardrails: { flagged: contentFiltered },
         metadata: {
+          ...providerMetadata,
           http: {
             status,
             statusText,

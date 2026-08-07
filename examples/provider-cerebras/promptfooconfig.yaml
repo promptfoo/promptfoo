@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Evaluating Llama models for educational concept explanations
+description: Evaluating Cerebras models for educational concept explanations
 prompts:
   - file://prompts.txt
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
-  - id: cerebras:llama-3.3-70b
+  - id: cerebras:gemma-4-31b
     config:
       temperature: 0.5
       max_completion_tokens: 1024

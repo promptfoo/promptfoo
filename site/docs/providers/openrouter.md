@@ -14,31 +14,35 @@ description: "Access 300+ models through OpenRouter's unified API gateway with c
 
 ## Popular current models
 
-OpenRouter's catalog changes quickly. These are current popular and recent model IDs that work well as starting points. Context lengths are from the OpenRouter catalog at time of writing — check [OpenRouter Models](https://openrouter.ai/models) (or `GET /api/v1/models`) for live values.
+OpenRouter's catalog changes quickly. These are popular model IDs that work well as starting points. Context lengths are from the OpenRouter catalog — check [OpenRouter Models](https://openrouter.ai/models) (or `GET /api/v1/models`) for live values.
 
 | Model ID                                                                                                   | Context (tokens) | Good for                           |
 | ---------------------------------------------------------------------------------------------------------- | ---------------: | ---------------------------------- |
-| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     |        1,050,000 | Highest-quality general evaluation |
+| [openai/gpt-5.6-sol](https://openrouter.ai/openai/gpt-5.6-sol)                                             |        1,050,000 | Complex reasoning and coding       |
+| [openai/gpt-5.6-sol-pro](https://openrouter.ai/openai/gpt-5.6-sol-pro)                                     |        1,050,000 | Sol with Pro reasoning mode        |
+| [openai/gpt-5.6-terra](https://openrouter.ai/openai/gpt-5.6-terra)                                         |        1,050,000 | Balanced GPT-5.6 workloads         |
+| [openai/gpt-5.6-terra-pro](https://openrouter.ai/openai/gpt-5.6-terra-pro)                                 |        1,050,000 | Terra with Pro reasoning mode      |
+| [openai/gpt-5.6-luna](https://openrouter.ai/openai/gpt-5.6-luna)                                           |        1,050,000 | Efficient GPT-5.6 workloads        |
+| [openai/gpt-5.6-luna-pro](https://openrouter.ai/openai/gpt-5.6-luna-pro)                                   |        1,050,000 | Luna with Pro reasoning mode       |
+| [openai/gpt-5.4](https://openrouter.ai/openai/gpt-5.4)                                                     |        1,050,000 | Earlier flagship GPT-5 workflows   |
 | [anthropic/claude-opus-4.7](https://openrouter.ai/anthropic/claude-opus-4.7)                               |        1,000,000 | Long-running agentic workflows     |
-| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           |          400,000 | Fast, lower-cost GPT-5 workflows   |
+| [openai/gpt-5.4-mini](https://openrouter.ai/openai/gpt-5.4-mini)                                           |          400,000 | Earlier compact GPT-5 workflows    |
 | [anthropic/claude-haiku-4.5](https://openrouter.ai/anthropic/claude-haiku-4.5)                             |          200,000 | Lower-latency Claude runs          |
 | [google/gemini-2.5-pro](https://openrouter.ai/google/gemini-2.5-pro)                                       |        1,048,576 | Reasoning-heavy tasks              |
 | [google/gemini-2.5-flash](https://openrouter.ai/google/gemini-2.5-flash)                                   |        1,048,576 | Fast multimodal and general chat   |
 | [meta-llama/llama-4-maverick](https://openrouter.ai/meta-llama/llama-4-maverick)                           |        1,048,576 | Popular open-weight frontier model |
 | [deepseek/deepseek-v3.2](https://openrouter.ai/deepseek/deepseek-v3.2)                                     |          163,840 | Cost-efficient reasoning and tools |
-| [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) |          128,000 | Compact Mistral general use        |
-| [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     |           40,960 | Strong open multilingual model     |
+| [mistralai/mistral-small-3.2-24b-instruct](https://openrouter.ai/mistralai/mistral-small-3.2-24b-instruct) |          256,000 | Compact Mistral general use        |
+| [qwen/qwen3-32b](https://openrouter.ai/qwen/qwen3-32b)                                                     |          131,072 | Strong open multilingual model     |
 
-For the full catalog of 300+ models and current pricing, visit [OpenRouter Models](https://openrouter.ai/models).
+For the full catalog of 300+ models and pricing, visit [OpenRouter Models](https://openrouter.ai/models).
 
 ## Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - id: openrouter:openai/gpt-5.4
+  - id: openrouter:openai/gpt-5.6-sol
     config:
-      temperature: 0.7
       max_tokens: 1000
 
   - id: openrouter:anthropic/claude-opus-4.7
@@ -55,9 +59,9 @@ If you route OpenRouter traffic through a proxy or OpenRouter-compatible gateway
 
 The same pattern applies to `apiKeyEnvar` — set it to read your API key from a custom environment variable name (default `OPENROUTER_API_KEY`).
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: openrouter:openai/gpt-5.4
+  - id: openrouter:openai/gpt-5.6-sol
     config:
       apiBaseUrl: https://proxy.example.com/openrouter/api/v1
       apiKeyEnvar: MY_PROXY_KEY # optional: read the Bearer token from $MY_PROXY_KEY
@@ -75,7 +79,7 @@ providers:
 
 Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openrouter:google/gemini-2.5-pro
     config:

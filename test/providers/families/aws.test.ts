@@ -136,6 +136,37 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(AwsBedrockCompletionProvider);
   });
 
+  it.each(['anthropic.claude-opus-4-7', 'anthropic.claude-opus-4-8', 'anthropic.claude-opus-5'])(
+    'keeps %s on IAM-native routes with Messages as an explicit opt-in',
+    async (model) => {
+      const bare = await bedrockFactory.create(
+        `bedrock:${model}`,
+        { config: { region: 'us-east-1' } },
+        ctx,
+      );
+      const converse = await bedrockFactory.create(
+        `bedrock:converse:${model}`,
+        { config: { region: 'us-east-1' } },
+        ctx,
+      );
+      const completion = await bedrockFactory.create(
+        `bedrock:completion:${model}`,
+        { config: { region: 'us-east-1' } },
+        ctx,
+      );
+      const messages = await bedrockFactory.create(
+        `bedrock:messages:${model}`,
+        { config: { region: 'us-east-1', apiKey: 'bedrock-key' } },
+        ctx,
+      );
+
+      expect(bare).toBeInstanceOf(AwsBedrockCompletionProvider);
+      expect(converse).toBeInstanceOf(AwsBedrockConverseProvider);
+      expect(completion).toBeInstanceOf(AwsBedrockCompletionProvider);
+      expect(messages).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    },
+  );
+
   it('routes bare Mythos to the Bedrock Anthropic Messages endpoint', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:anthropic.claude-mythos-5',
@@ -147,6 +178,19 @@ describe('aws bedrock provider factory routing', () => {
       'https://bedrock-mantle.us-east-1.api.aws/anthropic',
     );
     expect(provider.id()).toBe('bedrock:anthropic.claude-mythos-5');
+  });
+
+  it('routes bare Mythos Preview to the Bedrock Anthropic Messages endpoint', async () => {
+    const model = 'anthropic.claude-mythos-preview';
+    const provider = await bedrockFactory.create(
+      `bedrock:${model}`,
+      { config: { region: 'us-east-1', apiKey: 'bedrock-key' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    expect((provider as any).getApiBaseUrl()).toBe(
+      'https://bedrock-mantle.us-east-1.api.aws/anthropic',
+    );
   });
 
   it('supports the explicit messages form for Bedrock Fable', async () => {
@@ -161,6 +205,19 @@ describe('aws bedrock provider factory routing', () => {
   it('supports the explicit messages form for Bedrock Mythos', async () => {
     const provider = await bedrockFactory.create(
       'bedrock:messages:anthropic.claude-mythos-5',
+      { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
+      ctx,
+    );
+    expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+  });
+
+  it.each([
+    'anthropic.claude-mythos-preview',
+    'anthropic.claude-opus-4-7',
+    'anthropic.claude-opus-4-8',
+  ])('supports the explicit messages form for Bedrock %s', async (model) => {
+    const provider = await bedrockFactory.create(
+      `bedrock:messages:${model}`,
       { config: { apiKey: 'bedrock-key', region: 'us-east-1' } },
       ctx,
     );
@@ -204,7 +261,7 @@ describe('aws bedrock provider factory routing', () => {
   it('rejects unknown Anthropic Messages models instead of falling through to InvokeModel', async () => {
     await expect(
       bedrockFactory.create(
-        'bedrock:messages:anthropic.claude-opus-4-8',
+        'bedrock:messages:anthropic.claude-sonnet-4-6',
         { config: { apiKey: 'bedrock-key' } },
         ctx,
       ),

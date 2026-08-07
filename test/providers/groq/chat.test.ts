@@ -130,6 +130,23 @@ describe('GroqProvider', () => {
   });
 
   describe('getOpenAiBody', () => {
+    it('accepts Groq Chat service tiers and rejects non-Chat tiers', async () => {
+      for (const service_tier of ['auto', 'on_demand', 'flex', 'performance'] as const) {
+        const provider = new GroqProvider('openai/gpt-oss-120b', {
+          config: { service_tier },
+        });
+
+        expect((await provider.getOpenAiBody('Test prompt')).body.service_tier).toBe(service_tier);
+      }
+
+      const provider = new GroqProvider('openai/gpt-oss-120b', {
+        config: { service_tier: 'priority' as any },
+      });
+      await expect(provider.getOpenAiBody('Test prompt')).rejects.toThrow(
+        'Invalid Groq Chat Completions service_tier "priority"',
+      );
+    });
+
     it('should include reasoning_format when configured', async () => {
       const provider = new GroqProvider('openai/gpt-oss-120b', {
         config: {

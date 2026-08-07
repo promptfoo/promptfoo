@@ -121,7 +121,138 @@ describe('DEEPSEEK_CHAT_MODELS', () => {
 });
 
 describe('createDeepSeekProvider', () => {
-  it('should preserve the historical non-thinking default', () => {
-    expect(createDeepSeekProvider('deepseek').id()).toBe('deepseek:deepseek-chat');
+  it('uses DeepSeek native cache-hit usage when calculating V4 cost', () => {
+    const provider = createDeepSeekProvider('deepseek:deepseek-v4-pro') as unknown as {
+      calculateResponseCost(
+        data: Record<string, unknown>,
+        config: Record<string, unknown>,
+        cached: boolean,
+      ): number | undefined;
+    };
+
+    const cost = provider.calculateResponseCost(
+      {
+        usage: {
+          prompt_tokens: 1_000_000,
+          completion_tokens: 500_000,
+          prompt_cache_hit_tokens: 400_000,
+          prompt_cache_miss_tokens: 600_000,
+        },
+      },
+      {},
+      false,
+    );
+
+    expect(cost).toBeCloseTo(0.69745);
+  });
+
+  it('falls back to OpenAI-style cached-token usage for compatible gateways', () => {
+    const provider = createDeepSeekProvider('deepseek:deepseek-v4-pro') as unknown as {
+      calculateResponseCost(
+        data: Record<string, unknown>,
+        config: Record<string, unknown>,
+        cached: boolean,
+      ): number | undefined;
+    };
+
+    const cost = provider.calculateResponseCost(
+      {
+        usage: {
+          prompt_tokens: 1_000_000,
+          completion_tokens: 500_000,
+          prompt_tokens_details: { cached_tokens: 400_000 },
+        },
+      },
+      {},
+      false,
+    );
+
+    expect(cost).toBeCloseTo(0.69745);
+  });
+
+  it('should use the current V4 Flash model by default', () => {
+    expect(createDeepSeekProvider('deepseek').id()).toBe('deepseek:deepseek-v4-flash');
+  });
+
+  it('should preserve non-thinking behavior for the bare provider default', async () => {
+    const provider = createDeepSeekProvider('deepseek:');
+    const { body } = await (
+      provider as unknown as {
+        getOpenAiBody(prompt: string): Promise<{ body: Record<string, unknown> }>;
+      }
+    ).getOpenAiBody('hello');
+
+    expect(body.thinking).toEqual({ type: 'disabled' });
+  });
+
+  it('should keep the upstream thinking default for an explicit V4 model', async () => {
+    const provider = createDeepSeekProvider('deepseek:deepseek-v4-flash');
+    const { body } = await (
+      provider as unknown as {
+        getOpenAiBody(prompt: string): Promise<{ body: Record<string, unknown> }>;
+      }
+    ).getOpenAiBody('hello');
+
+    expect(body).not.toHaveProperty('thinking');
+  });
+
+  it('should keep the upstream thinking default for a passthrough model override', async () => {
+    const provider = createDeepSeekProvider('deepseek:', {
+      config: {
+        config: {
+          passthrough: { model: 'deepseek-v4-pro' },
+        },
+      },
+    });
+    const { body } = await (
+      provider as unknown as {
+        getOpenAiBody(prompt: string): Promise<{ body: Record<string, unknown> }>;
+      }
+    ).getOpenAiBody('hello');
+
+    expect(body.model).toBe('deepseek-v4-pro');
+    expect(body).not.toHaveProperty('thinking');
+  });
+
+  it('should preserve an explicit thinking override on the bare provider', async () => {
+    const provider = createDeepSeekProvider('deepseek:', {
+      config: {
+        config: {
+          passthrough: {
+            thinking: { type: 'enabled' },
+          },
+        },
+      },
+    });
+    const { body } = await (
+      provider as unknown as {
+        getOpenAiBody(prompt: string): Promise<{ body: Record<string, unknown> }>;
+      }
+    ).getOpenAiBody('hello');
+
+    expect(body.thinking).toEqual({ type: 'enabled' });
+  });
+
+  it('should keep the bare default when prompt passthrough replaces provider passthrough', async () => {
+    const provider = createDeepSeekProvider('deepseek:', {
+      config: {
+        config: {
+          passthrough: { trace_id: 'provider-trace' },
+        },
+      },
+    });
+    const { body } = await (
+      provider as unknown as {
+        getOpenAiBody(
+          prompt: string,
+          context: { prompt: { config: { passthrough: { trace_id: string } } } },
+        ): Promise<{ body: Record<string, unknown> }>;
+      }
+    ).getOpenAiBody('hello', {
+      prompt: { config: { passthrough: { trace_id: 'prompt-trace' } } },
+    });
+
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.trace_id).toBe('prompt-trace');
   });
 });

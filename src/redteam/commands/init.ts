@@ -305,8 +305,8 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
-      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
+      { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
+      { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
       {
         name: 'anthropic:claude-fable-5',
         value: 'anthropic:messages:claude-fable-5',
@@ -358,7 +358,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-5-mini', label }];
+      providers = [{ id: 'openai:gpt-5.6', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
     }

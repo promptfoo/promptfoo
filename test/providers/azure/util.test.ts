@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AZURE_MODELS } from '../../../src/providers/azure/defaults';
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
@@ -12,6 +12,10 @@ describe('throwConfigurationError', () => {
 });
 
 describe('calculateAzureCost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('calculates cost for valid model and tokens', () => {
     const cost = calculateAzureCost(
       'gpt-5.4',
@@ -73,13 +77,12 @@ describe('calculateAzureCost', () => {
     { id: 'gpt-5.6-sol', input: 5, output: 30, longInput: 10, longOutput: 45 },
     { id: 'gpt-5.6-terra', input: 2.5, output: 15, longInput: 5, longOutput: 22.5 },
     { id: 'gpt-5.6-luna', input: 1, output: 6, longInput: 2, longOutput: 9 },
-    { id: 'gpt-5.5-pro', input: 30, output: 180, longInput: 60, longOutput: 270 },
     {
-      id: 'gpt-5.5-pro-2026-04-23',
-      input: 30,
-      output: 180,
-      longInput: 60,
-      longOutput: 270,
+      id: 'gpt-5.5-2026-04-24',
+      input: 5,
+      output: 30,
+      longInput: 10,
+      longOutput: 45,
     },
   ])(
     'uses the correct standard and long-context pricing for $id',
@@ -133,22 +136,13 @@ describe('calculateAzureCost', () => {
       longOutput: 9,
     },
     {
-      id: 'gpt-5.5-pro',
-      input: 30,
-      cached: 3,
-      output: 180,
-      longInput: 60,
-      longCached: 6,
-      longOutput: 270,
-    },
-    {
-      id: 'gpt-5.5-pro-2026-04-23',
-      input: 30,
-      cached: 3,
-      output: 180,
-      longInput: 60,
-      longCached: 6,
-      longOutput: 270,
+      id: 'gpt-5.5-2026-04-24',
+      input: 5,
+      cached: 0.5,
+      output: 30,
+      longInput: 10,
+      longCached: 1,
+      longOutput: 45,
     },
   ])(
     'uses the correct cached-input rate for $id',
@@ -330,8 +324,17 @@ describe('calculateAzureCost', () => {
     ['gpt-5-chat-2025-10-03', 0.125],
     ['gpt-5-codex-2025-09-15', 0.125],
     ['gpt-5.5', 0.5],
+    ['gpt-5.5-2026-04-24', 0.5],
+    ['gpt-chat-latest', 0.5],
+    ['gpt-chat-latest-2026-06-24', 0.5],
+    ['gpt-chat-latest-2026-05-28', 0.5],
+    ['gpt-chat-latest-2026-05-05', 0.5],
     ['gpt-5.4', 0.25],
     ['gpt-5.2-2025-12-11', 0.175],
+    ['gpt-5.2-chat-2026-02-10', 0.175],
+    ['gpt-5.2-codex-2026-01-14', 0.175],
+    ['gpt-5.3-chat-2026-03-03', 0.175],
+    ['gpt-5.3-codex-2026-02-24', 0.175],
     ['gpt-5.1-codex-mini-2025-11-13', 0.025],
     ['gpt-4.1', 0.5],
     ['gpt-4.1-mini', 0.1],
@@ -339,6 +342,8 @@ describe('calculateAzureCost', () => {
     ['gpt-4o', 1.25],
     ['o4-mini', 0.275],
     ['o3-mini', 0.55],
+    ['claude-mythos-5', 1],
+    ['claude-mythos-preview', 2.5],
     ['claude-opus-4-6-20260205', 0.5],
   ])('uses the catalog cached-input rate for %s', (id, cachedInput) => {
     expect(calculateAzureCost(id, {}, 1_000, 0, 1_000)).toBeCloseTo(
@@ -389,6 +394,17 @@ describe('calculateAzureCost', () => {
         500,
       ),
     ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+    for (const modelName of ['gpt-5.2-chat-2026-02-10', 'gpt-5.3-chat-2026-03-03']) {
+      expect(
+        calculateAzureCost(
+          modelName,
+          { passthrough: { service_tier: 'priority' } },
+          2_000,
+          1_000,
+          500,
+        ),
+      ).toBeCloseTo((2 * (1_500 * 1.75 + 500 * 0.175 + 1_000 * 14)) / 1e6, 12);
+    }
   });
 
   it.each([
@@ -540,9 +556,42 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });
 
+  it('uses Claude Sonnet 5 promotional and cache-read pricing through August 31', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+
+    const defaults = AZURE_MODELS.find(({ id }) => id === 'claude-sonnet-5');
+    expect(defaults?.cost.input).toBe(2 / 1e6);
+    expect(defaults?.cost.output).toBe(10 / 1e6);
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1_000_000, 1_000_000, 250_000)).toBeCloseTo(
+      11.55,
+      12,
+    );
+  });
+
+  it('switches Claude Sonnet 5 standard and cache-read pricing on September 1', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-01T00:00:00.000Z'));
+
+    expect(calculateAzureCost('claude-sonnet-5', {}, 1_000_000, 1_000_000, 250_000)).toBeCloseTo(
+      17.325,
+      12,
+    );
+  });
+
   it('returns undefined for unknown model', () => {
     const cost = calculateAzureCost('unknown-model', {}, 100, 50);
     expect(cost).toBeUndefined();
+  });
+
+  it.each([
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    'gpt-5-chat-latest',
+  ])('does not price unpublished Azure model id %s', (id) => {
+    expect(AZURE_MODELS.some((model) => model.id === id)).toBe(false);
+    expect(calculateAzureCost(id, {}, 100, 50)).toBeUndefined();
   });
 
   it('calculates cost for Microsoft MAI image models from output tokens', () => {
@@ -752,11 +801,16 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.6-terra', 2.5, 15],
     ['gpt-5.6-luna', 1, 6],
     ['gpt-5.5', 5, 30],
-    ['gpt-5.5-pro', 30, 180],
-    ['gpt-5.5-pro-2026-04-23', 30, 180],
+    ['gpt-5.5-2026-04-24', 5, 30],
+    ['gpt-chat-latest', 5, 30],
+    ['gpt-chat-latest-2026-06-24', 5, 30],
+    ['gpt-chat-latest-2026-05-28', 5, 30],
+    ['gpt-chat-latest-2026-05-05', 5, 30],
     ['gpt-5.2', 1.75, 14],
-    ['gpt-5.2-pro', 21, 168],
-    ['gpt-5.2-pro-2025-12-11', 21, 168],
+    ['gpt-5.2-chat-2026-02-10', 1.75, 14],
+    ['gpt-5.2-codex-2026-01-14', 1.75, 14],
+    ['gpt-5.3-chat-2026-03-03', 1.75, 14],
+    ['gpt-5.3-codex-2026-02-24', 1.75, 14],
     ['gpt-5.1-codex-max', 1.25, 10],
     ['gpt-5', 1.25, 10],
     ['gpt-5-pro', 15, 120],
@@ -772,6 +826,8 @@ describe('AZURE_MODELS cost coverage', () => {
     ['gpt-5.4-mini', 0.75, 4.5],
     ['gpt-5.4-nano', 0.2, 1.25],
     ['Phi-4-multimodal-instruct', 0.08, 0.32],
+    ['claude-mythos-5', 10, 50],
+    ['claude-mythos-preview', 25, 125],
     ['claude-haiku-4-5', 1, 5],
     ['claude-haiku-4-5-20251001', 1, 5],
     ['o3', 2, 8],
@@ -787,11 +843,16 @@ describe('AZURE_MODELS cost coverage', () => {
     ['grok-code-fast-1', 0.2, 1.5],
     ['grok-4.3', 1.25, 2.5],
     ['grok-4-1-fast-reasoning', 0.2, 0.5],
+    ['grok-4-fast-reasoning', 0.2, 0.5],
+    ['grok-4-fast-non-reasoning', 0.2, 0.5],
+    ['grok-3-mini', 0.25, 1.27],
     ['Kimi-K2-Thinking', 0.6, 2.5],
     ['Kimi-K2.6', 0.95, 4],
     ['DeepSeek-V3.2', 0.58, 1.68],
     ['DeepSeek-V4-Pro', 1.74, 3.48],
     ['gpt-oss-120b', 0.15, 0.6],
+    ['mistral-medium-3-5', 1.5, 7.5],
+    ['Cohere-command-a-plus-05-2026', 0.8, 3.2],
     ['Phi-3-medium-4k-instruct', 0.17, 0.68],
   ])('prices %s at exactly %d in / %d out per 1M', (id, inputPerM, outputPerM) => {
     expect(calculateAzureCost(id, {}, 100_000, 0)).toBeCloseTo((inputPerM as number) / 10, 9);

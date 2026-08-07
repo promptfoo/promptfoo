@@ -188,7 +188,7 @@ describe('redteamInit', () => {
     vi.mocked(select)
       .mockResolvedValueOnce('prompt_model_chatbot')
       .mockResolvedValueOnce('now')
-      .mockResolvedValueOnce('openai:gpt-5-mini')
+      .mockResolvedValueOnce('openai:gpt-5.6')
       .mockResolvedValueOnce('default')
       .mockResolvedValueOnce('default');
     vi.mocked(editor).mockResolvedValue('User query: {{prompt}}');

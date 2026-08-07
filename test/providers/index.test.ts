@@ -54,6 +54,7 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { ProviderSchemas } from '../../src/types/api/providers';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
@@ -859,10 +860,26 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with vertex:video:modelname', async () => {
-    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-001');
     expect(provider).toBeInstanceOf(GoogleVideoProvider);
-    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
+
+  it.each(['google:video:veo-3.1-generate-preview', 'vertex:video:veo-3.1-generate-001'])(
+    'preserves an explicit basePath when loading %s',
+    async (providerPath) => {
+      const provider = (await loadApiProvider(providerPath, {
+        basePath: '/config-directory',
+        options: {
+          config: {
+            basePath: '/explicit-media-directory',
+          },
+        },
+      })) as GoogleVideoProvider;
+
+      expect(provider.config.basePath).toBe('/explicit-media-directory');
+    },
+  );
 
   it('loadApiProvider with replicate:modelname', async () => {
     const provider = await loadApiProvider('replicate:meta/llama3');
@@ -1386,6 +1403,28 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('preserves and renders the Cohere Model Vault URL through provider-test schemas', async () => {
+    const providerOptions = {
+      id: 'cohere:chat:command-a-03-2025',
+      env: {
+        COHERE_API_BASE_URL: 'https://vault.example.com',
+      },
+      config: {
+        apiBaseUrl: '{{ env.COHERE_API_BASE_URL }}',
+      },
+    };
+    const parsedOptions = [
+      ProviderSchemas.Test.Request.parse({ providerOptions }).providerOptions,
+      ProviderSchemas.TestSession.Request.parse({ provider: providerOptions }).provider,
+    ];
+
+    for (const options of parsedOptions) {
+      expect.soft(options.env?.COHERE_API_BASE_URL).toBe('https://vault.example.com');
+      const provider = await loadApiProvider(options.id, { options });
+      expect.soft(provider.config.apiBaseUrl).toBe('https://vault.example.com');
+    }
   });
 
   it('passes provider env overrides to provider instances', async () => {

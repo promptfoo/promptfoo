@@ -1,7 +1,7 @@
 ---
 title: OpenAI
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.6, GPT-5.5, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.6, GPT-5.5, GPT-4.1, o-series reasoning, embeddings, and assistants for AI evals'
 ---
 
 # OpenAI
@@ -31,7 +31,7 @@ The OpenAI provider supports the following model formats:
 - `openai:transcription:<model name>` - uses audio transcription models
 - `openai:tts` / `openai:speech` - defaults to `gpt-4o-mini-tts` on the audio speech endpoint
 - `openai:tts:<model name>` / `openai:speech:<model name>` - uses text-to-speech models
-- `openai:realtime` - defaults to `gpt-realtime-1.5`
+- `openai:realtime` - defaults to `gpt-realtime-2.1`
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 - `openai:video:<model name>` - uses Sora video generation models
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
@@ -57,7 +57,7 @@ providers:
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts), such as `temperature`, `max_tokens`, `max_completion_tokens`, `functions`, and `tools`, which can be used to customize model behavior like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
@@ -82,7 +82,7 @@ For information on setting up chat conversation, see [chat threads](/docs/config
 
 The `providers` list takes a `config` key that allows you to set parameters like `temperature` for non-reasoning models, `max_tokens`, `max_completion_tokens` for GPT-5 family chat models, and [others](https://platform.openai.com/docs/api-reference/chat/create). For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-4.1-mini
     config:
@@ -114,7 +114,7 @@ Supported parameters include:
 | `audioCost`              | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                 |
 | `audioInputCost`         | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                                                             |
 | `audioOutputCost`        | Override audio output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                                                            |
-| `max_tokens`             | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                                                                           |
+| `max_tokens`             | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `gpt-5-codex-mini`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                                                                            |
 | `maxRetries`             | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries. Hard-quota responses (`insufficient_quota`, `billing_hard_limit_reached`, `access_terminated`, etc.) are never retried regardless of this setting — retrying an exhausted account only amplifies load.                                                |
 | `metadata`               | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                                                                                       |
 | `omitDefaults`           | Omits hardcoded defaults for `temperature` and `max_tokens`/`max_output_tokens` unless values are explicitly set via config or environment variables. Supported by `openai:chat` and `openai:responses`.                                                                                                                                                    |
@@ -127,9 +127,10 @@ Supported parameters include:
 | `reasoning`              | Reasoning configuration object for reasoning-capable models. In practice, use this with the Responses API (`openai:responses:*`) for o-series and GPT-5 family models. `effort` supports `none`, `low`, `medium`, `high`, and model-specific values such as `minimal`, `xhigh`, or `max`, with optional `summary`, persisted `context`, and GPT-5.6 `mode`. |
 | `response_format`        | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                                                                                       |
 | `seed`                   | Seed used for deterministic output.                                                                                                                                                                                                                                                                                                                         |
+| `service_tier`           | Processing tier for supported models. Use `fast` for Fast mode; Promptfoo sends it to OpenAI as the canonical `priority` API value. You can also configure `priority` directly.                                                                                                                                                                             |
 | `stop`                   | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                                                                                 |
 | `store`                  | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                                                                           |
-| `temperature`            | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because it is unsupported by many of those models.                                                                                                                                   |
+| `temperature`            | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `gpt-5-codex-mini`, and GPT-5 family) because it is unsupported by many of those models.                                                                                                                                    |
 | `tool_choice`            | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                                                                   |
 | `tools`                  | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                                                                           |
 | `top_p`                  | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                                                                               |
@@ -139,6 +140,10 @@ Supported parameters include:
 Use `inputCost` and `outputCost` when a model has different prompt and completion rates.
 The legacy `cost` option remains a shared fallback. For audio-capable models,
 `audioInputCost` and `audioOutputCost` take precedence over `audioCost`.
+
+Promptfoo recognizes OpenAI's current first-party regional hosts (`us`, `eu`, `au`, `ca`, `jp`,
+`in`, `sg`, `kr`, `gb`, and `ae` under `*.api.openai.com`). They receive the same model lifecycle,
+endpoint compatibility, and `fast`-to-`priority` service-tier handling as `api.openai.com`.
 
 Here are the type declarations of `config` parameters:
 
@@ -240,7 +245,7 @@ Fine-tuned model IDs can be used with their corresponding endpoint, for example
 `openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name::ID` or
 `openai:completion:ft:babbage-002:company-name::ID`. Promptfoo recognizes the published
 inference rates for fine-tuned GPT-4.1, GPT-4o, GPT-3.5, GPT-4, o4-mini, Babbage, and Davinci
-bases, including cached-input and Batch rates where available. Flex and Priority pricing is not
+bases, including cached-input and Batch rates where available. Flex and Fast pricing is not
 inferred for fine-tuned models. See the
 [OpenAI supervised fine-tuning guide](https://developers.openai.com/api/docs/guides/supervised-fine-tuning)
 for currently supported training bases and lifecycle information.
@@ -298,14 +303,14 @@ GPT-5.1 is a GPT-5 family model that emphasizes coding, agentic tasks, and more 
 
 #### Available Models
 
-| Model               | Description                                        | Best For                                    |
-| ------------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1             | Primary GPT-5.1 model                              | Complex reasoning and broad world knowledge |
-| gpt-5.1-2025-11-13  | Dated snapshot version                             | Locked behavior for production              |
-| gpt-5.1-codex       | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
-| gpt-5.1-codex-max   | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
-| gpt-5.1-codex-mini  | Cost-efficient GPT-5.1 coding model                | High-throughput coding tasks                |
-| gpt-5.1-chat-latest | Chat-optimized alias                               | Conversational applications                 |
+| Model               | Description            | Best For                                    |
+| ------------------- | ---------------------- | ------------------------------------------- |
+| gpt-5.1             | Primary GPT-5.1 model  | Complex reasoning and broad world knowledge |
+| gpt-5.1-2025-11-13  | Dated snapshot version | Locked behavior for production              |
+| gpt-5.1-codex       | Retired July 23, 2026  | Historical evals only                       |
+| gpt-5.1-codex-max   | Retired July 23, 2026  | Historical evals only                       |
+| gpt-5.1-codex-mini  | Retired July 23, 2026  | Historical evals only                       |
+| gpt-5.1-chat-latest | Retired July 23, 2026  | Historical evals only                       |
 
 The GPT-5.1 Codex variants are Responses-only models. Use `openai:responses:<model>` (or the
 bare `openai:<model>` shorthand) instead of Chat Completions.
@@ -322,7 +327,7 @@ GPT-5.1 introduces several improvements over GPT-5:
 
 Fast, low-latency responses:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -333,7 +338,7 @@ providers:
 
 Complex coding and reasoning tasks:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -366,6 +371,11 @@ For tasks requiring reasoning, start with `medium` effort and increase to `high`
 
 GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated foundational reasoning model trained on agentic tasks across software engineering, math, research, and more. It's designed for long-running, detailed coding work.
 
+:::warning
+OpenAI shut down GPT-5.1-Codex-Max on July 23, 2026. Keep this section only for interpreting
+historical eval configurations; use a current GPT-5.6 model for new evals.
+:::
+
 #### Key Capabilities
 
 - **Compaction**: First model natively trained to operate across multiple context windows through compaction, coherently working over millions of tokens in a single task
@@ -376,7 +386,7 @@ GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1-codex-max
     config:
@@ -387,7 +397,7 @@ providers:
 
 For latency-insensitive tasks requiring maximum quality:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1-codex-max
     config:
@@ -423,6 +433,12 @@ GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and
 
 GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard and pro variants.
 
+:::warning Scheduled retirement
+OpenAI has deprecated `gpt-5.2-chat-latest` and scheduled it to shut down on August 10, 2026.
+Migrate chat evals to `gpt-5.6-sol` (or the `gpt-5.6` alias). Other GPT-5.2 API models remain
+available unless OpenAI lists a separate retirement.
+:::
+
 #### Available Models
 
 | Model                  | Description                     | Best For                           |
@@ -430,7 +446,7 @@ GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard
 | gpt-5.2                | Standard GPT-5.2 model          | Complex reasoning and coding tasks |
 | gpt-5.2-2025-12-11     | Snapshot version                | Locked behavior for production     |
 | gpt-5.2-chat-latest    | Chat-optimized alias            | Conversational applications        |
-| gpt-5.2-codex          | GPT-5.2 coding variant          | Agentic coding workflows           |
+| gpt-5.2-codex          | Retired July 23, 2026           | Historical evals only              |
 | gpt-5.2-pro            | Premium GPT-5.2 model           | Highest-quality reasoning tasks    |
 | gpt-5.2-pro-2025-12-11 | Snapshot version of GPT-5.2-pro | Locked behavior for production     |
 
@@ -439,16 +455,16 @@ GPT-5.2 is a GPT-5 family model for coding and agentic tasks, with both standard
 - **Context window**: 400,000 tokens
 - **Max output tokens**: 128,000 tokens
 - **Reasoning support**: Full reasoning token support with configurable effort levels
-- **Pricing (`gpt-5.2`, `gpt-5.2-chat-latest`, `gpt-5.2-codex`)**: $1.75 per 1M input tokens, $14 per 1M output tokens
+- **Pricing (`gpt-5.2`, `gpt-5.2-chat-latest`)**: $1.75 per 1M input tokens, $14 per 1M output tokens
 - **Pricing (`gpt-5.2-pro`)**: $21 per 1M input tokens, $168 per 1M output tokens
 
 #### Usage Examples
 
-Standard GPT-5.2 and its chat alias are available via both the Chat Completions API and Responses API. GPT-5.2 Codex and Pro are Responses-only:
+Standard GPT-5.2 and its chat alias are available via both the Chat Completions API and Responses API. GPT-5.2 Pro is Responses-only; GPT-5.2 Codex was retired on July 23, 2026:
 
 **Chat Completions API:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.2-chat-latest
     config:
@@ -463,9 +479,9 @@ providers:
 
 **Responses API:**
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: openai:responses:gpt-5.2-codex
+  - id: openai:responses:gpt-5.2
     config:
       max_output_tokens: 4096
 
@@ -479,7 +495,7 @@ providers:
 
 Fast, low-latency responses (no reasoning):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Chat API
   - id: openai:chat:gpt-5.2
@@ -498,7 +514,7 @@ providers:
 GPT-5.2-pro (including dated snapshots) is Responses-only and supports `medium`, `high`, and
 `xhigh` reasoning effort; `none` and `low` are rejected by the API:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.2-pro
     config:
@@ -525,6 +541,12 @@ providers:
 
 GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
 
+:::warning Scheduled retirement
+OpenAI has deprecated `gpt-5.3-chat-latest` and scheduled it to shut down on August 10, 2026.
+Migrate chat evals to `gpt-5.6-sol` (or the `gpt-5.6` alias). `gpt-5.3-codex` is also deprecated
+for Codex with ChatGPT sign-in, though API-key access may remain available.
+:::
+
 #### Available Models
 
 | Model               | Description          | Pricing (Input / Output)  |
@@ -539,7 +561,7 @@ GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.3-chat-latest
     config:
@@ -569,14 +591,14 @@ the explicit `openai:chat:` or `openai:responses:` prefix when endpoint selectio
 | Model           | Tier                    | Input      | Cached input | Output      |
 | --------------- | ----------------------- | ---------- | ------------ | ----------- |
 | `gpt-5.6-sol`   | Flagship                | $5.00 / 1M | $0.50 / 1M   | $30.00 / 1M |
-| `gpt-5.6-terra` | Balanced                | $2.50 / 1M | $0.25 / 1M   | $15.00 / 1M |
-| `gpt-5.6-luna`  | Fast and cost-efficient | $1.00 / 1M | $0.10 / 1M   | $6.00 / 1M  |
+| `gpt-5.6-terra` | Balanced                | $2.00 / 1M | $0.20 / 1M   | $12.00 / 1M |
+| `gpt-5.6-luna`  | Fast and cost-efficient | $0.20 / 1M | $0.02 / 1M   | $1.20 / 1M  |
 
 GPT-5.6 supports `max` reasoning and `reasoning.mode: pro` across Sol, Terra, and Luna. Codex `ultra` is available for Sol and Terra through the [Codex SDK](/docs/providers/openai-codex-sdk) or [Codex app-server](/docs/providers/openai-codex-app-server) provider as a multi-agent mode, not a Responses API reasoning value.
 
-Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Priority processing does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
+Prompt-cache reads receive a 90% discount, and cache writes cost 1.25 times the input rate. Promptfoo applies both when the API returns `cached_tokens` and `cache_write_tokens`; if a compatible gateway omits cache-write usage, Promptfoo leaves GPT-5.6 `cost` unset rather than underestimating it. Standard, Batch, and Flex requests above 272,000 input tokens use 2x input and 1.5x output pricing for the entire request; Fast mode does not support long-context requests. Regional processing endpoints add a 10% uplift. Each tier has a 1,050,000-token context window and 128,000 maximum output tokens.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.6
     config:
@@ -618,12 +640,12 @@ GPT-5.5 is a high-capability GPT-5 family model for professional work and agenti
 - **Reasoning effort**: `gpt-5.5` supports `none`, `low`, `medium`, `high`, and `xhigh`. In Chat Completions, set `reasoning_effort`; in Responses API, set `reasoning.effort`.
 - **Endpoint support**: `gpt-5.5` supports Chat Completions and Responses API. `gpt-5.5-pro` is Responses API only and supports Batch API.
 - **Cached input**: `gpt-5.5` cached input tokens are $0.50 per 1M. `gpt-5.5-pro` has no cached-input discount.
-- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and infers Batch, Flex, or Priority rates when the API response or configured `service_tier` identifies that tier.
+- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and applies published Batch, Flex, or Fast rates when the API response or configured `service_tier` identifies that tier. OpenAI has not published GPT-5.5 Pro Batch or Flex rates above 272,000 input tokens, so Promptfoo leaves those requests unpriced rather than assuming a discount; published standard long-context pricing remains available. Promptfoo treats configured `fast` and OpenAI's returned `priority` tier as the same Fast mode for billing.
 - **Long-running requests**: `gpt-5.5-pro` automatically receives the same 10-minute timeout as other GPT-5 pro models.
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.5
     config:
@@ -672,7 +694,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 
 #### Usage Examples
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.4-mini
     config:
@@ -716,7 +738,7 @@ Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large
 
 When using reasoning models, there are important differences in how tokens are handled:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:o1
     config:
@@ -789,12 +811,15 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
-- `gpt-image-2` - OpenAI's latest image generation model with flexible custom sizes
-- `gpt-image-1.5` - High-quality GPT Image model with strong instruction following
+- `gpt-image-2` - OpenAI's image generation model with flexible custom sizes
+- `gpt-image-1.5` - Deprecated; shuts down December 1, 2026
 - `gpt-image-1` - High-quality image generation model
-- `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
+- `gpt-image-1-mini` - Deprecated; shuts down December 1, 2026
 
 `dall-e-3` and `dall-e-2` were [retired from the OpenAI API](https://developers.openai.com/api/docs/deprecations) on May 12, 2026. Promptfoo retains request compatibility for gateways that still expose them; use a current GPT Image model for new evals.
+
+OpenAI has also deprecated `gpt-image-1.5`, `gpt-image-1-mini`, and `chatgpt-image-latest`, with
+shutdown scheduled for December 1, 2026. Use `gpt-image-2` for new evals.
 
 The `openai:image` provider uses the Image API generations endpoint. It supports text-to-image generation; image edit/reference inputs (`image`, `mask`, `input_fidelity`), streaming (`stream`/`partial_images`), and variations are not implemented in this provider.
 
@@ -802,9 +827,9 @@ See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo
 
 #### GPT Image 2
 
-GPT Image 2 is OpenAI's latest image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
+GPT Image 2 is OpenAI's image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-2
     config:
@@ -845,7 +870,7 @@ These are output image estimates. Input text tokens may also apply, and OpenAI m
 
 GPT Image 1.5 is a high-quality image generation model with strong instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1.5
     config:
@@ -885,7 +910,7 @@ API edit or inpainting operations.
 
 GPT Image 1 is a high-quality image generation model with superior instruction following, text rendering, and real-world knowledge.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1
     config:
@@ -918,7 +943,7 @@ providers:
 
 GPT Image 1 Mini is a cost-efficient version of GPT Image 1 with the same capabilities at lower cost.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:image:gpt-image-1-mini
     config:
@@ -974,9 +999,17 @@ OpenAI supports video generation via `openai:video:<model>`. Supported models an
 The Sora Videos API is scheduled for removal on September 24, 2026. `sora-2-pro-high-res` is a
 pricing tier, not a separate model ID; select a supported Pro resolution instead.
 
+:::warning Scheduled deprecation
+
+OpenAI has announced that Sora 2, Sora 2 Pro, and the Videos API will shut down on
+September 24, 2026. Keep existing evals only while that API remains available and plan to
+migrate before the shutdown date.
+
+:::
+
 ### Basic Usage
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -1001,6 +1034,7 @@ providers:
 ### Example Configuration
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'A cinematic shot of: {{scene}}'
 
@@ -1025,7 +1059,7 @@ tests:
 
 Generate videos starting from a source image using `input_reference`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -1061,7 +1095,7 @@ so routed gateways can authorize the full job lifecycle.
 
 Remix an existing Sora video with a new prompt using `remix_video_id`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:video:sora-2
     config:
@@ -1119,7 +1153,7 @@ and verify facts.
 
 To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add either the standard `web_search` tool or the preview `web_search_preview` tool to your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.1
     config:
@@ -1131,7 +1165,7 @@ To preserve an existing Chat Completions search integration, use a built-in sear
 models retrieve information before each response and return URL citations in
 `response.metadata.annotations`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5-search-api
     config:
@@ -1236,8 +1270,7 @@ export async function getTools() {
 
 :::
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.txt
 providers:
@@ -1282,7 +1315,7 @@ Sometimes OpenAI function calls don't match `tools` schemas. Use an [`is-valid-o
 
 To further test `tools` definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       city: Boston
@@ -1347,8 +1380,7 @@ They can also include functions that dynamically reference vars:
 
 Use the `functions` config to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`. For example:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.txt
 providers:
@@ -1392,7 +1424,7 @@ Sometimes OpenAI function calls don't match `functions` schemas. Use [`is-valid-
 
 To further test function call definitions, you can use the `javascript` assertion and/or `transform` directives. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tests:
   - vars:
       city: Boston
@@ -1425,14 +1457,14 @@ Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For
 
 To load your functions from a file, specify the file path in your provider configuration like so:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - file://./path/to/provider_with_function.yaml
 ```
 
 You can also use a pattern to load multiple files:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - file://./path/to/provider_*.yaml
 ```
@@ -1469,7 +1501,7 @@ Promptfoo supports the `response_format` parameter, which allows you to specify 
 
 #### Prompt config example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - label: 'Prompt #1'
     raw: 'You are a helpful math tutor. Solve {{problem}}'
@@ -1481,7 +1513,7 @@ prompts:
 
 #### Provider config example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:chat:gpt-5.4-mini
     config:
@@ -1580,7 +1612,7 @@ npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 
 You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - 'Answer this question: {{question}}'
 
@@ -1670,8 +1702,7 @@ The following properties can be overwritten in provider config:
 
 Here's an example of a more detailed config:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - 'Write a tweet about {{topic}}'
 providers:
@@ -1758,14 +1789,16 @@ Use these general-purpose audio models with `openai:chat:*`. Current OpenAI docs
 
 OpenAI [retired the older `gpt-4o-audio-preview` model family](https://developers.openai.com/api/docs/deprecations) on May 7, 2026. Use the current `gpt-audio*` models below for new evals.
 
+OpenAI has also deprecated the `gpt-audio` and `gpt-audio-mini` families, with shutdown scheduled
+for January 20, 2027. Use `gpt-audio-1.5` for new audio evals.
+
 **Available audio models:**
 
 - `gpt-audio-1.5` - Flagship audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-audio` - General audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-audio-2025-08-28` - Dated snapshot of `gpt-audio`
-- `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
-- `gpt-audio-mini-2025-12-15` - Dated snapshot of `gpt-audio-mini`
-- `gpt-audio-mini-2025-10-06` - Dated snapshot of `gpt-audio-mini`
+- `gpt-audio` - Deprecated; shuts down January 20, 2027
+- `gpt-audio-2025-08-28` - Deprecated dated snapshot of `gpt-audio`
+- `gpt-audio-mini` - Deprecated; shuts down January 20, 2027
+- `gpt-audio-mini-2025-12-15` - Deprecated dated snapshot of `gpt-audio-mini`
 
 ### Using audio inputs
 
@@ -1794,7 +1827,7 @@ You can include audio files in your prompts using the following format:
 
 With a corresponding configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - id: file://audio-input.json
     label: Audio Input
@@ -1835,9 +1868,9 @@ npx promptfoo@latest init --example openai-audio
 
 Use `openai:tts:<model>` or `openai:speech:<model>` to generate playable audio through
 `/v1/audio/speech`. Supported models are `gpt-4o-mini-tts`,
-`gpt-4o-mini-tts-2025-12-15`, `gpt-4o-mini-tts-2025-03-20`, `tts-1`, `tts-1-1106`,
-`tts-1-hd`, and `tts-1-hd-1106`. The March 2025 mini snapshot is scheduled for removal on
-July 23, 2026; prefer the current alias or December snapshot for new evals.
+`gpt-4o-mini-tts-2025-12-15`, `tts-1`, `tts-1-1106`, `tts-1-hd`, and `tts-1-hd-1106`.
+OpenAI shut down `gpt-4o-mini-tts-2025-03-20` on July 23, 2026; retain that ID only in
+historical eval results.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
@@ -1858,7 +1891,7 @@ the current `language` and `format` fields. `format` is an alias for `response_f
 API ignores a top-level `format` field, so promptfoo sends the value as `response_format`. If both
 are set, the explicit `response_format` takes precedence.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:tts:gpt-4o-mini-tts
     config:
@@ -1895,17 +1928,18 @@ per-minute figures below are OpenAI's cost estimates. Whisper is billed per minu
 
 | Model                                  | Description                          | Estimated cost per minute |
 | -------------------------------------- | ------------------------------------ | ------------------------- |
+| `gpt-transcribe`                       | Current general transcription model  | $0.0045                   |
 | `whisper-1`                            | Original Whisper transcription model | $0.006                    |
 | `gpt-4o-transcribe`                    | GPT-4o optimized for transcription   | $0.006                    |
 | `gpt-4o-mini-transcribe`               | Faster, more cost-effective option   | $0.003                    |
 | `gpt-4o-mini-transcribe-2025-12-15`    | Dated mini transcription snapshot    | $0.003                    |
-| `gpt-4o-mini-transcribe-2025-03-20`    | Previous mini transcription snapshot | $0.003                    |
+| `gpt-4o-mini-transcribe-2025-03-20`    | Deprecated; shuts down Jan 20, 2027  | $0.003                    |
 | `gpt-4o-transcribe-diarize`            | Identifies different speakers        | $0.006                    |
 | `gpt-4o-transcribe-diarize-2025-10-15` | Dated diarization snapshot           | $0.006                    |
 
 To use transcription models, specify the provider format `openai:transcription:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - '{{ audio_file }}'
 
@@ -1919,6 +1953,11 @@ providers:
     config:
       language: en
       prompt: This is a technical discussion about AI and machine learning.
+
+  - id: openai:transcription:gpt-transcribe
+    config:
+      keywords: [promptfoo, eval]
+      languages: [en, es]
 
   - id: openai:transcription:gpt-4o-transcribe-diarize
     config:
@@ -1934,20 +1973,23 @@ tests:
 
 #### Transcription configuration options
 
-| Parameter                  | Description                              | Options                               |
-| -------------------------- | ---------------------------------------- | ------------------------------------- |
-| `language`                 | Language of the audio (ISO-639-1)        | e.g., 'en', 'es', 'fr'                |
-| `prompt`                   | Context for non-diarized transcription   | Any text string                       |
-| `temperature`              | Controls randomness (0-1)                | Number between 0 and 1                |
-| `timestamp_granularities`  | Word or segment timestamps for Whisper   | ['word', 'segment']                   |
-| `chunking_strategy`        | Split long transcription audio using VAD | `auto` or `{ type: server_vad, ... }` |
-| `known_speaker_names`      | Up to four known speaker identifiers     | Array of strings                      |
-| `known_speaker_references` | Matching 2-10 second audio data URLs     | Array of data URLs                    |
+| Parameter                  | Description                                            | Options                               |
+| -------------------------- | ------------------------------------------------------ | ------------------------------------- |
+| `language`                 | Single language for models other than `gpt-transcribe` | e.g., 'en', 'es', 'fr'                |
+| `prompt`                   | Context for non-diarized transcription                 | Any text string                       |
+| `temperature`              | Controls randomness (0-1)                              | Number between 0 and 1                |
+| `timestamp_granularities`  | Word or segment timestamps for Whisper                 | ['word', 'segment']                   |
+| `chunking_strategy`        | Split long transcription audio using VAD               | `auto` or `{ type: server_vad, ... }` |
+| `known_speaker_names`      | Up to four known speaker identifiers                   | Array of strings                      |
+| `known_speaker_references` | Matching 2-10 second audio data URLs                   | Array of data URLs                    |
+| `keywords`                 | Vocabulary hints for `gpt-transcribe`                  | Array of strings                      |
+| `languages`                | Expected languages for `gpt-transcribe`                | Array of language codes               |
 
 Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM. Promptfoo
 automatically sets `chunking_strategy: auto` for diarization, which is required for inputs longer
 than 30 seconds. `timestamp_granularities` is only sent for `whisper-1`, and `prompt` is not
-supported for diarization. See OpenAI's
+supported for diarization. For `gpt-transcribe`, use `languages`; promptfoo maps a lone legacy
+`language` value to `languages`, but rejects configurations that set both options. See OpenAI's
 [speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text#speaker-diarization)
 for speaker-reference requirements.
 
@@ -1961,13 +2003,16 @@ chunking_strategy:
   silence_duration_ms: 500
 ```
 
-`gpt-realtime-whisper` is available through the native Realtime transcription-session API rather than the `/audio/transcriptions` endpoint used by `openai:transcription:*`. For conversational Realtime evals, use it as `input_audio_transcription.model` instead.
+`gpt-live-transcribe` ($0.017/minute) is available only through the Realtime
+transcription-session API, not the `/audio/transcriptions` endpoint used by
+`openai:transcription:*`. The conversational `openai:realtime:*` provider uses a different
+event flow and does not currently implement standalone Realtime transcription sessions.
 
 #### Diarization example
 
 The diarization model identifies different speakers in the audio:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - '{{ audio_file }}'
 
@@ -2009,26 +2054,33 @@ image inputs with streaming text and audio outputs.
 - `gpt-realtime-2.1-mini` - Current cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens, $0.80/$0.08 per 1M image/cached-image input tokens)
 - `gpt-realtime-2` - Reasoning-capable realtime model ($4/$24 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime-1.5` - Previous flagship realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-realtime` - General-availability realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
-- `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`
-- `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
-- `gpt-realtime-mini-2025-12-15`
-- `gpt-realtime-mini-2025-10-06`
-- `gpt-4o-mini-realtime-preview-2024-12-17` - Deprecated preview snapshot still available until its published shutdown date
+- `gpt-realtime` - Deprecated; shuts down January 20, 2027
+- `gpt-realtime-2025-08-28` - Deprecated dated snapshot of `gpt-realtime`
+- `gpt-realtime-mini` - Deprecated; shuts down January 20, 2027
+- `gpt-realtime-mini-2025-12-15` - Deprecated dated snapshot of `gpt-realtime-mini`
+- `gpt-4o-mini-realtime-preview-2024-12-17` - Deprecated preview snapshot
 
-Prefer the current `gpt-realtime*` models for new evals. OpenAI removed several older preview aliases on May 7, 2026, while the dated `gpt-4o-mini-realtime-preview-2024-12-17` snapshot remains available until its published July 23, 2026 shutdown date.
+Prefer the current `gpt-realtime-2.1*` models for new evals. OpenAI removed several older preview
+aliases on May 7, 2026, and the original `gpt-realtime*` families are scheduled to shut down on
+January 20, 2027.
 
 The Realtime 2.1 models support a 128k context window and up to 32k output tokens. The current
 Realtime request schema still accepts an integer `max_response_output_tokens` only up to 4,096;
 use `'inf'` to allow the model maximum.
 
+Specialized models use different Realtime session types. `gpt-live-transcribe` and
+`gpt-realtime-whisper` use `/v1/realtime/transcription_sessions`, while
+`gpt-realtime-translate` uses `/v1/realtime/translations`. Promptfoo does not yet expose those as
+standalone providers. `gpt-realtime-whisper` can still be configured as input transcription inside
+a conversational Realtime session.
+
 ### Using Realtime API
 
 To use the OpenAI Realtime API, use the provider format `openai:realtime:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: openai:realtime:gpt-realtime-1.5
+  - id: openai:realtime:gpt-realtime-2.1
     config:
       modalities: ['text', 'audio']
       voice: 'alloy'
@@ -2065,7 +2117,9 @@ The Realtime API configuration supports these parameters in addition to standard
 
 Promptfoo accepts the configuration names above for backward compatibility, then sends the current GA Realtime wire shape to OpenAI: `type: 'realtime'`, native `output_modalities`, nested `audio.input` / `audio.output`, and the documented top-level tool fields.
 
-`gpt-realtime-whisper` can be used as `input_audio_transcription.model` inside a conversational Realtime session. Its `delay` field is supported there; `prompt` is not supported for that model. OpenAI also exposes `gpt-realtime-translate` through a separate Realtime translation-session API; that is a different endpoint from the conversational `openai:realtime:*` provider documented here.
+Realtime transcription models use transcription-session events rather than the conversational
+assistant-response flow documented here. `gpt-live-transcribe` therefore is not a valid
+`openai:realtime:*` model in promptfoo today.
 
 #### Custom endpoints and proxies (Realtime)
 
@@ -2075,7 +2129,7 @@ You can use this to target Azure-compatible endpoints, proxies, or local/dev ser
 
 ```yaml
 providers:
-  - id: openai:realtime:gpt-realtime-1.5
+  - id: openai:realtime:gpt-realtime-2.1
     config:
       apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
       modalities: ['text']
@@ -2089,9 +2143,9 @@ The Realtime API supports function calling via tools, similar to the Chat API. H
 
 Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. The native Realtime format matches the OpenAI docs: function tools use top-level fields, and `tool_choice` is passed through in the Realtime shape you provide.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: openai:realtime:gpt-realtime-1.5
+  - id: openai:realtime:gpt-realtime-2.1
     config:
       tools:
         - type: function
@@ -2182,7 +2236,8 @@ The Realtime API supports multi-turn conversations with persistent context. For 
 
 ## Responses API
 
-OpenAI's Responses API is the most advanced interface for generating model responses, supporting text and image inputs, function calling, and conversation state. It provides access to OpenAI's full suite of features including reasoning models like o1, o3, and o4 series.
+OpenAI's Responses API supports text and image inputs, function calling, and conversation state.
+It can be used with compatible GPT and reasoning models.
 
 ### Supported Responses Models
 
@@ -2190,8 +2245,8 @@ The Responses API supports a wide range of models, including:
 
 - `gpt-5.6` - Alias for GPT-5.6 Sol ($5/$30 per 1M tokens)
 - `gpt-5.6-sol` - GPT-5.6 flagship model ($5/$30 per 1M tokens)
-- `gpt-5.6-terra` - GPT-5.6 balanced model ($2.50/$15 per 1M tokens)
-- `gpt-5.6-luna` - GPT-5.6 efficient model ($1/$6 per 1M tokens)
+- `gpt-5.6-terra` - GPT-5.6 balanced model ($2/$12 per 1M tokens)
+- `gpt-5.6-luna` - GPT-5.6 efficient model ($0.20/$1.20 per 1M tokens)
 - `gpt-5.5` - GPT-5.5 model ($5/$30 per 1M tokens)
 - `gpt-5.5-2026-04-23` - Dated snapshot of gpt-5.5
 - `gpt-5.5-pro` - Premium GPT-5.5 model ($30/$180 per 1M tokens)
@@ -2207,27 +2262,23 @@ The Responses API supports a wide range of models, including:
 - `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model
-- `gpt-5.1-chat-latest` - GPT-5.1 chat alias
-- `gpt-5.3-chat-latest` - GPT-5.3 chat alias
-- `gpt-5.2-chat-latest` - GPT-5.2 chat-optimized alias
-- `gpt-5.2-codex` - GPT-5.2 coding variant
+- `gpt-5.3-chat-latest` - Deprecated; shuts down August 10, 2026
+- `gpt-5.2-chat-latest` - Deprecated; shuts down August 10, 2026
 - `gpt-5.2-pro` - Premium GPT-5.2 model with highest reasoning capability ($21/$168 per 1M tokens)
-- `o1` - Powerful reasoning model
-- `o1-mini` - Smaller, more affordable reasoning model
-- `o1-pro` - Enhanced reasoning model with more compute
-- `o3-pro` - Highest-tier reasoning model
+- `o1` - Reasoning model
+- `o1-pro` - Higher-compute reasoning model
+- `o3-pro` - Reasoning model
 - `o3` - General-purpose reasoning model
 - `o3-mini` - Smaller, more affordable reasoning model
 - `o4-mini` - Fast, cost-effective reasoning model
-- `gpt-5-codex` - GPT-5 based coding model optimized for code generation
 - `gpt-5-codex-mini` - Responses replacement for the retired `codex-mini-latest` model
 - `gpt-5-pro` - Premium GPT-5 model with highest reasoning capability ($15/$120 per 1M tokens)
 
-The Pro and Codex variants of GPT-5, GPT-5.1, GPT-5.2, and GPT-5.3, along with `o1-pro`, `o3-pro`,
-and `computer-use-preview`, are Responses-only. Promptfoo auto-routes their bare IDs to Responses.
-Several older Codex and computer-use snapshots have published July 23, 2026 shutdown dates; check
-OpenAI's deprecation schedule before adding new eval coverage. `codex-mini-latest` has already
-been shut down; OpenAI recommends `gpt-5-codex-mini` as its Responses API replacement. `gpt-5-pro`
+The current Pro and Codex variants, along with `o1-pro` and `o3-pro`, are Responses-only.
+Promptfoo auto-routes their bare IDs to Responses. OpenAI shut down `computer-use-preview`,
+`gpt-5-chat-latest`, `gpt-5-codex`, the GPT-5.1 Codex/chat variants, and `gpt-5.2-codex` on
+July 23, 2026; retain those IDs only for historical eval results. `codex-mini-latest` was also
+shut down; OpenAI recommends `gpt-5-codex-mini` as its Responses API replacement. `gpt-5-pro`
 and its dated snapshot require `reasoning.effort: high`, while
 `gpt-5.2-pro` and its snapshot support `medium`, `high`, and `xhigh`.
 
@@ -2235,7 +2286,7 @@ and its dated snapshot require `reasoning.effort: high`, while
 
 To use the OpenAI Responses API, use the provider format `openai:responses:<model name>`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2269,7 +2320,7 @@ The Responses API supports OpenAI's MCP integration, allowing models to use remo
 
 To use MCP tools with the Responses API, add them to the `tools` array:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2295,7 +2346,7 @@ providers:
 
 Most MCP servers require authentication. Use the `headers` parameter to provide API keys or tokens:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2312,7 +2363,7 @@ providers:
 
 To limit which tools are available from an MCP server, use the `allowed_tools` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2328,7 +2379,7 @@ providers:
 
 By default, OpenAI requires approval before sharing data with MCP servers. You can configure approval settings:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # Never require approval for all tools
 providers:
   - id: openai:responses:gpt-5
@@ -2386,7 +2437,7 @@ npx promptfoo@latest init --example openai-mcp
 
 When using reasoning models like `o1`, `o1-pro`, `o3`, `o3-pro`, `o3-mini`, or `o4-mini`, you can control the reasoning effort:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3
     config:
@@ -2417,7 +2468,7 @@ For current specifications and pricing information, refer to [OpenAI API pricing
 
 Example configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3
     config:
@@ -2434,17 +2485,20 @@ providers:
 
 ### Deep Research Models (Responses API Only)
 
-Deep research models (`o3-deep-research`, `o4-mini-deep-research`) are specialized reasoning models designed for complex research tasks that require web search capabilities.
+The retired deep research models were specialized reasoning models designed for complex research
+tasks that required web search capabilities. This section remains for interpreting historical eval
+configurations.
 
 Available models:
 
-- `o3-deep-research` - Most powerful deep research model ($10/1M input, $40/1M output)
-- `o3-deep-research-2025-06-26` - Snapshot version
-- `o4-mini-deep-research` - Faster, more affordable ($2/1M input, $8/1M output)
-- `o4-mini-deep-research-2025-06-26` - Snapshot version
+- `o3-deep-research` - Retired alias (shut down July 23, 2026)
+- `o3-deep-research-2025-06-26` - Retired snapshot (shut down July 23, 2026)
+- `o4-mini-deep-research` - Retired alias (shut down July 23, 2026)
+- `o4-mini-deep-research-2025-06-26` - Retired snapshot (shut down July 23, 2026)
 
-OpenAI has scheduled these deep research aliases and snapshots to shut down on July 23, 2026 and
-recommends `gpt-5.5-pro` for new integrations. Retain them only for existing eval coverage.
+OpenAI shut down the dated snapshots and their undated aliases on July 23, 2026. Use
+`gpt-5.6-sol` for new integrations. The examples below are retained only to show the shape of
+historical configurations and will no longer run against the OpenAI API.
 
 All deep research models:
 
@@ -2456,7 +2510,7 @@ All deep research models:
 
 Example configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o4-mini-deep-research
     config:
@@ -2467,7 +2521,7 @@ providers:
 
 #### Advanced Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:o3-deep-research
     config:
@@ -2671,7 +2725,7 @@ GPT-5.6 also supports `prompt_cache_options`. The `implicit` mode below keeps au
 breakpoint placement for ordinary prompts. When the API reports `cache_write_tokens`, Promptfoo
 prices those writes at 1.25 times the active input rate.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.6
     config:
@@ -2688,7 +2742,7 @@ The `include` option requests extra structured payloads in the raw Responses obj
 For example, `web_search_call.results` returns search results when you need to inspect
 them in assertions or downstream tooling:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5.5
     config:
@@ -2703,7 +2757,7 @@ providers:
 
 The Responses API supports tool and function calling, similar to the Chat API:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: openai:responses:gpt-5
     config:
@@ -2738,7 +2792,7 @@ providers:
 
 Legacy `apiHost`, newer `apiBaseUrl`, and OpenAI endpoint environment variable Azure configurations all support the same Responses reasoning and verbosity options.
 
-For comprehensive Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
+For Azure Responses API documentation, see the [Azure provider documentation](/docs/providers/azure#azure-responses-api).
 
 ### Complete Example
 

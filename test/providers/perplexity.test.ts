@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
   calculatePerplexityCost,
@@ -75,6 +76,172 @@ describe('Perplexity Provider', () => {
       expect(provider.config.apiKeyEnvar).toBe('PERPLEXITY_API_KEY');
     });
 
+    it('should forward Perplexity-specific search options', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          search_domain_filter: ['example.com'],
+          search_recency_filter: 'week',
+          return_related_questions: true,
+          return_images: true,
+          search_after_date_filter: '01/01/2026',
+          search_before_date_filter: '02/01/2026',
+          web_search_options: {
+            search_context_size: 'high',
+            user_location: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              country: 'US',
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            search_domain_filter: ['prompt.example'],
+            web_search_options: {
+              search_context_size: 'low',
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body).toMatchObject({
+        search_domain_filter: ['prompt.example'],
+        search_recency_filter: 'week',
+        return_related_questions: true,
+        return_images: true,
+        search_after_date_filter: '01/01/2026',
+        search_before_date_filter: '02/01/2026',
+        web_search_options: {
+          search_context_size: 'low',
+        },
+      });
+
+      const { body: passthroughBody } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            search_domain_filter: ['prompt.example'],
+            passthrough: {
+              search_domain_filter: ['passthrough.example'],
+              web_search_options: {
+                search_context_size: 'medium',
+              },
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(passthroughBody).toMatchObject({
+        search_domain_filter: ['passthrough.example'],
+        web_search_options: {
+          search_context_size: 'medium',
+        },
+      });
+    });
+
+    it('prefers direct prompt search options over inherited provider passthrough', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          passthrough: {
+            search_domain_filter: ['provider.example'],
+            return_images: true,
+            web_search_options: {
+              search_context_size: 'high',
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            search_domain_filter: ['prompt.example'],
+            return_images: false,
+            web_search_options: {
+              search_context_size: 'low',
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body).toMatchObject({
+        search_domain_filter: ['prompt.example'],
+        return_images: false,
+        web_search_options: {
+          search_context_size: 'low',
+        },
+      });
+    });
+
+    it('does not restore provider passthrough fields replaced by prompt passthrough', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          passthrough: {
+            search_domain_filter: ['private.example'],
+            web_search_options: {
+              search_context_size: 'high',
+            },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            passthrough: {
+              model: 'sonar-pro',
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body.model).toBe('sonar-pro');
+      expect(body).not.toHaveProperty('search_domain_filter');
+      expect(body).not.toHaveProperty('web_search_options');
+    });
+
+    it('preserves null search options from prompt passthrough over inherited values', async () => {
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          search_domain_filter: ['provider.example'],
+          web_search_options: {
+            search_context_size: 'high',
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+          config: {
+            passthrough: {
+              search_domain_filter: null,
+              web_search_options: null,
+            },
+          },
+        },
+        vars: {},
+      });
+
+      expect(body).toHaveProperty('search_domain_filter', null);
+      expect(body).toHaveProperty('web_search_options', null);
+    });
+
     it('should set the correct usage tier', () => {
       const tiers = ['high', 'medium', 'low'] as const;
 
@@ -145,25 +312,168 @@ describe('Perplexity Provider', () => {
       expect(result.cost).toBe(0.00018); // (10/1M * $3) + (10/1M * $15) = $0.00018
     });
 
-    it('should handle cached responses correctly', async () => {
-      // Mock the parent class callApi method with a cached response
-      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
-        output: 'Cached output',
-        tokenUsage: {
-          total: 20,
-          cached: 20,
+    it('should prefer Perplexity authoritative total cost', () => {
+      const provider = new PerplexityProvider('sonar-pro');
+      const cost = (provider as any).calculateResponseCost(
+        {
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 10,
+            total_tokens: 20,
+            cost: {
+              input_tokens_cost: 0.00003,
+              output_tokens_cost: 0.00015,
+              request_cost: 0.014,
+              total_cost: 0.01418,
+            },
+          },
         },
-        cached: true,
-      });
+        {},
+        false,
+      );
 
-      const provider = new PerplexityProvider('sonar');
+      expect(cost).toBe(0.01418);
+    });
+
+    it('should report zero cost for a response served through the parent cache path', async () => {
+      // Never let this regression test clear a developer's persistent evaluation cache.
+      expect(process.env.PROMPTFOO_CACHE_TYPE).toBe('memory');
+      await clearCache();
+      enableCache();
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-id',
+            model: 'sonar-pro',
+            choices: [
+              {
+                finish_reason: 'stop',
+                index: 0,
+                message: { role: 'assistant', content: 'Cached output' },
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 10,
+              total_tokens: 20,
+              cost: { total_cost: 0.01418 },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      try {
+        const provider = new PerplexityProvider('sonar-pro', {
+          config: { apiKey: 'test-key' },
+        });
+        const first = await provider.callApi('Test prompt');
+        const second = await provider.callApi('Test prompt');
+
+        expect(first).toMatchObject({ cached: false, cost: 0.01418 });
+        expect(second).toMatchObject({
+          cached: true,
+          cost: 0,
+          tokenUsage: { cached: 20 },
+        });
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        disableCache();
+        await clearCache();
+      }
+    });
+
+    it('should omit cost for a fresh response without usage metadata', async () => {
+      disableCache();
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-without-usage',
+            model: 'sonar-pro',
+            choices: [
+              {
+                finish_reason: 'stop',
+                index: 0,
+                message: { role: 'assistant', content: 'Fresh output' },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: { apiKey: 'test-key' },
+      });
       const result = await provider.callApi('Test prompt');
 
-      // Verify cached response is returned unchanged
-      expect(result.cached).toBe(true);
-      expect(result.tokenUsage?.cached).toBe(20);
-      // Cost should not be calculated for cached responses
+      expect(result).toMatchObject({ output: 'Fresh output', cached: false });
       expect(result.cost).toBeUndefined();
+    });
+
+    it('should preserve Perplexity search artifacts in response metadata', async () => {
+      disableCache();
+      const images = [
+        {
+          image_url: 'https://example.com/image.jpg',
+          origin_url: 'https://example.com/article',
+          title: 'Example image',
+          width: 640,
+          height: 480,
+        },
+      ];
+      const relatedQuestions = ['What happened next?'];
+      const citations = ['https://example.com/article'];
+      const searchResults = [
+        {
+          title: 'Example article',
+          url: 'https://example.com/article',
+          snippet: 'A concise result.',
+          source: 'web',
+        },
+      ];
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: 'response-with-search-artifacts',
+            model: 'sonar-pro',
+            choices: [
+              {
+                finish_reason: 'stop',
+                index: 0,
+                message: { role: 'assistant', content: 'Search-backed output' },
+              },
+            ],
+            citations,
+            search_results: searchResults,
+            images,
+            related_questions: relatedQuestions,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      const provider = new PerplexityProvider('sonar-pro', {
+        config: {
+          apiKey: 'test-key',
+          return_images: true,
+          return_related_questions: true,
+        },
+      });
+      const result = await provider.callApi('Test prompt');
+
+      expect(result).toMatchObject({
+        output: 'Search-backed output',
+        metadata: {
+          citations: [{ url: citations[0], content: citations[0] }],
+          perplexity: {
+            citations,
+            search_results: searchResults,
+            images,
+            related_questions: relatedQuestions,
+          },
+        },
+      });
     });
 
     it('should still calculate cost for fresh responses with cached input tokens', async () => {

@@ -4,7 +4,7 @@ import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { appendOpenAiApiPath } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel, RETIRED_OPENAI_MODEL_IDS } from './util';
 
 import type {
   ApiModerationProvider,
@@ -12,13 +12,16 @@ import type {
   ProviderModerationResponse,
 } from '../../types/index';
 
-const OPENAI_MODERATION_MODELS = [
+const OPENAI_MODERATION_AND_RETIRED_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'text-moderation-latest', maxTokens: 32768, capabilities: ['text'] },
   { id: 'text-moderation-stable', maxTokens: 32768, capabilities: ['text'] },
   { id: 'text-moderation-007', maxTokens: 32768, capabilities: ['text'] },
 ];
+const OPENAI_MODERATION_MODELS = OPENAI_MODERATION_AND_RETIRED_MODELS.filter(
+  ({ id }) => !RETIRED_OPENAI_MODEL_IDS.has(id),
+);
 
 type OpenAIModerationModelId = string;
 
@@ -227,10 +230,11 @@ export class OpenAiModerationProvider
   static MODERATION_MODEL_IDS = OPENAI_MODERATION_MODELS.map((model) => model.id);
 
   constructor(
-    modelName: OpenAIModerationModelId = 'text-moderation-latest',
+    modelName: OpenAIModerationModelId = 'omni-moderation-latest',
     options: { config?: OpenAIModerationConfig; id?: string; env?: any } = {},
   ) {
     super(modelName, options);
+    assertOpenAiApiModel(modelName, this.getApiUrl());
     if (!OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown OpenAI moderation model: ${modelName}`);
     }

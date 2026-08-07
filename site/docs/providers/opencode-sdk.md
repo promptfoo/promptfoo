@@ -70,6 +70,7 @@ OpenCode supports 75+ providers - see [Supported Providers](#supported-providers
 Use `opencode:sdk` to access OpenCode's configured model:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - opencode:sdk
 
@@ -86,6 +87,7 @@ By default, OpenCode SDK runs in a temporary directory with no tools enabled. Wh
 Specify the provider and model directly in your config:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: opencode:sdk
     config:
@@ -103,6 +105,7 @@ This overrides the model configured via the OpenCode CLI for this specific eval.
 Specify a working directory to enable read-only file tools:
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: opencode:sdk
     config:
@@ -119,7 +122,8 @@ Relative `working_dir` values are resolved from the directory containing the con
 
 Use the OpenCode `format` request option for JSON Schema-constrained responses:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: opencode:sdk
     config:
@@ -148,6 +152,7 @@ prompts:
 OpenCode `workspace` support lets you target a specific workspace-aware server context. This requires either `working_dir` or `baseUrl`:
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: opencode:sdk
     config:

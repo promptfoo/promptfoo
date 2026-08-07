@@ -1,5 +1,31 @@
 import type { ProviderFactory } from '../registryTypes';
 
+const GEMINI_ROBOTICS_STANDARD_MODEL = 'gemini-robotics-er-2-preview';
+
+function isLiveOnlyModel(modelName: string): boolean {
+  return (
+    modelName === 'gemini-3.5-live-translate-preview' ||
+    modelName.startsWith('gemini-robotics-er-2-streaming-')
+  );
+}
+
+function validateGoogleModelRoute(modelName: string, serviceType?: string): void {
+  if (isLiveOnlyModel(modelName) && serviceType !== 'live') {
+    throw new Error(
+      `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`,
+    );
+  }
+  if (
+    modelName === GEMINI_ROBOTICS_STANDARD_MODEL &&
+    serviceType !== undefined &&
+    serviceType !== 'chat'
+  ) {
+    throw new Error(
+      `Model "${modelName}" uses the standard Gemini Interactions API. Use google:${modelName} or vertex:${modelName}.`,
+    );
+  }
+}
+
 // Every provider class is imported lazily inside its factory so that merely
 // loading this family module (which happens on any `vertex:`/`google:`/`palm:`
 // lookup) stays cheap: a given path pulls in only the provider it actually
@@ -7,17 +33,46 @@ import type { ProviderFactory } from '../registryTypes';
 export const googleProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
-    create: async (providerPath, providerOptions) => {
+    create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'live') {
+        const modelName = splits.slice(2).join(':');
+        validateGoogleModelRoute(modelName, firstPart);
+        throw new Error(
+          `Vertex AI does not support the Gemini Live API. Use google:live:${modelName}.`,
+        );
+      }
+      if (firstPart === 'image') {
+        const modelName = splits.slice(2).join(':');
+        validateGoogleModelRoute(modelName, firstPart);
+        throw new Error(
+          `Vertex AI image generation is not supported. Use google:image:${modelName}.`,
+        );
+      }
+      const explicitServiceType = ['chat', 'video', 'embedding', 'embeddings'].includes(firstPart)
+        ? firstPart
+        : undefined;
+      const routedModelName = explicitServiceType
+        ? splits.slice(2).join(':')
+        : splits.slice(1).join(':');
+      validateGoogleModelRoute(routedModelName, explicitServiceType);
       const modelName =
         firstPart === 'chat' ? splits.slice(2).join(':') : splits.slice(1).join(':');
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (
+        modelName === 'gemini-omni-flash-preview' ||
+        modelName === 'gemini-robotics-er-2-preview'
+      ) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, {
           ...providerOptions,
           id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
+          env: providerOptions.env ?? context.env,
+          config: {
+            ...(context.basePath && { basePath: context.basePath }),
+            ...providerOptions.config,
+            vertexai: true,
+          },
         });
       }
       if (firstPart === 'video') {
@@ -26,7 +81,11 @@ export const googleProviderFactories: ProviderFactory[] = [
         return new GoogleVideoProvider(modelName, {
           ...providerOptions,
           id: providerPath,
-          config: { ...providerOptions.config, vertexai: true },
+          config: {
+            ...(context.basePath && { basePath: context.basePath }),
+            ...providerOptions.config,
+            vertexai: true,
+          },
         });
       }
       const { VertexChatProvider, VertexEmbeddingProvider } = await import('../google/vertex');
@@ -43,12 +102,19 @@ export const googleProviderFactories: ProviderFactory[] = [
   {
     test: (providerPath: string) =>
       providerPath.startsWith('google:') || providerPath.startsWith('palm:'),
-    create: async (providerPath, providerOptions) => {
+    create: async (providerPath, providerOptions, context) => {
       const splits = providerPath.split(':');
 
       if (splits.length >= 3) {
         const serviceType = splits[1];
         const modelName = splits.slice(2).join(':');
+        if (modelName === GEMINI_ROBOTICS_STANDARD_MODEL && serviceType === 'chat') {
+          const providerPrefix = splits[0];
+          throw new Error(
+            `Model "${modelName}" uses the standard Gemini Interactions API and does not support ${providerPrefix}:chat:. Use ${providerPrefix}:${modelName}.`,
+          );
+        }
+        validateGoogleModelRoute(modelName, serviceType);
 
         if (serviceType === 'live') {
           // This is a Live API request
@@ -64,6 +130,10 @@ export const googleProviderFactories: ProviderFactory[] = [
           return new GoogleVideoProvider(modelName, {
             ...providerOptions,
             id: providerPath,
+            config: {
+              ...(context.basePath && { basePath: context.basePath }),
+              ...providerOptions.config,
+            },
           });
         } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
           if (!modelName) {
@@ -78,8 +148,12 @@ export const googleProviderFactories: ProviderFactory[] = [
 
       // Default to regular Google API
       const modelName = splits[1];
+      validateGoogleModelRoute(modelName);
 
-      if (modelName === 'gemini-omni-flash-preview') {
+      if (
+        modelName === 'gemini-omni-flash-preview' ||
+        modelName === 'gemini-robotics-er-2-preview'
+      ) {
         const { GoogleInteractionsProvider } = await import('../google/interactions');
         return new GoogleInteractionsProvider(modelName, providerOptions);
       }

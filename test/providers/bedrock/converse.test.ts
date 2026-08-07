@@ -26,6 +26,10 @@ interface MockConverseCommandOutput {
     totalTokens?: number;
     cacheReadInputTokens?: number;
     cacheWriteInputTokens?: number;
+    cacheDetails?: Array<{
+      ttl: '5m' | '1h';
+      inputTokens: number;
+    }>;
   };
   stopReason?: StopReason;
   metrics?: {
@@ -182,6 +186,10 @@ function createMockConverseResponse(
       totalTokens: number;
       cacheReadInputTokens?: number;
       cacheWriteInputTokens?: number;
+      cacheDetails?: Array<{
+        ttl: '5m' | '1h';
+        inputTokens: number;
+      }>;
     };
     stopReason?: StopReason;
     latencyMs?: number;
@@ -1254,6 +1262,33 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.cost).toBeCloseTo(0.005775, 8);
     });
 
+    it('should bill one-hour prompt cache writes separately in Claude cost', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1' },
+      });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: {
+            inputTokens: 100,
+            outputTokens: 50,
+            totalTokens: 750,
+            cacheReadInputTokens: 500,
+            cacheWriteInputTokens: 100,
+            cacheDetails: [
+              { ttl: '1h', inputTokens: 40 },
+              { ttl: '5m', inputTokens: 60 },
+            ],
+          },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      // Base rates: uncached input $10, cache read $1, five-minute write $12.50,
+      // one-hour write $20, and output $50 per million tokens.
+      expect(result.cost).toBeCloseTo(0.00555, 8);
+    });
+
     it('should not apply the regional premium for a global inference-profile ARN', async () => {
       const provider = new AwsBedrockConverseProvider(
         'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.anthropic.claude-fable-5',
@@ -2013,27 +2048,33 @@ Third line`;
       );
     });
 
-    it('should include service tier when specified', async () => {
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          serviceTier: { type: 'priority' },
-        },
-      });
+    it.each(['priority', 'reserved'] as const)(
+      'should include %s service tier when specified',
+      async (serviceTier) => {
+        const provider = new AwsBedrockConverseProvider(
+          'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          {
+            config: {
+              region: 'us-east-1',
+              serviceTier: { type: serviceTier },
+            },
+          },
+        );
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          serviceTier: { type: 'priority' },
-        }),
-      );
-    });
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            serviceTier: { type: serviceTier },
+          }),
+        );
+      },
+    );
   });
 
   describe('guardrails', () => {
@@ -2355,10 +2396,9 @@ Third line`;
       );
     });
 
-    it('strips raw sampling fields for Claude Sonnet 5 and preserves disabled thinking', async () => {
-      // Sonnet 5 is sampling-deprecated (rejects temperature/top_p/top_k) but NOT always-on,
-      // so raw additionalModelRequestFields must have those stripped and manual thinking
-      // converted to adaptive — while `thinking: { type: 'disabled' }` is preserved (unlike Fable).
+    it('strips unsupported raw fields for always-on Claude Sonnet 5 thinking', async () => {
+      // Sonnet 5 rejects sampling controls and always uses adaptive thinking. Manual thinking
+      // converts to adaptive, while an invalid disabled request is omitted.
       const provider = new AwsBedrockConverseProvider('anthropic.claude-sonnet-5', {
         config: {
           region: 'us-east-1',
@@ -2394,9 +2434,7 @@ Third line`;
       await disabledProvider.callApi('Test');
 
       expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          additionalModelRequestFields: { thinking: { type: 'disabled' } },
-        }),
+        expect.not.objectContaining({ additionalModelRequestFields: expect.anything() }),
       );
     });
 
@@ -3386,6 +3424,36 @@ Third line`;
       const result = await provider.callApiStreaming('Test');
 
       expect(result.cost).toBeCloseTo(0.0005445, 8);
+    });
+
+    it('should bill one-hour prompt cache writes separately in streaming cost', async () => {
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+        config: { region: 'us-east-1', streaming: true },
+      });
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { messageStop: { stopReason: 'end_turn' } },
+        {
+          metadata: {
+            usage: {
+              inputTokens: 100,
+              outputTokens: 50,
+              totalTokens: 750,
+              cacheReadInputTokens: 500,
+              cacheWriteInputTokens: 100,
+              cacheDetails: [
+                { ttl: '1h', inputTokens: 40 },
+                { ttl: '5m', inputTokens: 60 },
+              ],
+            },
+          },
+        },
+      ];
+      mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
+
+      const result = await provider.callApiStreaming('Test');
+
+      expect(result.cost).toBeCloseTo(0.00555, 8);
     });
 
     it('should handle streaming tool use response', async () => {

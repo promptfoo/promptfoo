@@ -2397,8 +2397,8 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
-  it('should return true for Google Veo 2 provider', () => {
-    expect(isVideoProvider('google:video:veo-2-generate')).toBe(true);
+  it('should return true for Google Veo on Vertex AI', () => {
+    expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
   });
 
   it('should return true for any provider with :video: in the name', () => {

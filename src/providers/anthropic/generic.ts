@@ -26,16 +26,24 @@ import type { AnthropicBaseOptions } from './types';
  */
 export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
   const suppressed: Record<string, null> = {};
-  const customHeadersEnv = getEnvString('ANTHROPIC_CUSTOM_HEADERS');
-  if (!customHeadersEnv) {
-    return suppressed;
-  }
-  for (const line of customHeadersEnv.split('\n')) {
-    const colon = line.indexOf(':');
-    if (colon >= 0) {
-      const name = line.substring(0, colon).trim();
-      if (name) {
-        suppressed[name] = null;
+  // The SDK reads process.env directly, while promptfoo's accessor can return a
+  // config-level env override. Suppress the union so a lower-priority process
+  // secret cannot leak when a different override masks it from getEnvString.
+  const customHeaderSources = new Set([
+    getEnvString('ANTHROPIC_CUSTOM_HEADERS'),
+    process.env.ANTHROPIC_CUSTOM_HEADERS,
+  ]);
+  for (const customHeadersEnv of customHeaderSources) {
+    if (!customHeadersEnv) {
+      continue;
+    }
+    for (const line of customHeadersEnv.split('\n')) {
+      const colon = line.indexOf(':');
+      if (colon >= 0) {
+        const name = line.substring(0, colon).trim();
+        if (name) {
+          suppressed[name] = null;
+        }
       }
     }
   }

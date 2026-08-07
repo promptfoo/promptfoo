@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Comprehensive test of deep research features
+description: Comprehensive test of Responses research with web search
 prompts:
   - |
     Research and provide a brief answer to: {{query}}
@@ -7,22 +7,24 @@ prompts:
 
 providers:
   # Test with limited searches
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-5.6-sol
     label: Quick Research (2 searches)
     config:
       max_output_tokens: 5000
       max_tool_calls: 2
+      tool_choice: required
       tools:
-        - type: web_search_preview
+        - type: web_search
 
   # Test with more searches
-  - id: openai:responses:o4-mini-deep-research
+  - id: openai:responses:gpt-5.6-sol
     label: Detailed Research (5 searches)
     config:
       max_output_tokens: 10000
       max_tool_calls: 5
+      tool_choice: required
       tools:
-        - type: web_search_preview
+        - type: web_search
 
 tests:
   - vars:

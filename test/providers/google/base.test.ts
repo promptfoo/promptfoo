@@ -64,7 +64,10 @@ vi.mock('../../../src/providers/google/auth', () => ({
     determineVertexMode: vi.fn().mockReturnValue(false),
     validateAndWarn: vi.fn(),
     getApiKey: vi.fn().mockReturnValue({ apiKey: 'test-key', source: 'config' }),
-    resolveRegion: vi.fn().mockReturnValue('us-central1'),
+    resolveRegion: vi.fn(
+      (config: { region?: string }, _env, _hasApiKey, defaultRegion?: string) =>
+        config.region || defaultRegion || 'us-central1',
+    ),
     resolveProjectId: vi.fn().mockResolvedValue('test-project'),
   },
 }));
@@ -111,6 +114,12 @@ describe('GoogleGenericProvider', () => {
     mockMcpInstance.cleanup.mockReset().mockResolvedValue(undefined);
     // Reset utility mocks
     vi.mocked(maybeLoadToolsFromExternalFile).mockReset().mockResolvedValue([]);
+    vi.mocked(GoogleAuthManager.resolveRegion)
+      .mockReset()
+      .mockImplementation(
+        (config: { region?: string }, _env, _hasApiKey, defaultRegion?: string) =>
+          config.region || defaultRegion || 'us-central1',
+      );
   });
 
   afterEach(() => {
@@ -234,6 +243,22 @@ describe('GoogleGenericProvider', () => {
       });
 
       expect(provider.getRegion()).toBe('europe-west1');
+    });
+
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-pro-preview',
+      'gemini-3.1-pro-preview-customtools',
+      'gemini-3.1-flash-lite',
+      'gemini-3-flash-preview',
+    ])('should default Vertex %s to the global endpoint in API key mode', (modelName) => {
+      vi.mocked(GoogleAuthManager.determineVertexMode).mockReturnValue(true);
+
+      const provider = new TestGoogleProvider(modelName);
+
+      expect(provider.getRegion()).toBe('global');
     });
   });
 

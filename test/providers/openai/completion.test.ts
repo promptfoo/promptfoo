@@ -81,6 +81,186 @@ describe('OpenAI Provider', () => {
       },
     );
 
+    it('should bill a qualified passthrough completion model through a custom gateway', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: {
+            total_tokens: 2_000_000,
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+          },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('davinci-002', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'openai/babbage-002' },
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('openai/babbage-002');
+      expect(result.cost).toBeCloseTo(0.8, 10);
+    });
+
+    it('should not apply OpenAI pricing to another gateway model namespace', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Test output' }],
+          usage: {
+            total_tokens: 2_000_000,
+            prompt_tokens: 1_000_000,
+            completion_tokens: 1_000_000,
+          },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('davinci-002', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { model: 'vendor/babbage-002' },
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+
+      expect(JSON.parse(request[1].body).model).toBe('vendor/babbage-002');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should send the configured fast tier while retaining fast billing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Fast output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'fast',
+        },
+      });
+
+      const result = await provider.callApi('Answer quickly');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('fast');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should bill the effective passthrough service tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Priority output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'flex',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer with priority');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should remove inherited passthrough when a prompt replaces it with an empty object', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Standard output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Use the prompt override', {
+        prompt: { config: { passthrough: {} } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body).not.toHaveProperty('service_tier');
+      expect(result.cost).toBeCloseTo((1_000 * 0.25 + 100 * 2) / 1e6, 10);
+    });
+
+    it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        ...mockResponse,
+        data: {
+          choices: [{ text: 'Flex output' }],
+          usage: { total_tokens: 1_100, prompt_tokens: 1_000, completion_tokens: 100 },
+        },
+      });
+      const provider = new OpenAiCompletionProvider('gpt-5-mini', {
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1',
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer flexibly', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('flex');
+      expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
+    });
+
+    it.each([
+      undefined,
+      'https://us.api.openai.com/v1',
+      'https://eu.api.openai.com/v1',
+      'https://au.api.openai.com/v1',
+      'https://ca.api.openai.com/v1',
+      'https://jp.api.openai.com/v1',
+      'https://in.api.openai.com/v1',
+      'https://sg.api.openai.com/v1',
+      'https://kr.api.openai.com/v1',
+      'https://gb.api.openai.com/v1',
+      'https://ae.api.openai.com/v1',
+    ])(
+      'should omit service tiers from first-party legacy Completion requests at %s',
+      async (apiBaseUrl) => {
+        mockFetchWithCache.mockResolvedValueOnce(mockResponse);
+        const provider = new OpenAiCompletionProvider('babbage-002', {
+          config: {
+            apiBaseUrl,
+            service_tier: 'default',
+            passthrough: { service_tier: 'priority' },
+          },
+        });
+
+        const result = await provider.callApi('Use the legacy endpoint', {
+          prompt: { config: { service_tier: 'flex' } },
+        } as any);
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+        expect(body).not.toHaveProperty('service_tier');
+        expect(result.cost).toBeCloseTo((5 * 0.4 + 5 * 0.4) / 1e6, 10);
+      },
+    );
+
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {

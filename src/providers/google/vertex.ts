@@ -10,8 +10,6 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import { loadYaml } from '../../util/yamlLoad';
 import {
@@ -25,6 +23,7 @@ import {
   parseMessages,
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCostFromUsage,
@@ -38,6 +37,8 @@ import {
   mergeParts,
   normalizeGeminiAudio,
   normalizeSafetySettings,
+  omitUnsupportedGeminiSamplingControls,
+  parseConfigResponseSchema,
   parseConfigSystemInstruction,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -57,7 +58,6 @@ import type {
   ClaudeRequest,
   ClaudeResponse,
   ClaudeThinkingConfig,
-  CompletionOptions,
   GoogleProviderConfig,
 } from './types';
 import type {
@@ -83,6 +83,89 @@ const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
   input: 6 / 1e6,
   output: 22.5 / 1e6,
 };
+
+const VERTEX_LLAMA_4_MODELS = new Set([
+  'llama-4-maverick-17b-128e-instruct-maas',
+  'llama-4-scout-17b-16e-instruct-maas',
+]);
+
+interface VertexLlamaModelSafetySettings {
+  enabled: boolean;
+  llama_guard_settings: Record<string, unknown>;
+}
+
+type VertexLlamaSafetyRequestConfig =
+  | {
+      bodyFields: {
+        extra_body?: {
+          google: {
+            model_safety_settings: VertexLlamaModelSafetySettings;
+          };
+        };
+      };
+      enabled: boolean;
+      settingCount: number;
+    }
+  | { error: string };
+
+function getRequiredVertexLlamaRegion(modelName: string): 'us-central1' | 'us-east5' {
+  return VERTEX_LLAMA_4_MODELS.has(modelName) ? 'us-east5' : 'us-central1';
+}
+
+function getVertexLlamaRegionError(modelName: string, region: string): string | undefined {
+  const requiredRegion = getRequiredVertexLlamaRegion(modelName);
+  if (region === requiredRegion) {
+    return undefined;
+  }
+
+  const availabilitySubject = VERTEX_LLAMA_4_MODELS.has(modelName)
+    ? `Llama model ${modelName} is`
+    : 'Llama models are';
+  return `${availabilitySubject} only available in the ${requiredRegion} region. Current region: ${region}. Please set region: '${requiredRegion}' in your configuration.`;
+}
+
+function getVertexLlamaSafetyRequestConfig(
+  modelName: string,
+  llamaConfig: GoogleProviderConfig['llamaConfig'],
+): VertexLlamaSafetyRequestConfig {
+  if (VERTEX_LLAMA_4_MODELS.has(modelName)) {
+    if (
+      llamaConfig?.safetySettings?.enabled === true ||
+      llamaConfig?.safetySettings?.llama_guard_settings !== undefined
+    ) {
+      return {
+        error: `Llama model ${modelName} does not support Llama Guard safety settings. Remove llamaConfig.safetySettings or set enabled: false without llama_guard_settings.`,
+      };
+    }
+    return { bodyFields: {}, enabled: false, settingCount: 0 };
+  }
+
+  const llamaGuardSettings = llamaConfig?.safetySettings?.llama_guard_settings;
+  if (
+    llamaGuardSettings !== undefined &&
+    (typeof llamaGuardSettings !== 'object' || llamaGuardSettings === null)
+  ) {
+    return {
+      error: `Invalid llama_guard_settings: must be an object, received ${typeof llamaGuardSettings}`,
+    };
+  }
+
+  const modelSafetySettings: VertexLlamaModelSafetySettings = {
+    enabled: llamaConfig?.safetySettings?.enabled !== false,
+    llama_guard_settings: llamaGuardSettings || {},
+  };
+  return {
+    bodyFields: {
+      extra_body: {
+        google: {
+          model_safety_settings: modelSafetySettings,
+        },
+      },
+    },
+    enabled: modelSafetySettings.enabled,
+    settingCount: Object.keys(modelSafetySettings.llama_guard_settings).length,
+  };
+}
 
 function applyVertexClaudeLongContextPricing(
   modelName: string,
@@ -320,9 +403,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
     let mergedSystem = system;
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const effectiveConfig = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const parsedConfigInstruction = parseConfigSystemInstruction(
-      this.config.systemInstruction,
+      effectiveConfig.systemInstruction,
       context?.vars,
+      promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
     );
     if (parsedConfigInstruction) {
       const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
@@ -470,15 +557,21 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
       // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
       const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
+      // `-latest` is a published Vertex alias, but not a valid first-party Anthropic model ID.
+      // Keep the alias for request routing while using the canonical Vertex-equivalent ID for billing.
+      const pricingModelName =
+        normalizedModelName === 'claude-sonnet-4-5-latest'
+          ? 'claude-sonnet-4-5'
+          : normalizedModelName;
 
       // Regional and multi-region Vertex endpoints bill Claude 4.5+ models at a premium
       // over the global endpoint (see isClaudeRegionalPremiumModel).
       const pricingConfig =
         this.getRegion() === 'global'
           ? this.config
-          : applyClaudeRegionalPremium(normalizedModelName, this.config);
+          : applyClaudeRegionalPremium(pricingModelName, this.config);
       const effectivePricingConfig = applyVertexClaudeLongContextPricing(
-        normalizedModelName,
+        pricingModelName,
         pricingConfig,
         data.usage?.input_tokens,
         data.usage?.cache_read_input_tokens,
@@ -489,12 +582,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
         output,
         tokenUsage,
         cost: calculateAnthropicCost(
-          normalizedModelName,
+          pricingModelName,
           effectivePricingConfig,
           data.usage?.input_tokens,
           data.usage?.output_tokens,
           data.usage?.cache_read_input_tokens,
           data.usage?.cache_creation_input_tokens,
+          data.usage?.cache_creation?.ephemeral_1h_input_tokens,
         ),
       };
 
@@ -545,17 +639,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -632,6 +729,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    body.generationConfig = omitUnsupportedGeminiSamplingControls(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -640,23 +741,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
         );
       }
 
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = parseConfigResponseSchema(
+        config.responseSchema,
+        context?.vars,
+        promptConfig?.responseSchema === undefined ? this.config.basePath : promptBasePath,
       );
 
-      // Parse JSON string if it's a string (not loaded from file)
-      if (typeof schema === 'string') {
-        try {
-          schema = JSON.parse(schema);
-        } catch (error) {
-          throw new Error(`Invalid JSON in responseSchema: ${error}`);
-        }
-      }
-
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
-
-      body.generationConfig.response_schema = schema;
+      body.generationConfig.response_schema = schema as any;
       body.generationConfig.response_mime_type = 'application/json';
     }
 
@@ -892,6 +983,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionForCost,
           true,
           lastData.usageMetadata,
+          this.getRegion(),
         );
         const audio = normalizeGeminiAudio(output);
 
@@ -1059,12 +1151,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callLlamaApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    // Validate region for Llama models (only available in us-central1)
     const region = this.getRegion();
-    if (region !== 'us-central1') {
-      return {
-        error: `Llama models are only available in the us-central1 region. Current region: ${region}. Please set region: 'us-central1' in your configuration.`,
-      };
+    const regionError = getVertexLlamaRegionError(this.modelName, region);
+    if (regionError) {
+      return { error: regionError };
     }
 
     // Parse the chat prompt into Llama format
@@ -1075,28 +1165,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       },
     ]);
 
-    // Define proper type for Llama model safety settings
-    interface LlamaModelSafetySettings {
-      enabled: boolean;
-      llama_guard_settings: Record<string, unknown>;
+    const safetyRequestConfig = getVertexLlamaSafetyRequestConfig(
+      this.modelName,
+      this.config.llamaConfig,
+    );
+    if ('error' in safetyRequestConfig) {
+      return { error: safetyRequestConfig.error };
     }
-
-    // Validate llama_guard_settings if provided
-    const llamaGuardSettings = this.config.llamaConfig?.safetySettings?.llama_guard_settings;
-    if (
-      llamaGuardSettings !== undefined &&
-      (typeof llamaGuardSettings !== 'object' || llamaGuardSettings === null)
-    ) {
-      return {
-        error: `Invalid llama_guard_settings: must be an object, received ${typeof llamaGuardSettings}`,
-      };
-    }
-
-    // Extract safety settings from config - default to enabled if not specified
-    const modelSafetySettings: LlamaModelSafetySettings = {
-      enabled: this.config.llamaConfig?.safetySettings?.enabled !== false, // Default to true
-      llama_guard_settings: llamaGuardSettings || {},
-    };
 
     // Prepare the request body for Llama models
     const body = {
@@ -1107,11 +1182,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       top_p: this.config.topP,
       top_k: this.config.topK,
-      extra_body: {
-        google: {
-          model_safety_settings: modelSafetySettings,
-        },
-      },
+      ...safetyRequestConfig.bodyFields,
     };
 
     const cache = await getCache();
@@ -1119,14 +1190,14 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,
-      region: this.getRegion(),
+      region,
       messageCount: messages.length,
       maxTokens: body.max_tokens,
       temperature: body.temperature,
       topP: body.top_p,
       topK: body.top_k,
-      safetySettingsEnabled: modelSafetySettings.enabled,
-      llamaGuardSettingCount: Object.keys(modelSafetySettings.llama_guard_settings).length,
+      safetySettingsEnabled: safetyRequestConfig.enabled,
+      llamaGuardSettingCount: safetyRequestConfig.settingCount,
       cacheKey,
     });
 
@@ -1166,7 +1237,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
       // Llama models use a different endpoint format
-      const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
+      const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${region}/endpoints/openapi/chat/completions`;
 
       const res = await client.request({
         url,
@@ -1278,7 +1349,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getRegion(): string {
-    return this.config.region || 'us-central1';
+    return GoogleAuthManager.resolveRegion(this.config, this.env);
   }
 
   getApiVersion(): string {

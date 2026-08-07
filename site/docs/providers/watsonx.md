@@ -1,19 +1,20 @@
 ---
 sidebar_label: WatsonX
-description: Configure IBM WatsonX's text and chat models for enterprise-grade LLM testing, including Granite, Llama, code, and multilingual options
+description: Configure IBM watsonx.ai text and chat models for LLM testing
 ---
 
 # WatsonX
 
-[IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports text generation and chat models from the `Granite` and `Llama` series, along with additional models for code generation and multilingual tasks.
+[IBM watsonx.ai](https://www.ibm.com/watsonx) exposes foundation models through text generation
+and chat APIs. Model availability varies by region and account.
 
 ## Supported Models
 
-IBM watsonx.ai provides foundation models through its inference API. The promptfoo WatsonX provider currently supports **text generation and chat models** that can be called directly via API.
+IBM watsonx.ai provides foundation models through its inference API. The promptfoo WatsonX provider supports **text generation and chat models** that can be called directly via API.
 
 :::tip Finding Available Models
 
-To see the latest models available in your region, use IBM's API or review IBM's [supported foundation models](https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-supported-foundation-models):
+To see the models available in your region, use IBM's API or review IBM's [supported foundation models](https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-supported-foundation-models):
 
 ```bash
 curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2024-05-01" \
@@ -24,29 +25,24 @@ curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=202
 
 ### Currently Available Models
 
-The following are representative **ready-to-use** models that IBM currently provides for direct inferencing through the text generation or chat APIs:
+Use the model-specs endpoint above as the source of truth. The examples below intentionally
+avoid a broad static catalog because IBM changes regional availability and lifecycle status.
 
 #### IBM Granite
 
-- `ibm/granite-4-h-small` - Latest ready-to-use Granite text model
-- `ibm/granite-3-8b-instruct` - Older instruct model (deprecated)
-- `ibm/granite-8b-code-instruct` - Code generation specialist
+- `ibm/granite-4-h-small` - Ready-to-use Granite text model
 
 #### Meta Llama
 
-- `meta-llama/llama-4-maverick-17b-128e-instruct-fp8` - Latest Llama 4 model
-- `meta-llama/llama-3-3-70b-instruct` - Latest Llama 3.3 (70B)
+Query the model-specs endpoint for the Llama models available in your region.
 
 #### Mistral
 
-- `mistralai/mistral-large-2512` - Latest ready-to-use Mistral Large model
-- `mistralai/mistral-medium-2505` - Mid-tier model
-- `mistralai/mistral-small-3-1-24b-instruct-2503` - Smaller instruct model
+Query the model-specs endpoint for the Mistral models available in your region.
 
 #### Other Models
 
-- `openai/gpt-oss-120b` - Open-source GPT-compatible model
-- `sdaia/allam-1-13b-instruct` - Arabic and English instruct model
+Query the model-specs endpoint for other ready-to-use models available in your region.
 
 ### Other Model Types
 
@@ -148,7 +144,8 @@ To install the WatsonX provider, use the following steps:
 
 Once configured, you can use the WatsonX provider to generate text responses based on prompts. Here's an example using the **Granite 4 H Small** model:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - watsonx:ibm/granite-4-h-small
 
@@ -167,17 +164,8 @@ You can also use other models by changing the model ID:
 
 ```yaml
 providers:
-  # IBM Granite models
+  # Replace this ID with a text/chat model returned by the model-specs endpoint.
   - watsonx:ibm/granite-4-h-small
-  - watsonx:ibm/granite-8b-code-instruct
-
-  # Meta Llama models
-  - watsonx:meta-llama/llama-3-3-70b-instruct
-  - watsonx:meta-llama/llama-4-maverick-17b-128e-instruct-fp8
-
-  # Mistral models
-  - watsonx:mistralai/mistral-large-2512
-  - watsonx:mistralai/mistral-medium-2505
 ```
 
 ## Configuration Options

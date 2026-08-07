@@ -1,9 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import {
+  Agent,
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
   protocol,
-  run,
+  Runner,
   startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
@@ -20,7 +23,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem, Session } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -29,6 +32,58 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
+
+type AgentExecutionOverrides = { model?: string; modelSettings?: ModelSettings };
+type AgentExecutionScope = AgentExecutionOverrides & { active: boolean };
+type GenericRunnerRun = (
+  agent: Agent<any, any>,
+  input: unknown,
+  options?: unknown,
+) => Promise<unknown>;
+
+const AGENT_RUNNER_INSTRUMENTED = Symbol.for('promptfoo.openaiAgents.runnerInstrumented');
+const AGENT_EXECUTION_OVERRIDES = Symbol.for('promptfoo.openaiAgents.executionOverrides');
+type InstrumentedRunnerPrototype = {
+  run: GenericRunnerRun & { [AGENT_RUNNER_INSTRUMENTED]?: boolean };
+  [AGENT_EXECUTION_OVERRIDES]?: AsyncLocalStorage<AgentExecutionScope>;
+};
+
+const runnerPrototype = Runner.prototype as unknown as InstrumentedRunnerPrototype;
+// Duplicate module evaluations share this Runner, so they must also share its execution context.
+const agentExecutionOverrides = getOrCreateAgentExecutionOverrides(runnerPrototype);
+
+function getOrCreateAgentExecutionOverrides(
+  prototype: InstrumentedRunnerPrototype,
+): AsyncLocalStorage<AgentExecutionScope> {
+  const existingStorage = prototype[AGENT_EXECUTION_OVERRIDES];
+  if (existingStorage) {
+    return existingStorage;
+  }
+
+  const storage = new AsyncLocalStorage<AgentExecutionScope>();
+  Object.defineProperty(prototype, AGENT_EXECUTION_OVERRIDES, { value: storage });
+  return storage;
+}
+
+function instrumentRunner(): void {
+  const currentRun = runnerPrototype.run;
+  if (currentRun[AGENT_RUNNER_INSTRUMENTED]) {
+    return;
+  }
+
+  // Agent.asTool() creates a new Runner but closes over the source Agent. Intercept every nested
+  // run while a promptfoo provider call is active so the Runner receives an isolated overridden
+  // clone. This preserves all tool options and event handlers without mutating shared agents.
+  const instrumentedRun: GenericRunnerRun = async function (this: Runner, agent, input, options) {
+    const scope = agentExecutionOverrides.getStore();
+    const executableAgent = scope?.active ? applyExecutionOverrides(agent, scope) : agent;
+    return currentRun.call(this, executableAgent, input, options);
+  };
+  Object.defineProperty(instrumentedRun, AGENT_RUNNER_INSTRUMENTED, { value: true });
+  runnerPrototype.run = instrumentedRun;
+}
+
+instrumentRunner();
 
 /**
  * OpenAI Agents Provider
@@ -39,6 +94,7 @@ import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-t
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
+  private executionModelSettings?: ModelSettings;
   private session?: Session;
   private sessionInitialization?: Promise<Session>;
   private sessionQueues = new WeakMap<Session, Promise<void>>();
@@ -49,6 +105,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   ) {
     super(modelName, options);
     this.agentConfig = options.config || {};
+    // The Agents SDK can replace its global OpenAI client or model provider independently of
+    // promptfoo (setDefaultOpenAIClient/setDefaultModelProvider), and exposes no public getter for
+    // that effective endpoint. Applying first-party catalog restrictions here would therefore
+    // reject valid custom-provider model IDs. Let the configured SDK provider resolve them.
   }
 
   id(): string {
@@ -116,14 +176,19 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         loadOutputGuardrails(this.agentConfig.outputGuardrails),
       ]);
 
-      const configuredAgent = agent.clone({
+      const configuredAgent = cloneAgentPreservingHooks(agent, {
         tools: mergeArrays(agent.tools, tools),
         handoffs: mergeArrays(agent.handoffs, handoffs),
         inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
         outputGuardrails: mergeArrays(agent.outputGuardrails, outputGuardrails),
       });
 
-      const mockAwareAgent = this.wrapToolsIfNeeded(configuredAgent);
+      this.executionModelSettings = resolveModelSettings(this.agentConfig.modelSettings);
+      const overriddenAgent = applyExecutionOverrides(configuredAgent, {
+        model: this.agentConfig.model || undefined,
+        modelSettings: this.executionModelSettings,
+      });
+      const mockAwareAgent = this.wrapToolsIfNeeded(overriddenAgent);
 
       logger.debug('[AgentsProvider] Agent initialized successfully', {
         name: mockAwareAgent.name,
@@ -189,16 +254,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
-      // Override the agent's model only when the provider config explicitly asks to.
-      // The provider suffix is an agent label, not a model identifier.
-      if (this.agentConfig.model) {
-        runOptions.model = this.agentConfig.model;
-      }
-
-      // Override model settings if specified
-      if (this.agentConfig.modelSettings) {
-        runOptions.modelSettings = resolveModelSettings(this.agentConfig.modelSettings);
-      }
+      // Keep Runner defaults for SDK-created agents while the cloned graph above enforces the
+      // provider overrides on explicit initial and handoff agents.
+      const runner = new Runner({
+        ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
+        ...(this.executionModelSettings ? { modelSettings: this.executionModelSettings } : {}),
+      });
 
       const traceContext = parseTraceparent(context?.traceparent);
       const traceMetadata = buildTraceMetadata(
@@ -209,16 +270,32 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       // Run the agent within the evaluator trace when Promptfoo supplied one so
       // nested agent spans stay attached to trajectory assertions and UI traces.
-      const executeRun = () =>
-        getOrCreateTrace(
-          async () => {
-            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
-          },
-          {
-            ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
-            ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
-          },
-        );
+      const executeRun = async () => {
+        const executionScope: AgentExecutionScope = {
+          active: true,
+          model: this.agentConfig.model || undefined,
+          modelSettings: this.executionModelSettings,
+        };
+
+        try {
+          return await agentExecutionOverrides.run(executionScope, () =>
+            getOrCreateTrace(
+              async () => {
+                return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
+              },
+              {
+                ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
+                ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
+              },
+            ),
+          );
+        } finally {
+          // AsyncLocalStorage contexts outlive the awaited call when code starts detached work.
+          // Mark this shared scope inactive so a later Runner.run() from that detached task uses
+          // its own Agent settings, while nested agent-as-tool runs awaited above remain overridden.
+          executionScope.active = false;
+        }
+      };
       const result = runOptions.session
         ? await this.withSessionLock(runOptions.session, executeRun)
         : await executeRun();
@@ -308,7 +385,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       };
     });
 
-    return agent.clone({ tools });
+    return cloneAgentPreservingHooks(agent, { tools });
   }
 
   private parsePromptInput(prompt: string): string | AgentInputItem[] {
@@ -445,6 +522,67 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   }
 
   return [...(existing ?? []), ...(additions ?? [])];
+}
+
+function cloneAgentPreservingHooks(
+  source: Agent<any, any>,
+  config: Parameters<Agent<any, any>['clone']>[0],
+): Agent<any, any> {
+  const cloned = source.clone(config);
+  const sourceHooks = source as unknown as { eventEmitter: unknown };
+  const clonedHooks = cloned as unknown as { eventEmitter: unknown };
+  // Agent.clone() creates a fresh lifecycle emitter. The provider replaces the cloned graph at
+  // execution time, so share the source emitter to preserve all registered hook semantics.
+  clonedHooks.eventEmitter = sourceHooks.eventEmitter;
+  return cloned;
+}
+
+/**
+ * Clone the executable agent graph so provider-level model overrides win on every turn.
+ *
+ * The Agents SDK treats Runner model configuration as a fallback: explicit settings on an agent
+ * take precedence. Handoff agents therefore need the same overrides applied before execution.
+ */
+function applyExecutionOverrides(
+  agent: Agent<any, any>,
+  overrides: AgentExecutionOverrides,
+): Agent<any, any> {
+  if (overrides.model === undefined && overrides.modelSettings === undefined) {
+    return agent;
+  }
+
+  const clonedAgents = new WeakMap<Agent<any, any>, Agent<any, any>>();
+
+  const cloneAgent = (source: Agent<any, any>): Agent<any, any> => {
+    const existing = clonedAgents.get(source);
+    if (existing) {
+      return existing;
+    }
+
+    const cloned = cloneAgentPreservingHooks(source, {
+      ...(overrides.model === undefined ? {} : { model: overrides.model }),
+      ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
+      handoffs: [],
+      tools: source.tools,
+    });
+    clonedAgents.set(source, cloned);
+    cloned.handoffs = source.handoffs.map((candidate) => {
+      if ('clone' in candidate && 'agent' in candidate) {
+        const handoff = candidate as Handoff<any, any>;
+        return handoff.clone({
+          agent: cloneAgent(handoff.agent),
+          onInvokeHandoff: async (context, args) =>
+            cloneAgent(await handoff.onInvokeHandoff(context, args)),
+        });
+      }
+
+      return cloneAgent(candidate as Agent<any, any>);
+    });
+
+    return cloned;
+  };
+
+  return cloneAgent(agent);
 }
 
 let tracingProcessorRegistration: Promise<void> | undefined;

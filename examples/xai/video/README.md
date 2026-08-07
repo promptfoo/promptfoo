@@ -76,6 +76,24 @@ providers:
 
 `reference_images` cannot be combined with `image` or `video`, and reference-guided videos are limited to 10 seconds.
 
+Grok Imagine Video 1.5 also supports reference-to-video with up to seven images and three preset
+voices. Its reference-to-video duration can be up to 15 seconds and its resolution is capped at
+720p:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video-1.5
+    config:
+      reference_images:
+        - url: 'https://example.com/person.jpg'
+      reference_audios:
+        - voice_id: 'eve'
+      duration: 15
+      resolution: '720p'
+```
+
+Preset voices are currently available only to trusted partners in the United States.
+
 ## See Also
 
 - [xAI Provider Documentation](https://promptfoo.dev/docs/providers/xai)

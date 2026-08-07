@@ -4,7 +4,8 @@
  * Supports:
  * - Text-to-video generation
  * - Image-to-video generation (with image.url)
- * - Video editing (with video.url)
+ * - Reference-to-video generation (with reference images and Video 1.5 preset voices)
+ * - Video editing (with video.url, legacy model only)
  *
  * API Documentation: https://docs.x.ai/docs/guides/video-generations-and-edits
  */
@@ -20,6 +21,8 @@ import {
   DEFAULT_POLL_INTERVAL_MS,
   formatVideoOutput,
   generateVideoCacheKey,
+  isVideoCacheReferenceUrlSafe,
+  sanitizeVideoCacheReferenceUrl,
   storeCacheMapping,
   storeVideoContent,
 } from '../video';
@@ -37,11 +40,22 @@ import type {
 // Types
 // =============================================================================
 
-export type XaiVideoModel = 'grok-imagine-video';
+export type XaiVideoModel =
+  | 'grok-imagine-video'
+  | 'grok-imagine-video-1.5'
+  | 'grok-imagine-video-1.5-preview'
+  | 'grok-imagine-video-1.5-2026-05-30';
 
 export type XaiVideoAspectRatio = '16:9' | '4:3' | '1:1' | '9:16' | '3:4' | '3:2' | '2:3';
 
-export type XaiVideoResolution = '720p' | '480p';
+export type XaiVideoResolution = '1080p' | '720p' | '480p';
+
+export interface XaiVideoCostOptions {
+  modelName?: string;
+  resolution?: XaiVideoResolution;
+  hasImageInput?: boolean;
+  imageInputCount?: number;
+}
 
 export interface XaiVideoJobResponse {
   request_id: string;
@@ -103,6 +117,8 @@ export interface XaiVideoOptions {
   image?: { url: string };
   /** Reference image URLs for reference-to-video generation */
   reference_images?: { url: string }[];
+  /** Preset voice IDs for Grok Imagine Video 1.5 reference-to-video generation */
+  reference_audios?: { voice_id: string }[];
   /** Video URL for video editing */
   video?: { url: string };
   /** Polling interval in ms (default: 10000) */
@@ -130,8 +146,19 @@ const VALID_ASPECT_RATIOS: readonly XaiVideoAspectRatio[] = [
   '2:3',
 ] as const;
 
-/** Valid resolutions for Grok Imagine */
-const VALID_RESOLUTIONS: readonly XaiVideoResolution[] = ['720p', '480p'] as const;
+const GROK_IMAGINE_VIDEO_15_MODELS = new Set<string>([
+  'grok-imagine-video-1.5',
+  'grok-imagine-video-1.5-preview',
+  'grok-imagine-video-1.5-2026-05-30',
+]);
+
+/** Valid resolutions for the legacy and 1.5 Grok Imagine video families. */
+const LEGACY_VALID_RESOLUTIONS: readonly XaiVideoResolution[] = ['720p', '480p'] as const;
+const VIDEO_15_VALID_RESOLUTIONS: readonly XaiVideoResolution[] = [
+  '1080p',
+  '720p',
+  '480p',
+] as const;
 
 /** Default configuration */
 const DEFAULT_DURATION = 8;
@@ -139,21 +166,42 @@ const DEFAULT_ASPECT_RATIO: XaiVideoAspectRatio = '16:9';
 const DEFAULT_RESOLUTION: XaiVideoResolution = '720p';
 const MIN_DURATION = 1;
 const MAX_DURATION = 15;
-const MAX_REFERENCE_IMAGE_DURATION = 10;
+const LEGACY_MAX_REFERENCE_DURATION = 10;
 const MAX_REFERENCE_IMAGES = 7;
+const MAX_REFERENCE_AUDIOS = 3;
 
-/**
- * Cost per second for Grok Imagine video generation
- * Note: This is an estimate - verify with xAI pricing
- */
-const COST_PER_SECOND = 0.05;
+const LEGACY_VIDEO_COST_PER_SECOND: Record<'720p' | '480p', number> = {
+  '720p': 0.07,
+  '480p': 0.05,
+};
+const VIDEO_15_COST_PER_SECOND: Record<XaiVideoResolution, number> = {
+  '1080p': 0.25,
+  '720p': 0.14,
+  '480p': 0.08,
+};
+const LEGACY_IMAGE_INPUT_COST = 0.002;
+const VIDEO_15_IMAGE_INPUT_COST = 0.01;
 
 // =============================================================================
 // Validation
 // =============================================================================
 
 export const validateAspectRatio = createValidator(VALID_ASPECT_RATIOS, 'aspect ratio');
-export const validateResolution = createValidator(VALID_RESOLUTIONS, 'resolution');
+const validateLegacyResolution = createValidator(LEGACY_VALID_RESOLUTIONS, 'resolution');
+const validateVideo15Resolution = createValidator(VIDEO_15_VALID_RESOLUTIONS, 'resolution');
+
+function isGrokImagineVideo15Model(modelName: string): boolean {
+  return GROK_IMAGINE_VIDEO_15_MODELS.has(modelName);
+}
+
+export function validateResolution(
+  resolution: XaiVideoResolution,
+  modelName: string = DEFAULT_MODEL,
+): { valid: boolean; message?: string } {
+  return isGrokImagineVideo15Model(modelName)
+    ? validateVideo15Resolution(resolution)
+    : validateLegacyResolution(resolution);
+}
 
 export function validateDuration(duration: number): { valid: boolean; message?: string } {
   if (duration < MIN_DURATION || duration > MAX_DURATION) {
@@ -165,14 +213,73 @@ export function validateDuration(duration: number): { valid: boolean; message?: 
   return { valid: true };
 }
 
+function normalizeReferenceAudioVoiceId(voiceId: string): string {
+  return voiceId.trim().toLowerCase();
+}
+
+function buildVideoInputReference(
+  modelName: XaiVideoModel,
+  config: XaiVideoOptions,
+): string | null {
+  if (config.image?.url) {
+    const imageUrl = isGrokImagineVideo15Model(modelName)
+      ? sanitizeVideoCacheReferenceUrl(config.image.url)
+      : config.image.url;
+    return `image:${imageUrl}`;
+  }
+
+  const referenceImages = config.reference_images?.map(({ url }) => url) ?? [];
+  const referenceAudios =
+    config.reference_audios?.map(({ voice_id }) => normalizeReferenceAudioVoiceId(voice_id)) ?? [];
+  if (!referenceImages.length && !referenceAudios.length) {
+    return null;
+  }
+
+  if (modelName === DEFAULT_MODEL && referenceImages.length && !referenceAudios.length) {
+    return `reference_images:${referenceImages.join('|')}`;
+  }
+
+  return JSON.stringify({
+    type: 'xai-reference-media',
+    reference_images: referenceImages.map(sanitizeVideoCacheReferenceUrl),
+    reference_audios: referenceAudios,
+  });
+}
+
+function canUsePersistentCache(modelName: XaiVideoModel, config: XaiVideoOptions): boolean {
+  if (!isGrokImagineVideo15Model(modelName)) {
+    return true;
+  }
+
+  const inputUrls = [
+    ...(config.image?.url ? [config.image.url] : []),
+    ...(config.reference_images?.map(({ url }) => url) ?? []),
+  ];
+  return inputUrls.every(isVideoCacheReferenceUrlSafe);
+}
+
 /**
  * Calculate video generation cost
  */
-export function calculateVideoCost(seconds: number, cached: boolean = false): number {
+export function calculateVideoCost(
+  seconds: number,
+  cached: boolean = false,
+  options: XaiVideoCostOptions = {},
+): number {
   if (cached) {
     return 0;
   }
-  return COST_PER_SECOND * seconds;
+
+  const modelName = options.modelName ?? DEFAULT_MODEL;
+  const resolution = options.resolution ?? DEFAULT_RESOLUTION;
+  const isVideo15 = isGrokImagineVideo15Model(modelName);
+  const outputRate = isVideo15
+    ? VIDEO_15_COST_PER_SECOND[resolution]
+    : LEGACY_VIDEO_COST_PER_SECOND[resolution === '480p' ? '480p' : '720p'];
+  const imageInputCount = options.imageInputCount ?? (options.hasImageInput ? 1 : 0);
+  const imageInputCost =
+    imageInputCount * (isVideo15 ? VIDEO_15_IMAGE_INPUT_COST : LEGACY_IMAGE_INPUT_COST);
+  return outputRate * seconds + imageInputCost;
 }
 
 // =============================================================================
@@ -282,6 +389,13 @@ export class XAIVideoProvider implements ApiProvider {
       body.reference_images = config.reference_images.map(({ url }) => ({ url }));
     }
 
+    // Preset voices for Grok Imagine Video 1.5 reference-to-video
+    if (config.reference_audios?.length) {
+      body.reference_audios = config.reference_audios.map(({ voice_id }) => ({
+        voice_id: normalizeReferenceAudioVoiceId(voice_id),
+      }));
+    }
+
     // Video editing
     if (config.video?.url) {
       body.video = { url: config.video.url };
@@ -310,37 +424,105 @@ export class XAIVideoProvider implements ApiProvider {
     }
   }
 
-  private validateReferenceImages(
+  private validateVideoInputs(
     prompt: string,
     config: XaiVideoOptions,
     duration: number,
+    resolution: XaiVideoResolution,
     isEdit: boolean,
   ): string | undefined {
-    if (!config.reference_images?.length) {
+    const isVideo15 = isGrokImagineVideo15Model(this.modelName);
+    const referenceImageCount = config.reference_images?.length ?? 0;
+    const referenceAudios: unknown = config.reference_audios;
+    if (referenceAudios !== undefined && !Array.isArray(referenceAudios)) {
+      return 'reference_audios must be an array of preset voice objects.';
+    }
+    const referenceAudioCount = referenceAudios?.length ?? 0;
+    const hasReferenceImages = referenceImageCount > 0;
+    const hasReferenceAudios = referenceAudioCount > 0;
+    const hasReferenceMedia = hasReferenceImages || hasReferenceAudios;
+
+    if (isVideo15 && isEdit) {
+      return 'Grok Imagine Video 1.5 does not support video editing.';
+    }
+
+    if (hasReferenceAudios && !isVideo15) {
+      return 'reference_audios are only supported by Grok Imagine Video 1.5.';
+    }
+
+    if (!hasReferenceMedia) {
       return undefined;
     }
 
     if (config.image?.url) {
-      return 'reference_images cannot be combined with image input. Use one video generation mode per request.';
+      return hasReferenceAudios
+        ? 'reference media cannot be combined with image input. Use one video generation mode per request.'
+        : 'reference_images cannot be combined with image input. Use one video generation mode per request.';
     }
 
     if (isEdit) {
-      return 'reference_images cannot be combined with video edits. Use one video generation mode per request.';
+      return 'reference media cannot be combined with video edits. Use one video generation mode per request.';
     }
 
     if (!prompt.trim()) {
-      return 'reference_images require a non-empty prompt.';
+      return 'Reference-to-video requires a non-empty prompt.';
     }
 
-    if (config.reference_images.length > MAX_REFERENCE_IMAGES) {
-      return `Invalid reference_images count "${config.reference_images.length}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
+    if (referenceImageCount > MAX_REFERENCE_IMAGES) {
+      return `Invalid reference_images count "${referenceImageCount}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
     }
 
-    if (duration > MAX_REFERENCE_IMAGE_DURATION) {
-      return `Invalid duration "${duration}" for reference_images. Must be between ${MIN_DURATION} and ${MAX_REFERENCE_IMAGE_DURATION} seconds.`;
+    if (referenceAudioCount > MAX_REFERENCE_AUDIOS) {
+      return `Invalid reference_audios count "${referenceAudioCount}". Must be between 1 and ${MAX_REFERENCE_AUDIOS}.`;
+    }
+
+    if (
+      referenceAudios?.some(
+        (entry: unknown) =>
+          typeof entry !== 'object' ||
+          entry === null ||
+          !('voice_id' in entry) ||
+          typeof entry.voice_id !== 'string' ||
+          !entry.voice_id.trim(),
+      )
+    ) {
+      return 'Each reference_audios entry must contain a non-empty voice_id.';
+    }
+
+    const maxReferenceDuration = isVideo15 ? MAX_DURATION : LEGACY_MAX_REFERENCE_DURATION;
+    if (duration > maxReferenceDuration) {
+      return `Invalid duration "${duration}" for reference-to-video. Must be between ${MIN_DURATION} and ${maxReferenceDuration} seconds.`;
+    }
+
+    if (resolution === '1080p') {
+      return 'Reference-to-video resolution is capped at 720p.';
     }
 
     return undefined;
+  }
+
+  private validateGenerationParameters(
+    duration: number,
+    aspectRatio: XaiVideoAspectRatio,
+    resolution: XaiVideoResolution,
+    isEdit: boolean,
+  ): string | undefined {
+    if (isEdit) {
+      return undefined;
+    }
+
+    const durationValidation = validateDuration(duration);
+    if (!durationValidation.valid) {
+      return durationValidation.message;
+    }
+
+    const aspectRatioValidation = validateAspectRatio(aspectRatio);
+    if (!aspectRatioValidation.valid) {
+      return aspectRatioValidation.message;
+    }
+
+    const resolutionValidation = validateResolution(resolution, this.modelName);
+    return resolutionValidation.valid ? undefined : resolutionValidation.message;
   }
 
   /**
@@ -411,7 +593,7 @@ export class XAIVideoProvider implements ApiProvider {
    */
   private async downloadAndStoreVideo(
     videoUrl: string,
-    cacheKey: string,
+    cacheKey: string | undefined,
     evalId?: string,
   ): Promise<{ storageKey?: string; error?: string }> {
     try {
@@ -434,7 +616,7 @@ export class XAIVideoProvider implements ApiProvider {
           contentType: 'video/mp4',
           mediaType: 'video',
           evalId,
-          contentHash: cacheKey,
+          ...(cacheKey ? { contentHash: cacheKey } : {}),
         },
         PROVIDER_NAME,
       );
@@ -475,46 +657,47 @@ export class XAIVideoProvider implements ApiProvider {
     const evalId = context?.evaluationId;
     const isEdit = !!config.video?.url;
     const hasReferenceImages = Boolean(config.reference_images?.length);
+    const hasReferenceAudios = Boolean(config.reference_audios?.length);
 
-    const referenceImageError = this.validateReferenceImages(prompt, config, duration, isEdit);
-    if (referenceImageError) {
-      return { error: referenceImageError };
-    }
-
-    // Validate parameters (only for generation, not edits)
-    if (!isEdit) {
-      const durationValidation = validateDuration(duration);
-      if (!durationValidation.valid) {
-        return { error: durationValidation.message };
-      }
-
-      const aspectRatioValidation = validateAspectRatio(aspectRatio);
-      if (!aspectRatioValidation.valid) {
-        return { error: aspectRatioValidation.message };
-      }
-
-      const resolutionValidation = validateResolution(resolution);
-      if (!resolutionValidation.valid) {
-        return { error: resolutionValidation.message };
-      }
-    }
-
-    // Generate cache key (skip caching for edits)
-    const cacheKey = generateVideoCacheKey({
-      provider: 'xai',
+    const inputValidationError = this.validateVideoInputs(
       prompt,
-      model: this.modelName,
-      size: `${aspectRatio}:${resolution}`,
-      seconds: duration,
-      inputReference: config.image?.url
-        ? `image:${config.image.url}`
-        : config.reference_images?.length
-          ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
-          : null,
-    });
+      config,
+      duration,
+      resolution,
+      isEdit,
+    );
+    if (inputValidationError) {
+      return { error: inputValidationError };
+    }
+
+    const generationParameterError = this.validateGenerationParameters(
+      duration,
+      aspectRatio,
+      resolution,
+      isEdit,
+    );
+    if (generationParameterError) {
+      return { error: generationParameterError };
+    }
+
+    const persistentCacheAllowed = canUsePersistentCache(this.modelName, config);
+    const cacheKey = persistentCacheAllowed
+      ? generateVideoCacheKey({
+          provider: 'xai',
+          prompt,
+          model: this.modelName,
+          size: `${aspectRatio}:${resolution}`,
+          seconds: duration,
+          inputReference: buildVideoInputReference(this.modelName, config),
+        })
+      : undefined;
+
+    if (!persistentCacheAllowed) {
+      logger.debug(`[${PROVIDER_NAME}] Skipping persistent cache for credential-bearing input URL`);
+    }
 
     // Check cache (skip for edits)
-    if (!isEdit) {
+    if (!isEdit && cacheKey) {
       const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
       if (cachedVideoKey) {
         logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
@@ -545,6 +728,7 @@ export class XAIVideoProvider implements ApiProvider {
             resolution,
             duration,
             hasReferenceImages,
+            hasReferenceAudios,
           },
         };
       }
@@ -602,10 +786,18 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost = reportedCost ?? calculateVideoCost(actualDuration, false);
+    const outputResolution = isEdit ? undefined : resolution;
+    const estimatedCost = outputResolution
+      ? calculateVideoCost(actualDuration, false, {
+          modelName: this.modelName,
+          resolution: outputResolution,
+          imageInputCount: config.reference_images?.length || (config.image?.url ? 1 : 0),
+        })
+      : undefined;
+    const cost = reportedCost ?? estimatedCost;
 
     // Store cache mapping (skip for edits)
-    if (!isEdit) {
+    if (!isEdit && cacheKey) {
       await storeCacheMapping(cacheKey, storageKey, undefined, undefined, PROVIDER_NAME);
     }
 
@@ -626,18 +818,19 @@ export class XAIVideoProvider implements ApiProvider {
         duration: actualDuration,
         model: this.modelName,
         aspectRatio,
-        resolution,
+        ...(outputResolution ? { resolution: outputResolution } : {}),
       },
       metadata: {
         requestId,
-        cacheKey,
+        ...(cacheKey ? { cacheKey } : {}),
         model: this.modelName,
         aspectRatio,
-        resolution,
+        ...(outputResolution ? { resolution: outputResolution } : {}),
         duration: actualDuration,
         storageKey,
         isEdit,
         hasReferenceImages,
+        hasReferenceAudios,
       },
     };
   }

@@ -154,6 +154,7 @@ export interface CompletionOptions {
   /** Additional top-level Gemini request fields. */
   passthrough?: Record<string, unknown>;
   projectId?: string;
+  /** Vertex location. Current Gemini 3 models default to `global`; explicit values take precedence. */
   region?: string;
   publisher?: string;
   apiVersion?: string; // For Live API: 'v1alpha' or 'v1beta'
@@ -250,6 +251,12 @@ export interface CompletionOptions {
     // Transcription configuration
     outputAudioTranscription?: Record<string, any>;
     inputAudioTranscription?: Record<string, any>;
+
+    // Gemini 3.5 Live Translate configuration
+    translationConfig?: {
+      targetLanguageCode?: string;
+      echoTargetLanguage?: boolean;
+    };
 
     // Affective dialog (v1alpha only)
     enableAffectiveDialog?: boolean;
@@ -434,6 +441,9 @@ export interface CompletionOptions {
  * { vertexai: true, apiKey: 'your-key' }
  */
 export interface GoogleProviderConfig extends CompletionOptions {
+  /** Base directory for resolving relative file references in provider configuration. */
+  basePath?: string;
+
   /**
    * Explicitly enable Vertex AI mode.
    *
@@ -507,6 +517,10 @@ export interface ClaudeResponse {
   usage: {
     input_tokens: number;
     cache_creation_input_tokens: number;
+    cache_creation?: {
+      ephemeral_5m_input_tokens?: number;
+      ephemeral_1h_input_tokens?: number;
+    };
     cache_read_input_tokens: number;
     output_tokens: number;
   };
@@ -517,14 +531,22 @@ export interface ClaudeResponse {
 // =============================================================================
 
 /**
- * Supported Veo video models
+ * Recognized Veo model IDs. Retired IDs remain for configuration compatibility.
  */
 export type GoogleVideoModel =
   | 'veo-3.1-generate-preview'
+  | 'veo-3.1-fast-generate-preview'
+  | 'veo-3.1-lite-generate-preview'
   | 'veo-3.1-fast-preview'
   | 'veo-3-generate'
   | 'veo-3-fast'
-  | 'veo-2-generate';
+  | 'veo-2-generate'
+  | 'veo-3.1-generate-001'
+  | 'veo-3.1-fast-generate-001'
+  | 'veo-3.1-lite-generate-001'
+  | 'veo-3.0-generate-001'
+  | 'veo-3.0-fast-generate-001'
+  | 'veo-2.0-generate-001';
 
 /**
  * Supported aspect ratios for Veo video generation
@@ -534,7 +556,7 @@ export type GoogleVideoAspectRatio = '16:9' | '9:16';
 /**
  * Supported resolutions for Veo video generation
  */
-export type GoogleVideoResolution = '720p' | '1080p';
+export type GoogleVideoResolution = '720p' | '1080p' | '4k';
 
 /**
  * Valid video durations by model
@@ -562,6 +584,9 @@ export interface GoogleVideoReferenceImage {
  * Configuration options for Google video generation (Veo)
  */
 export interface GoogleVideoOptions {
+  /** Base directory for resolving relative file:// media paths */
+  basePath?: string;
+
   // Model selection
   model?: GoogleVideoModel;
 
@@ -590,8 +615,8 @@ export interface GoogleVideoOptions {
   referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Base64/file:// video for AI Studio, or Veo operation ID in Vertex flows
+  extendVideoId?: string; // Deprecated alias for sourceVideo
+  sourceVideo?: string; // Prior Gemini URI for AI Studio, or gs:// URI for Vertex AI
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;
@@ -607,6 +632,7 @@ export interface GoogleVideoOptions {
   projectId?: string; // Google Cloud project ID
   region?: string; // Vertex AI region (default: us-central1)
   credentials?: string; // Path to credentials file or JSON string
+  storageUri?: string; // Vertex-only Cloud Storage output destination (gs://bucket/prefix/)
 }
 
 /**
@@ -620,9 +646,11 @@ export interface GoogleVideoOperation {
   };
   response?: {
     '@type'?: string;
-    // New format: videos array with base64 encoded video
+    // New format: inline video bytes or a Vertex Cloud Storage output
     videos?: Array<{
-      bytesBase64Encoded: string;
+      bytesBase64Encoded?: string;
+      gcsUri?: string;
+      mimeType?: string;
     }>;
     // Legacy format with URI
     generateVideoResponse?: {

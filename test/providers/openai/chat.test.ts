@@ -455,7 +455,7 @@ describe('OpenAI Provider', () => {
       ['openai/gpt-5-search-api-2025-10-14', 0.0100625],
       ['github/openai/gpt-4o-mini-search-preview-2025-03-11', 0.0250045],
     ])(
-      'should include token rates and the Chat Completions search fee for routed model %s',
+      'should include qualified token rates and the Chat Completions search fee for routed model %s',
       async (model, cost) => {
         mockFetchWithCache.mockResolvedValueOnce({
           data: {
@@ -518,6 +518,98 @@ describe('OpenAI Provider', () => {
       const result = await provider.callApi('What happened today?');
 
       expect(result.cost).toBeCloseTo(0.02125, 10);
+    });
+
+    it.each(['vendor/gpt-5-search-api', 'vendor/openai/gpt-4o-mini-search-preview'])(
+      'should not apply OpenAI Chat search fees to another gateway namespace: %s',
+      async (model) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          data: {
+            choices: [{ message: { content: 'Vendor answer' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await new OpenAiChatCompletionProvider(model, {
+          config: { apiBaseUrl: 'https://gateway.example/v1' },
+        }).callApi('What happened today?');
+
+        expect(result.cost).toBeUndefined();
+      },
+    );
+
+    it('should send the configured fast tier as priority while retaining fast billing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Fast answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: { service_tier: 'fast' },
+      });
+
+      const result = await provider.callApi('Answer quickly');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should bill the effective passthrough service tier when the response omits it', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Priority answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: {
+          service_tier: 'flex',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer with priority');
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('priority');
+      expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+    });
+
+    it('should prefer a per-prompt direct service tier over provider passthrough', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Flex answer' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 1_000, completion_tokens: 100, total_tokens: 1_100 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-5-mini', {
+        config: {
+          service_tier: 'default',
+          passthrough: { service_tier: 'priority' },
+        },
+      });
+
+      const result = await provider.callApi('Answer flexibly', {
+        prompt: { config: { service_tier: 'flex' } },
+      } as any);
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+
+      expect(body.service_tier).toBe('flex');
+      expect(result.cost).toBeCloseTo((1_000 * 0.125 + 100 * 1) / 1e6, 10);
     });
 
     it('should price a fine-tuned Chat Completions model from the API usage ledger', async () => {
@@ -1952,9 +2044,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o1Provider = new OpenAiChatCompletionProvider('o1');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
-      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1');
       const o3StandardProvider = new OpenAiChatCompletionProvider('o3');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
 
@@ -2005,7 +2097,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should identify reasoning models with prefixed names (GitHub Models)', async () => {
       // Prefixed reasoning models
-      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1-mini');
+      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1');
       const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
       const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
@@ -2030,9 +2122,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
+      const o1Provider = new OpenAiChatCompletionProvider('o1');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
-      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
+      const o1PreviewProvider = new OpenAiChatCompletionProvider('o1');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
       const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
       const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
@@ -2080,7 +2172,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model (should omit temperature)
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { temperature: 0.7 },
       });
       await o1Provider.callApi('Test prompt');
@@ -2164,7 +2256,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test O1 model with max_completion_tokens
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { max_completion_tokens: 200 },
       });
       await o1Provider.callApi('Test prompt');
@@ -2325,7 +2417,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test O1 model with reasoning_effort
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: { reasoning_effort: 'high' } as any,
       });
       await o1Provider.callApi('Test prompt');
@@ -2427,7 +2519,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const o1Provider = new OpenAiChatCompletionProvider('o1-mini', {
+      const o1Provider = new OpenAiChatCompletionProvider('o1', {
         config: {
           reasoning: {
             effort: 'high',

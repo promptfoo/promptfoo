@@ -255,12 +255,12 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([...GPT_5_6_MODELS, 'openai.gpt-5.5', 'openai.gpt-5.4'])(
-      'computes a finite, non-zero cost end-to-end for %s via the OpenAI billing tables',
+      'computes a finite, non-zero cost end-to-end for %s',
       (modelId) => {
         restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
         const provider = createBedrockOpenAiResponsesProvider(modelId, {});
         const billingModelName = (provider as any).getBillingModelName({});
-        // The stripped id must actually resolve in the OpenAI cost map, not just be a string.
+        // The normalized id must resolve in the applicable billing table, not just be a string.
         const cost = calculateOpenAIUsageCost(
           billingModelName,
           {},
@@ -276,14 +276,17 @@ describe('bedrock openaiResponses helper', () => {
     );
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
+      ['openai.gpt-5.6-sol', 5.5, 0.55, 6.875, 33],
+      ['openai.gpt-5.6-terra', 2.75, 0.275, 3.4375, 16.5],
+      ['openai.gpt-5.6-luna', 1.1, 0.11, 1.375, 6.6],
     ])(
-      'applies first-party-equivalent cache read/write and output rates to %s',
-      (modelId, input, output) => {
+      'applies Bedrock cache read/write and output rates to %s',
+      (modelId, input, cacheRead, cacheWrite, output) => {
         const provider = createBedrockOpenAiResponsesProvider(modelId, {
-          config: { apiKey: 'bedrock-key' },
+          config: {
+            apiKey: 'bedrock-key',
+            apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          },
         });
         const cost = calculateOpenAIUsageCost(
           (provider as any).getBillingModelName({}),
@@ -297,11 +300,119 @@ describe('bedrock openaiResponses helper', () => {
         );
 
         expect(cost).toBeCloseTo(
-          (500 * input + 200 * input * 0.1 + 300 * input * 1.25 + 500 * output) / 1e6,
+          (500 * input + 200 * cacheRead + 300 * cacheWrite + 500 * output) / 1e6,
           12,
         );
       },
     );
+
+    it('uses the capability model for the Bedrock web-search tool fee', () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      const result = (provider as any).applyBilling(
+        {},
+        {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        },
+        provider.config,
+        false,
+      );
+
+      expect(result.cost).toBeCloseTo(0.032, 10);
+    });
+
+    it('uses the effective passthrough model for Bedrock token billing', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          passthrough: { model: 'openai.gpt-5.6-luna' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        },
+      });
+      const request = await provider.getOpenAiBody('hello');
+      const result = (provider as any).applyBilling(
+        {},
+        {
+          usage: {
+            input_tokens: 1_000_000,
+            output_tokens: 1_000_000,
+            input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+          },
+        },
+        request.config,
+        false,
+      );
+
+      expect(request.body.model).toBe('openai.gpt-5.6-luna');
+      expect(request.body.reasoning).toEqual({ effort: 'high' });
+      expect(request.body.temperature).toBeUndefined();
+      expect(result.cost).toBeCloseTo(7.7, 10);
+    });
+
+    it.each([
+      ['provider config', { service_tier: 'flex' }, undefined, 'flex'],
+      [
+        'provider passthrough',
+        { service_tier: 'default', passthrough: { service_tier: 'priority' } },
+        undefined,
+        'priority',
+      ],
+      [
+        'prompt config',
+        { service_tier: 'default' },
+        { prompt: { config: { service_tier: 'flex' } } },
+        'flex',
+      ],
+      [
+        'prompt passthrough',
+        { service_tier: 'default' },
+        { prompt: { config: { passthrough: { service_tier: 'fast' } } } },
+        'fast',
+      ],
+    ] as const)(
+      'rejects unsupported Bedrock GPT service tiers from %s',
+      async (_case, config, context, tier) => {
+        const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+          config: { apiKey: 'bedrock-key', ...config } as any,
+        });
+
+        await expect(provider.getOpenAiBody('hello', context as any)).rejects.toThrow(
+          `supports only the standard inference tier; received "${tier}"`,
+        );
+      },
+    );
+
+    it.each([
+      ['omitted', undefined],
+      ['default', 'default'],
+      ['null', null],
+    ] as const)('accepts the Bedrock GPT standard tier when %s', async (_case, tier) => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-sol', {
+        config: {
+          apiKey: 'bedrock-key',
+          ...(tier === undefined ? {} : { service_tier: tier }),
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('hello');
+
+      if (tier === 'default') {
+        expect(body.service_tier).toBe('default');
+      } else {
+        expect(body.service_tier).toBeUndefined();
+      }
+    });
 
     it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
@@ -318,12 +429,12 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
+      ['openai.gpt-5.6-sol', 5.5, 0.55, 6.875, 33],
+      ['openai.gpt-5.6-terra', 2.75, 0.275, 3.4375, 16.5],
+      ['openai.gpt-5.6-luna', 1.1, 0.11, 1.375, 6.6],
     ])(
-      'applies the long-context rates without a first-party regional uplift to %s',
-      (modelId, input, output) => {
+      'does not apply first-party long-context or regional rates to %s',
+      (modelId, input, cacheRead, cacheWrite, output) => {
         const provider = createBedrockOpenAiResponsesProvider(modelId, {
           config: { apiKey: 'bedrock-key', region: 'us-east-1' },
         });
@@ -339,11 +450,7 @@ describe('bedrock openaiResponses helper', () => {
         );
 
         expect(cost).toBeCloseTo(
-          (150_000 * input * 2 +
-            100_000 * input * 0.2 +
-            50_000 * input * 2.5 +
-            1000 * output * 1.5) /
-            1e6,
+          (150_000 * input + 100_000 * cacheRead + 50_000 * cacheWrite + 1000 * output) / 1e6,
           10,
         );
       },
@@ -732,6 +839,49 @@ describe('bedrock openaiResponses helper', () => {
       expect((provider as any).supportsTemperature()).toBe(true);
     });
 
+    it('uses the published Bedrock Grok 4.3 rates, including cached input', () => {
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          apiKey: 'bedrock-key',
+          apiBaseUrl: 'https://bedrock-proxy.example.test/openai/v1',
+          passthrough: { model: 'xai.grok-4.3' },
+        },
+      });
+      const billingModelName = (provider as any).getBillingModelName(provider.config);
+
+      expect(billingModelName).toBe('bedrock:grok-4.3');
+      expect(
+        calculateOpenAIUsageCost(
+          billingModelName,
+          provider.config,
+          {
+            input_tokens: 1_000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 200 },
+          },
+          { apiUrl: provider.getApiUrl() },
+        ),
+      ).toBeCloseTo((800 * 1.25 + 200 * 0.2 + 500 * 2.5) / 1e6, 12);
+    });
+
+    it.each(['batch', 'flex', 'fast', 'priority'])(
+      'leaves Grok 4.3 %s-tier cost unset when AWS does not publish a rate',
+      (serviceTier) => {
+        expect(
+          calculateOpenAIUsageCost(
+            'bedrock:grok-4.3',
+            {},
+            {
+              input_tokens: 1_000,
+              output_tokens: 500,
+              input_tokens_details: { cached_tokens: 200 },
+            },
+            { serviceTier },
+          ),
+        ).toBeUndefined();
+      },
+    );
+
     it('omits the inherited temperature default when Grok temperature is not configured', async () => {
       restoreEnv = mockProcessEnv({
         AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key',
@@ -750,7 +900,12 @@ describe('bedrock openaiResponses helper', () => {
     it('forwards reasoning effort, sends the real xai. model id, and preserves explicit temperature', async () => {
       restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
       const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
-        config: { omitDefaults: false, reasoning_effort: 'high', temperature: 0 } as any,
+        config: {
+          omitDefaults: false,
+          passthrough: { model: 'xai.grok-4.3' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        } as any,
       });
       const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
       expect((provider.config as any).omitDefaults).toBe(true);
@@ -759,6 +914,24 @@ describe('bedrock openaiResponses helper', () => {
       expect(body.temperature).toBe(0);
       // No GPT-5 verbosity for Grok.
       expect(body.text?.verbosity).toBeUndefined();
+    });
+
+    it('preserves Grok capabilities for a passthrough model override', async () => {
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = createBedrockOpenAiResponsesProvider('xai.grok-4.3', {
+        config: {
+          passthrough: { model: 'xai.grok-4.20-0309' },
+          reasoning_effort: 'high',
+          temperature: 0,
+        } as any,
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('What is 17*23?');
+
+      expect(body.model).toBe('xai.grok-4.20-0309');
+      expect(body.reasoning).toEqual({ effort: 'high' });
+      expect(body.temperature).toBe(0);
+      expect(body.max_output_tokens).toBeUndefined();
     });
 
     it('preserves explicit top_p when Grok reasoning is active', async () => {

@@ -43,7 +43,9 @@ providers:
       maxTurns: 10
 ```
 
-For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model, currently `gpt-5.4-mini`, and that upstream default can change over time.
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with
+`config.model`. The SDK's fallback model can change between releases, so do not treat an
+implicit default as a stable eval input.
 
 ## Configuration Options
 
@@ -64,6 +66,10 @@ For repeatable eval baselines, set a model explicitly on the exported SDK agent 
 | `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
 | `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
 | `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
+
+`config.model` and `config.modelSettings` are execution overrides. When present, each option
+replaces the corresponding field on the initial agent and every handoff agent, including agents
+loaded from a file. Omit either option to preserve that field from each agent definition.
 
 ## File-Based Configuration
 
@@ -474,7 +480,9 @@ See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you wa
 
 ## Example: D&D Dungeon Master
 
-Full working example with D&D mechanics, dice rolling, and character management:
+The complete example, including its agent and tool files, is available in
+[examples/openai-agents-basic](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-basic).
+Its config uses the following file references:
 
 ```yaml
 description: D&D Adventure with AI Dungeon Master

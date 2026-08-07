@@ -21,7 +21,7 @@ type OpenAIModelRates = {
   image?: OpenAIModalRates;
 };
 
-export type OpenAIProcessingTier = 'standard' | 'batch' | 'flex' | 'priority';
+export type OpenAIProcessingTier = 'standard' | 'batch' | 'flex' | 'fast';
 
 export type OpenAIBillingUsage = {
   totalInputTokens: number;
@@ -62,8 +62,8 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.5) },
-  { models: ['gpt-5.6-terra'], rates: perMillion(0.25) },
-  { models: ['gpt-5.6-luna'], rates: perMillion(0.1) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.02) },
   { models: ['chat-latest'], rates: perMillion(0.5) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.25) },
@@ -185,8 +185,8 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
-  { models: ['gpt-5.6-terra'], rates: perMillion(0.5) },
-  { models: ['gpt-5.6-luna'], rates: perMillion(0.2) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.04) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
 ]);
@@ -229,7 +229,9 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
   'o4-mini-2025-04-16',
 ]);
 
-const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
+const GPT_5_5_PRO_MODELS = new Set(['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23']);
+
+const FAST_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6', 'gpt-5.6-sol'],
     rates: {
@@ -242,19 +244,19 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6-terra'],
     rates: {
-      input: perMillion(5),
-      cachedInput: perMillion(0.5),
-      cacheWriteInput: perMillion(6.25),
-      output: perMillion(30),
+      input: perMillion(4),
+      cachedInput: perMillion(0.4),
+      cacheWriteInput: perMillion(5),
+      output: perMillion(24),
     },
   },
   {
     models: ['gpt-5.6-luna'],
     rates: {
-      input: perMillion(2),
-      cachedInput: perMillion(0.2),
-      cacheWriteInput: perMillion(2.5),
-      output: perMillion(12),
+      input: perMillion(0.4),
+      cachedInput: perMillion(0.04),
+      cacheWriteInput: perMillion(0.5),
+      output: perMillion(2.4),
     },
   },
   {
@@ -417,7 +419,11 @@ const REALTIME_MODAL_RATES = buildRateTable<OpenAIModelRates>([
     },
   },
   {
-    models: ['gpt-4o-realtime-preview', 'gpt-4o-realtime-preview-2024-12-17'],
+    models: [
+      'gpt-4o-realtime-preview',
+      'gpt-4o-realtime-preview-2024-12-17',
+      'gpt-4o-realtime-preview-2025-06-03',
+    ],
     rates: {
       text: { input: perMillion(5), cachedInput: perMillion(2.5), output: perMillion(20) },
       audio: {
@@ -499,6 +505,43 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
 const TEXT_MODELS_BY_ID = new Map(OPENAI_BILLING_MODELS.map((model) => [model.id, model]));
 
 const GPT_5_6_MODELS = new Set(['gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
+const BEDROCK_MANTLE_TEXT_RATES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['gpt-5.6', 'gpt-5.6-sol'],
+    rates: {
+      input: perMillion(5.5),
+      cachedInput: perMillion(0.55),
+      cacheWriteInput: perMillion(6.875),
+      output: perMillion(33),
+    },
+  },
+  {
+    models: ['gpt-5.6-terra'],
+    rates: {
+      input: perMillion(2.75),
+      cachedInput: perMillion(0.275),
+      cacheWriteInput: perMillion(3.4375),
+      output: perMillion(16.5),
+    },
+  },
+  {
+    models: ['gpt-5.6-luna'],
+    rates: {
+      input: perMillion(1.1),
+      cachedInput: perMillion(0.11),
+      cacheWriteInput: perMillion(1.375),
+      output: perMillion(6.6),
+    },
+  },
+  {
+    models: ['grok-4.3'],
+    rates: {
+      input: perMillion(1.25),
+      cachedInput: perMillion(0.2),
+      output: perMillion(2.5),
+    },
+  },
+]);
 const OPENAI_REGIONAL_PROCESSING_MODEL = /^gpt-5\.[456](?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set(['us.api.openai.com', 'eu.api.openai.com']);
@@ -524,6 +567,37 @@ function usesOpenAIRegionalProcessing(
   } catch {
     return false;
   }
+}
+
+function getBedrockMantleTextRates(
+  modelName: string,
+  resolvedApiUrl: string | undefined,
+  tier: OpenAIProcessingTier,
+): OpenAITextRates | undefined {
+  const hasBedrockBillingMarker = modelName.startsWith('bedrock:');
+  const billingModelName = modelName.replace(/^bedrock:/, '');
+  if (billingModelName === 'grok-4.3' && tier !== 'standard') {
+    // AWS publishes only Grok 4.3 Standard rates. Do not reuse them for other service tiers.
+    return undefined;
+  }
+  if (hasBedrockBillingMarker) {
+    return BEDROCK_MANTLE_TEXT_RATES[billingModelName];
+  }
+
+  if (!resolvedApiUrl) {
+    return undefined;
+  }
+
+  try {
+    const hostname = new URL(resolvedApiUrl).hostname.toLowerCase();
+    if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
+      return BEDROCK_MANTLE_TEXT_RATES[billingModelName];
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function applyRateMultiplier(rates: OpenAITextRates, multiplier: number): OpenAITextRates {
@@ -604,8 +678,10 @@ function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIPro
   switch (serviceTier) {
     case 'batch':
     case 'flex':
-    case 'priority':
+    case 'fast':
       return serviceTier;
+    case 'priority':
+      return 'fast';
     default:
       return 'standard';
   }
@@ -644,7 +720,7 @@ function getFineTunedModelRates(
   const fineTunedBaseModel = Object.keys(FINE_TUNED_TEXT_RATES).find(
     (candidate) => modelName === candidate || modelName.startsWith(`${candidate}:`),
   );
-  if (!fineTunedBaseModel || tier === 'flex' || tier === 'priority') {
+  if (!fineTunedBaseModel || tier === 'flex' || tier === 'fast') {
     return undefined;
   }
 
@@ -660,6 +736,32 @@ function getFineTunedModelRates(
           })
         : text,
   };
+}
+
+function hasUnpublishedLongContextTierRates(
+  modelName: string,
+  tier: OpenAIProcessingTier,
+  totalInputTokens: number,
+  longContext: { threshold: number } | undefined,
+): boolean {
+  return (
+    (tier === 'batch' || tier === 'flex') &&
+    GPT_5_5_PRO_MODELS.has(modelName) &&
+    longContext !== undefined &&
+    totalInputTokens > longContext.threshold
+  );
+}
+
+function getCompleteTextCostOverrides(config: OpenAIBillingConfig): OpenAITextRates | undefined {
+  const input = config.inputCost ?? config.cost;
+  const output = config.outputCost ?? config.cost;
+  return input === undefined || output === undefined ? undefined : { input, output };
+}
+
+function getCompleteAudioCostOverrides(config: OpenAIBillingConfig): OpenAIModalRates | undefined {
+  const input = config.audioInputCost ?? config.audioCost;
+  const output = config.audioOutputCost ?? config.audioCost;
+  return input === undefined || output === undefined ? undefined : { input, output };
 }
 
 function getModelRates(
@@ -704,12 +806,17 @@ function getModelRates(
   }
 
   const model = TEXT_MODELS_BY_ID.get(modelName);
-  if (tier === 'priority' && PRIORITY_TEXT_RATES[modelName]) {
-    const longContext = model?.cost?.longContext;
+  const longContext = model?.cost?.longContext;
+  if (hasUnpublishedLongContextTierRates(modelName, tier, totalInputTokens, longContext)) {
+    // OpenAI publishes GPT-5.5 Pro's standard long-context rates, but not Batch or Flex
+    // rates above 272K input tokens. Fail closed instead of assuming the usual 50% discount.
+    return undefined;
+  }
+  if (tier === 'fast' && FAST_TEXT_RATES[modelName]) {
     if (longContext && totalInputTokens > longContext.threshold) {
       return undefined;
     }
-    return { text: PRIORITY_TEXT_RATES[modelName] };
+    return { text: FAST_TEXT_RATES[modelName] };
   }
 
   const text = getBaseTextRates(modelName, totalInputTokens);
@@ -919,7 +1026,22 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
+  const bedrockMantleTextRates = getBedrockMantleTextRates(modelName, options.apiUrl, tier);
+  const catalogRates = bedrockMantleTextRates
+    ? { text: bedrockMantleTextRates }
+    : getModelRates(modelName, tier, usage.totalInputTokens);
+  const explicitTextRates = getCompleteTextCostOverrides(config);
+  const explicitAudioRates = getCompleteAudioCostOverrides(config);
+  // Complete explicit rates are authoritative when no catalog entry applies, including for
+  // namespaced gateway models. Partial overrides cannot establish a safe fallback rate table.
+  const modelRates =
+    catalogRates ??
+    (explicitTextRates
+      ? {
+          text: explicitTextRates,
+          ...(explicitAudioRates ? { audio: explicitAudioRates } : {}),
+        }
+      : undefined);
   if (!modelRates) {
     return undefined;
   }
@@ -935,6 +1057,10 @@ export function calculateOpenAIUsageCost(
 
   if (options.cachedResponse) {
     return 0;
+  }
+
+  if (!rates.audio && (usage.audioInputTokens > 0 || usage.audioOutputTokens > 0)) {
+    return undefined;
   }
 
   const textInputCost = config.inputCost ?? config.cost ?? rates.text.input;
@@ -1003,7 +1129,7 @@ export function calculateOpenAIUsageCost(
 }
 
 function isReasoningModel(modelName: string): boolean {
-  const capabilityModelName = modelName.replace(/(^|\/)ft:/, '$1');
+  const capabilityModelName = modelName.replace(/^bedrock:/, '').replace(/(^|\/)ft:/, '$1');
   return (
     capabilityModelName.startsWith('gpt-5') ||
     capabilityModelName.startsWith('o1') ||

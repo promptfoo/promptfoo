@@ -4,8 +4,9 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
+import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as vertexUtil from '../../../src/providers/google/util';
-import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -112,10 +113,20 @@ vi.mock('../../../src/providers/google/auth', async () => {
       getApiKey: vi.fn().mockReturnValue({ apiKey: undefined, source: 'none' }),
       determineVertexMode: vi.fn().mockReturnValue(true),
       validateAndWarn: vi.fn(),
-      // Respect config.region when provided, otherwise default to us-central1
-      resolveRegion: vi.fn().mockImplementation((config?: { region?: string }) => {
-        return config?.region || 'us-central1';
-      }),
+      resolveRegion: vi
+        .fn()
+        .mockImplementation(
+          (
+            config?: { region?: string },
+            env?: { VERTEX_REGION?: string; GOOGLE_CLOUD_LOCATION?: string },
+          ) =>
+            config?.region ||
+            env?.VERTEX_REGION ||
+            env?.GOOGLE_CLOUD_LOCATION ||
+            process.env.VERTEX_REGION ||
+            process.env.GOOGLE_CLOUD_LOCATION ||
+            'us-central1',
+        ),
       resolveProjectId: vi.fn().mockResolvedValue('test-project-id'),
     },
   };
@@ -189,6 +200,158 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     mockIsCacheEnabled.mockReturnValue(true);
   });
+
+  it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+    'omits unsupported sampling controls for %s',
+    async (modelName) => {
+      provider = new VertexChatProvider(modelName, {
+        config: {
+          temperature: 0.2,
+          topP: 0.3,
+          topK: 4,
+          generationConfig: {
+            temperature: 0.5,
+            topP: 0.6,
+            topK: 7,
+            maxOutputTokens: 200,
+          },
+        },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+        },
+      ]);
+
+      await provider.callGeminiApi('test prompt');
+
+      const generationConfig = mockRequest.mock.calls[0]?.[0]?.data.generationConfig;
+      expect(generationConfig).not.toHaveProperty('temperature');
+      expect(generationConfig).not.toHaveProperty('topP');
+      expect(generationConfig).not.toHaveProperty('topK');
+      expect(generationConfig).toHaveProperty('maxOutputTokens', 200);
+    },
+  );
+
+  const providerGeminiSystemInstructionBasePath = path.resolve('provider', 'base');
+  const promptGeminiSystemInstructionBasePath = path.resolve('prompt', 'base');
+
+  it.each([
+    {
+      owner: 'provider',
+      promptConfig: { basePath: promptGeminiSystemInstructionBasePath },
+      expectedPath: path.resolve(providerGeminiSystemInstructionBasePath, 'system-instruction.txt'),
+    },
+    {
+      owner: 'prompt',
+      promptConfig: {
+        basePath: promptGeminiSystemInstructionBasePath,
+        systemInstruction: 'file://system-instruction.txt',
+      },
+      expectedPath: path.resolve(promptGeminiSystemInstructionBasePath, 'system-instruction.txt'),
+    },
+  ])(
+    'resolves $owner-owned systemInstruction against its Vertex basePath',
+    async ({ promptConfig, expectedPath }) => {
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = path.resolve('global', 'base');
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('Instruction loaded from the owning base path.');
+      provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          basePath: providerGeminiSystemInstructionBasePath,
+          systemInstruction: 'file://system-instruction.txt',
+        },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        },
+      ]);
+
+      try {
+        await provider.callGeminiApi('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
+          vars: {},
+        });
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            systemInstruction: {
+              parts: [{ text: 'Instruction loaded from the owning base path.' }],
+            },
+          }),
+        }),
+      );
+    },
+  );
+
+  const providerSchemaBasePath = path.resolve('provider', 'base');
+  const promptSchemaBasePath = path.resolve('prompt', 'base');
+
+  it.each([
+    {
+      owner: 'provider',
+      promptConfig: { basePath: promptSchemaBasePath },
+      expectedPath: path.resolve(providerSchemaBasePath, 'schema.json'),
+    },
+    {
+      owner: 'prompt',
+      promptConfig: {
+        basePath: promptSchemaBasePath,
+        responseSchema: 'file://schema.json',
+      },
+      expectedPath: path.resolve(promptSchemaBasePath, 'schema.json'),
+    },
+  ])(
+    'resolves $owner-owned responseSchema against its Vertex basePath',
+    async ({ promptConfig, expectedPath }) => {
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = path.resolve('global', 'base');
+      const responseSchema = {
+        type: 'object',
+        properties: { answer: { type: 'string' } },
+      };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(responseSchema));
+      provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: {
+          basePath: providerSchemaBasePath,
+          responseSchema: 'file://schema.json',
+        },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: '{"answer":"ok"}' }] } }],
+        },
+      ]);
+
+      try {
+        await provider.callGeminiApi('test prompt', {
+          prompt: { raw: 'test prompt', label: 'test', config: promptConfig },
+          vars: {},
+        });
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            generationConfig: expect.objectContaining({
+              response_schema: responseSchema,
+            }),
+          }),
+        }),
+      );
+    },
+  );
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -2022,13 +2185,14 @@ describe('VertexChatProvider.callLlamaApi', () => {
     mockCacheSet.mockReset();
 
     mockIsCacheEnabled.mockReturnValue(true);
+    vi.mocked(GoogleAuthManager.getApiKey).mockReturnValue({ apiKey: undefined, source: 'none' });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should enforce us-central1 region for Llama models', async () => {
+  it('should enforce us-central1 region for legacy Llama models', async () => {
     // Create provider with non-us-central1 region
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
       config: { region: 'europe-west1' },
@@ -2041,6 +2205,123 @@ describe('VertexChatProvider.callLlamaApi', () => {
       error:
         "Llama models are only available in the us-central1 region. Current region: europe-west1. Please set region: 'us-central1' in your configuration.",
     });
+  });
+
+  it.each(['llama-4-scout-17b-16e-instruct-maas', 'llama-4-maverick-17b-128e-instruct-maas'])(
+    'should call the current Llama 4 model %s in us-east5',
+    async (modelName) => {
+      const mockRequest = mockVertexRequest({
+        choices: [{ message: { content: 'Llama 4 response content' } }],
+        usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+      });
+      provider = new VertexChatProvider(modelName, {
+        config: { region: 'us-east5' },
+      });
+
+      const response = await provider.callLlamaApi('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('/locations/us-east5/endpoints/openapi/chat/completions'),
+          data: expect.objectContaining({
+            model: `meta/${modelName}`,
+          }),
+        }),
+      );
+      expect(mockRequest.mock.calls[0][0].data).not.toHaveProperty('extra_body');
+    },
+  );
+
+  it.each([
+    { authMode: 'API key', apiKey: 'test-api-key' },
+    { authMode: 'OAuth', apiKey: undefined },
+  ])('defaults unconfigured Llama 4 to us-east5 with $authMode auth', async ({ apiKey }) => {
+    await vi.mocked(GoogleAuthManager.getApiKey).withImplementation(
+      () => ({ apiKey, source: apiKey ? 'config' : 'none' }),
+      async () => {
+        await vi.mocked(GoogleAuthManager.resolveRegion).withImplementation(
+          (
+            config: { region?: string },
+            env?: { VERTEX_REGION?: string; GOOGLE_CLOUD_LOCATION?: string },
+            hasApiKey?: boolean,
+            modelDefaultRegion?: string,
+          ) =>
+            config.region ||
+            env?.VERTEX_REGION ||
+            env?.GOOGLE_CLOUD_LOCATION ||
+            modelDefaultRegion ||
+            (hasApiKey === false ? 'global' : 'us-central1'),
+          async () => {
+            const mockRequest = mockVertexRequest({
+              choices: [{ message: { content: 'Llama 4 response content' } }],
+              usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+            });
+            provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas');
+
+            const response = await provider.callLlamaApi('test prompt');
+
+            expect(response.error).toBeUndefined();
+            expect(GoogleAuthManager.resolveRegion).toHaveBeenCalledWith(
+              provider.config,
+              provider.env,
+              Boolean(apiKey),
+              'us-east5',
+            );
+            expect(mockRequest).toHaveBeenCalledWith(
+              expect.objectContaining({
+                url: expect.stringContaining(
+                  'us-east5-aiplatform.googleapis.com/v1beta1/projects/test-project-id/locations/us-east5/endpoints/openapi/chat/completions',
+                ),
+              }),
+            );
+          },
+        );
+      },
+    );
+  });
+
+  it('should reject Llama 4 in the legacy us-central1 region', async () => {
+    const mockRequest = mockVertexRequest({
+      choices: [{ message: { content: 'unexpected response' } }],
+    });
+    provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+      config: { region: 'us-central1' },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response).toEqual({
+      error:
+        "Llama model llama-4-scout-17b-16e-instruct-maas is only available in the us-east5 region. Current region: us-central1. Please set region: 'us-east5' in your configuration.",
+    });
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: 'explicitly enabled safety',
+      safetySettings: { enabled: true },
+    },
+    {
+      name: 'custom guard settings',
+      safetySettings: { llama_guard_settings: { custom_setting: 'value' } },
+    },
+  ])('should reject $name for Llama 4 before network I/O', async ({ safetySettings }) => {
+    const mockRequest = mockVertexRequest({
+      choices: [{ message: { content: 'unexpected response' } }],
+    });
+    provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+      config: {
+        region: 'us-east5',
+        llamaConfig: { safetySettings },
+      },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response.error).toMatch(/does not support Llama Guard/i);
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   it('should validate llama_guard_settings is a valid object', async () => {
@@ -2915,6 +3196,71 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
+  it('prices the Vertex-only Sonnet 4.5 latest alias without changing request routing', async () => {
+    const model = 'claude-sonnet-4-5-latest';
+    provider = new VertexChatProvider(model, {
+      config: { region: 'global', max_tokens: 32 },
+    });
+    const mockRequest = mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: 150_000,
+        output_tokens: 10_000,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    });
+
+    const result = await provider.callClaudeApi('test prompt');
+
+    expect(mockRequest.mock.calls[0][0].url).toContain(
+      '/publishers/anthropic/models/claude-sonnet-4-5-latest:rawPredict',
+    );
+    expect(result.cost).toBeCloseTo(0.6, 6);
+  });
+
+  it('bills Vertex Sonnet 5 one-hour cache writes at the one-hour rate', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-08-31T23:59:59.999Z'));
+      const model = 'claude-sonnet-5';
+      provider = new VertexChatProvider(model, {
+        config: { region: 'global', max_tokens: 32 },
+      });
+      mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 1_000_000,
+          cache_creation: {
+            ephemeral_5m_input_tokens: 0,
+            ephemeral_1h_input_tokens: 1_000_000,
+          },
+        },
+      });
+
+      const result = await provider.callClaudeApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(4, 10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
     const model = 'claude-fable-5';
     provider = new VertexChatProvider(model, {
@@ -3244,6 +3590,72 @@ describe('VertexChatProvider.callClaudeApi', () => {
       const requestData = getRequestData();
       expect(requestData.system).toEqual([{ type: 'text', text: 'Always respond NO.' }]);
     });
+
+    const providerClaudeSystemInstructionBasePath = path.resolve('provider', 'base');
+    const promptClaudeSystemInstructionBasePath = path.resolve('prompt', 'base');
+    const providerClaudeSystemInstructionPath = path.resolve(
+      providerClaudeSystemInstructionBasePath,
+      'instruction.txt',
+    );
+    const promptClaudeSystemInstructionPath = path.resolve(
+      promptClaudeSystemInstructionBasePath,
+      'instruction.txt',
+    );
+
+    it.each([
+      {
+        owner: 'provider',
+        promptConfig: { basePath: promptClaudeSystemInstructionBasePath },
+        expectedPath: providerClaudeSystemInstructionPath,
+        expectedInstruction: 'Provider instruction.',
+      },
+      {
+        owner: 'prompt',
+        promptConfig: {
+          basePath: promptClaudeSystemInstructionBasePath,
+          systemInstruction: 'file://instruction.txt',
+        },
+        expectedPath: promptClaudeSystemInstructionPath,
+        expectedInstruction: 'Prompt instruction.',
+      },
+    ])(
+      'resolves $owner-owned systemInstruction against its Vertex Claude basePath',
+      async ({ promptConfig, expectedPath, expectedInstruction }) => {
+        const originalBasePath = cliState.basePath;
+        cliState.basePath = path.resolve('global', 'base');
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+          const pathString = filePath.toString();
+          if (pathString === providerClaudeSystemInstructionPath) {
+            return 'Provider instruction.';
+          }
+          if (pathString === promptClaudeSystemInstructionPath) {
+            return 'Prompt instruction.';
+          }
+          return 'Global instruction.';
+        });
+        provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+          config: {
+            basePath: providerClaudeSystemInstructionBasePath,
+            systemInstruction: 'file://instruction.txt',
+          },
+        });
+        setupClaudeMocks();
+
+        try {
+          await provider.callClaudeApi('Hello', {
+            prompt: { raw: 'Hello', label: 'test', config: promptConfig },
+            vars: {},
+          });
+        } finally {
+          cliState.basePath = originalBasePath;
+        }
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+        const requestData = getRequestData();
+        expect(requestData.system).toEqual([{ type: 'text', text: expectedInstruction }]);
+      },
+    );
 
     it('should render context vars in config.systemInstruction for Claude system parameter', async () => {
       provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
@@ -4000,5 +4412,31 @@ describe('VertexChatProvider.callClaudeApi', () => {
       });
       expect(provider.getApiHost()).toBe('config.example.com');
     });
+  });
+});
+
+describe('VertexEmbeddingProvider.getRegion', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('uses explicit, provider-scoped, process, and default region precedence', () => {
+    vi.stubEnv('VERTEX_REGION', 'process-vertex-region');
+    vi.stubEnv('GOOGLE_CLOUD_LOCATION', 'process-cloud-location');
+
+    const providerScoped = new VertexEmbeddingProvider('gemini-embedding-001', {
+      env: { GOOGLE_CLOUD_LOCATION: 'provider-cloud-location' },
+    });
+    const explicitlyConfigured = new VertexEmbeddingProvider('gemini-embedding-001', {
+      config: { region: 'configured-region' },
+      env: { VERTEX_REGION: 'provider-vertex-region' },
+    });
+
+    expect(providerScoped.getRegion()).toBe('provider-cloud-location');
+    expect(explicitlyConfigured.getRegion()).toBe('configured-region');
+    expect(GoogleAuthManager.resolveRegion).toHaveBeenCalledWith(
+      providerScoped.config,
+      providerScoped.env,
+    );
   });
 });

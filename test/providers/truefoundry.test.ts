@@ -234,6 +234,131 @@ describe('TrueFoundry', () => {
         expect(result.latencyMs).toBeGreaterThanOrEqual(0);
       });
 
+      it('should apply OpenAI pricing to the documented openai-main namespace', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+        const documentedProvider = new TrueFoundryProvider('openai-main/gpt-4o', {});
+
+        const result = await documentedProvider.callApi('Test prompt');
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+        expect(JSON.parse(request.body ?? '{}').model).toBe('openai-main/gpt-4o');
+        expect(result.cost).toBeCloseTo(0.0000625, 10);
+      });
+
+      it('should apply OpenAI pricing to a custom OpenAI account name', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+        const customAccountProvider = new TrueFoundryProvider('production-east/gpt-4o', {
+          config: { openaiAccountNames: ['production-east'] },
+        });
+
+        const result = await customAccountProvider.callApi('Test prompt');
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+        expect(JSON.parse(request.body ?? '{}').model).toBe('production-east/gpt-4o');
+        expect(result.cost).toBeCloseTo(0.0000625, 10);
+      });
+
+      it('should apply OpenAI pricing to a passthrough TrueFoundry model', async () => {
+        const mockResponse = {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+        const passthroughProvider = new TrueFoundryProvider('openai-main/gpt-4o-mini', {
+          config: { passthrough: { model: 'openai-main/gpt-4o' } },
+        });
+
+        const result = await passthroughProvider.callApi('Test prompt');
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+        expect(JSON.parse(request.body ?? '{}').model).toBe('openai-main/gpt-4o');
+        expect(result.cost).toBeCloseTo(0.0000625, 10);
+      });
+
+      it.each([
+        'vendor/gpt-4',
+        'vendor/openai/gpt-4',
+        'vendor/openai-main/gpt-4',
+        'production-east/gpt-4',
+        'openai-prod/gpt-4',
+        'vendor/openai-prod/gpt-4',
+      ])(
+        'should not apply OpenAI pricing to another TrueFoundry model namespace: %s',
+        async (model) => {
+          const mockResponse = {
+            choices: [{ message: { content: 'Vendor output' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          };
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            new Response(JSON.stringify(mockResponse), {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            }),
+          );
+          const vendorProvider = new TrueFoundryProvider(model, {});
+
+          const result = await vendorProvider.callApi('Test prompt');
+          const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+          expect(JSON.parse(request.body ?? '{}').model).toBe(model);
+          expect(result.cost).toBeUndefined();
+        },
+      );
+
+      it('should not apply OpenAI pricing to an unrelated passthrough namespace', async () => {
+        const model = 'vendor/production-east/gpt-4';
+        const mockResponse = {
+          choices: [{ message: { content: 'Vendor output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        };
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          }),
+        );
+        const vendorProvider = new TrueFoundryProvider('openai-main/gpt-4o', {
+          config: {
+            openaiAccountNames: ['production-east'],
+            passthrough: { model },
+          },
+        });
+
+        const result = await vendorProvider.callApi('Test prompt');
+        const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+        expect(JSON.parse(request.body ?? '{}').model).toBe(model);
+        expect(result.cost).toBeUndefined();
+      });
+
       it('should add X-TFY-METADATA header when metadata is provided', async () => {
         const providerWithMetadata = new TrueFoundryProvider('openai/gpt-4', {
           config: {
@@ -704,6 +829,7 @@ describe('TrueFoundry', () => {
       expect(result).toEqual({
         embedding: [0.1, 0.2, 0.3],
         latencyMs: expect.any(Number),
+        cost: expect.closeTo(0.00000065, 12),
         tokenUsage: {
           total: 5,
           prompt: 5,
@@ -712,6 +838,54 @@ describe('TrueFoundry', () => {
         },
       });
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should apply OpenAI pricing to the documented openai-main embedding namespace', async () => {
+      const mockResponse = {
+        data: [{ embedding: [0.1, 0.2, 0.3], index: 0 }],
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+      };
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        }),
+      );
+      const documentedProvider = new TrueFoundryEmbeddingProvider(
+        'openai-main/text-embedding-3-large',
+        {},
+      );
+
+      const result = await documentedProvider.callEmbeddingApi('Test text');
+      const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+      expect(JSON.parse(request.body ?? '{}').model).toBe('openai-main/text-embedding-3-large');
+      expect(result.cost).toBeCloseTo(0.00000065, 12);
+    });
+
+    it('should apply OpenAI pricing to a custom OpenAI embedding account name', async () => {
+      const mockResponse = {
+        data: [{ embedding: [0.1, 0.2, 0.3], index: 0 }],
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+      };
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockResponse), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        }),
+      );
+      const customAccountProvider = new TrueFoundryEmbeddingProvider(
+        'production-east/text-embedding-3-large',
+        { config: { openaiAccountNames: ['production-east'] } },
+      );
+
+      const result = await customAccountProvider.callEmbeddingApi('Test text');
+      const request = mockedFetchWithRetries.mock.calls[0]?.[1] as { body?: string };
+
+      expect(JSON.parse(request.body ?? '{}').model).toBe('production-east/text-embedding-3-large');
+      expect(result.cost).toBeCloseTo(0.00000065, 12);
     });
 
     it('should add TrueFoundry headers to embedding requests', async () => {

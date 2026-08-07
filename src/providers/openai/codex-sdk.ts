@@ -116,23 +116,22 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Model support varies:
  * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
  * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
- * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
- *   the OpenAI API uses 'none' instead of 'minimal'
+ * - gpt-5.5 / gpt-5.4 / gpt-5.4-mini: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
- * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh' (deprecated for
+ *   ChatGPT sign-in)
  * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
  *
  * Values:
- * - 'minimal': Minimal reasoning overhead
+ * - 'minimal': Legacy minimal reasoning setting accepted by some older models
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Extra-high reasoning depth
  * - 'max': Deepest single-agent reasoning for GPT-5.6
  * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
@@ -640,7 +639,8 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
-    // GPT-5.6 models (requires Codex 0.144.0 or later)
+    // GPT-5.6 models (requires Codex 0.146.0 or later)
+    'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
@@ -650,6 +650,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-pro',
+    'gpt-5.4-mini',
     // GPT-5.3 Codex models
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
@@ -2349,7 +2350,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return {
       output,
       tokenUsage,
-      cost: this.calculateCodexResponseCost(tokenUsage, resolvedConfig.model),
+      cost: this.calculateCodexResponseCost(
+        tokenUsage,
+        this.getCodexBillingModelName(resolvedConfig),
+        Boolean(resolvedConfig.codex_path_override),
+      ),
       metadata: this.buildCodexResponseMetadata(turn.items, skillRootPrefixes),
       raw: JSON.stringify(turn),
       sessionId,
@@ -2373,14 +2378,26 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       return undefined;
     }
 
+    const reasoningTokens = turnUsage.reasoning_output_tokens;
+    const cacheWriteTokens = turnUsage.cache_write_input_tokens;
+    const hasCompletionDetails =
+      typeof reasoningTokens === 'number' || typeof cacheWriteTokens === 'number';
+
     return {
       // cached_input_tokens is already included in input_tokens by the Codex SDK.
       prompt: turnUsage.input_tokens,
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number'
-        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+      ...(hasCompletionDetails
+        ? {
+            completionDetails: {
+              ...(typeof reasoningTokens === 'number' ? { reasoning: reasoningTokens } : {}),
+              ...(typeof cacheWriteTokens === 'number'
+                ? { cacheCreationInputTokens: cacheWriteTokens }
+                : {}),
+            },
+          }
         : {}),
     };
   }
@@ -2388,8 +2405,39 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private calculateCodexResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
+    usesCustomCodexBinary: boolean,
   ): number | undefined {
+    // SDK 0.146 fills an omitted cache-write field with zero. That is reliable for its bundled
+    // Codex binary, but a custom/older binary may omit the field (or have it normalized to zero)
+    // despite performing cache writes. A positive value reported by the binary is still usable.
+    const normalizedModel = model?.replace(/^bedrock:/, '');
+    if (usesCustomCodexBinary && normalizedModel?.startsWith('gpt-5.6')) {
+      const cacheWriteTokens = tokenUsage?.completionDetails?.cacheCreationInputTokens;
+      if (
+        typeof cacheWriteTokens !== 'number' ||
+        !Number.isFinite(cacheWriteTokens) ||
+        cacheWriteTokens <= 0
+      ) {
+        return undefined;
+      }
+    }
     return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
+  }
+
+  private getCodexBillingModelName(config: OpenAICodexSDKConfig): string | undefined {
+    const cliConfigProvider = config.cli_config?.model_provider;
+    const modelProvider =
+      config.model_provider ??
+      (typeof cliConfigProvider === 'string' ? cliConfigProvider : undefined);
+
+    if (
+      modelProvider?.trim().toLowerCase() === 'amazon-bedrock' &&
+      config.model?.startsWith('openai.')
+    ) {
+      return `bedrock:${config.model.slice('openai.'.length)}`;
+    }
+
+    return config.model;
   }
 
   private async cleanupCodexTurn(

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +14,7 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 import logger from '../../../src/logger';
-import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
+import { GOOGLE_MODELS, getVertexModelDefaultRegion } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
   calculateGoogleCostFromUsage,
@@ -26,8 +27,10 @@ import {
   mergeParts,
   normalizeSafetySettings,
   normalizeTools,
+  parseConfigSystemInstruction,
   parseStringObject,
   removeGoogleFunctionDeclarations,
+  resolveGoogleConfigFileReference,
   resolveGoogleToolConfig,
   resolveProjectId,
   sanitizeSchemaForGemini,
@@ -132,6 +135,20 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 describe('util', () => {
+  it.each(['gemini-flash-latest', 'gemini-flash-lite-latest'])(
+    'uses the global Vertex endpoint by default for %s',
+    (modelId) => {
+      expect(getVertexModelDefaultRegion(modelId)).toBe('global');
+    },
+  );
+
+  it.each(['llama-4-scout-17b-16e-instruct-maas', 'llama-4-maverick-17b-128e-instruct-maas'])(
+    'uses the us-east5 Vertex endpoint by default for %s',
+    (modelId) => {
+      expect(getVertexModelDefaultRegion(modelId)).toBe('us-east5');
+    },
+  );
+
   beforeEach(() => {
     vi.clearAllMocks();
     resetGoogleAuthMock();
@@ -150,6 +167,41 @@ describe('util', () => {
 
     it('should return undefined as-is', () => {
       expect(parseStringObject(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('config file references', () => {
+    it.each(['rules.txt', 'schema.json'])(
+      'preserves absolute Windows %s file URLs when basePath is set',
+      (fileName) => {
+        const originalPlatform = process.platform;
+        Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+        try {
+          expect(resolveGoogleConfigFileReference(`file:///C:/${fileName}`, 'D:\\project')).toBe(
+            `file://C:/${fileName}`,
+          );
+        } finally {
+          Object.defineProperty(process, 'platform', {
+            value: originalPlatform,
+            configurable: true,
+          });
+        }
+      },
+    );
+
+    it('renders an absolute system instruction file path before basePath resolution', () => {
+      const instructionPath = path.resolve('/absolute', 'system-instruction.txt');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('Instruction from the rendered path.');
+
+      const result = parseConfigSystemInstruction(
+        'file://{{ instructionPath }}',
+        { instructionPath },
+        path.resolve('/provider', 'base'),
+      );
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(instructionPath, 'utf8');
+      expect(result).toEqual({ parts: [{ text: 'Instruction from the rendered path.' }] });
     });
   });
 
@@ -1937,7 +1989,38 @@ describe('util', () => {
   });
 
   describe('normalizeTools', () => {
-    it('should convert snake_case to camelCase for tool properties', () => {
+    it('should canonicalize and sanitize snake_case function declarations', () => {
+      const normalized = normalizeTools([
+        {
+          function_declarations: [
+            {
+              name: 'lookup',
+              parameters: {
+                type: 'object',
+                properties: { query: { type: 'string' } },
+                additionalProperties: false,
+              },
+            },
+          ],
+        } as any,
+      ]);
+
+      expect(normalized).toEqual([
+        {
+          functionDeclarations: [
+            {
+              name: 'lookup',
+              parameters: {
+                type: 'OBJECT',
+                properties: { query: { type: 'STRING' } },
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('should canonicalize snake_case tool properties to camelCase', () => {
       const tools = [
         {
           google_search: {},
@@ -1959,20 +2042,12 @@ describe('util', () => {
 
       expect(normalized).toEqual([
         {
-          google_search: {},
           googleSearch: {},
         },
         {
-          code_execution: {},
           codeExecution: {},
         },
         {
-          google_search_retrieval: {
-            dynamicRetrievalConfig: {
-              mode: 'MODE_DYNAMIC',
-              dynamicThreshold: 0,
-            },
-          },
           googleSearchRetrieval: {
             dynamicRetrievalConfig: {
               mode: 'MODE_DYNAMIC',
@@ -1995,7 +2070,6 @@ describe('util', () => {
 
       expect(normalized).toEqual([
         {
-          google_search: { property1: 'value1' },
           googleSearch: { property2: 'value2' },
         },
       ]);
@@ -2024,7 +2098,6 @@ describe('util', () => {
               description: 'A test function',
             },
           ],
-          google_search: {},
           googleSearch: {},
         },
       ]);
@@ -2205,16 +2278,12 @@ describe('util', () => {
       expect(result).toBe(mockProjectId);
     });
 
-    it('should handle Google Auth Library getProjectId failure gracefully', async () => {
-      // Override mock to make getProjectId fail
+    it('should not invoke Google Auth Library when an explicit project ID is configured', async () => {
       const { mockAuthInstance } = googleAuthMock;
-      mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
-      mockAuthInstance.fromJSON.mockResolvedValue({ name: 'mockCredentialClient' });
       mockAuthInstance.getProjectId.mockRejectedValue(
         new Error('Unable to detect a Project Id in the current environment'),
       );
 
-      // Test that explicit config projectId is still used even when getProjectId fails
       const config = {
         projectId: 'explicit-project',
         credentials: '{"type": "service_account", "project_id": "creds-project"}',
@@ -2223,10 +2292,8 @@ describe('util', () => {
 
       const result = await resolveProjectId(config, env);
       expect(result).toBe('explicit-project');
-
-      // Verify that getProjectId was called but failed gracefully
-      expect(mockAuthInstance.getProjectId).toHaveBeenCalled();
-      expect(mockAuthInstance.fromJSON).toHaveBeenCalled();
+      expect(mockAuthInstance.getProjectId).not.toHaveBeenCalled();
+      expect(mockAuthInstance.fromJSON).not.toHaveBeenCalled();
     });
 
     it('should return empty string when all sources fail', async () => {
@@ -2593,7 +2660,7 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00125, 10);
     });
 
-    it('should calculate cost for gemini-2.0-flash model', () => {
+    it('should retain historical cost for retired gemini-2.0-flash', () => {
       // gemini-2.0-flash: input=0.1/1M, output=0.4/1M
       const cost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
       // Expected: (10000 * 0.1 + 5000 * 0.4) / 1M = (1000 + 2000) / 1M = 0.003
@@ -2644,7 +2711,7 @@ describe('util', () => {
       expect(cost).toBeCloseTo(1.9, 10);
     });
 
-    it('should calculate cost for gemini-3.1-flash-lite-preview', () => {
+    it('should retain historical cost for retired gemini-3.1-flash-lite-preview', () => {
       // gemini-3.1-flash-lite-preview: input=0.25/1M, output=1.5/1M
       const cost = calculateGoogleCost('gemini-3.1-flash-lite-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.001, 10);
@@ -2656,11 +2723,215 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.001, 10);
     });
 
+    it.each([
+      ['priority', 0.9],
+      ['flex', 0.25],
+    ] as const)(
+      'should use the exact Gemini 3.1 Flash-Lite %s audio input price',
+      (serviceTier, expectedCost) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.1-flash-lite',
+          { service_tier: serviceTier },
+          1_000_000,
+          0,
+          false,
+          1_000_000,
+        );
+
+        expect(cost).toBeCloseTo(expectedCost, 10);
+      },
+    );
+
     it('should calculate cost for gemini-3.5-flash', () => {
       // gemini-3.5-flash: input=1.5/1M, output=9.0/1M
       const cost = calculateGoogleCost('gemini-3.5-flash', {}, 1000, 500);
       // Expected: (1000 * 1.5 + 500 * 9.0) / 1M = (1500 + 4500) / 1M = 0.006
       expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should use current Gemini 3.5 Flash audio and Flex prices', () => {
+      const standardAudioCost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        {},
+        1_000_000,
+        0,
+        false,
+        1_000_000,
+      );
+      const flexCachedCost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { service_tier: 'flex' },
+        1_000_000,
+        1_000_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+
+      expect(standardAudioCost).toBeCloseTo(1.5, 10);
+      expect(flexCachedCost).toBeCloseTo(0.08 + 4.5, 10);
+    });
+
+    it.each([
+      ['gemini-3.5-flash', 1.5 + 9],
+      ['gemini-3.1-flash-lite', 0.25 + 1.5],
+    ])('should apply the Vertex non-global premium for %s', (modelId, globalPrice) => {
+      const globalCost = calculateGoogleCost(
+        modelId,
+        { region: 'global' },
+        1_000_000,
+        1_000_000,
+        true,
+      );
+      const regionalCost = calculateGoogleCost(
+        modelId,
+        { region: 'us' },
+        1_000_000,
+        1_000_000,
+        true,
+      );
+
+      expect(globalCost).toBeCloseTo(globalPrice, 10);
+      expect(regionalCost).toBeCloseTo(globalPrice * 1.1, 10);
+    });
+
+    it('should use the exact non-global Vertex Flex cache price for Gemini 3.5 Flash', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash',
+        { region: 'us', service_tier: 'flex' },
+        1_000_000,
+        1_000_000,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+
+      expect(cost).toBeCloseTo(0.0825 + 4.95, 10);
+    });
+
+    it.each([
+      ['gemini-3.1-pro-preview', 100_000, 100_000, 10_000, 0.692],
+      ['gemini-3-flash-preview', 1_000_000, 1_000_000, 0, 1.75],
+    ])(
+      'should apply current Flex pricing for %s',
+      (modelId, promptTokens, completionTokens, cachedPromptTokens, expected) => {
+        const cost = calculateGoogleCost(
+          modelId,
+          { service_tier: 'flex' },
+          promptTokens,
+          completionTokens,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          cachedPromptTokens,
+        );
+
+        expect(cost).toBeCloseTo(expected, 10);
+      },
+    );
+
+    it.each([
+      ['gemini-3.6-flash', 1.5, 7.5],
+      ['gemini-3.5-flash-lite', 0.3, 2.5],
+    ])('should calculate standard pricing for %s', (modelId, inputPrice, outputPrice) => {
+      const cost = calculateGoogleCost(modelId, {}, 1_000_000, 1_000_000);
+
+      expect(cost).toBeCloseTo(inputPrice + outputPrice, 10);
+    });
+
+    it('should apply exact flex and priority cache pricing for gemini-3.5-flash-lite', () => {
+      const flexCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'flex' },
+        1_000_000,
+        1_000_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+      const priorityCost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1_000_000,
+        1_000_000,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+      );
+
+      expect(flexCost).toBeCloseTo(0.02 + 1.25, 10);
+      expect(priorityCost).toBeCloseTo(0.05 + 4.5, 10);
+    });
+
+    it.each([
+      ['global', 'flex', 0.015 + 1.25],
+      ['global', 'priority', 0.054 + 4.5],
+      ['us-central1', 'flex', (0.015 + 1.25) * 1.1],
+      ['us-central1', 'priority', (0.054 + 4.5) * 1.1],
+    ])(
+      'should apply Vertex %s endpoint pricing for gemini-3.5-flash-lite %s',
+      (region, serviceTier, expected) => {
+        const cost = calculateGoogleCost(
+          'gemini-3.5-flash-lite',
+          { region, service_tier: serviceTier },
+          1_000_000,
+          1_000_000,
+          true,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          1_000_000,
+        );
+
+        expect(cost).toBeCloseTo(expected, 10);
+      },
+    );
+
+    it('should apply the Vertex premium from the resolved endpoint region', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'flex' },
+        1_000_000,
+        1_000_000,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        1_000_000,
+        undefined,
+        undefined,
+        'us-central1',
+      );
+
+      expect(cost).toBeCloseTo((0.015 + 1.25) * 1.1, 10);
+    });
+
+    it('should not apply the Vertex regional premium to explicit cost overrides', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { cost: 0.01, region: 'us-central1' },
+        100,
+        100,
+        true,
+      );
+
+      expect(cost).toBeCloseTo(2, 10);
     });
 
     it('should calculate cost for gemini-omni-flash-preview', () => {
@@ -2751,7 +3022,7 @@ describe('util', () => {
         );
 
         expect(cost).toBeCloseTo(
-          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+          (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
           12,
         );
       },
@@ -2805,7 +3076,7 @@ describe('util', () => {
     });
 
     it.each(['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'])(
-      'should preserve the %s audio-input rate at priority tier',
+      'should use the official %s audio-input rate at priority tier',
       (modelId) => {
         const cost = calculateGoogleCost(
           modelId,
@@ -2822,7 +3093,7 @@ describe('util', () => {
         );
 
         expect(cost).toBeCloseTo(
-          (400 * 0.45 + 400 * 0.045 + 100 * 0.5 + 100 * 0.09 + 100 * 2.7) / 1e6,
+          (400 * 0.45 + 400 * 0.045 + 100 * 0.9 + 100 * 0.09 + 100 * 2.7) / 1e6,
           12,
         );
       },
@@ -2846,7 +3117,7 @@ describe('util', () => {
         );
 
         expect(flexCost).toBeCloseTo(
-          (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.5 + 100_000 * 0.025 + 100_000 * 0.75) /
+          (400_000 * 0.125 + 400_000 * 0.0125 + 100_000 * 0.25 + 100_000 * 0.025 + 100_000 * 0.75) /
             1e6,
           12,
         );
@@ -2854,7 +3125,7 @@ describe('util', () => {
     );
 
     it.each([
-      ['gemini-flash-latest', 1.5, 0.15, 0.15, 1, 9],
+      ['gemini-flash-latest', 1.5, 0.15, 0.15, 1.5, 9],
       ['gemini-flash-lite-latest', 0.25, 0.025, 0.05, 0.5, 1.5],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
     ])(
@@ -2894,6 +3165,7 @@ describe('util', () => {
     });
 
     it.each([
+      ['gemini-3.1-flash-tts-preview', 1, 20],
       ['gemini-2.5-pro-preview-tts', 1, 20],
       ['gemini-2.5-flash-preview-tts', 0.5, 10],
     ])('prices %s using the published TTS rates without context tiering', (id, input, output) => {
@@ -2929,7 +3201,7 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo(
-        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
     });
@@ -2993,11 +3265,13 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.002, 10);
     });
 
-    it('should calculate cost for gemini-embedding-2-preview (tracks gemini-embedding-2)', () => {
-      // gemini-embedding-2-preview: input=0.2/1M, output=0
-      const cost = calculateGoogleCost('gemini-embedding-2-preview', {}, 10000, 0);
-      expect(cost).toBeCloseTo(0.002, 10);
-    });
+    it.each(['embedding-2-preview', 'gemini-embedding-2-preview'])(
+      'should calculate historical preview cost for %s',
+      (model) => {
+        const cost = calculateGoogleCost(model, {}, 10000, 0);
+        expect(cost).toBeCloseTo(0.002, 10);
+      },
+    );
 
     it('should apply resolved-model tiered pricing for the gemini-pro-latest alias', () => {
       const costBelowThreshold = calculateGoogleCost('gemini-pro-latest', {}, 100000, 50000);
@@ -3062,10 +3336,53 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0015, 10);
     });
 
-    it('should calculate cost for gemini-robotics-er-1.6-preview', () => {
-      // gemini-robotics-er-1.6-preview: input=1.0/1M, output=5.0/1M
-      const cost = calculateGoogleCost('gemini-robotics-er-1.6-preview', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.0035, 10);
+    it('should calculate modality-aware cost for gemini-robotics-er-1.6-preview', () => {
+      // Robotics ER 1.6: audio input=$2/1M, output=$5/1M.
+      const cost = calculateGoogleCost(
+        'gemini-robotics-er-1.6-preview',
+        {},
+        1_000,
+        500,
+        false,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(0.0045, 10);
+    });
+
+    it.each(['gemini-robotics-er-2-preview', 'gemini-robotics-er-2-streaming-preview'])(
+      'should calculate published Robotics ER 2 pricing for %s',
+      (model) => {
+        expect(calculateGoogleCost(model, {}, 1_000, 500)).toBeCloseTo(0.007, 10);
+      },
+    );
+
+    it('should calculate cached-input pricing for gemini-robotics-er-2-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-robotics-er-2-preview',
+        {},
+        1_000,
+        0,
+        false,
+        0,
+        0,
+        undefined,
+        0,
+        1_000,
+      );
+      expect(cost).toBeCloseTo(0.0002, 10);
+    });
+
+    it('should calculate audio pricing for gemini-3.5-live-translate-preview', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-live-translate-preview',
+        {},
+        1_000,
+        500,
+        false,
+        1_000,
+        500,
+      );
+      expect(cost).toBeCloseTo(0.014, 10);
     });
 
     it('should calculate resolved-model cost for gemini-flash-latest', () => {
@@ -3078,9 +3395,9 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.001, 10);
     });
 
-    it('should return undefined for shutdown models', () => {
-      // Deprecated/shutdown Google model IDs: these should not appear in GOOGLE_MODELS
-      // and should return undefined pricing if referenced directly.
+    it('should return undefined for shutdown models without retained historical pricing', () => {
+      // These shutdown Google model IDs have no retained pricing. Other retired IDs intentionally
+      // remain in GOOGLE_MODELS so saved evaluations can still be scored.
       // Keep this list aligned with Google's model lifecycle/deprecation documentation.
       const shutdownModels = [
         'gemini-2.5-pro-preview-05-06',

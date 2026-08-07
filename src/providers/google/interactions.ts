@@ -7,7 +7,13 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { calculateGoogleCost, mergeGoogleCompletionOptions } from './util';
+import {
+  calculateGoogleCost,
+  mergeGoogleCompletionOptions,
+  parseConfigResponseSchema,
+  parseConfigSystemInstruction,
+  resolveGoogleToolConfig,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -19,13 +25,21 @@ type InteractionContent = {
   data?: string;
   uri?: string;
   mime_type?: string;
+  annotations?: unknown[];
+};
+
+type InteractionStep = {
+  type?: string;
+  content?: InteractionContent[];
+  error?: { message?: string };
+  [key: string]: unknown;
 };
 
 type InteractionResponse = {
   id?: string;
   status?: string;
   error?: { message?: string };
-  steps?: Array<{ type?: string; content?: InteractionContent[]; error?: { message?: string } }>;
+  steps?: InteractionStep[];
   usage?: {
     total_input_tokens?: number;
     total_output_tokens?: number;
@@ -41,6 +55,12 @@ type InteractionResponse = {
   };
 };
 
+type ParsedInteractionInput = {
+  input: string | unknown[] | Record<string, unknown>;
+  systemInstruction?: string;
+  hasSystemInstruction?: boolean;
+};
+
 function normalizeAudioMimeType(format?: string): string {
   if (format?.startsWith('audio/')) {
     return format;
@@ -54,9 +74,39 @@ function normalizeAudioMimeType(format?: string): string {
   return `audio/${format || 'mpeg'}`;
 }
 
-function parseInteractionInput(prompt: string): string | unknown[] | Record<string, unknown> {
+function getInteractionText(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(getInteractionText);
+  }
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.text === 'string') {
+    return [record.text];
+  }
+  return getInteractionText(record.content ?? record.parts);
+}
+
+function parseInteractionInput(
+  prompt: string,
+  extractSystemInstructions: boolean,
+): ParsedInteractionInput {
   try {
     const parsedPrompt = JSON.parse(prompt) as unknown;
+    const promptEnvelope =
+      parsedPrompt && typeof parsedPrompt === 'object' && !Array.isArray(parsedPrompt)
+        ? (parsedPrompt as {
+            system_instruction?: unknown;
+            systemInstruction?: unknown;
+          })
+        : undefined;
+    const envelopeSystemInstruction = getInteractionText(
+      promptEnvelope?.system_instruction ?? promptEnvelope?.systemInstruction,
+    );
     const parsed =
       parsedPrompt &&
       typeof parsedPrompt === 'object' &&
@@ -65,9 +115,10 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
         ? (parsedPrompt as { contents: unknown[] }).contents
         : parsedPrompt;
     if (Array.isArray(parsed)) {
-      return parsed.map((content) => {
+      const systemInstructions = [...envelopeSystemInstruction];
+      const input = parsed.flatMap((content): unknown[] => {
         if (!content || typeof content !== 'object') {
-          return content;
+          return [content];
         }
 
         const normalizePart = (part: unknown) => {
@@ -108,6 +159,9 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             return part;
           }
           const imagePart = part as { type?: string; image_url?: string | { url?: string } };
+          if (imagePart.type === 'input_text') {
+            return { ...imagePart, type: 'text' };
+          }
           if (imagePart.type === 'input_audio') {
             const inputAudio = (part as { input_audio?: { data?: string; format?: string } })
               .input_audio;
@@ -133,7 +187,7 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
         };
 
         if (!('role' in content)) {
-          return normalizePart(content);
+          return [normalizePart(content)];
         }
 
         const {
@@ -143,6 +197,10 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
           ...message
         } = content as Record<string, unknown>;
         const interactionContent = messageContent ?? parts;
+        if (role === 'system' && extractSystemInstructions) {
+          systemInstructions.push(...getInteractionText(interactionContent));
+          return [];
+        }
         const normalizedContent = Array.isArray(interactionContent)
           ? interactionContent.map((part) => normalizePart(part))
           : typeof interactionContent === 'string'
@@ -150,19 +208,309 @@ function parseInteractionInput(prompt: string): string | unknown[] | Record<stri
             : interactionContent && typeof interactionContent === 'object'
               ? [normalizePart(interactionContent)]
               : [];
-        return {
-          ...message,
-          type: role === 'assistant' || role === 'model' ? 'model_output' : 'user_input',
-          content: normalizedContent,
-        };
+        return [
+          {
+            ...message,
+            type: role === 'assistant' || role === 'model' ? 'model_output' : 'user_input',
+            content: normalizedContent,
+          },
+        ];
       });
+      if (input.length === 0 && systemInstructions.length > 0) {
+        return {
+          input: [
+            {
+              type: 'user_input',
+              content: systemInstructions.map((text) => ({ type: 'text', text })),
+            },
+          ],
+          hasSystemInstruction: true,
+        };
+      }
+      return {
+        input,
+        ...(systemInstructions.length > 0
+          ? {
+              systemInstruction: systemInstructions.join('\n'),
+              hasSystemInstruction: true,
+            }
+          : {}),
+      };
     }
-    return parsed && typeof parsed === 'object'
-      ? (parsed as unknown[] | Record<string, unknown>)
-      : prompt;
+    return {
+      input:
+        parsed && typeof parsed === 'object'
+          ? (parsed as unknown[] | Record<string, unknown>)
+          : prompt,
+      ...(envelopeSystemInstruction.length > 0
+        ? {
+            systemInstruction: envelopeSystemInstruction.join('\n'),
+            hasSystemInstruction: true,
+          }
+        : {}),
+    };
   } catch {
-    return prompt;
+    return { input: prompt };
   }
+}
+
+const INTERACTION_INPUT_METADATA_FIELDS = new Set(['mime_type', 'mimeType', 'role', 'type']);
+
+function hasSemanticInteractionInput(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasSemanticInteractionInput);
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(
+      ([field, nestedValue]) =>
+        !INTERACTION_INPUT_METADATA_FIELDS.has(field) && hasSemanticInteractionInput(nestedValue),
+    );
+  }
+  return value !== null && value !== undefined;
+}
+
+function getLiveOnlyModelRouteError(modelName: string): string | undefined {
+  if (
+    modelName === 'gemini-3.5-live-translate-preview' ||
+    modelName.startsWith('gemini-robotics-er-2-streaming-')
+  ) {
+    return `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`;
+  }
+  return undefined;
+}
+
+const INTERACTION_GENERATION_FIELDS = new Set([
+  'max_output_tokens',
+  'seed',
+  'stop_sequences',
+  'thinking_level',
+  'thinking_summaries',
+  'tool_choice',
+  'transcription_config',
+  'video_config',
+]);
+
+const INTERACTION_GENERATION_ALIASES: Record<string, string> = {
+  maxOutputTokens: 'max_output_tokens',
+  stopSequences: 'stop_sequences',
+  thinkingLevel: 'thinking_level',
+  thinkingSummaries: 'thinking_summaries',
+  topP: 'top_p',
+  toolChoice: 'tool_choice',
+  transcriptionConfig: 'transcription_config',
+  videoConfig: 'video_config',
+};
+
+const INTERACTION_SAMPLING_FIELDS = new Set(['temperature', 'top_p']);
+
+const INTERACTION_TOP_LEVEL_GENERATION_FIELDS = new Set([
+  ...INTERACTION_GENERATION_FIELDS,
+  ...Object.keys(INTERACTION_GENERATION_ALIASES),
+  'temperature',
+  'top_p',
+  'topP',
+  'top_k',
+  'topK',
+  'thinkingConfig',
+  'thinking_config',
+  'thinkingBudget',
+  'thinking_budget',
+  'negative_prompt',
+  'negativePrompt',
+  'responseMimeType',
+  'response_mime_type',
+  'responseSchema',
+  'response_schema',
+]);
+
+type NormalizedInteractionGenerationConfig = {
+  config: Record<string, unknown>;
+  error?: string;
+};
+
+function normalizeInteractionThinkingLevel(value: unknown): unknown {
+  return typeof value === 'string' ? value.toLowerCase() : value;
+}
+
+function hasInteractionThinkingLevel(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const config = value as Record<string, unknown>;
+  const hasNestedThinkingLevel = [config.thinkingConfig, config.thinking_config].some(
+    (thinkingConfig) => {
+      if (!thinkingConfig || typeof thinkingConfig !== 'object' || Array.isArray(thinkingConfig)) {
+        return false;
+      }
+      const nestedConfig = thinkingConfig as Record<string, unknown>;
+      return nestedConfig.thinkingLevel !== undefined || nestedConfig.thinking_level !== undefined;
+    },
+  );
+  return (
+    hasNestedThinkingLevel ||
+    config.thinkingLevel !== undefined ||
+    config.thinking_level !== undefined
+  );
+}
+
+function shouldRejectInteractionThinkingBudget(
+  value: unknown,
+  ignoreNumericThinkingBudget: boolean,
+): boolean {
+  return typeof value === 'number' && !ignoreNumericThinkingBudget;
+}
+
+function isSupportedInteractionGenerationField(
+  field: string,
+  allowSamplingControls: boolean,
+): boolean {
+  return (
+    INTERACTION_GENERATION_FIELDS.has(field) ||
+    (allowSamplingControls && INTERACTION_SAMPLING_FIELDS.has(field))
+  );
+}
+
+function normalizeInteractionGenerationConfig(
+  value: unknown,
+  allowSamplingControls = false,
+  ignoreNumericThinkingBudget = false,
+): NormalizedInteractionGenerationConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { config: {} };
+  }
+
+  const config: Record<string, unknown> = {};
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (field === 'thinkingConfig' || field === 'thinking_config') {
+      if (!fieldValue || typeof fieldValue !== 'object' || Array.isArray(fieldValue)) {
+        continue;
+      }
+      const thinkingConfig = fieldValue as Record<string, unknown>;
+      const thinkingBudget = thinkingConfig.thinkingBudget ?? thinkingConfig.thinking_budget;
+      if (shouldRejectInteractionThinkingBudget(thinkingBudget, ignoreNumericThinkingBudget)) {
+        return {
+          config: {},
+          error:
+            'Gemini Interactions generation_config does not support numeric thinkingBudget; use thinkingConfig.thinkingLevel instead.',
+        };
+      }
+      const thinkingLevel = thinkingConfig.thinkingLevel ?? thinkingConfig.thinking_level;
+      if (thinkingLevel !== undefined) {
+        config.thinking_level = normalizeInteractionThinkingLevel(thinkingLevel);
+      }
+      continue;
+    }
+    if (field === 'thinkingBudget' || field === 'thinking_budget') {
+      if (shouldRejectInteractionThinkingBudget(fieldValue, ignoreNumericThinkingBudget)) {
+        return {
+          config: {},
+          error:
+            'Gemini Interactions generation_config does not support numeric thinkingBudget; use thinking_level instead.',
+        };
+      }
+      continue;
+    }
+
+    const normalizedField = INTERACTION_GENERATION_ALIASES[field] || field;
+    if (
+      !isSupportedInteractionGenerationField(normalizedField, allowSamplingControls) ||
+      fieldValue === undefined
+    ) {
+      continue;
+    }
+    config[normalizedField] =
+      normalizedField === 'thinking_level'
+        ? normalizeInteractionThinkingLevel(fieldValue)
+        : fieldValue;
+  }
+  return { config };
+}
+
+function normalizeInteractionGenerationLayers(
+  layers: unknown[],
+  allowSamplingControls = false,
+): NormalizedInteractionGenerationConfig {
+  const hasLaterThinkingLevel = new Array<boolean>(layers.length);
+  let laterThinkingLevelFound = false;
+  for (let index = layers.length - 1; index >= 0; index--) {
+    hasLaterThinkingLevel[index] = laterThinkingLevelFound;
+    laterThinkingLevelFound ||= hasInteractionThinkingLevel(layers[index]);
+  }
+
+  const config: Record<string, unknown> = {};
+  for (const [index, layer] of layers.entries()) {
+    const normalizedLayer = normalizeInteractionGenerationConfig(
+      layer,
+      allowSamplingControls,
+      hasLaterThinkingLevel[index] ?? false,
+    );
+    if (normalizedLayer.error) {
+      return normalizedLayer;
+    }
+    Object.assign(config, normalizedLayer.config);
+  }
+  return { config };
+}
+
+function normalizeInteractionServiceTier(
+  value: unknown,
+): 'flex' | 'standard' | 'priority' | undefined {
+  return value === 'flex' || value === 'standard' || value === 'priority' ? value : undefined;
+}
+
+type InteractionStructuredOutputLayer = {
+  generationConfigs: unknown[];
+  responseSchema?: string;
+};
+
+function resolveInteractionStructuredOutput(layers: InteractionStructuredOutputLayer[]): {
+  mimeType?: string;
+  responseSchema?: unknown;
+} {
+  let legacyMimeType: unknown;
+  let legacyResponseSchema: unknown;
+  for (const layer of layers) {
+    let layerMimeType: unknown;
+    let layerResponseSchema: unknown;
+    for (const generationConfig of layer.generationConfigs) {
+      if (
+        !generationConfig ||
+        typeof generationConfig !== 'object' ||
+        Array.isArray(generationConfig)
+      ) {
+        continue;
+      }
+      const config = generationConfig as Record<string, unknown>;
+      const responseMimeType = config.response_mime_type ?? config.responseMimeType;
+      const responseSchemaValue = config.response_schema ?? config.responseSchema;
+      if (responseMimeType !== undefined) {
+        layerMimeType = responseMimeType;
+      }
+      if (responseSchemaValue !== undefined) {
+        layerResponseSchema = responseSchemaValue;
+      }
+    }
+    if (layer.responseSchema !== undefined && layerResponseSchema !== undefined) {
+      throw new Error(
+        '`responseSchema` provided but `generationConfig.response_schema` already set.',
+      );
+    }
+    if (layerMimeType !== undefined) {
+      legacyMimeType = layerMimeType;
+    }
+    const resolvedLayerSchema = layer.responseSchema ?? layerResponseSchema;
+    if (resolvedLayerSchema !== undefined) {
+      legacyResponseSchema = resolvedLayerSchema;
+    }
+  }
+
+  return {
+    ...(typeof legacyMimeType === 'string' ? { mimeType: legacyMimeType } : {}),
+    ...(legacyResponseSchema === undefined ? {} : { responseSchema: legacyResponseSchema }),
+  };
 }
 
 function normalizeInteractionSafetySettings(
@@ -186,10 +534,142 @@ function getInteractionModalityTokenCount(
 function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
   const steps = data.steps || [];
   const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
+  const latestToolStep = steps
+    .map((step) => step.type?.endsWith('_call') || step.type?.endsWith('_result'))
+    .lastIndexOf(true);
   return steps
-    .slice(latestUserInput + 1)
+    .slice(Math.max(latestUserInput, latestToolStep) + 1)
     .filter((step) => step.type === 'model_output')
     .flatMap((step) => step.content || []);
+}
+
+function getInteractionAnnotationExcerpt(
+  text: string | undefined,
+  startIndex: unknown,
+  endIndex: unknown,
+): string {
+  if (
+    typeof text !== 'string' ||
+    !Number.isInteger(startIndex) ||
+    !Number.isInteger(endIndex) ||
+    (startIndex as number) < 0 ||
+    (endIndex as number) < (startIndex as number)
+  ) {
+    return '';
+  }
+  const bytes = Buffer.from(text, 'utf8');
+  if ((endIndex as number) > bytes.length) {
+    return '';
+  }
+  return bytes
+    .subarray(startIndex as number, endIndex as number)
+    .toString('utf8')
+    .trim();
+}
+
+interface InteractionCitationAnnotation {
+  type?: unknown;
+  url?: unknown;
+  title?: unknown;
+  document_uri?: unknown;
+  file_name?: unknown;
+  source?: unknown;
+  page_number?: unknown;
+  media_id?: unknown;
+  place_id?: unknown;
+  name?: unknown;
+  start_index?: unknown;
+  end_index?: unknown;
+  startIndex?: unknown;
+  endIndex?: unknown;
+}
+
+function getTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeInteractionCitation(
+  annotation: unknown,
+  text: string | undefined,
+): Array<{ url?: string; source?: string; content: string }> {
+  if (!annotation || typeof annotation !== 'object') {
+    return [];
+  }
+
+  const record = annotation as InteractionCitationAnnotation;
+  const startIndex = record.start_index ?? record.startIndex;
+  const endIndex = record.end_index ?? record.endIndex;
+  const excerpt = getInteractionAnnotationExcerpt(text, startIndex, endIndex);
+
+  if (record.type === 'url_citation') {
+    const url = getTrimmedString(record.url);
+    if (!/^https?:\/\//i.test(url)) {
+      return [];
+    }
+    const title = getTrimmedString(record.title);
+    return [{ url, content: [title, excerpt].filter(Boolean).join(': ') || url }];
+  }
+
+  if (record.type === 'file_citation') {
+    const source = [record.document_uri, record.source, record.file_name, record.media_id]
+      .map(getTrimmedString)
+      .find(Boolean);
+    if (!source) {
+      return [];
+    }
+    const fileName = getTrimmedString(record.file_name);
+    const page = Number.isInteger(record.page_number) ? ` (page ${record.page_number})` : '';
+    const label = `${fileName || source}${page}`;
+    return [{ source, content: [label, excerpt].filter(Boolean).join(': ') || source }];
+  }
+
+  if (record.type === 'place_citation') {
+    const url = getTrimmedString(record.url);
+    const name = getTrimmedString(record.name);
+    const placeId = getTrimmedString(record.place_id);
+    const source = url || placeId || name;
+    if (!source) {
+      return [];
+    }
+    return [
+      {
+        ...(url ? { url } : { source }),
+        content: [name, excerpt].filter(Boolean).join(': ') || source,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function getInteractionGroundingMetadata(
+  data: InteractionResponse,
+  outputContent: InteractionContent[],
+): Record<string, unknown> {
+  const annotations = outputContent.flatMap((part) =>
+    Array.isArray(part.annotations) ? part.annotations : [],
+  );
+  const citations = outputContent.flatMap((part) => {
+    if (!Array.isArray(part.annotations)) {
+      return [];
+    }
+    return part.annotations.flatMap((annotation) =>
+      normalizeInteractionCitation(annotation, part.text),
+    );
+  });
+
+  const steps = data.steps || [];
+  const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
+  const latestSteps = steps.slice(latestUserInput + 1);
+  const interactionToolCalls = latestSteps.filter((step) => step.type?.endsWith('_call'));
+  const interactionToolResults = latestSteps.filter((step) => step.type?.endsWith('_result'));
+
+  return {
+    ...(annotations.length > 0 ? { annotations } : {}),
+    ...(citations.length > 0 ? { citations } : {}),
+    ...(interactionToolCalls.length > 0 ? { interactionToolCalls } : {}),
+    ...(interactionToolResults.length > 0 ? { interactionToolResults } : {}),
+  };
 }
 
 function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
@@ -216,17 +696,23 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
 
+function getVertexInteractionsRegion(config: GoogleProviderConfig, env?: EnvOverrides): string {
+  return (
+    config.region ||
+    env?.VERTEX_REGION ||
+    env?.GOOGLE_CLOUD_LOCATION ||
+    getEnvString('VERTEX_REGION') ||
+    getEnvString('GOOGLE_CLOUD_LOCATION') ||
+    'global'
+  );
+}
+
 function getVertexInteractionsEndpoint(
   config: GoogleProviderConfig,
   projectId: string,
   env?: EnvOverrides,
 ): string {
-  const region =
-    config.region ||
-    env?.VERTEX_REGION ||
-    getEnvString('VERTEX_REGION') ||
-    getEnvString('GOOGLE_CLOUD_LOCATION') ||
-    'global';
+  const region = getVertexInteractionsRegion(config, env);
   const configuredHost =
     config.apiBaseUrl ||
     config.apiHost ||
@@ -235,6 +721,107 @@ function getVertexInteractionsEndpoint(
     (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
   const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
+}
+
+function getVertexExpressInteractionsEndpoint(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string {
+  const configuredHost =
+    config.apiBaseUrl ||
+    config.apiHost ||
+    env?.VERTEX_API_HOST ||
+    getEnvString('VERTEX_API_HOST') ||
+    'aiplatform.googleapis.com';
+  const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
+  return `${host.replace(/\/$/, '')}/v1beta1/interactions`;
+}
+
+function getVertexInteractionsApiKey(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string | undefined {
+  return (
+    config.apiKey ||
+    env?.VERTEX_API_KEY ||
+    env?.GOOGLE_API_KEY ||
+    GoogleAuthManager.getApiKey(config, undefined, true).apiKey
+  );
+}
+
+function usesVertexExpressInteractions(
+  config: GoogleProviderConfig,
+  env: EnvOverrides | undefined,
+  apiKey?: string,
+): boolean {
+  const hasOAuthConfig = Boolean(
+    config.credentials ||
+      config.keyFilename ||
+      config.googleAuthOptions?.keyFilename ||
+      config.googleAuthOptions?.credentials,
+  );
+  const providerScopedRegion = config.region || env?.VERTEX_REGION || env?.GOOGLE_CLOUD_LOCATION;
+  const hasProviderScopedOAuthConfig = Boolean(
+    config.projectId ||
+      env?.VERTEX_PROJECT_ID ||
+      env?.GOOGLE_PROJECT_ID ||
+      env?.GOOGLE_CLOUD_PROJECT ||
+      (providerScopedRegion && providerScopedRegion !== 'global'),
+  );
+  const explicitlyRequestedExpress =
+    config.expressMode === true ||
+    Boolean(config.apiKey) ||
+    (Boolean(env?.VERTEX_API_KEY) && !hasProviderScopedOAuthConfig);
+  const effectiveRegion =
+    providerScopedRegion || getEnvString('VERTEX_REGION') || getEnvString('GOOGLE_CLOUD_LOCATION');
+  const hasProjectScopedOAuthConfig = Boolean(
+    config.projectId ||
+      env?.VERTEX_PROJECT_ID ||
+      env?.GOOGLE_PROJECT_ID ||
+      env?.GOOGLE_CLOUD_PROJECT ||
+      getEnvString('VERTEX_PROJECT_ID') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      (effectiveRegion && effectiveRegion !== 'global'),
+  );
+  return (
+    Boolean(apiKey) &&
+    config.expressMode !== false &&
+    !hasOAuthConfig &&
+    (explicitlyRequestedExpress || !hasProjectScopedOAuthConfig)
+  );
+}
+
+function mergeGoogleInteractionsRequestConfig(
+  providerConfig: GoogleProviderConfig,
+  promptConfig?: Partial<GoogleProviderConfig>,
+): GoogleProviderConfig {
+  const mergedConfig = mergeGoogleCompletionOptions(
+    providerConfig,
+    promptConfig,
+  ) as GoogleProviderConfig;
+
+  // Prompt configuration may shape the request body, but it must not redirect an authenticated
+  // request, replace provider credentials, or switch authentication modes. Keep every endpoint,
+  // authentication, and transport option owned by the provider instance.
+  return {
+    ...mergedConfig,
+    apiKey: providerConfig.apiKey,
+    apiHost: providerConfig.apiHost,
+    apiBaseUrl: providerConfig.apiBaseUrl,
+    headers: providerConfig.headers,
+    projectId: providerConfig.projectId,
+    region: providerConfig.region,
+    publisher: providerConfig.publisher,
+    apiVersion: providerConfig.apiVersion,
+    credentials: providerConfig.credentials,
+    expressMode: providerConfig.expressMode,
+    googleAuthOptions: providerConfig.googleAuthOptions,
+    keyFilename: providerConfig.keyFilename,
+    scopes: providerConfig.scopes,
+    vertexai: providerConfig.vertexai,
+    strictMutualExclusivity: providerConfig.strictMutualExclusivity,
+  };
 }
 
 export class GoogleInteractionsProvider implements ApiProvider {
@@ -251,6 +838,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     this.config = options.config || {};
     this.env = options.env;
     this.providerId = options.id;
+    GoogleAuthManager.validateAndWarn(this.config, this.env);
   }
 
   id(): string {
@@ -262,38 +850,129 @@ export class GoogleInteractionsProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!prompt.trim()) {
-      return { error: 'Prompt is required for Gemini Interactions API' };
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleInteractionsRequestConfig(this.config, promptConfig);
+    const { toolsDisabled } = resolveGoogleToolConfig(config);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
+    const providerPassthrough = this.config.passthrough || {};
+    const promptPassthrough = promptConfig?.passthrough || {};
+    const mergedPassthrough = {
+      ...providerPassthrough,
+      ...promptPassthrough,
+    };
+    const passthroughModel = promptPassthrough.model ?? providerPassthrough.model;
+    const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
+    const routeError = getLiveOnlyModelRouteError(effectiveModel);
+    if (routeError) {
+      return { error: routeError };
     }
-
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    ) as GoogleProviderConfig;
-    const passthroughPreviousInteractionId =
-      config.passthrough?.previous_interaction_id ?? config.passthrough?.previousInteractionId;
-    if (config.vertexai && (config.previousInteractionId || passthroughPreviousInteractionId)) {
+    const isVideoModel = effectiveModel === 'gemini-omni-flash-preview';
+    const allowSamplingControls = config.vertexai && isVideoModel;
+    const {
+      input: interactionInput,
+      systemInstruction: promptSystemInstruction,
+      hasSystemInstruction: hasPromptSystemInstruction,
+    } = parseInteractionInput(prompt, !isVideoModel);
+    const requestInput =
+      promptPassthrough.input ??
+      providerPassthrough.input ??
+      (config.vertexai && typeof interactionInput === 'string'
+        ? [{ type: 'text', text: interactionInput }]
+        : interactionInput);
+    if (!hasSemanticInteractionInput(requestInput)) {
+      return { error: 'Gemini Interactions prompt must contain at least one input item.' };
+    }
+    const previousInteractionId =
+      promptPassthrough.previous_interaction_id ??
+      promptPassthrough.previousInteractionId ??
+      promptConfig?.previousInteractionId ??
+      providerPassthrough.previous_interaction_id ??
+      providerPassthrough.previousInteractionId ??
+      this.config.previousInteractionId;
+    const providerPassthroughResponseFormat =
+      providerPassthrough.response_format ?? providerPassthrough.responseFormat;
+    const promptPassthroughResponseFormat =
+      promptPassthrough.response_format ?? promptPassthrough.responseFormat;
+    const providerPassthroughSystemInstruction =
+      providerPassthrough.system_instruction ?? providerPassthrough.systemInstruction;
+    const promptPassthroughSystemInstruction =
+      promptPassthrough.system_instruction ?? promptPassthrough.systemInstruction;
+    const passthroughSystemInstruction =
+      promptPassthroughSystemInstruction ??
+      (promptConfig?.systemInstruction === undefined && !hasPromptSystemInstruction
+        ? providerPassthroughSystemInstruction
+        : undefined);
+    const interactionConfigTools = toolsDisabled ? undefined : config.tools;
+    const hasConfigTools = Array.isArray(interactionConfigTools)
+      ? interactionConfigTools.length > 0
+      : Boolean(interactionConfigTools);
+    const interactionTools = toolsDisabled ? undefined : mergedPassthrough.tools;
+    const hasPassthroughTools = Array.isArray(interactionTools)
+      ? interactionTools.length > 0
+      : Boolean(interactionTools);
+    const hasClientExecutedTools = Array.isArray(interactionTools)
+      ? interactionTools.some(
+          (tool) =>
+            tool !== null &&
+            typeof tool === 'object' &&
+            !Array.isArray(tool) &&
+            ['function', 'computer_use'].includes(String((tool as { type?: unknown }).type)),
+        )
+      : false;
+    const hasMcpTools = !toolsDisabled && config.mcp?.enabled === true;
+    if (config.vertexai && isVideoModel && previousInteractionId) {
       return {
         error:
           'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
       };
     }
-    if (
-      (Array.isArray(config.tools) ? config.tools.length > 0 : Boolean(config.tools)) ||
-      (Array.isArray(config.passthrough?.tools)
-        ? config.passthrough.tools.length > 0
-        : Boolean(config.passthrough?.tools)) ||
-      config.mcp?.enabled
-    ) {
+    if (isVideoModel && (hasConfigTools || hasPassthroughTools || hasMcpTools)) {
       return {
         error:
           'Gemini Omni Flash does not support tools, including grounding, code execution, or function calling.',
       };
     }
+    if (!isVideoModel && (hasConfigTools || hasMcpTools)) {
+      return {
+        error:
+          'Gemini Interactions models require Interactions-native tool declarations in config.passthrough.tools; generateContent-style config.tools and MCP tools are not supported on this route.',
+      };
+    }
+    if (!isVideoModel && hasClientExecutedTools) {
+      return {
+        error:
+          'Gemini Interactions custom function and computer-use tools are not supported because Promptfoo does not yet handle requires_action responses. Use managed built-in tools in config.passthrough.tools.',
+      };
+    }
     let apiKey: string | undefined;
     let endpoint: string;
     let headers: Record<string, string>;
-    if (config.vertexai) {
+    const rawVertexApiKey = config.vertexai
+      ? getVertexInteractionsApiKey(config, this.env)
+      : undefined;
+    const vertexApiKey = rawVertexApiKey
+      ? getNunjucksEngine().renderString(rawVertexApiKey, {})
+      : undefined;
+    if (
+      config.vertexai &&
+      vertexApiKey &&
+      usesVertexExpressInteractions(config, this.env, vertexApiKey)
+    ) {
+      const region = getVertexInteractionsRegion(config, this.env);
+      if (region !== 'global') {
+        return {
+          error: `Vertex Express Interactions supports only the global endpoint, but region ${region} was configured. Set expressMode: false and use OAuth or Application Default Credentials for a regional endpoint.`,
+        };
+      }
+      apiKey = vertexApiKey;
+      endpoint = getVertexExpressInteractionsEndpoint(config, this.env);
+      headers = {
+        'Content-Type': 'application/json',
+        'Api-Revision': '2026-05-20',
+        'x-goog-api-key': vertexApiKey,
+        ...config.headers,
+      };
+    } else if (config.vertexai) {
       try {
         const { client, projectId: authProjectId } = await GoogleAuthManager.getOAuthClient({
           credentials: config.credentials,
@@ -313,13 +992,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
         if (!projectId) {
           return {
             error:
-              'Gemini Omni on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
+              'Gemini Interactions on Vertex AI requires a project ID. Set GOOGLE_CLOUD_PROJECT or add projectId to the provider config.',
           };
         }
         const accessToken = await client.getAccessToken();
         const token = typeof accessToken === 'string' ? accessToken : accessToken?.token;
         if (!token) {
-          return { error: 'Gemini Omni on Vertex AI could not obtain an OAuth access token.' };
+          return {
+            error: 'Gemini Interactions on Vertex AI could not obtain an OAuth access token.',
+          };
         }
         endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
         const { authorization, ...authHeaders } =
@@ -334,7 +1015,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
           ...config.headers,
         };
       } catch (err) {
-        return { error: `Gemini Omni Vertex AI authentication error: ${String(err)}` };
+        return {
+          error: `Gemini Interactions on Vertex AI authentication error: ${String(err)}`,
+        };
       }
     } else {
       const rawApiKey =
@@ -356,68 +1039,239 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const unsupportedGenerationFields = new Set([
-      ...(config.vertexai ? [] : ['temperature', 'top_p', 'topP']),
-      'stop_sequences',
-      'stopSequences',
-      'negative_prompt',
-      'negativePrompt',
-      'system_instruction',
-      'systemInstruction',
-      'service_tier',
-      'serviceTier',
-    ]);
-    const passthroughGenerationConfig = config.passthrough?.generation_config;
-    const generationConfig = {
-      ...(config.maxOutputTokens === undefined
+    const providerGenerationConfigValue = {
+      ...(this.config.maxOutputTokens === undefined
         ? {}
-        : { max_output_tokens: config.maxOutputTokens }),
-      ...(config.vertexai && config.temperature !== undefined
-        ? { temperature: config.temperature }
+        : { max_output_tokens: this.config.maxOutputTokens }),
+      ...(allowSamplingControls && this.config.temperature !== undefined
+        ? { temperature: this.config.temperature }
         : {}),
-      ...(config.vertexai && config.topP !== undefined ? { top_p: config.topP } : {}),
-      ...Object.fromEntries(
-        Object.entries({
-          ...(config.generationConfig || {}),
-          ...(passthroughGenerationConfig &&
-          typeof passthroughGenerationConfig === 'object' &&
-          !Array.isArray(passthroughGenerationConfig)
-            ? passthroughGenerationConfig
-            : {}),
-        })
-          .filter(([field]) => !unsupportedGenerationFields.has(field))
-          .map(([field, value]) => [
-            field === 'topP' ? 'top_p' : field === 'maxOutputTokens' ? 'max_output_tokens' : field,
-            value,
-          ]),
-      ),
+      ...(allowSamplingControls && this.config.topP !== undefined
+        ? { top_p: this.config.topP }
+        : {}),
+      ...(this.config.stopSequences === undefined
+        ? {}
+        : { stop_sequences: this.config.stopSequences }),
+      ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
+      ...(this.config.generationConfig || {}),
     };
-    const passthrough = Object.fromEntries(
-      Object.entries(config.passthrough || {}).filter(
-        ([field]) =>
-          field !== 'generation_config' &&
-          field !== 'generationConfig' &&
-          !unsupportedGenerationFields.has(field),
-      ),
+    const promptGenerationConfigValue = {
+      ...(promptConfig?.maxOutputTokens === undefined
+        ? {}
+        : { max_output_tokens: promptConfig.maxOutputTokens }),
+      ...(allowSamplingControls && promptConfig?.temperature !== undefined
+        ? { temperature: promptConfig.temperature }
+        : {}),
+      ...(allowSamplingControls && promptConfig?.topP !== undefined
+        ? { top_p: promptConfig.topP }
+        : {}),
+      ...(promptConfig?.stopSequences === undefined
+        ? {}
+        : { stop_sequences: promptConfig.stopSequences }),
+      ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
+      ...(promptConfig?.generationConfig || {}),
+    };
+    const normalizedGenerationConfig = normalizeInteractionGenerationLayers(
+      [
+        providerGenerationConfigValue,
+        providerPassthrough.generationConfig,
+        providerPassthrough.generation_config,
+        promptGenerationConfigValue,
+        promptPassthrough.generationConfig,
+        promptPassthrough.generation_config,
+      ],
+      allowSamplingControls,
     );
-    const interactionInput = parseInteractionInput(prompt);
+    if (normalizedGenerationConfig.error) {
+      return { error: normalizedGenerationConfig.error };
+    }
+    const generationConfig = {
+      ...normalizedGenerationConfig.config,
+      ...(!isVideoModel && toolsDisabled ? { tool_choice: 'none' } : {}),
+    };
+    const providerServiceTier =
+      providerPassthrough.service_tier ??
+      providerPassthrough.serviceTier ??
+      this.config.service_tier;
+    const promptServiceTier =
+      promptPassthrough.service_tier ?? promptPassthrough.serviceTier ?? promptConfig?.service_tier;
+    const rawServiceTier = promptServiceTier ?? providerServiceTier;
+    const serviceTier = normalizeInteractionServiceTier(rawServiceTier);
+    if (rawServiceTier !== undefined && serviceTier === undefined) {
+      return {
+        error: 'Gemini Interactions service_tier must be one of flex, standard, or priority.',
+      };
+    }
+    const billingConfig = {
+      ...config,
+      service_tier: serviceTier,
+      passthrough: {
+        ...(config.passthrough || {}),
+        service_tier: serviceTier,
+        serviceTier,
+      },
+    };
+    const passthrough = {
+      ...Object.fromEntries(
+        Object.entries(mergedPassthrough).filter(
+          ([field]) =>
+            field !== 'generation_config' &&
+            field !== 'generationConfig' &&
+            field !== 'model' &&
+            field !== 'service_tier' &&
+            field !== 'serviceTier' &&
+            field !== 'previous_interaction_id' &&
+            field !== 'previousInteractionId' &&
+            field !== 'response_format' &&
+            field !== 'responseFormat' &&
+            field !== 'system_instruction' &&
+            field !== 'systemInstruction' &&
+            field !== 'input' &&
+            field !== 'store' &&
+            field !== 'safety_settings' &&
+            (!toolsDisabled || field !== 'tools') &&
+            !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field),
+        ),
+      ),
+      ...(!isVideoModel && passthroughSystemInstruction !== undefined
+        ? { system_instruction: passthroughSystemInstruction }
+        : {}),
+    };
+    const systemInstructionContent =
+      !isVideoModel && passthroughSystemInstruction === undefined
+        ? parseConfigSystemInstruction(
+            config.systemInstruction,
+            context?.vars,
+            promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+          )
+        : undefined;
+    const systemInstruction =
+      !isVideoModel && passthroughSystemInstruction === undefined
+        ? [
+            ...(systemInstructionContent?.parts
+              .map((part) => part.text)
+              .filter((text): text is string => typeof text === 'string') ?? []),
+            ...(promptSystemInstruction ? [promptSystemInstruction] : []),
+          ].join('\n')
+        : undefined;
+    const promptStructuredOutput =
+      !isVideoModel && promptPassthroughResponseFormat === undefined
+        ? resolveInteractionStructuredOutput([
+            {
+              generationConfigs: [promptConfig?.generationConfig],
+              responseSchema: promptConfig?.responseSchema,
+            },
+            {
+              generationConfigs: [
+                promptPassthrough.generationConfig,
+                promptPassthrough.generation_config,
+              ],
+            },
+          ])
+        : undefined;
+    const hasPromptStructuredOutput =
+      promptStructuredOutput?.mimeType !== undefined ||
+      promptStructuredOutput?.responseSchema !== undefined;
+    const passthroughResponseFormat =
+      promptPassthroughResponseFormat ??
+      (hasPromptStructuredOutput ? undefined : providerPassthroughResponseFormat);
+    const providerStructuredOutput =
+      !isVideoModel &&
+      passthroughResponseFormat === undefined &&
+      providerPassthroughResponseFormat === undefined
+        ? resolveInteractionStructuredOutput([
+            {
+              generationConfigs: [this.config.generationConfig],
+              responseSchema: this.config.responseSchema,
+            },
+            {
+              generationConfigs: [
+                providerPassthrough.generationConfig,
+                providerPassthrough.generation_config,
+              ],
+            },
+          ])
+        : undefined;
+    const promptOwnsResponseSchema = promptStructuredOutput?.responseSchema !== undefined;
+    const rawResponseSchema = promptOwnsResponseSchema
+      ? promptStructuredOutput.responseSchema
+      : providerStructuredOutput?.responseSchema;
+    const responseMimeType =
+      promptStructuredOutput?.mimeType ??
+      (promptOwnsResponseSchema ? undefined : providerStructuredOutput?.mimeType) ??
+      (rawResponseSchema === undefined ? undefined : 'application/json');
+    const responseSchema =
+      rawResponseSchema === undefined || responseMimeType !== 'application/json'
+        ? undefined
+        : parseConfigResponseSchema(
+            rawResponseSchema as string,
+            context?.vars,
+            promptOwnsResponseSchema ? promptBasePath : this.config.basePath,
+          );
+    const structuredOutput = {
+      mimeType: responseMimeType,
+      schema: responseSchema,
+    };
+    const generatedVideoResponseFormat = config.vertexai
+      ? [
+          {
+            type: 'video',
+            ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+          },
+        ]
+      : {
+          type: 'video',
+          ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}),
+        };
+    const videoResponseFormat =
+      promptPassthroughResponseFormat ??
+      (promptConfig?.aspectRatio === undefined
+        ? (providerPassthroughResponseFormat ?? generatedVideoResponseFormat)
+        : generatedVideoResponseFormat);
+    const store =
+      promptPassthrough.store ??
+      promptConfig?.store ??
+      providerPassthrough.store ??
+      this.config.store;
+    const providerSafetySettings =
+      providerPassthrough.safety_settings ??
+      (this.config.safetySettings
+        ? normalizeInteractionSafetySettings(this.config.safetySettings)
+        : undefined);
+    const promptSafetySettings =
+      promptPassthrough.safety_settings ??
+      (promptConfig?.safetySettings
+        ? normalizeInteractionSafetySettings(promptConfig.safetySettings)
+        : undefined);
+    const safetySettings = promptSafetySettings ?? providerSafetySettings;
     const body = {
-      model: this.modelName,
-      input:
-        config.vertexai && typeof interactionInput === 'string'
-          ? [{ type: 'text', text: interactionInput }]
-          : interactionInput,
-      response_format: config.vertexai
-        ? [{ type: 'video', ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}) }]
-        : { type: 'video', ...(config.aspectRatio ? { aspect_ratio: config.aspectRatio } : {}) },
-      ...(config.previousInteractionId
-        ? { previous_interaction_id: config.previousInteractionId }
-        : {}),
-      ...(config.store === undefined ? {} : { store: config.store }),
-      ...(config.safetySettings
-        ? { safety_settings: normalizeInteractionSafetySettings(config.safetySettings) }
-        : {}),
+      model: effectiveModel,
+      input: requestInput,
+      ...(isVideoModel
+        ? { response_format: videoResponseFormat }
+        : passthroughResponseFormat === undefined
+          ? structuredOutput?.mimeType || structuredOutput?.schema !== undefined
+            ? {
+                response_format: [
+                  {
+                    type: 'text',
+                    ...(structuredOutput.mimeType ? { mime_type: structuredOutput.mimeType } : {}),
+                    ...(structuredOutput.schema === undefined
+                      ? {}
+                      : { schema: structuredOutput.schema }),
+                  },
+                ],
+              }
+            : {}
+          : { response_format: passthroughResponseFormat }),
+      ...(previousInteractionId === undefined
+        ? {}
+        : { previous_interaction_id: previousInteractionId }),
+      ...(store === undefined ? {} : { store }),
+      ...(safetySettings === undefined ? {} : { safety_settings: safetySettings }),
+      ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
       ...passthrough,
       background: false,
       stream: false,
@@ -515,6 +1369,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
 
     const outputContent = getModelOutputContent(data);
+    const groundingMetadata = getInteractionGroundingMetadata(data, outputContent);
     const lastTextIndex = outputContent.map((part) => part.type === 'text').lastIndexOf(true);
     const lastNonTextIndex = outputContent
       .slice(0, lastTextIndex)
@@ -525,6 +1380,80 @@ export class GoogleInteractionsProvider implements ApiProvider {
       .filter((part) => part.type === 'text' && part.text)
       .map((part) => part.text)
       .join('');
+
+    const usage = data.usage;
+    const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
+    const outputTokens = usage?.total_output_tokens ?? 0;
+    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
+    const audioInputTokens =
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
+    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
+    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
+    const imageInputTokens =
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, [
+        'image',
+        'document',
+        'video',
+      ]) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, [
+        'image',
+        'document',
+        'video',
+      ]);
+    const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
+      'audio',
+    ]);
+    const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
+      'image',
+      'document',
+      'video',
+    ]);
+    const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
+      'audio',
+    ]);
+    const videoTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
+      'video',
+    ]);
+    const tokenUsage = {
+      prompt: promptTokens,
+      completion: outputTokens,
+      total: usage?.total_tokens ?? promptTokens + outputTokens + thoughtTokens,
+      cached: usage?.total_cached_tokens ?? 0,
+      numRequests: 1,
+      ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
+    };
+    const cost = cached
+      ? undefined
+      : calculateGoogleCost(
+          effectiveModel,
+          billingConfig,
+          promptTokens,
+          outputTokens + thoughtTokens,
+          config.vertexai,
+          audioInputTokens,
+          audioOutputTokens,
+          videoTokens,
+          imageInputTokens,
+          usage?.total_cached_tokens,
+          cachedAudioTokens,
+          cachedImageTokens,
+          config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
+        );
+
+    if (!isVideoModel) {
+      if (!text) {
+        return { error: 'Gemini interaction did not return text output', raw: data };
+      }
+      return {
+        output: text,
+        cached,
+        tokenUsage,
+        cost,
+        metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
+      };
+    }
+
     const video = [...outputContent].reverse().find((part) => part.type === 'video');
     if (!video?.data && !video?.uri) {
       return { error: 'Gemini interaction did not return video output', raw: data };
@@ -629,40 +1558,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
       }
     }
 
-    const usage = data.usage;
-    const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
-    const outputTokens = usage?.total_output_tokens ?? 0;
-    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
-    const audioInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
-    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
-    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
-    const imageInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, [
-        'image',
-        'document',
-        'video',
-      ]) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, [
-        'image',
-        'document',
-        'video',
-      ]);
-    const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-      'audio',
-    ]);
-    const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-      'image',
-      'document',
-      'video',
-    ]);
-    const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
-      'audio',
-    ]);
-    const videoTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
-      'video',
-    ]);
     const videoUrl = blobRef?.uri ?? video.uri;
     const sanitizedPrompt = prompt
       .replace(/\r?\n|\r/g, ' ')
@@ -673,39 +1568,17 @@ export class GoogleInteractionsProvider implements ApiProvider {
     return {
       output: text || `[Video: ${sanitizedPrompt}](${videoUrl})`,
       cached,
-      tokenUsage: {
-        prompt: promptTokens,
-        completion: outputTokens,
-        total: usage?.total_tokens ?? promptTokens + outputTokens + thoughtTokens,
-        cached: usage?.total_cached_tokens ?? 0,
-        numRequests: 1,
-        ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
-      },
-      cost: cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            promptTokens,
-            outputTokens + thoughtTokens,
-            config.vertexai,
-            audioInputTokens,
-            audioOutputTokens,
-            videoTokens,
-            imageInputTokens,
-            usage?.total_cached_tokens,
-            cachedAudioTokens,
-            cachedImageTokens,
-          ),
+      tokenUsage,
+      cost,
       video: {
         id: data.id,
         blobRef,
         url: videoUrl,
         format: video.mime_type?.split('/')[1] || 'mp4',
-        model: this.modelName,
+        model: effectiveModel,
         aspectRatio: config.aspectRatio,
       },
-      metadata: { interactionId: data.id, status: data.status },
+      metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
     };
   }
 }

@@ -2,12 +2,13 @@
 title: Vercel AI Gateway
 sidebar_label: Vercel AI Gateway
 sidebar_position: 48
-description: Access OpenAI, Anthropic, Google, and 20+ AI providers through Vercel's unified AI Gateway. Supports text generation, streaming, structured output, and embeddings.
+description: Access language and embedding models through Vercel's unified AI Gateway
 ---
 
 # Vercel AI Gateway
 
-[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access AI models from 20+ providers through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway) provides a unified interface to access
+models through a single API. This provider uses the official [Vercel AI SDK](https://ai-sdk.dev/).
 
 If you call the Vercel AI SDK directly from a [`file://` custom provider](/docs/providers/custom-api/) and enable `experimental_telemetry`, Promptfoo's [trajectory assertions](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used) can normalize the SDK's tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.
 
@@ -47,7 +48,7 @@ providers:
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -57,7 +58,7 @@ providers:
 
 ### Full Configuration Options
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:anthropic/claude-sonnet-4.5
     config:
@@ -108,6 +109,7 @@ providers:
 Generate structured JSON output by providing a JSON schema:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:
@@ -142,7 +144,7 @@ tests:
 
 Enable streaming for real-time responses:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: vercel:anthropic/claude-sonnet-4.5
     config:
@@ -152,37 +154,36 @@ providers:
 
 ## Supported Providers
 
-The Vercel AI Gateway supports models from these providers:
+Vercel exposes an unauthenticated discovery endpoint with current model IDs, capabilities, and
+pricing metadata:
 
-| Provider   | Example Models                                              |
-| ---------- | ----------------------------------------------------------- |
-| OpenAI     | `openai/gpt-5`, `openai/o3-mini`, `openai/gpt-4o-mini`      |
-| Anthropic  | `anthropic/claude-sonnet-4.5`, `anthropic/claude-haiku-4.5` |
-| Google     | `google/gemini-2.5-flash`, `google/gemini-2.5-pro`          |
-| Mistral    | `mistral/mistral-large`, `mistral/magistral-medium`         |
-| Cohere     | `cohere/command-a`                                          |
-| DeepSeek   | `deepseek/deepseek-r1`, `deepseek/deepseek-v3`              |
-| Perplexity | `perplexity/sonar-pro`, `perplexity/sonar-reasoning`        |
-| xAI        | `xai/grok-3`, `xai/grok-4`                                  |
+```bash
+curl -fsS https://ai-gateway.vercel.sh/v1/models |
+  jq -r '.data[] | [.id, .type] | @tsv'
+```
 
-For a complete list, see the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers).
+See the [Vercel AI Gateway documentation](https://vercel.com/docs/ai-gateway/models-and-providers)
+for the response fields and filtering examples.
 
 ## Embedding Models
 
 Generate embeddings for text similarity, search, and RAG applications:
 
 ```yaml title="promptfooconfig.yaml"
-providers:
-  - vercel:embedding:openai/text-embedding-3-small
-
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'Generate embedding for: {{text}}'
+  - 'Hello world'
+
+providers:
+  - echo
 
 tests:
-  - vars:
-      text: 'Hello world'
-    assert:
-      - type: is-valid-embedding
+  - assert:
+      - type: similar
+        value: 'Hello world'
+        threshold: 0.9
+        provider:
+          id: vercel:embedding:openai/text-embedding-3-small
 ```
 
 Supported embedding models:
@@ -199,6 +200,7 @@ Supported embedding models:
 ### Multi-Provider Comparison
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o-mini
     config:
@@ -224,6 +226,7 @@ tests:
 ### JSON Response with Validation
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: vercel:openai/gpt-4o
     config:

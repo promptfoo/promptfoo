@@ -1,17 +1,19 @@
 ---
-description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
+description: Route promptfoo requests through a self-hosted Helicone AI Gateway
 ---
 
 # Helicone AI Gateway
 
-[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted AI gateway that provides a unified OpenAI-compatible interface for 100+ LLM providers. The Helicone provider in promptfoo allows you to route requests through a locally running Helicone AI Gateway instance.
+[Helicone AI Gateway](https://github.com/Helicone/ai-gateway) is an open-source, self-hosted
+OpenAI-compatible gateway. The Helicone provider in promptfoo routes requests through a locally
+running gateway instance.
 
 ## Benefits
 
-- **Unified Interface**: Use OpenAI SDK syntax to access 100+ different LLM providers
-- **Load Balancing**: Smart provider selection based on latency, cost, or custom strategies
-- **Caching**: Intelligent response caching to reduce costs and improve performance
-- **Rate Limiting**: Built-in rate limiting and usage controls
+- **Unified Interface**: Use OpenAI-compatible requests with gateway-supported providers
+- **Load Balancing**: Route requests using gateway-defined strategies
+- **Caching**: Cache responses when a cache store and layer are configured
+- **Rate Limiting**: Apply limits configured on the gateway
 - **Observability**: Optional integration with Helicone's observability platform
 - **Self-Hosted**: Run your own gateway instance for full control
 
@@ -24,7 +26,6 @@ First, start a local Helicone AI Gateway instance:
 ```bash
 # Set your provider API keys
 export OPENAI_API_KEY=your_openai_key
-export ANTHROPIC_API_KEY=your_anthropic_key
 export GROQ_API_KEY=your_groq_key
 
 # Start the gateway
@@ -45,8 +46,7 @@ To route requests through your local Helicone AI Gateway:
 
 ```yaml
 providers:
-  - helicone:openai/gpt-5-mini
-  - helicone:anthropic/claude-3-5-sonnet
+  - helicone:openai/gpt-4o-mini
   - helicone:groq/llama-3.1-8b-instant
 ```
 
@@ -79,7 +79,7 @@ providers:
   - id: helicone:openai/gpt-4o
     config:
       router: production
-  - id: helicone:openai/gpt-3.5-turbo
+  - id: helicone:openai/gpt-4o-mini
     config:
       router: development
 ```
@@ -93,22 +93,13 @@ The Helicone provider uses the format: `helicone:provider/model`
 Examples:
 
 - `helicone:openai/gpt-4o`
-- `helicone:anthropic/claude-3-5-sonnet`
 - `helicone:groq/llama-3.1-8b-instant`
 
 ### Supported Models
 
-The Helicone AI Gateway supports 100+ models from various providers. Some popular examples:
-
-| Provider  | Example Models                                                    |
-| --------- | ----------------------------------------------------------------- |
-| OpenAI    | `openai/gpt-4o`, `openai/gpt-5-mini`, `openai/o1-preview`         |
-| Anthropic | `anthropic/claude-3-5-sonnet`, `anthropic/claude-3-haiku`         |
-| Groq      | `groq/llama-3.1-8b-instant`, `groq/llama-3.1-70b-versatile`       |
-| Meta      | `meta-llama/Llama-3-8b-chat-hf`, `meta-llama/Llama-3-70b-chat-hf` |
-| Google    | `google/gemma-7b-it`, `google/gemma-2b-it`                        |
-
-For a complete list, see the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway).
+The self-hosted gateway validates model IDs against its bundled catalog before forwarding requests.
+Check both the [Helicone AI Gateway documentation](https://github.com/Helicone/ai-gateway) and the
+upstream provider's current catalog before pinning an ID.
 
 ### Configuration Parameters
 
@@ -135,9 +126,10 @@ Since the provider extends OpenAI's chat completion provider, all standard OpenA
 
 ### Basic OpenAI Integration
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - helicone:openai/gpt-5-mini
+  - helicone:openai/gpt-4o-mini
 
 prompts:
   - "Translate '{{text}}' to French"
@@ -152,19 +144,14 @@ tests:
 
 ### Multi-Provider Comparison with Observability
 
-```yaml
+Configure observability on the gateway, then use a normal promptfoo config to compare its upstream
 providers:
-  - id: helicone:openai/gpt-4o
-    config:
-      tags: ['openai', 'gpt4']
-      properties:
-        model_family: 'gpt-4'
 
-  - id: helicone:anthropic/claude-3-5-sonnet-20241022
-    config:
-      tags: ['anthropic', 'claude']
-      properties:
-        model_family: 'claude-3'
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - helicone:openai/gpt-4o-mini
+  - helicone:groq/llama-3.1-8b-instant
 
 prompts:
   - 'Write a creative story about {{topic}}'
@@ -177,6 +164,7 @@ tests:
 ### Custom Provider with Full Configuration
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: helicone:openai/gpt-4o
     config:
@@ -199,14 +187,18 @@ tests:
 
 ### Caching and Performance Optimization
 
-```yaml
+Configure a cache store and cache layer on the gateway first. The request headers below opt this
+provider into that existing cache layer and set a one-hour freshness lifetime; they do not create a
+cache store.
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: helicone:openai/gpt-3.5-turbo
+  - id: helicone:openai/gpt-4o-mini
     config:
-      cache: true
-      properties:
-        cache_strategy: 'aggressive'
-        use_case: 'batch_processing'
+      headers:
+        Helicone-Cache-Enabled: 'true'
+        Cache-Control: 'max-age=3600'
 
 prompts:
   - 'Summarize: {{text}}'
@@ -214,53 +206,34 @@ prompts:
 tests:
   - vars:
       text: 'Large text content to summarize...'
-    assert:
-      - type: latency
-        threshold: 2000 # Should be faster due to caching
 ```
 
 ## Features
 
 ### Request Monitoring
 
-All requests routed through Helicone are automatically logged with:
-
-- Request/response payloads
-- Token usage and costs
-- Latency metrics
-- Custom properties and tags
+Request logging depends on the gateway's optional Helicone integration. Configure it on the gateway;
+the promptfoo provider does not enable logging or add Helicone properties by itself.
 
 ### Cost Analytics
 
-Track costs across different providers and models:
-
-- Per-request cost breakdown
-- Aggregated cost analytics
-- Cost optimization recommendations
+Cost analytics also depend on the gateway's optional Helicone integration. They are not enabled by
+the promptfoo provider alone.
 
 ### Caching
 
-Intelligent response caching:
-
-- Semantic similarity matching
-- Configurable cache duration
-- Cost reduction through cache hits
+Caching depends on the gateway's cache store and middleware configuration. Request headers can
+override an existing cache layer for one provider request.
 
 ### Rate Limiting
 
-Built-in rate limiting:
-
-- Per-user limits
-- Per-session limits
-- Custom rate limiting rules
+Rate limits are configured on the gateway, not in the promptfoo provider config.
 
 ## Best Practices
 
-1. **Use Meaningful Tags**: Tag your requests with relevant metadata for better analytics
-2. **Track Sessions**: Use session IDs to track conversation flows
-3. **Enable Caching**: For repeated or similar requests, enable caching to reduce costs
-4. **Monitor Costs**: Regularly review cost analytics in the Helicone dashboard
-5. **Custom Properties**: Use custom properties to segment and analyze your usage
+1. Check both the gateway catalog and the upstream provider catalog before pinning a model ID.
+2. Configure routers, caching, logging, and rate limits on the gateway before using related request options.
+3. Keep upstream provider credentials in environment variables instead of tracked promptfoo configs.
 
 ## Troubleshooting
 

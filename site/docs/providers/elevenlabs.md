@@ -5,11 +5,11 @@ description: 'Test ElevenLabs AI audio capabilities: Text-to-Speech, Speech-to-T
 
 # ElevenLabs
 
-The ElevenLabs provider integrates multiple AI audio capabilities for comprehensive voice AI testing and evaluation.
+The ElevenLabs provider integrates multiple AI audio capabilities for voice AI testing and evaluation.
 
 :::tip
 
-For a comprehensive step-by-step tutorial, see the [Evaluating ElevenLabs voice AI guide](/docs/guides/evaluate-elevenlabs/).
+For a step-by-step tutorial, see the [Evaluating ElevenLabs voice AI guide](/docs/guides/evaluate-elevenlabs/).
 
 :::
 
@@ -26,7 +26,8 @@ Get started with ElevenLabs in 3 steps:
 
 2. **Create a config file** (`promptfooconfig.yaml`):
 
-   ```yaml
+   ```yaml title="promptfooconfig.yaml"
+   # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
    prompts:
      - 'Welcome to our customer service. How can I help you today?'
 
@@ -228,7 +229,8 @@ All providers support these common parameters:
 
 ### Text-to-Speech: Voice Comparison
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'Welcome to ElevenLabs. Our AI voice technology delivers natural-sounding speech.'
 
@@ -237,7 +239,7 @@ providers:
     config:
       modelId: eleven_flash_v2_5
 
-  - id: elevenlabs:tts:clyde
+  - id: elevenlabs:tts:2EiwWnXFnvU5JabPnv8n
     config:
       modelId: eleven_turbo_v2_5
 
@@ -252,27 +254,32 @@ tests:
 
 ### Speech-to-Text: Accuracy Testing
 
+With a local recording at `audio/test-recording.mp3`:
+
 ```yaml
 prompts:
-  - file://audio/test-recording.mp3
+  - '{{audioFile}}'
 
 providers:
   - id: elevenlabs:stt
     config:
       diarization: true
+      calculateWER: true
+      referenceText: 'The quick brown fox jumps over the lazy dog.'
 
 tests:
   - description: WER is acceptable
+    vars:
+      audioFile: audio/test-recording.mp3
     assert:
       - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          return result.wer < 0.05; // Less than 5% error
+        value: context.metadata?.wer?.wer < 0.05
 ```
 
 ### Conversational Agents: Evaluation
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |
     User: I need help with my order
@@ -298,8 +305,8 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const passed = result.analysis.evaluation_criteria_results.filter(r => r.passed);
+          const results = context.metadata?.evaluationResults ?? [];
+          const passed = results.filter((result) => result.passed);
           return passed.length >= 2;
 ```
 
@@ -458,32 +465,33 @@ Common voice IDs and names:
 
 Compare voice quality across models and voices:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'The quick brown fox jumps over the lazy dog. This sentence contains every letter of the alphabet.'
 
 providers:
-  - id: flash-model
-    label: Flash Model (Fastest)
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
+    label: flash-model
     config:
       modelId: eleven_flash_v2_5
-      voiceId: rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM
 
-  - id: turbo-model
-    label: Turbo Model (Best Quality)
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
+    label: turbo-model
     config:
       modelId: eleven_turbo_v2_5
-      voiceId: rachel
+      voiceId: 21m00Tcm4TlvDq8ikWAM
 
 tests:
   - description: Flash model completes quickly
-    provider: flash-model
+    providers: [flash-model]
     assert:
       - type: latency
         threshold: 1000
 
   - description: Turbo model has better quality
-    provider: turbo-model
+    providers: [turbo-model]
     assert:
       - type: cost
         threshold: 0.01
@@ -491,43 +499,32 @@ tests:
 
 ### Transcription Accuracy Pipeline
 
-Test end-to-end TTS → STT accuracy:
+Save the TTS output as `audio/tts-output.mp3`, then use this STT fragment to measure transcription accuracy:
 
 ```yaml
 prompts:
-  - |
-    The meeting is scheduled for Thursday at 2 PM in conference room B.
-    Please bring your laptop and quarterly report.
+  - '{{audioFile}}'
 
 providers:
-  - id: tts-generator
-    label: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
-    config:
-      modelId: eleven_flash_v2_5
-
-  - id: stt-transcriber
-    label: elevenlabs:stt
+  - id: elevenlabs:stt
     config:
       calculateWER: true
+      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
 
 tests:
   - vars:
-      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
+      audioFile: audio/tts-output.mp3
     assert:
       - type: javascript
-        value: |
-          const result = JSON.parse(output);
-          if (result.wer_result) {
-            return result.wer_result.wer < 0.03; // Less than 3% error
-          }
-          return true;
+        value: context.metadata?.wer?.wer < 0.03
 ```
 
 ### Agent Regression Testing
 
 Ensure agent improvements don't degrade performance:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - |
     User: I need to cancel my subscription
@@ -555,9 +552,8 @@ tests:
     assert:
       - type: javascript
         value: |
-          const result = JSON.parse(output);
-          const criteria = result.analysis.evaluation_criteria_results;
-          return criteria.every(c => c.passed);
+          const criteria = context.metadata?.evaluationResults ?? [];
+          return criteria.length >= 2 && criteria.every((criterion) => criterion.passed);
 ```
 
 ## Best Practices

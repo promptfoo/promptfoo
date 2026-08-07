@@ -11,7 +11,7 @@ import path from 'path';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { getConfigDirectoryPath } from '../../util/config/manage';
-import { sanitizeUrl } from '../../util/sanitizer';
+import { isSecretField, looksLikeSecret, REDACTED, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 
 import type { MediaMetadata, MediaStorageRef } from '../../storage/types';
@@ -22,12 +22,188 @@ import type { MediaMetadata, MediaStorageRef } from '../../storage/types';
 
 const MEDIA_DIR = 'media';
 const CACHE_DIR = 'video/_cache';
+const SIGNED_URL_CREDENTIAL_PARAM_NAME =
+  /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|policy$|key-pair-id$|key$|auth$|credential$|jwt$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i;
+const CACHE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:(?:token|key|secret|credential|auth|bearer|basic)[-_. ][a-z0-9._~-]{8,}|sk-(?:proj-|ant-)?[a-z0-9_-]{20,}|key-[a-z0-9]{20,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 /** Default polling interval for video generation jobs (10 seconds) */
 export const DEFAULT_POLL_INTERVAL_MS = 10000;
 
 /** Default maximum polling time for video generation jobs (10 minutes) */
 export const DEFAULT_MAX_POLL_TIME_MS = 600000;
+
+function isCredentialLikeVideoUrlValue(value: string): boolean {
+  return looksLikeSecret(value) || CACHE_CREDENTIAL_PATH_SEGMENT.test(value);
+}
+
+function scrubVideoUrlParams(params: URLSearchParams, removeCredentials: boolean): void {
+  for (const key of Array.from(params.keys())) {
+    const values = params.getAll(key);
+    const containsCredentialValue = values.some(
+      (value) => value === REDACTED || isCredentialLikeVideoUrlValue(value),
+    );
+    if (
+      isSecretField(key) ||
+      SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) ||
+      containsCredentialValue
+    ) {
+      if (removeCredentials) {
+        params.delete(key);
+      } else {
+        params.set(key, REDACTED);
+      }
+    }
+  }
+}
+
+function getDecodedVideoUrlFragment(hash: string): string {
+  const fragment = hash.startsWith('#') ? hash.slice(1) : hash;
+  try {
+    return decodeURIComponent(fragment);
+  } catch {
+    return fragment;
+  }
+}
+
+function isCredentialLikeVideoUrlFragment(fragment: string): boolean {
+  const segments = fragment.split('/').filter(Boolean);
+  return (
+    isCredentialLikeVideoUrlValue(fragment) ||
+    segments.some(isCredentialLikeVideoUrlValue) ||
+    (segments.length > 1 && isSecretField(segments[0]))
+  );
+}
+
+function hasVideoUrlCredentialParams(params: URLSearchParams): boolean {
+  for (const [key, value] of params.entries()) {
+    if (
+      isSecretField(key) ||
+      SIGNED_URL_CREDENTIAL_PARAM_NAME.test(key) ||
+      value === REDACTED ||
+      isCredentialLikeVideoUrlValue(value)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function scrubVideoReferenceUrl(
+  reference: string,
+  removeCredentials: boolean,
+  scrubCredentialPathSegments = false,
+): string {
+  const safeReference = sanitizeUrl(reference);
+  try {
+    const safeUrl = new URL(safeReference);
+    if (scrubCredentialPathSegments) {
+      safeUrl.pathname = safeUrl.pathname
+        .split('/')
+        .map((segment) => {
+          try {
+            return CACHE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment))
+              ? '%5BREDACTED%5D'
+              : segment;
+          } catch {
+            return segment;
+          }
+        })
+        .join('/');
+    }
+    scrubVideoUrlParams(safeUrl.searchParams, removeCredentials);
+    if (!removeCredentials) {
+      safeUrl.searchParams.sort();
+    }
+
+    const decodedFragment = getDecodedVideoUrlFragment(safeUrl.hash);
+    if (safeUrl.hash.includes('=') || decodedFragment.includes('=')) {
+      const fragmentParams = new URLSearchParams(
+        safeUrl.hash.includes('=') ? safeUrl.hash.slice(1) : decodedFragment,
+      );
+      scrubVideoUrlParams(fragmentParams, removeCredentials);
+      if (!removeCredentials) {
+        fragmentParams.sort();
+      }
+      const fragment = fragmentParams.toString();
+      safeUrl.hash = fragment ? `#${fragment}` : '';
+    } else if (isCredentialLikeVideoUrlFragment(decodedFragment)) {
+      safeUrl.hash = removeCredentials ? '' : `#${encodeURIComponent(REDACTED)}`;
+    }
+    return safeUrl.toString();
+  } catch {
+    return safeReference;
+  }
+}
+
+/**
+ * Remove replayable credentials from a video URI before persisting it in provider metadata.
+ * The resource path and benign query parameters are preserved.
+ */
+export function sanitizeVideoSourceUri(uri: string): string {
+  return scrubVideoReferenceUrl(uri, true);
+}
+
+/**
+ * Canonicalize a video input URL for cache identity without retaining replayable credentials.
+ * Credential parameter names remain as stable markers so equivalent signed resources deduplicate.
+ */
+export function sanitizeVideoCacheReferenceUrl(reference: string): string {
+  return scrubVideoReferenceUrl(reference, false, true);
+}
+
+/**
+ * Whether a URL can safely participate in a persistent video cache key.
+ *
+ * Credential-bearing URLs are intentionally excluded instead of canonicalized:
+ * hashing the raw URL retains secret-derived material, while redacting it can make
+ * distinct authenticated resources collide on the same persistent cache entry.
+ */
+export function isVideoCacheReferenceUrlSafe(reference: string): boolean {
+  const sanitizedReference = sanitizeUrl(reference);
+  if (
+    sanitizedReference === REDACTED ||
+    sanitizedReference.includes(REDACTED) ||
+    /%5Bredacted%5D/i.test(sanitizedReference)
+  ) {
+    return false;
+  }
+
+  try {
+    const referenceUrl = new URL(reference);
+    if (referenceUrl.username || referenceUrl.password) {
+      return false;
+    }
+
+    if (hasVideoUrlCredentialParams(referenceUrl.searchParams)) {
+      return false;
+    }
+
+    const decodedFragment = getDecodedVideoUrlFragment(referenceUrl.hash);
+    if (referenceUrl.hash.includes('=') || decodedFragment.includes('=')) {
+      const fragmentParams = new URLSearchParams(
+        referenceUrl.hash.includes('=') ? referenceUrl.hash.slice(1) : decodedFragment,
+      );
+      if (hasVideoUrlCredentialParams(fragmentParams)) {
+        return false;
+      }
+    } else if (isCredentialLikeVideoUrlFragment(decodedFragment)) {
+      return false;
+    }
+
+    return !referenceUrl.pathname.split('/').some((segment) => {
+      try {
+        return CACHE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    // A malformed or relative reference cannot be partitioned safely without
+    // risking secret-derived cache material, so leave it to provider validation.
+    return false;
+  }
+}
 
 // =============================================================================
 // Cache Utilities
@@ -69,23 +245,7 @@ export function generateVideoCacheKey(params: {
   let inputReference: typeof params.inputReference = rawReference || params.inputReference || null;
 
   if (rawReference && /^https?:\/\//i.test(rawReference)) {
-    const safeReference = sanitizeUrl(rawReference);
-    try {
-      const safeUrl = new URL(safeReference);
-      for (const key of Array.from(safeUrl.searchParams.keys())) {
-        if (
-          /^(?:x-amz-|x-goog-|awsaccesskeyid$|googleaccessid$|expires$|sig(?:nature)?$|policy$|key-pair-id$|st$|se$|sp$|sv$|sr$|si$|ss$|srt$|spr$|sip$|ses$|sdd$|saoid$|suoid$|scid$|skoid$|sktid$|skt$|ske$|sks$|skv$|rscc$|rscd$|rsce$|rscl$|rsct$)/i.test(
-            key,
-          )
-        ) {
-          safeUrl.searchParams.set(key, '[REDACTED]');
-        }
-      }
-      safeUrl.searchParams.sort();
-      inputReference = safeUrl.toString();
-    } catch {
-      inputReference = safeReference;
-    }
+    inputReference = sanitizeVideoCacheReferenceUrl(rawReference);
   }
 
   const hashInput = JSON.stringify({

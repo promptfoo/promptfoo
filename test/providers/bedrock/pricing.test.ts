@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateBedrockCost,
   calculateBedrockInvokeModelCost,
@@ -10,6 +10,10 @@ const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
 describe('calculateBedrockCost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it.each([
     // Z.AI GLM — distinct per variant; -flash must not be priced as -4.7.
     { id: 'zai.glm-5', input: 1.0, output: 3.2 },
@@ -31,6 +35,7 @@ describe('calculateBedrockCost', () => {
     { id: 'google.gemma-3-4b-it', input: 0.04, output: 0.08 },
     { id: 'google.gemma-3-12b-it', input: 0.09, output: 0.29 },
     { id: 'google.gemma-3-27b-it', input: 0.23, output: 0.38 },
+    { id: 'amazon.nova-2-lite-v1:0', input: 0.3, output: 2.5 },
     { id: 'writer.palmyra-vision-7b', input: 0.15, output: 0.6 },
     { id: 'us.writer.palmyra-x5-v1:0', input: 0.6, output: 6 },
   ])('uses the base rate for $id', ({ id, input, output }) => {
@@ -53,11 +58,23 @@ describe('calculateBedrockCost', () => {
       input: 0.18,
       output: 0.78,
     },
+    {
+      id: 'us-gov.anthropic.claude-opus-4-8',
+      region: 'us-gov-west-1',
+      input: 6,
+      output: 30,
+    },
   ])('uses the published regional rate for $id in $region', ({ id, region, input, output }) => {
     expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, region)).toBeCloseTo(
       costAtRates(input, output),
       6,
     );
+  });
+
+  it('infers GovCloud pricing from the Claude inference profile ID', () => {
+    expect(
+      calculateBedrockCost('us-gov.anthropic.claude-opus-4-8', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(6, 30), 6);
   });
 
   it('applies service tier pricing multipliers', () => {
@@ -66,6 +83,14 @@ describe('calculateBedrockCost', () => {
         type: 'priority',
       }),
     ).toBeCloseTo(costAtRates(0.3, 1.2) * 1.75, 6);
+  });
+
+  it('does not report on-demand token cost for reserved throughput', () => {
+    expect(
+      calculateBedrockCost('minimax.minimax-m2', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1', {
+        type: 'reserved',
+      }),
+    ).toBeUndefined();
   });
 
   it('uses newly published London pricing for GLM 4.7', () => {
@@ -119,32 +144,77 @@ describe('calculateBedrockCost', () => {
     ).toBeCloseTo(15, 6);
   });
 
-  it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
-    // The global endpoint bills at the base rate; regional profiles add a premium (below).
-    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
-      (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
-      6,
-    );
+  it('switches Claude Sonnet 5 pricing at the September 1 boundary', () => {
+    const now = vi.spyOn(Date, 'now');
+
+    now.mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 1_000_000, 1_000_000)).toBe(12);
+    expect(
+      calculateBedrockInvokeModelCost('global.anthropic.claude-sonnet-5', 1_000_000, 1_000_000),
+    ).toBe(12);
+
+    now.mockReturnValue(Date.parse('2026-09-01T00:00:00.000Z'));
+    expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 1_000_000, 1_000_000)).toBe(18);
+    expect(
+      calculateBedrockInvokeModelCost('global.anthropic.claude-sonnet-5', 1_000_000, 1_000_000),
+    ).toBe(18);
   });
 
-  it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-    // Sonnet 5 bills its full 1M context at the standard rate. Use the global endpoint to
+  it('bills one-hour Claude cache writes at 2x the input rate', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+
+    const expectedCost =
+      (100 / 1e6) * 2 + (500 / 1e6) * 0.2 + (60 / 1e6) * 2.5 + (40 / 1e6) * 4 + (50 / 1e6) * 10;
+
+    expect(
+      calculateBedrockCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        undefined,
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+  });
+
+  it('bills Claude Sonnet 5 at its promotional rate above 200k tokens', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
+    // Sonnet 5 bills its full 1M context at the same rate. Use the global endpoint to
     // isolate this from the regional premium.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
-      (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
+      (300_000 / 1e6) * 2 + (20_000 / 1e6) * 10,
       6,
     );
   });
 
   it('applies the 10% regional premium to non-global Claude 4.5+ profiles (Sonnet 5, Opus 4.8, Sonnet 4.6)', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
     // Per Anthropic pricing, Claude 4.5+ models carry a 10% premium on regional/geo endpoints;
     // only the `global.` endpoint bills at the base rate.
-    const sonnet5Base = (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15;
+    const sonnet5Base = (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10;
     expect(calculateBedrockCost('us.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
       sonnet5Base * 1.1,
       6,
     );
     expect(calculateBedrockCost('eu.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base * 1.1,
+      6,
+    );
+    expect(calculateBedrockCost('au.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
       sonnet5Base * 1.1,
       6,
     );
@@ -203,11 +273,12 @@ describe('calculateBedrockCost', () => {
   });
 
   it('reports InvokeModel cost for Claude Sonnet 5 (a Claude 5 model) but not legacy Sonnet 4.x', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-31T23:59:59.999Z'));
     // Live QA found the default `bedrock:` (InvokeModel) path reported `cost: 0` for Sonnet 5
     // because the allowlist only covered Fable/Mythos. Sonnet 5 is a Claude 5 model with a
     // verified rate, so it reports cost — the global endpoint at base and regional/geo profiles
     // with the 10% premium. Sonnet 4.6 (legacy Claude 4.x) stays fail-closed.
-    const base = (100 / 1e6) * 3 + (200 / 1e6) * 15;
+    const base = (100 / 1e6) * 2 + (200 / 1e6) * 10;
     expect(
       calculateBedrockInvokeModelCost(
         'global.anthropic.claude-sonnet-5',

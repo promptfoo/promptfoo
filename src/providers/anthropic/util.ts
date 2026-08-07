@@ -11,6 +11,24 @@ import type {
   WebSearchToolConfig,
 } from './types';
 
+export const CLAUDE_SONNET_5_STANDARD_PRICING_START_MS = Date.UTC(2026, 8, 1);
+
+/**
+ * Return Claude Sonnet 5's active base rates in dollars per million tokens.
+ *
+ * Anthropic's introductory $2/$10 pricing runs through August 31, 2026; standard
+ * $3/$15 pricing starts at 00:00 UTC on September 1. Read the clock on every cost
+ * calculation so a long-running promptfoo process crosses the boundary correctly.
+ */
+export function getClaudeSonnet5PricingPerMillion(now = Date.now()): {
+  input: number;
+  output: number;
+} {
+  return now < CLAUDE_SONNET_5_STANDARD_PRICING_START_MS
+    ? { input: 2, output: 10 }
+    : { input: 3, output: 15 };
+}
+
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
@@ -33,18 +51,16 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  // Claude Sonnet 5 — the most agentic Sonnet, with a 1M context window and effort
-  // levels. Uses standard list pricing ($3/$15); the launch introductory pricing
-  // ($2/$10, through Aug 31, 2026) is intentionally not encoded here. The full 1M
-  // context bills at this flat rate — prompt size never changes the per-token price.
+  // Claude Sonnet 5 — the calculator replaces these introductory rates at runtime
+  // when standard $3/$15 pricing takes effect on Sep 1, 2026.
   ...['claude-sonnet-5'].map((model) => ({
     id: model,
     cost: {
-      input: 3 / 1e6, // $3 / MTok
-      output: 15 / 1e6, // $15 / MTok
+      input: 2 / 1e6, // $2 / MTok
+      output: 10 / 1e6, // $10 / MTok
     },
   })),
-  // Claude Mythos Preview - gated research preview for defensive cybersecurity (Project Glasswing)
+  // Claude Mythos Preview (deprecated; retained for historical cost scoring)
   ...['claude-mythos-preview'].map((model) => ({
     id: model,
     cost: {
@@ -76,22 +92,23 @@ export const ANTHROPIC_MODELS = [
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  // Claude 4.6 models
-  ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
+  // Claude 4.6 IDs are dateless pinned snapshots. Anthropic does not publish separate
+  // `-latest` pointers for them.
+  ...['claude-sonnet-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 3 / 1e6, // $3 / MTok
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-opus-4-6', 'claude-opus-4-6-latest'].map((model) => ({
+  ...['claude-opus-4-6'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
       output: 25 / 1e6, // $25 / MTok
     },
   })),
-  ...['claude-opus-4-5', 'claude-opus-4-5-20251101', 'claude-opus-4-5-latest'].map((model) => ({
+  ...['claude-opus-4-5', 'claude-opus-4-5-20251101'].map((model) => ({
     id: model,
     cost: {
       input: 5 / 1e6, // $5 / MTok
@@ -103,7 +120,6 @@ export const ANTHROPIC_MODELS = [
     'claude-opus-4-1-20250805',
     'claude-opus-4-20250514',
     'claude-opus-4-0',
-    'claude-opus-4-latest',
   ].map((model) => ({
     id: model,
     cost: {
@@ -114,10 +130,8 @@ export const ANTHROPIC_MODELS = [
   ...[
     'claude-sonnet-4-5',
     'claude-sonnet-4-5-20250929',
-    'claude-sonnet-4-5-latest',
     'claude-sonnet-4-20250514',
     'claude-sonnet-4-0',
-    'claude-sonnet-4-latest',
   ].map((model) => ({
     id: model,
     cost: {
@@ -125,7 +139,7 @@ export const ANTHROPIC_MODELS = [
       output: 15 / 1e6, // $15 / MTok
     },
   })),
-  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001', 'claude-haiku-4-5-latest'].map((model) => ({
+  ...['claude-haiku-4-5', 'claude-haiku-4-5-20251001'].map((model) => ({
     id: model,
     cost: {
       input: 1 / 1e6, // $1 / MTok
@@ -184,6 +198,39 @@ export const ANTHROPIC_MODELS = [
   })),
 ];
 
+// These aliases were previously accepted by promptfoo, but Anthropic does not publish them as
+// first-party model IDs. Keep them out of ANTHROPIC_MODELS so they are not presented as current
+// catalog entries or priced by default. They remain available for shorthand routing through
+// compatible gateways, and their former rates provide the missing half of a partial explicit
+// pricing override.
+const ANTHROPIC_COMPATIBILITY_ALIAS_MODELS = [
+  ...['claude-opus-4-6-latest', 'claude-opus-4-5-latest'].map((id) => ({
+    id,
+    cost: { input: 5 / 1e6, output: 25 / 1e6 },
+  })),
+  ...['claude-sonnet-4-6-latest', 'claude-sonnet-4-5-latest'].map((id) => ({
+    id,
+    cost: { input: 3 / 1e6, output: 15 / 1e6 },
+  })),
+  {
+    id: 'claude-haiku-4-5-latest',
+    cost: { input: 1 / 1e6, output: 5 / 1e6 },
+  },
+  {
+    id: 'claude-opus-4-latest',
+    cost: { input: 15 / 1e6, output: 75 / 1e6 },
+  },
+  {
+    id: 'claude-sonnet-4-latest',
+    cost: { input: 3 / 1e6, output: 15 / 1e6 },
+  },
+];
+
+export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
+  ...ANTHROPIC_MODELS.map((model) => model.id),
+  ...ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.map((model) => model.id),
+]);
+
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
 // `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure deployment
 // names. The leading `(^|[^a-z0-9])` boundary and a trailing lookahead guard (`(?![0-9])`,
@@ -191,6 +238,7 @@ export const ANTHROPIC_MODELS = [
 // neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and `claude-sonnet-4-5` is not Sonnet 5)
 // while still matching dated snapshots like `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
+const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![0-9])/i;
 const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
@@ -209,8 +257,8 @@ interface ClaudeModelFamily {
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
   /**
-   * Omitting `thinking` runs adaptive thinking rather than no thinking (Opus 5), so requests
-   * that never set `thinking` still spend thinking tokens against `max_tokens`.
+   * Omitting `thinking` runs adaptive thinking rather than no thinking, so requests that never
+   * set `thinking` still spend thinking tokens against `max_tokens`.
    */
   thinkingOnByDefault?: boolean;
   /**
@@ -232,6 +280,11 @@ interface ClaudeModelFamily {
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
+    match: CLAUDE_MYTHOS_PREVIEW_RE,
+    warningName: 'Claude Mythos Preview',
+    alwaysOnAdaptiveThinking: true,
+  },
+  {
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
@@ -252,6 +305,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -319,7 +373,7 @@ export function isAlwaysOnAdaptiveThinkingClaudeModel(modelId: string): boolean 
 }
 
 /**
- * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5). Callers use this
+ * True when omitting `thinking` still runs adaptive thinking (Claude Opus 5 / Sonnet 5). Callers use this
  * so that thinking-token headroom (e.g. the default `max_tokens`) reflects what the API will
  * actually do rather than assuming an absent `thinking` field means thinking is off.
  */
@@ -383,10 +437,10 @@ export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean 
 }
 
 /**
- * Normalize a Claude thinking config for models that deprecate manual
- * budget-based thinking: an `enabled` budget converts to adaptive thinking
- * (preserving `display`), and `disabled` is omitted on always-on adaptive
- * thinking models (Fable 5 / Mythos 5), which reject it. `disabled` is also
+ * Normalize a Claude thinking config for models that require adaptive thinking:
+ * an `enabled` budget converts to adaptive thinking (preserving `display`), and
+ * `disabled` is omitted on always-on adaptive thinking models, which reject it.
+ * `disabled` is also
  * omitted on effort-capped models (Opus 5) when `effort` is high enough that
  * the combination would 400. The Anthropic, Bedrock InvokeModel/Converse, and
  * Vertex paths all share this transform; user-facing warnings stay at the call
@@ -399,7 +453,11 @@ export function normalizeClaudeThinkingConfig<
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
-  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+  if (
+    thinking?.type === 'enabled' &&
+    (isSamplingParamsDeprecatedClaudeModel(modelId) ||
+      isAlwaysOnAdaptiveThinkingClaudeModel(modelId))
+  ) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
   if (
@@ -415,6 +473,9 @@ export function normalizeClaudeThinkingConfig<
 // Bedrock and Vertex bill Claude 4.5+ regional/geo endpoints at this premium over
 // the global endpoint (see isClaudeRegionalPremiumModel).
 export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
+const CLAUDE_US_INFERENCE_GEO_MULTIPLIER = 1.1;
+const CLAUDE_46_OR_LATER_MODEL_PATTERN =
+  /^claude-(?:(?:opus|sonnet)-4-(?:6|7|8)(?:-|$)|(?:fable|mythos|opus|sonnet)-5(?:-|$))/;
 
 /**
  * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
@@ -577,18 +638,23 @@ export function parseMessages(messages: string): {
 /**
  * Compute input cost with Anthropic cache pricing applied.
  * Anthropic docs: input_tokens is the non-cached portion; cache_read and cache_creation are additive.
- * Cache reads cost 10% of base rate (90% discount), cache writes cost 125% of base rate (25% surcharge).
+ * Cache reads cost 10% of base rate (90% discount). Five-minute cache writes cost 125% of
+ * base rate and one-hour cache writes cost 200% of base rate.
  */
 export function calculateCacheInputCost(
   baseInputRate: number,
   uncachedInputTokens: number,
   cacheRead: number,
   cacheCreation: number,
+  cacheCreation1h = 0,
 ): number {
+  const oneHourCacheCreation = Math.min(Math.max(cacheCreation1h, 0), cacheCreation);
+  const fiveMinuteCacheCreation = Math.max(cacheCreation - oneHourCacheCreation, 0);
   return (
     uncachedInputTokens * baseInputRate +
     cacheRead * baseInputRate * 0.1 +
-    cacheCreation * baseInputRate * 1.25
+    fiveMinuteCacheCreation * baseInputRate * 1.25 +
+    oneHourCacheCreation * baseInputRate * 2
   );
 }
 
@@ -599,9 +665,29 @@ export function calculateAnthropicCost(
   completionTokens?: number,
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
+  cacheCreation1hTokens?: number,
+  reportedInferenceGeo?: string | null,
 ): number | undefined {
   const pricingModelName = normalizeAnthropicModelName(modelName);
-  const modelInfo = ANTHROPIC_MODELS.find((model) => model.id === pricingModelName);
+  const hasExplicitPricing =
+    config.cost != null || config.inputCost != null || config.outputCost != null;
+  const registeredModel =
+    ANTHROPIC_MODELS.find((model) => model.id === pricingModelName) ??
+    (hasExplicitPricing
+      ? ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.find((model) => model.id === pricingModelName)
+      : undefined);
+  const sonnet5Pricing =
+    pricingModelName === 'claude-sonnet-5' ? getClaudeSonnet5PricingPerMillion() : undefined;
+  const modelInfo =
+    registeredModel && sonnet5Pricing
+      ? {
+          ...registeredModel,
+          cost: {
+            input: sonnet5Pricing.input / 1e6,
+            output: sonnet5Pricing.output / 1e6,
+          },
+        }
+      : registeredModel;
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
   // only the `global.` endpoint bills at base rate.
@@ -613,8 +699,17 @@ export function calculateAnthropicCost(
   // Apply the regional endpoint premium (if any) as a flat multiplier on the final cost, so it
   // composes with long-context and cache pricing rather than overriding either.
   const regionalPremiumMultiplier: number = effectiveConfig.regionalPremiumMultiplier ?? 1;
-  const withRegionalPremium = (cost: number | undefined): number | undefined =>
-    cost == null ? cost : cost * regionalPremiumMultiplier;
+  const inferenceGeo = reportedInferenceGeo ?? effectiveConfig?.extra_body?.inference_geo;
+  const usesUsInferenceGeo =
+    pricingModelName === modelName &&
+    inferenceGeo === 'us' &&
+    CLAUDE_46_OR_LATER_MODEL_PATTERN.test(pricingModelName) &&
+    effectiveConfig.cost == null &&
+    effectiveConfig.inputCost == null &&
+    effectiveConfig.outputCost == null;
+  const inferenceGeoMultiplier = usesUsInferenceGeo ? CLAUDE_US_INFERENCE_GEO_MULTIPLIER : 1;
+  const withPricingMultipliers = (cost: number | undefined): number | undefined =>
+    cost == null ? cost : cost * regionalPremiumMultiplier * inferenceGeoMultiplier;
 
   // An explicit flat `cost` (with no separate input/output rates) intentionally overrides
   // tier-specific and cache pricing, so it short-circuits straight to the base calculation.
@@ -624,6 +719,7 @@ export function calculateAnthropicCost(
     effectiveConfig.outputCost == null;
   const cacheRead = cacheReadTokens ?? 0;
   const cacheCreation = cacheCreationTokens ?? 0;
+  const cacheCreation1h = cacheCreation1hTokens ?? 0;
 
   // This shared helper does not infer size-based tiers. Provider-specific callers can supply
   // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.
@@ -640,19 +736,19 @@ export function calculateAnthropicCost(
   ) {
     const inputCost = effectiveConfig.inputCost ?? effectiveConfig.cost ?? modelInfo.cost.input;
     const outputCost = effectiveConfig.outputCost ?? effectiveConfig.cost ?? modelInfo.cost.output;
-    return withRegionalPremium(
-      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+    return withPricingMultipliers(
+      calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation, cacheCreation1h) +
         completionTokens * outputCost,
     );
   }
 
-  return withRegionalPremium(
+  return withPricingMultipliers(
     calculateCostBase(
       pricingModelName,
       effectiveConfig,
       promptTokens,
       completionTokens,
-      ANTHROPIC_MODELS,
+      modelInfo ? [modelInfo] : [],
     ),
   );
 }

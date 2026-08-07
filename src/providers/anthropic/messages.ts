@@ -225,6 +225,17 @@ function mergeAnthropicUsage(
       output_tokens: acc.output_tokens + (usage.output_tokens ?? 0),
       cache_creation_input_tokens:
         (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
+      cache_creation:
+        acc.cache_creation || usage.cache_creation
+          ? {
+              ephemeral_5m_input_tokens:
+                (acc.cache_creation?.ephemeral_5m_input_tokens ?? 0) +
+                (usage.cache_creation?.ephemeral_5m_input_tokens ?? 0),
+              ephemeral_1h_input_tokens:
+                (acc.cache_creation?.ephemeral_1h_input_tokens ?? 0) +
+                (usage.cache_creation?.ephemeral_1h_input_tokens ?? 0),
+            }
+          : null,
       cache_read_input_tokens:
         (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
       output_tokens_details:
@@ -260,6 +271,8 @@ function getAnthropicCostFromMessage(
     message.usage?.output_tokens,
     message.usage?.cache_read_input_tokens ?? undefined,
     message.usage?.cache_creation_input_tokens ?? undefined,
+    message.usage?.cache_creation?.ephemeral_1h_input_tokens ?? undefined,
+    message.usage?.inference_geo,
   );
 }
 
@@ -477,6 +490,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return 'anthropic';
   }
 
+  protected sanitizeRequestHeaders(headers: Record<string, string>): Record<string, string> {
+    return headers;
+  }
+
+  protected supportsResponseCache(): boolean {
+    return true;
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -571,11 +592,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
    * Three model-level rules apply, each verified against the live API:
    * - Manual budget thinking (`type: 'enabled'`) is rejected on adaptive-only models and is
    *   converted to `type: 'adaptive'`.
-   * - `type: 'disabled'` is rejected outright on always-on models (Fable 5 / Mythos 5), and on
+   * - `type: 'disabled'` is rejected outright on always-on models, and on
    *   Opus 5 when `effort` is `xhigh`/`max`. In both cases it is dropped rather than sent.
-   * - On Opus 5 an *omitted* thinking config still runs adaptive thinking, so it counts as
-   *   enabled — callers size the default `max_tokens` off this, and treating it as disabled
-   *   truncates responses mid-answer.
+   * - On Opus 5 and Sonnet 5 an *omitted* thinking config still runs adaptive thinking, so it
+   *   consumes output tokens — callers size the default `max_tokens` off this, and treating it
+   *   as disabled truncates responses mid-answer.
    *
    * Warnings are emitted at most once per provider instance.
    */
@@ -590,13 +611,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   ): {
     thinking: Anthropic.Messages.ThinkingConfigParam | undefined;
     /**
-     * Thinking was explicitly turned on (or is always on). Gates the legacy
-     * extended-thinking incompatibilities — forced `tool_choice`, `top_p` clamping,
-     * `top_k`/`temperature` omission.
+     * Thinking was explicitly turned on (or is always on). Callers combine this with
+     * model sampling capabilities before applying legacy extended-thinking restrictions.
      */
     thinkingEnabled: boolean;
     /**
-     * Thinking will consume output tokens, including the Opus 5 case where an omitted
+     * Thinking will consume output tokens, including the Opus 5 / Sonnet 5 case where an omitted
      * `thinking` field still runs adaptive. Only used to size the default `max_tokens`:
      * a request that thinks by default needs headroom or it truncates mid-answer.
      */
@@ -604,11 +624,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   } {
     const { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
 
-    if (samplingParamsDeprecated && requested?.type === 'enabled') {
+    if ((samplingParamsDeprecated || alwaysOnAdaptiveThinking) && requested?.type === 'enabled') {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
-            ? 'Claude Fable 5 and Claude Mythos 5 always use adaptive thinking. Manual thinking budgets have been removed; use effort to control reasoning depth.'
+            ? `Adaptive thinking is always on for ${modelWarningName}. Manual thinking budgets have been removed; use effort to control reasoning depth.`
             : `Manual extended thinking (thinking.type "enabled") is not supported on ${modelWarningName} and has been converted to adaptive thinking. Use thinking: { type: "adaptive" } with effort to control reasoning depth.`,
         );
         this.manualThinkingConversionWarned = true;
@@ -616,7 +636,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     } else if (requested?.type === 'disabled' && !this.disabledThinkingRemovalWarned) {
       if (alwaysOnAdaptiveThinking) {
         logger.warn(
-          'Adaptive thinking is always on for Claude Fable 5 and Claude Mythos 5. thinking.type "disabled" has been omitted.',
+          `Adaptive thinking is always on for ${modelWarningName}. thinking.type "disabled" has been omitted.`,
         );
         this.disabledThinkingRemovalWarned = true;
       } else if (isDisabledThinkingRejectedAtEffort(this.modelName, effort)) {
@@ -734,12 +754,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       config.effort,
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
+    // Mythos Preview is always-on adaptive but, unlike the Claude 5 adaptive-sampling
+    // families, still accepts explicit sampling controls. Keep the legacy extended-thinking
+    // restrictions for every other family while preserving those supported controls here.
+    const thinkingConstrainsSamplingParams =
+      thinkingEnabled && !(alwaysOnAdaptiveThinking && !samplingParamsDeprecated);
 
     // Validate and warn about thinking-incompatible params. Skip when the model
     // deprecates sampling params entirely — the deduped model-level warning
     // below already covers the omission, and the "disable thinking" advice is
     // impossible on always-on adaptive thinking models (Fable 5 / Mythos 5).
-    if (thinkingEnabled && !samplingParamsDeprecated) {
+    if (thinkingConstrainsSamplingParams && !samplingParamsDeprecated) {
       if (config.top_k != null) {
         logger.warn(
           'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
@@ -784,11 +809,13 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
     let resolvedTopP: number | undefined;
     if (config.top_p != null) {
-      resolvedTopP = thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
+      resolvedTopP = thinkingConstrainsSamplingParams
+        ? Math.max(0.95, Math.min(1.0, config.top_p))
+        : config.top_p;
     }
 
     // Warn when temperature is silently omitted due to top_p (even without thinking)
-    if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
+    if (config.temperature != null && resolvedTopP != null && !thinkingConstrainsSamplingParams) {
       logger.warn(
         'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
       );
@@ -834,7 +861,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
     // and on adaptive-sampling Claude models.
     // Collapse those cases into one predicate so the params spread stays readable.
-    const omitTemperature = resolvedTopP != null || thinkingEnabled || samplingParamsDeprecated;
+    const omitTemperature =
+      resolvedTopP != null || thinkingConstrainsSamplingParams || samplingParamsDeprecated;
 
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
@@ -867,7 +895,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(resolvedTopP == null || samplingParamsDeprecated ? {} : { top_p: resolvedTopP }),
       // Anthropic docs: top_k is incompatible with extended thinking, and Opus
       // adaptive-sampling models reject it along with the other sampling controls.
-      ...(config.top_k == null || thinkingEnabled || samplingParamsDeprecated
+      ...(config.top_k == null || thinkingConstrainsSamplingParams || samplingParamsDeprecated
         ? {}
         : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
@@ -892,9 +920,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       params: getMessagesRequestMetadata(params),
     });
 
-    const headers: Record<string, string> = {
-      ...(config.headers || {}),
-    };
+    const headers = this.sanitizeRequestHeaders({ ...(config.headers || {}) });
 
     // Add beta features header if specified
     let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
@@ -943,18 +969,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       headers['x-app'] = CLAUDE_CODE_X_APP;
     }
 
-    const cache = await getCache();
+    const shouldUseResponseCache =
+      this.supportsResponseCache() && isCacheEnabled() && config.mcp?.enabled !== true;
+    const cache = shouldUseResponseCache ? await getCache() : undefined;
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
-    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
-      {
-        ...cacheKeyParams,
-        ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
-      },
-    )}`;
-    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
+    const cacheKey = shouldUseResponseCache
+      ? `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+          {
+            ...cacheKeyParams,
+            ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
+          },
+        )}`
+      : undefined;
 
-    if (shouldUseResponseCache) {
+    if (cache && cacheKey) {
       // Try to get the cached response
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
@@ -1018,7 +1047,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         };
       }
 
-      if (shouldUseResponseCache) {
+      if (cache && cacheKey) {
         try {
           await cache.set(cacheKey, JSON.stringify(resolvedMessage));
         } catch (err) {
