@@ -10,8 +10,9 @@ import * as path from 'path';
 
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
-import { ellipsize } from '../../util/text';
+import { markNonIdempotentRequestAccepted } from '../../util/fetch/retryContext';
 import { sleep } from '../../util/time';
+import { formatVideoOutput } from '../video';
 import { AwsBedrockGenericProvider } from './base';
 
 import type { BlobRef } from '../../blobs';
@@ -408,6 +409,7 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
       return { error: startError || 'Failed to start video generation' };
     }
 
+    markNonIdempotentRequestAccepted();
     logger.info(`[Nova Reel] Job started`, { invocationArn });
 
     // Poll for completion
@@ -450,13 +452,8 @@ export class NovaReelVideoProvider extends AwsBedrockGenericProvider implements 
     const durationSeconds = config.durationSeconds || DEFAULT_DURATION_SECONDS;
 
     // Format output
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     const videoUrl = blobRef?.uri || outputUrl;
-    const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
+    const output = formatVideoOutput(prompt, videoUrl);
 
     return {
       output,

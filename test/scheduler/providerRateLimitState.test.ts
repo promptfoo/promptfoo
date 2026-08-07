@@ -344,6 +344,94 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('executeWithRetry - retry behavior', () => {
+    it('should cancel rate-limit backoff without calling the provider again', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn().mockRejectedValue(new Error('Rate limit exceeded'));
+      const pending = state.executeWithRetry('req-abort', callFn, {
+        abortSignal: controller.signal,
+        getRetryAfter: () => 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callFn).toHaveBeenCalledTimes(1);
+      expect(state.getMetrics().activeRequests).toBe(0);
+      expect(state.getMetrics().failedRequests).toBe(1);
+    });
+
+    it('should normalize custom abort reasons during retry backoff', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn().mockRejectedValue(new Error('Rate limit exceeded'));
+      const pending = state.executeWithRetry('req-custom-abort', callFn, {
+        abortSignal: controller.signal,
+        getRetryAfter: () => 60_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort(new Error('caller cancelled'));
+
+      await expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'caller cancelled',
+      });
+      expect(callFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should prefer cancellation over a concurrent provider error', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn(async () => {
+        controller.abort(new Error('caller cancelled'));
+        throw new Error('Network error');
+      });
+
+      await expect(
+        state.executeWithRetry('req-abort-error', callFn, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', message: 'caller cancelled' });
+      expect(callFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should cancel transient-response backoff without releasing another request', async () => {
+      const controller = new AbortController();
+      const callFn = vi.fn().mockResolvedValue({ error: 'API error 503: Service Unavailable' });
+      const pending = state.executeWithRetry('req-abort-response', callFn, {
+        abortSignal: controller.signal,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(callFn).toHaveBeenCalledTimes(1);
+      expect(state.getMetrics().activeRequests).toBe(0);
+    });
+
+    it('should retry transient errors returned in provider responses', async () => {
+      const callFn = vi
+        .fn()
+        .mockResolvedValueOnce({ error: 'API error 503: Service Unavailable' })
+        .mockResolvedValueOnce({ output: 'success' });
+
+      const promise = state.executeWithRetry('req-1', callFn, {});
+      await vi.runAllTimersAsync();
+
+      await expect(promise).resolves.toEqual({ output: 'success' });
+      expect(callFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('should return the final transient provider response after retries are exhausted', async () => {
+      const response = { error: 'Network error' };
+      const callFn = vi.fn().mockResolvedValue(response);
+
+      const promise = state.executeWithRetry('req-1', callFn, { maxRetriesOverride: 2 });
+      await vi.runAllTimersAsync();
+
+      await expect(promise).resolves.toBe(response);
+      expect(callFn).toHaveBeenCalledTimes(3);
+      expect(state.getMetrics()).toMatchObject({ failedRequests: 1, completedRequests: 0 });
+    });
+
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
@@ -402,6 +490,21 @@ describe('ProviderRateLimitState', () => {
       expect(events.length).toBe(1);
       expect(events[0].attempt).toBe(1);
       expect(events[0].reason).toBe('ratelimit');
+    });
+
+    it('should start retry backoff at the configured base delay', async () => {
+      const events: any[] = [];
+      state.on('request:retrying', (event) => events.push(event));
+      const callFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('HTTP 503: Service Unavailable'))
+        .mockResolvedValueOnce('success');
+
+      const pending = state.executeWithRetry('req-base-delay', callFn, {});
+      await vi.runAllTimersAsync();
+
+      await expect(pending).resolves.toBe('success');
+      expect(events[0].delayMs).toBe(FAST_RETRY_POLICY.baseDelayMs);
     });
 
     it('should increment retriedRequests', async () => {
