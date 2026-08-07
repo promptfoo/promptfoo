@@ -4,6 +4,7 @@ import { getEnvBool } from '../../envars';
 import {
   checkEmailStatus,
   clearUserEmail,
+  getCloudUserEmail,
   getUserEmail,
   getUserId,
   setUserEmail,
@@ -16,10 +17,11 @@ import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
+const CLOUD_MANAGED_EMAIL_ERROR = 'Email is managed through Promptfoo Cloud authentication';
 
 userRouter.get('/email', async (_req: Request, res: Response): Promise<void> => {
   try {
-    const email = getUserEmail();
+    const email = cloudConfig.isEnabled() ? await getCloudUserEmail() : getUserEmail();
     // Return 200 with null email instead of 404 to avoid console errors when no email is configured
     res.json(UserSchemas.Get.Response.parse({ email: email || null }));
   } catch (error) {
@@ -55,6 +57,11 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
 
   const { email } = bodyResult.data;
   try {
+    if (cloudConfig.isEnabled()) {
+      res.status(403).json({ error: CLOUD_MANAGED_EMAIL_ERROR });
+      return;
+    }
+
     setUserEmail(email);
     res.json(
       UserSchemas.Update.Response.parse({
@@ -78,6 +85,11 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
 
 userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
   try {
+    if (cloudConfig.isEnabled()) {
+      res.status(403).json({ error: CLOUD_MANAGED_EMAIL_ERROR });
+      return;
+    }
+
     clearUserEmail();
     res.json(UserSchemas.ClearEmail.Response.parse({ success: true, message: 'Email cleared' }));
   } catch (error) {
