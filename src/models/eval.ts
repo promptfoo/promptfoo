@@ -784,6 +784,15 @@ export default class Eval {
     return this.failedResults.has(getResultIndexKey(result));
   }
 
+  /**
+   * Raw rows that failed to persist to the database. `fetchResultsBatched()` streams only
+   * rows found in the DB, so consumers that need the full result set (e.g. per-test repeat
+   * pass-rate checks) must merge these back in to see a failed-to-persist attempt.
+   */
+  getFailedResults(): EvaluateResult[] {
+    return Array.from(this.failedResults.values());
+  }
+
   // Reconstruct in-memory EvalResults for rows that failed to persist for the given test,
   // so the comparison input (which otherwise reads only the database) sees the full set.
   // The reconstruction is cached and reused: when a test has both select-best and max-score,

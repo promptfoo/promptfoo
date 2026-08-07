@@ -33,10 +33,10 @@ function makeResult(opts: {
 describe('computeRepeatPassRateViolations', () => {
   it('returns no violations when all groups meet the threshold', () => {
     const results = [
-      makeResult({ testIdx: 0, promptIdx: 0, success: true }),
-      makeResult({ testIdx: 0, promptIdx: 0, success: true }),
-      makeResult({ testIdx: 1, promptIdx: 0, success: true }),
-      makeResult({ testIdx: 1, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: false }),
     ];
 
     expect(computeRepeatPassRateViolations(results, 50)).toEqual([]);
@@ -45,11 +45,19 @@ describe('computeRepeatPassRateViolations', () => {
   it('flags a group whose repeat pass rate is below the threshold', () => {
     const results = [
       // testIdx 0: 8/10 pass = 80% (above 80%, but threshold is strict <, so OK)
-      ...Array.from({ length: 8 }, () => makeResult({ testIdx: 0, promptIdx: 0, success: true })),
-      ...Array.from({ length: 2 }, () => makeResult({ testIdx: 0, promptIdx: 0, success: false })),
+      ...Array.from({ length: 8 }, () =>
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      ),
+      ...Array.from({ length: 2 }, () =>
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+      ),
       // testIdx 1: 7/10 pass = 70% (below 80%, should flag)
-      ...Array.from({ length: 7 }, () => makeResult({ testIdx: 1, promptIdx: 0, success: true })),
-      ...Array.from({ length: 3 }, () => makeResult({ testIdx: 1, promptIdx: 0, success: false })),
+      ...Array.from({ length: 7 }, () =>
+        makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: true }),
+      ),
+      ...Array.from({ length: 3 }, () =>
+        makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: false }),
+      ),
     ];
 
     const violations = computeRepeatPassRateViolations(results, 80);
@@ -66,9 +74,9 @@ describe('computeRepeatPassRateViolations', () => {
   it('treats errors as non-passes (matching aggregate PROMPTFOO_PASS_RATE_THRESHOLD semantics)', () => {
     // Mix of failures and errors should both count against the pass rate.
     const results = [
-      makeResult({ testIdx: 0, promptIdx: 0, success: true }),
-      makeResult({ testIdx: 0, promptIdx: 0, success: false }), // assertion failure
-      makeResult({ testIdx: 0, promptIdx: 0, success: false }), // error
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }), // assertion failure
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }), // error
     ];
 
     const violations = computeRepeatPassRateViolations(results, 80);
@@ -87,14 +95,14 @@ describe('computeRepeatPassRateViolations', () => {
   it('groups repeats independently per (testIdx, promptIdx)', () => {
     const results = [
       // testIdx 0 + promptIdx 0: 1/2 = 50%
-      makeResult({ testIdx: 0, promptIdx: 0, success: true }),
-      makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
       // testIdx 0 + promptIdx 1: 2/2 = 100%
-      makeResult({ testIdx: 0, promptIdx: 1, success: true }),
-      makeResult({ testIdx: 0, promptIdx: 1, success: true }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 1, success: true }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 1, success: true }),
       // testIdx 1 + promptIdx 0: 0/2 = 0%
-      makeResult({ testIdx: 1, promptIdx: 0, success: false }),
-      makeResult({ testIdx: 1, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: false }),
     ];
 
     const violations = computeRepeatPassRateViolations(results, 80);
@@ -129,6 +137,7 @@ describe('computeRepeatPassRateViolations', () => {
     const results = [
       makeResult({
         testIdx: 0,
+        repeatGroupTestIdx: 0,
         promptIdx: 0,
         success: false,
         testCase: { description: 'Refund flow' } as AtomicTestCase,
@@ -143,6 +152,7 @@ describe('computeRepeatPassRateViolations', () => {
     const results = [
       makeResult({
         testIdx: 0,
+        repeatGroupTestIdx: 0,
         promptIdx: 0,
         success: false,
         description: 'Per-result label',
@@ -155,7 +165,7 @@ describe('computeRepeatPassRateViolations', () => {
   });
 
   it('returns no violations when the threshold is not finite', () => {
-    const results = [makeResult({ testIdx: 0, promptIdx: 0, success: false })];
+    const results = [makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false })];
 
     expect(computeRepeatPassRateViolations(results, Number.NaN)).toEqual([]);
     expect(computeRepeatPassRateViolations(results, Number.POSITIVE_INFINITY)).toEqual([]);
@@ -164,10 +174,10 @@ describe('computeRepeatPassRateViolations', () => {
   it('sorts violations by (testIdx, promptIdx) for deterministic output', () => {
     const results = [
       // Intentionally out of order to verify sorting.
-      makeResult({ testIdx: 2, promptIdx: 0, success: false }),
-      makeResult({ testIdx: 0, promptIdx: 1, success: false }),
-      makeResult({ testIdx: 0, promptIdx: 0, success: false }),
-      makeResult({ testIdx: 1, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 2, repeatGroupTestIdx: 2, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 1, success: false }),
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: false }),
     ];
 
     const violations = computeRepeatPassRateViolations(results, 100);
@@ -181,7 +191,7 @@ describe('computeRepeatPassRateViolations', () => {
 
   it('computes a violation for a single supplied failing result', () => {
     const violations = computeRepeatPassRateViolations(
-      [makeResult({ testIdx: 0, promptIdx: 0, success: false })],
+      [makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false })],
       100,
     );
 
@@ -196,13 +206,26 @@ describe('computeRepeatPassRateViolations', () => {
       },
     ]);
   });
+
+  it('skips rows that are not part of a repeat group', () => {
+    // A single, intentionally non-repeated row (opt-out with `options.repeat: 1`) must not be
+    // graded as its own repeat group.
+    const results = [
+      makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+      makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+    ];
+
+    expect(computeRepeatPassRateViolations(results, 100)).toEqual([]);
+  });
 });
 
 describe('findRepeatPassRateViolations', () => {
   it('returns no violations when the threshold is not finite', async () => {
     const evalRecord = {
       persisted: false,
-      results: [makeResult({ testIdx: 0, promptIdx: 0, success: false })],
+      results: [
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+      ],
     } as unknown as Eval;
 
     expect(await findRepeatPassRateViolations(evalRecord, Number.NaN)).toEqual([]);
@@ -213,9 +236,9 @@ describe('findRepeatPassRateViolations', () => {
     const evalRecord = {
       persisted: false,
       results: [
-        makeResult({ testIdx: 0, promptIdx: 0, success: true }),
-        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
-        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
       ],
     } as unknown as Eval;
 
@@ -249,6 +272,7 @@ describe('findRepeatPassRateViolations', () => {
     const evalRecord = {
       persisted: true,
       fetchResultsBatched,
+      getFailedResults: () => [],
     } as unknown as Eval;
 
     const violations = await findRepeatPassRateViolations(evalRecord, 80);
@@ -269,16 +293,18 @@ describe('findRepeatPassRateViolations', () => {
       yield [
         makeResult({
           testIdx: 5,
+          repeatGroupTestIdx: 5,
           promptIdx: 2,
           success: false,
           description: 'Tax calculation',
         }),
-        makeResult({ testIdx: 5, promptIdx: 2, success: false }),
+        makeResult({ testIdx: 5, repeatGroupTestIdx: 5, promptIdx: 2, success: false }),
       ];
     }
     const evalRecord = {
       persisted: true,
       fetchResultsBatched,
+      getFailedResults: () => [],
     } as unknown as Eval;
 
     const violations = await findRepeatPassRateViolations(evalRecord, 100);
@@ -297,6 +323,7 @@ describe('findRepeatPassRateViolations', () => {
     const evalRecord = {
       persisted: true,
       fetchResultsBatched,
+      getFailedResults: () => [],
     } as unknown as Eval;
 
     expect(await findRepeatPassRateViolations(evalRecord, 80)).toEqual([]);
@@ -305,15 +332,16 @@ describe('findRepeatPassRateViolations', () => {
   it('sorts violations deterministically for persisted evals too', async () => {
     async function* fetchResultsBatched() {
       yield [
-        makeResult({ testIdx: 2, promptIdx: 0, success: false }),
-        makeResult({ testIdx: 0, promptIdx: 1, success: false }),
-        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
-        makeResult({ testIdx: 1, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 2, repeatGroupTestIdx: 2, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 1, success: false }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 1, repeatGroupTestIdx: 1, promptIdx: 0, success: false }),
       ];
     }
     const evalRecord = {
       persisted: true,
       fetchResultsBatched,
+      getFailedResults: () => [],
     } as unknown as Eval;
 
     const violations = await findRepeatPassRateViolations(evalRecord, 100);
@@ -322,6 +350,34 @@ describe('findRepeatPassRateViolations', () => {
       [0, 1],
       [1, 0],
       [2, 0],
+    ]);
+  });
+
+  it('merges rows that failed to persist into the repeat buckets', async () => {
+    async function* fetchResultsBatched() {
+      yield [
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      ];
+    }
+    const evalRecord = {
+      persisted: true,
+      fetchResultsBatched,
+      getFailedResults: () => [
+        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+      ],
+    } as unknown as Eval;
+
+    const violations = await findRepeatPassRateViolations(evalRecord, 100);
+    expect(violations).toEqual([
+      {
+        testIdx: 0,
+        promptIdx: 0,
+        successes: 2,
+        total: 3,
+        passRate: (2 / 3) * 100,
+        description: undefined,
+      },
     ]);
   });
 });

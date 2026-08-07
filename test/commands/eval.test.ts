@@ -48,6 +48,7 @@ import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { createEvaluateResult } from '../factories/eval';
+import { tagRepeatPassRateResult } from '../../src/util/repeatPassRateMetadata';
 import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
@@ -1944,8 +1945,8 @@ describe('evalCommand', () => {
           },
         },
       ] as unknown as Eval['prompts'];
-      await evalRecord.addResult(createEvaluateResult({ testIdx: 0, success: true }));
-      await evalRecord.addResult(createEvaluateResult({ testIdx: 0, success: false }));
+      await evalRecord.addResult(tagRepeatPassRateResult(createEvaluateResult({ testIdx: 0, success: true }), 0));
+      await evalRecord.addResult(tagRepeatPassRateResult(createEvaluateResult({ testIdx: 0, success: false }), 0));
       return evalRecord;
     });
 

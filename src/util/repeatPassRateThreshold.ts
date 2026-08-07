@@ -1,4 +1,4 @@
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from './repeatPassRateMetadata';
+import { getRepeatPassRateGroupTestIdx } from './repeatPassRateMetadata';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
@@ -23,8 +23,10 @@ export interface RepeatPassRateViolation {
 
 type RepeatPassRateResult = Pick<
   EvalResult,
-  'testIdx' | 'promptIdx' | 'success' | 'description' | 'metadata' | 'testCase'
->;
+  'testIdx' | 'promptIdx' | 'success' | 'description' | 'testCase'
+> & {
+  metadata?: Record<string, any>;
+};
 
 type Bucket = {
   testIdx: number;
@@ -34,15 +36,15 @@ type Bucket = {
   description?: string;
 };
 
-function getRepeatGroupTestIdx(result: Pick<RepeatPassRateResult, 'testIdx' | 'metadata'>) {
-  const repeatGroupTestIdx = result.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY];
-  return typeof repeatGroupTestIdx === 'number' && Number.isSafeInteger(repeatGroupTestIdx)
-    ? repeatGroupTestIdx
-    : result.testIdx;
-}
-
 function addResultToBuckets(buckets: Map<string, Bucket>, result: RepeatPassRateResult) {
-  const testIdx = getRepeatGroupTestIdx(result);
+  const testIdx = getRepeatPassRateGroupTestIdx(result);
+  if (testIdx === undefined) {
+    // Row was not part of a repeat group (e.g. a test opted out with
+    // `options.repeat: 1` inside a globally repeated run). A single, intentionally
+    // non-repeated row must not be graded as its own repeat group — that would fail
+    // any threshold above 0 when the run is otherwise configured to allow opt-outs.
+    return;
+  }
   const key = `${testIdx}:${result.promptIdx}`;
   let bucket = buckets.get(key);
   if (!bucket) {
@@ -124,6 +126,12 @@ export async function findRepeatPassRateViolations(
     for (const result of batch) {
       addResultToBuckets(buckets, result);
     }
+  }
+  // Rows that failed to persist live only in memory and are not returned by the batched
+  // DB stream. Merge them back in so a failed-to-persist attempt still counts against the
+  // per-test repeat pass rate instead of silently dropping the failing repeat.
+  for (const result of evalRecord.getFailedResults()) {
+    addResultToBuckets(buckets, result);
   }
   return collectViolations(buckets, threshold);
 }

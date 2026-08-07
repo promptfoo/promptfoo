@@ -104,6 +104,12 @@ function runtimeTagsForEval(
   return Object.keys(tags).length > 0 ? tags : undefined;
 }
 
+function normalizeRepeatCount(repeat: number | undefined, fallback = 1): number {
+  return typeof repeat === 'number' && Number.isSafeInteger(repeat) && repeat > 0
+    ? repeat
+    : fallback;
+}
+
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
@@ -1177,10 +1183,21 @@ export async function doEval(
       const aggregateThresholdViolated =
         passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
 
+      // Mirror the evaluator's effective per-test repeat resolution
+      // (defaultTest options merge with test options, falling back to the global repeat).
+      const defaultTestRepeat =
+        typeof testSuite?.defaultTest === 'object'
+          ? normalizeRepeatCount(testSuite.defaultTest.options?.repeat)
+          : 1;
+      const anyTestRepeated = (testSuite?.tests ?? []).some((test) => {
+        const testRepeat = normalizeRepeatCount(test.options?.repeat, defaultTestRepeat);
+        return testRepeat > 1;
+      });
+
       let repeatViolations: Awaited<ReturnType<typeof findRepeatPassRateViolations>> = [];
       if (
         isCliInvocation &&
-        repeat > 1 &&
+        (repeat > 1 || anyTestRepeated) &&
         repeatPassRateThreshold !== undefined &&
         Number.isFinite(repeatPassRateThreshold)
       ) {

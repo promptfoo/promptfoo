@@ -19,6 +19,26 @@ export function tagRepeatPassRateResult(result: EvaluateResult, testIdx: number 
   return result;
 }
 
+/**
+ * Read the repeat-stable group identity off a result. Prefers the in-memory symbol tag
+ * (set by `tagRepeatPassRateResult` on raw evaluator rows), falling back to the stored
+ * metadata key for rows reconstructed from the database. Returns `undefined` for rows
+ * that were never part of a repeat group (e.g. a test opting out with `options.repeat: 1`
+ * inside a globally repeated run).
+ */
+export function getRepeatPassRateGroupTestIdx(
+  result: EvaluateResult | { metadata?: Record<string, unknown> },
+): number | undefined {
+  const symbolTag = (result as EvaluateResult & TaggedRepeatResult)[REPEAT_PASS_RATE_GROUP_RESULT_KEY];
+  if (typeof symbolTag === 'number' && Number.isSafeInteger(symbolTag)) {
+    return symbolTag;
+  }
+  const metadataTag = result.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY];
+  return typeof metadataTag === 'number' && Number.isSafeInteger(metadataTag)
+    ? metadataTag
+    : undefined;
+}
+
 export function addStoredRepeatPassRateMetadata(
   metadata: Record<string, any> | undefined,
   result: EvaluateResult,
