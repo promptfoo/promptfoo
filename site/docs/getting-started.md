@@ -18,25 +18,25 @@ After [installing](/docs/installation) promptfoo, you can set up your first conf
 
 Set up your first config file with a pre-built example by running this command with [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
 
-  <Tabs groupId="promptfoo-command">
-    <TabItem value="npx" label="npx" default>
-      ```bash
-      npx promptfoo@latest init --example getting-started
-      ```
-    </TabItem>
-    <TabItem value="npm" label="npm">
-      ```bash
-      npm install -g promptfoo
-      promptfoo init --example getting-started
-      ```
-    </TabItem>
-    <TabItem value="brew" label="brew">
-      ```bash
-      brew install promptfoo
-      promptfoo init --example getting-started
-      ```
-    </TabItem>
-  </Tabs>
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    ```bash
+    npx promptfoo@latest init --example getting-started
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    npm install -g promptfoo
+    promptfoo init --example getting-started
+    ```
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    ```bash
+    brew install promptfoo
+    promptfoo init --example getting-started
+    ```
+  </TabItem>
+</Tabs>
 
 This will create a new directory with a [basic example](https://github.com/promptfoo/promptfoo/tree/main/examples/getting-started) that tests translation prompts across different models. The example includes:
 
@@ -48,6 +48,16 @@ Most providers need authentication. For OpenAI:
 ```sh
 export OPENAI_API_KEY=sk-abc123
 ```
+
+This command only applies to the current terminal session. If you want the key to be available in future sessions on a local, trusted machine, you can configure it permanently in your shell:
+
+- **Bash / Zsh (macOS / Linux):** Add `export OPENAI_API_KEY="your-key"` to your profile file (such as `~/.zshrc`, `~/.bash_profile`, or `~/.bashrc`).
+- **Fish:** Run `set -Ux OPENAI_API_KEY "your-key"` to set a universal exported variable, or add `set -gx OPENAI_API_KEY "your-key"` to your `~/.config/fish/config.fish` file.
+- **Windows (PowerShell):** Run `[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "your-key", "User")` to set a persistent user-level environment variable.
+
+:::caution
+Never commit API keys or hardcode secrets into source control. For long-term storage or production use, prefer utilizing a dedicated secret manager or your operating system's secure credential keychain.
+:::
 
 Then navigate to the example directory, run the eval, and view results:
 
@@ -121,7 +131,7 @@ If you prefer a visual interface, run `promptfoo eval setup` to configure your f
 
 This opens a browser-based setup flow that walks you through creating prompts, choosing providers, and adding test cases.
 
-<div style={{ textAlign: 'center' }}>   
+<div style={{ textAlign: 'center' }}>
   <img src="/img/docs/eval-setup.png" alt="Promptfoo eval setup Web UI" style={{ width: '80%' }} />
 </div>
 
@@ -187,14 +197,14 @@ Now that you've created an initial configuration, you can update `promptfooconfi
        ```
      </TabItem>
      <TabItem value="npm" label="npm">
-      ```bash
-      promptfoo eval
-      ```
+       ```bash
+       promptfoo eval
+       ```
      </TabItem>
      <TabItem value="brew" label="brew">
-      ```bash
-      promptfoo eval
-      ```
+       ```bash
+       promptfoo eval
+       ```
      </TabItem>
    </Tabs>
 
