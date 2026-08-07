@@ -28,11 +28,12 @@ assert:
     threshold: 1.0 # Context must support entire answer
 ```
 
-### Required fields
+### Fields
 
-- `value` - Expected answer/ground truth
-- `context` - Retrieved text (in vars or via `contextTransform`)
-- `threshold` - Minimum score 0-1 (default: 0)
+- `value` - Required. Expected answer/ground truth
+- `context` - Optional. Retrieved text (in vars or via `contextTransform`). If omitted,
+  `context-recall` uses the prompt as context.
+- `threshold` - Optional. Minimum score 0-1 (default: 0.5)
 
 ### Full example
 

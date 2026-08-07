@@ -27,11 +27,11 @@ assert:
     threshold: 0.9 # Require 90% of claims to be supported
 ```
 
-### Required fields
+### Fields
 
-- `query` - User's question (in test vars)
-- `context` - Reference text (in vars or via `contextTransform`)
-- `threshold` - Minimum score 0-1 (default: 0)
+- `query` - Required. User's question (in test vars)
+- `context` - Required. Reference text (in vars or via `contextTransform`)
+- `threshold` - Optional. Minimum score 0-1 (default: 0.5)
 
 ### Full example
 
