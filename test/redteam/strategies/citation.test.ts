@@ -4,6 +4,7 @@ import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
@@ -40,6 +41,10 @@ describe('citation strategy', () => {
     mockGetUserEmail.mockReturnValue('test@example.com');
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
+    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
+      'Content-Type': 'application/json',
+      ...extra,
+    }));
     mockGetRemoteGenerationExplicitlyDisabledError.mockImplementation(
       (strategyName) =>
         `${strategyName} requires remote generation, which has been explicitly disabled.`,
@@ -99,15 +104,67 @@ describe('citation strategy', () => {
         },
         body: JSON.stringify({
           task: 'citation',
-          testCases: [testCases[0]],
-          injectVar: 'prompt',
           topic: 'original prompt',
-          config: {},
           email: 'test@example.com',
         }),
       },
       expect.any(Number),
     );
+  });
+
+  it('forwards targetId without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      targetId: 'cloud-target-123',
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({ targetId: 'cloud-target-123' });
+    expect(body).not.toContain('CANARY');
+    expect(body).not.toContain('secret');
+  });
+
+  it('forwards supported citation options without serializing unrelated config', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          citation: { type: 'Journal Article', content: 'Test citation' },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await addCitationTestCases(testCases, 'prompt', {
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+      env: { CANARY: 'secret' },
+    });
+
+    const body = mockFetchWithCache.mock.calls[0]?.[1]?.body;
+    expect(body).toBeTypeOf('string');
+    expect(JSON.parse(body as string)).toMatchObject({
+      useAcademic: true,
+      useJournals: false,
+      useBooks: true,
+    });
+    expect(body).not.toContain('secret');
   });
 
   it('should throw error when remote generation is disabled', async () => {

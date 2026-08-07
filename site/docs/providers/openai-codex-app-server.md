@@ -15,9 +15,9 @@ For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./
 ```yaml
 providers:
   - openai:codex-app-server
-  - openai:codex-app-server:gpt-5.5
+  - openai:codex-app-server:gpt-5.6-sol
   - openai:codex-desktop
-  - openai:codex-desktop:gpt-5.5
+  - openai:codex-desktop:gpt-5.6-sol
 ```
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
@@ -36,19 +36,19 @@ Use this provider when the thing being tested depends on app-server-only behavio
 
 ## What Promptfoo Can and Can't Evaluate
 
-| Eval surface                                    | Supported? | Notes                                                                                            |
-| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                       |
-| Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                             |
-| JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                          |
-| Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`; cost needs a known model id.               |
-| Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                       |
-| Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                 |
-| Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized. |
-| Deep app-server tracing                         | Yes        | Enable `deep_tracing` to inject OTEL env vars into a fresh app-server process per row.           |
-| Live partial output in assertions               | No         | Promptfoo receives the final provider response after the turn completes.                         |
-| Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                              |
-| WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                |
+| Eval surface                                    | Supported? | Notes                                                                                                                                       |
+| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Final assistant text                            | Yes        | Returned in `response.output` as a string.                                                                                                  |
+| Text, image, local image, skill, mention inputs | Yes        | Pass plain text or a JSON array of supported app-server input items.                                                                        |
+| JSON schema output                              | Yes        | Pass `output_schema`; assert with `is-json` or parse `output` yourself.                                                                     |
+| Token usage and estimated cost                  | Yes        | Token usage is read from `thread/tokenUsage/updated`; GPT-5.6 cost stays undefined because the protocol does not report cache-write tokens. |
+| Thread IDs and turn IDs                         | Yes        | Available under `sessionId` and `metadata.codexAppServer`.                                                                                  |
+| Approval, permission, MCP, and tool requests    | Yes        | `server_request_policy` gives deterministic responses for non-interactive evals.                                                            |
+| Streamed item metadata                          | Yes        | Command, file, MCP, dynamic tool, web search, reasoning, and agent-message items are normalized.                                            |
+| Deep app-server tracing                         | Yes        | Enable `deep_tracing` to inject OTEL env vars into a fresh app-server process per row.                                                      |
+| Live partial output in assertions               | No         | Promptfoo receives the final provider response after the turn completes.                                                                    |
+| Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                                                                         |
+| WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                                                           |
 
 When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
 
@@ -68,6 +68,27 @@ export OPENAI_API_KEY=your_api_key_here
 ```
 
 Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible evals, prefer API-key-backed runs or set `cli_env.CODEX_HOME` to a fixture home directory that already contains the intended Codex login state.
+
+### Run on Amazon Bedrock
+
+Set `model_provider: amazon-bedrock` with a Bedrock model id to run OpenAI's frontier models on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models). Provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:codex-app-server
+    config:
+      model: openai.gpt-5.6-sol # Bedrock model id (note the openai. prefix)
+      model_provider: amazon-bedrock
+      model_reasoning_effort: max
+      sandbox_mode: read-only
+      approval_policy: never
+      cli_env:
+        AWS_REGION: us-east-2
+        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
+        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
+```
+
+The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (Sol: `us-east-1`/`us-east-2`; Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
 
 ## Basic Usage
 
@@ -124,7 +145,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `additional_directories`   | string[]      | Additional directories added to workspace-write sandbox roots.                                                                                                      | None                 |
 | `skip_git_repo_check`      | boolean       | Skip the default Git repository safety check.                                                                                                                       | `false`              |
 | `codex_path_override`      | string        | Path to a specific `codex` binary.                                                                                                                                  | `codex`              |
-| `model`                    | string        | Model id, such as `gpt-5.5`. Can also be set in the provider id.                                                                                                    | Codex default        |
+| `model`                    | string        | Model id, such as `gpt-5.6-sol`. Can also be set in the provider id.                                                                                                | Codex default        |
 | `model_provider`           | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
 | `service_tier`             | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
 | `sandbox_mode`             | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
@@ -132,7 +153,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `network_access_enabled`   | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
 | `approval_policy`          | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object. `on-failure` is accepted for compatibility but deprecated by Codex.           | `never`              |
 | `approvals_reviewer`       | string        | `user` or `auto_review`. `guardian_subagent` is still accepted as a legacy alias.                                                                                   | App-server default   |
-| `model_reasoning_effort`   | string        | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.                                                                                                             | App-server default   |
+| `model_reasoning_effort`   | string        | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or `ultra`. GPT-5.6 support is catalog-driven; `ultra` enables proactive subagent use.                  | App-server default   |
 | `reasoning_summary`        | string        | `auto`, `concise`, `detailed`, or `none`.                                                                                                                           | App-server default   |
 | `personality`              | string        | `none`, `friendly`, or `pragmatic`.                                                                                                                                 | App-server default   |
 | `base_instructions`        | string        | Base instructions passed to `thread/start` and `thread/resume`.                                                                                                     | None                 |
@@ -157,6 +178,10 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `startup_timeout_ms`       | number        | `initialize` timeout.                                                                                                                                               | `30000`              |
 | `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
 | `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
+
+:::note GPT-5.6 requires Codex 0.144.0 or later
+The app-server provider starts the `codex` binary on your PATH, or `codex_path_override`. Use version 0.144.0 or later so its model catalog recognizes GPT-5.6 and the corresponding reasoning levels. Confirm the effective reasoning with `deep_tracing` when using a custom binary.
+:::
 
 ### Granular Approval Policy
 
@@ -188,6 +213,22 @@ providers:
 ```
 
 `collaboration_mode` is experimental and is sent on `turn/start`. App-server may let the selected mode override model, reasoning effort, or developer instructions for the turn.
+
+### Goals and Subagents
+
+Codex gates optional capabilities behind [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Set them under `cli_config.features`, which Promptfoo forwards as `codex app-server -c features.<name>=...` overrides.
+
+```yaml
+providers:
+  - id: openai:codex-app-server:gpt-5.5
+    config:
+      cli_config:
+        features:
+          goals: true
+          multi_agent: true
+```
+
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
 
 ## Server Request Policy
 
@@ -310,7 +351,23 @@ Command output, tool arguments, and approval metadata are sanitized before they 
 
 ## Tracing
 
-Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items.
+Promptfoo wraps each provider call in a GenAI span. The app-server provider also creates item-level spans for completed command, file, MCP, dynamic tool, reasoning, search, and agent-message items, plus a `gen_ai.turn N` marker span around each Codex `turn/started` -> `turn/completed` notification. Every item span is tagged with `gen_ai.turn.index` so callers can correlate items back to the protocol turn that emitted them.
+
+To verify that an app-server protocol turn was traced, count the turn markers:
+
+```yaml
+assert:
+  - type: trace-span-count
+    value:
+      pattern: 'gen_ai.turn *'
+      min: 1
+      max: 1
+```
+
+An app-server `turn/start` request covers one agent turn, including any internal model
+generations and tool execution. App-server notifications do not expose those internal
+model-generation boundaries, so these markers cannot distinguish batched from
+sequential tool calls inside a turn.
 
 Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 

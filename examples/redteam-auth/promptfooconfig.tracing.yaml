@@ -64,9 +64,11 @@ redteam:
     - id: crescendo
 tracing:
   enabled: true
-  includeInternalSpans: true
   otlp:
-    endpoint: http://localhost:5317
+    http:
+      enabled: true
+      port: 5317
+  queryDelay: 3000
   provider:
     id: tempo
     endpoint: http://localhost:3250

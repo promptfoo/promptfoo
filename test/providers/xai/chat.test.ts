@@ -102,9 +102,10 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('supported models', () => {
-    it('includes Grok 4.3 and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
+    it('includes Grok 4.5, 4.3, and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
       expect(XAI_CHAT_MODELS).toEqual(
         expect.arrayContaining([
+          expect.objectContaining({ id: 'grok-4.5' }),
           expect.objectContaining({ id: 'grok-4.3' }),
           expect.objectContaining({ id: 'grok-4.20-0309-reasoning' }),
           expect.objectContaining({ id: 'grok-4.20-0309-non-reasoning' }),
@@ -112,11 +113,24 @@ describe('xAI Chat Provider', () => {
         ]),
       );
       expect(GROK_REASONING_MODELS).toEqual(
-        expect.arrayContaining(['grok-4.3', 'grok-4.3-latest', 'grok-4.20-reasoning', 'grok-4.20']),
+        expect.arrayContaining([
+          'grok-4.5',
+          'grok-4.5-latest',
+          'grok-build-latest',
+          'grok-4.3',
+          'grok-4.3-latest',
+          'grok-latest',
+          'grok-4.20-reasoning',
+          'grok-4.20',
+        ]),
       );
       expect(GROK_4_MODELS).toEqual(
         expect.arrayContaining([
+          'grok-4.5',
+          'grok-4.5-latest',
+          'grok-build-latest',
           'grok-4.3',
+          'grok-latest',
           'grok-4.20-reasoning',
           'grok-4.20-non-reasoning',
           'grok-4.20-multi-agent',
@@ -141,7 +155,11 @@ describe('xAI Chat Provider', () => {
         'grok-4.20-0309-reasoning',
         'grok-4.20-multi-agent-0309',
         'grok-4.3',
+        'grok-4.5',
+        'grok-4.5-latest',
+        'grok-build-latest',
         'grok-code-fast-1',
+        'grok-latest',
       ];
       const trackedModelIds = XAI_CHAT_MODELS.flatMap((model) => [
         model.id,
@@ -186,6 +204,8 @@ describe('xAI Chat Provider', () => {
   describe('Reported cost handling', () => {
     it('converts xAI cost ticks to USD', () => {
       expect(getXAICostInUsd({ cost_in_usd_ticks: 37_756_000 })).toBe(0.0037756);
+      expect(getXAICostInUsd({ cost_in_usd_ticks: -1 })).toBeUndefined();
+      expect(getXAICostInUsd({ cost_in_usd_ticks: Number.NaN })).toBeUndefined();
       expect(getXAICostInUsd()).toBeUndefined();
     });
   });
@@ -269,7 +289,8 @@ describe('xAI Chat Provider', () => {
       expect(GROK_3_MINI_MODELS).not.toContain('grok-2-1212');
     });
 
-    it('identifies Grok Code Fast as reasoning models', () => {
+    it('identifies Grok Build and its Grok Code Fast aliases as reasoning models', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-build-0.1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast');
       expect(GROK_REASONING_MODELS).toContain('grok-code-fast-1-0825');
@@ -323,6 +344,66 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Grok-4 specific functionality', () => {
+    it('recognizes Grok 4.5 models as reasoning models', () => {
+      for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        expect(provider.isReasoningModel()).toBe(true);
+      }
+    });
+
+    it('preserves reasoning_effort for Grok 4.5 chat requests and strips unsupported params', async () => {
+      // Verified live 2026-07-09: grok-4.5 accepts reasoning_effort low/medium/high
+      // (not none) and rejects presence_penalty, frequency_penalty, and stop.
+      for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: {
+            config: {
+              reasoning_effort: 'medium',
+              presence_penalty: 0.5,
+              frequency_penalty: 0.7,
+              stop: ['\\n'],
+              temperature: 0.8,
+            },
+          },
+        });
+
+        expect(provider.supportsReasoningEffort()).toBe(true);
+        expect(result.body.reasoning_effort).toBe('medium');
+        expect(result.body.presence_penalty).toBeUndefined();
+        expect(result.body.frequency_penalty).toBeUndefined();
+        expect(result.body.stop).toBeUndefined();
+        expect(result.body.temperature).toBe(0.8);
+      }
+    });
+
+    it('rejects unsupported reasoning_effort values for Grok 4.5', async () => {
+      for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
+        for (const reasoningEffort of ['none', 'xhigh', 'minimal']) {
+          const provider = createXAIProvider(`xai:${modelName}`) as any;
+
+          await expect(
+            provider.getOpenAiBody('test prompt', {
+              prompt: { config: { reasoning_effort: reasoningEffort } },
+            }),
+          ).rejects.toThrow(
+            `xAI model ${modelName} does not support reasoning_effort ${JSON.stringify(reasoningEffort)}`,
+          );
+        }
+      }
+    });
+
+    it('preserves reasoning_effort none for Grok 4.3 and its aliases', async () => {
+      for (const modelName of ['grok-4.3', 'grok-4.3-latest', 'grok-latest']) {
+        const provider = createXAIProvider(`xai:${modelName}`) as any;
+        const result = await provider.getOpenAiBody('test prompt', {
+          prompt: { config: { reasoning_effort: 'none' } },
+        });
+
+        expect(result.body.reasoning_effort).toBe('none');
+      }
+    });
+
     it('recognizes Grok 4.3 models as reasoning models', () => {
       const provider = createXAIProvider('xai:grok-4.3') as any;
       expect(provider.isReasoningModel()).toBe(true);
@@ -521,9 +602,16 @@ describe('xAI Chat Provider', () => {
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-latest');
     });
 
+    it('includes Grok 4.5 in reasoning effort models list', () => {
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.5');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.5-latest');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-build-latest');
+    });
+
     it('includes Grok 4.3 in reasoning effort models list', () => {
       expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3');
       expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3-latest');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-latest');
     });
 
     it('includes Grok-3 mini models in reasoning effort models list', () => {
@@ -538,10 +626,29 @@ describe('xAI Chat Provider', () => {
       expect(grok4?.cost?.output).toBeDefined();
     });
 
+    it('includes Grok 4.5 in XAI_CHAT_MODELS with API-sourced pricing', () => {
+      const grok45 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.5');
+      expect(grok45).toBeDefined();
+      expect(grok45?.aliases).toContain('grok-4.5-latest');
+      expect(grok45?.aliases).toContain('grok-build-latest');
+      // Verified against xAI /v1/language-models/grok-4.5 on 2026-07-09
+      // (20000/60000/5000 price units, long-context 40000/120000/10000 at 200K+).
+      expect(grok45?.cost?.input).toBe(2.0 / 1e6);
+      expect(grok45?.cost?.output).toBe(6.0 / 1e6);
+      expect(grok45?.cost?.cache_read).toBe(0.5 / 1e6);
+      expect(grok45?.cost?.longContext).toEqual({
+        threshold: 200_000,
+        input: 4.0 / 1e6,
+        output: 12.0 / 1e6,
+        cache_read: 1.0 / 1e6,
+      });
+    });
+
     it('includes Grok 4.3 in XAI_CHAT_MODELS with API-sourced pricing', () => {
       const grok43 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.3');
       expect(grok43).toBeDefined();
       expect(grok43?.aliases).toContain('grok-4.3-latest');
+      expect(grok43?.aliases).toContain('grok-latest');
       // Verified against xAI /v1/language-models/grok-4.3 (12500/25000/2000 ticks).
       expect(grok43?.cost?.input).toBe(1.25 / 1e6);
       expect(grok43?.cost?.output).toBe(2.5 / 1e6);
@@ -623,15 +730,63 @@ describe('xAI Chat Provider', () => {
       expect(miniAliasCost).toBeDefined();
     });
 
+    it('applies the cache-read rate to cached prompt tokens', () => {
+      // The model table defines cache_read for grok-4, but it was never applied.
+      const full = calculateXAICost('grok-4-0709', {}, 1000, 500);
+      const discounted = calculateXAICost('grok-4-0709', {}, 1000, 500, 0, 800);
+      expect(full).toBeDefined();
+      expect(discounted as number).toBeLessThan(full as number);
+    });
+
+    it('bills the cached prompt subset at the cache-read rate (deterministic)', () => {
+      // input $3/M, output $15/M, cache-read $0.75/M; 1000 prompt (800 cached), 500 output.
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+      // (200 uncached * 3e-6) + (800 cached * 0.75e-6) + (500 * 15e-6) = 0.0087
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 800)).toBeCloseTo(0.0087, 10);
+      // Without any cached tokens: (1000 * 3e-6) + (500 * 15e-6) = 0.0105
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500)).toBeCloseTo(0.0105, 10);
+      // A proxy may make cache hits free; an explicit zero must not fall back to model pricing.
+      expect(
+        calculateXAICost('grok-4-0709', { ...rates, cacheReadCost: 0 }, 1000, 500, 0, 800),
+      ).toBeCloseTo(0.0081, 10);
+    });
+
+    it('clamps cached prompt tokens to valid usage boundaries', () => {
+      const rates = { inputCost: 3e-6, outputCost: 15e-6, cacheReadCost: 0.75e-6 };
+
+      // A full cache hit bills every prompt token at the reduced rate.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 1000)).toBeCloseTo(0.00825, 10);
+      // Inconsistent provider usage cannot discount more tokens than the prompt contains.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, 2000)).toBeCloseTo(0.00825, 10);
+      // Invalid negative usage falls back to the undiscounted input cost.
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, -1)).toBeCloseTo(0.0105, 10);
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Number.NaN)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+      expect(calculateXAICost('grok-4-0709', rates, 1000, 500, 0, Infinity)).toBeCloseTo(
+        0.0105,
+        10,
+      );
+    });
+
+    it('falls back to full input pricing when the model has no cache-read rate', () => {
+      // grok-2-1212 has input: 2.0/1e6, output: 10.0/1e6, and no cache_read rate.
+      // Cached tokens reported by the provider must not produce a NaN cost or a
+      // phantom discount; they bill at the full input rate exactly as if no cache
+      // tokens were reported.
+      const withCache = calculateXAICost('grok-2-1212', {}, 1000, 500, 0, 800);
+      const withoutCache = calculateXAICost('grok-2-1212', {}, 1000, 500);
+      // (2.0/1e6 * 1000) + (10.0/1e6 * 500) = 0.002 + 0.005 = 0.007
+      expect(withCache).toBeCloseTo(0.007, 10);
+      expect(withCache).toBe(withoutCache);
+    });
+
     it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
       for (const modelName of [
         'grok-4-1-fast-reasoning',
         'grok-4-fast-non-reasoning',
         'grok-4',
-        'grok-code-fast',
-        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
-        // it shares the post-retirement billing target with the undated slug.
-        'grok-code-fast-1-0825',
         'grok-3',
         // The grok-3 family collapses every -beta and -fast variant into the
         // same id on xAI's catalog, so all of them must redirect together.
@@ -642,6 +797,111 @@ describe('xAI Chat Provider', () => {
       ]) {
         expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
       }
+    });
+
+    it('bills grok-build-0.1 and its grok-code-fast aliases at its own pricing', () => {
+      // xAI's docs list grok-code-fast-1 / grok-code-fast / grok-code-fast-1-0825 as
+      // aliases of grok-build-0.1 ($1.00 input / $2.00 output per 1M tokens), so they
+      // must NOT redirect to grok-4.3 pricing.
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 100_000, 1_000_000)).toBeCloseTo(2.1, 10);
+      }
+    });
+
+    it('switches grok-build-0.1 and its aliases to higher-context pricing at 200k tokens', () => {
+      for (const modelName of [
+        'grok-build-0.1',
+        'grok-code-fast-1',
+        'grok-code-fast',
+        'grok-code-fast-1-0825',
+      ]) {
+        // One token below the threshold stays on the standard tier.
+        expect(calculateXAICost(modelName, {}, 199_999, 1_000)).toBeCloseTo(
+          (199_999 * 1 + 1_000 * 2) / 1e6,
+          10,
+        );
+        // The REST schema defines the threshold as inclusive (at or above).
+        expect(calculateXAICost(modelName, {}, 200_000, 1_000)).toBeCloseTo(
+          (200_000 * 2 + 1_000 * 4) / 1e6,
+          10,
+        );
+      }
+    });
+
+    it('uses higher-context cache-read pricing for grok-build-0.1 cached prompt tokens', () => {
+      expect(calculateXAICost('grok-build-0.1', {}, 200_001, 1_000, 0, 100_000)).toBeCloseTo(
+        (100_001 * 2 + 100_000 * 0.4 + 1_000 * 4) / 1e6,
+        10,
+      );
+    });
+
+    it('bills grok-4.5 and its aliases at API-sourced pricing', () => {
+      // $2/M input, $6/M output: (100_000 * 2 + 1_000_000 * 6) / 1e6 = 6.2
+      for (const modelName of ['grok-4.5', 'grok-4.5-latest', 'grok-build-latest']) {
+        expect(calculateXAICost(modelName, {}, 100_000, 1_000_000)).toBeCloseTo(6.2, 10);
+      }
+    });
+
+    it('switches grok-4.5 to higher-context pricing at 200k input tokens', () => {
+      // One token below the threshold stays on the standard tier.
+      expect(calculateXAICost('grok-4.5', {}, 199_999, 1_000)).toBeCloseTo(
+        (199_999 * 2 + 1_000 * 6) / 1e6,
+        10,
+      );
+      // The REST schema defines the threshold as inclusive (at or above).
+      expect(calculateXAICost('grok-4.5', {}, 200_000, 1_000)).toBeCloseTo(
+        (200_000 * 4 + 1_000 * 12) / 1e6,
+        10,
+      );
+    });
+
+    it('uses grok-4.5 cache-read pricing for cached prompt tokens on both tiers', () => {
+      // Standard tier: $0.50/M cache-read.
+      expect(calculateXAICost('grok-4.5', {}, 1_000, 500, 0, 800)).toBeCloseTo(
+        (200 * 2 + 800 * 0.5 + 500 * 6) / 1e6,
+        10,
+      );
+      // Long-context tier: $1/M cache-read.
+      expect(calculateXAICost('grok-4.5', {}, 200_001, 1_000, 0, 100_000)).toBeCloseTo(
+        (100_001 * 4 + 100_000 * 1 + 1_000 * 12) / 1e6,
+        10,
+      );
+    });
+
+    it('adds reasoning tokens at the output rate when billed separately (chat completions)', () => {
+      // Live chat-completions response for grok-4.5 on 2026-07-09:
+      // prompt 219 (128 cached), completion 1, reasoning 50,
+      // usage.cost_in_usd_ticks = 5_520_000 → $0.000552.
+      // (91 * 2 + 128 * 0.5 + (1 + 50) * 6) / 1e6 = 0.000552
+      expect(
+        calculateXAICost('grok-4.5', {}, 219, 1, 50, 128, { reasoningBilledSeparately: true }),
+      ).toBeCloseTo(0.000552, 12);
+
+      // Without the flag (Responses API convention) reasoning is already part of
+      // completion tokens and must not be added on top.
+      expect(calculateXAICost('grok-4.5', {}, 219, 51, 50, 128)).toBeCloseTo(0.000552, 12);
+    });
+
+    it('bills separately-reported reasoning at the long-context output rate at the threshold', () => {
+      // Chat completions with a >200K prompt: the whole request (including the
+      // separately-reported reasoning tokens) switches to the $4/$12/$1 tier.
+      expect(
+        calculateXAICost('grok-4.5', {}, 200_001, 1_000, 500, 100_000, {
+          reasoningBilledSeparately: true,
+        }),
+      ).toBeCloseTo((100_001 * 4 + 100_000 * 1 + (1_000 + 500) * 12) / 1e6, 10);
+    });
+
+    it('bills a reasoning-only chat turn when reasoning is billed separately', () => {
+      // completion 0 + reasoning 50: (219 - 128) * 2 + 128 * 0.5 + 50 * 6 ticks-equivalent.
+      expect(
+        calculateXAICost('grok-4.5', {}, 219, 0, 50, 128, { reasoningBilledSeparately: true }),
+      ).toBeCloseTo((91 * 2 + 128 * 0.5 + 50 * 6) / 1e6, 12);
     });
 
     it('returns undefined for invalid inputs', () => {
@@ -680,15 +940,40 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBe(2.5);
     });
 
-    it('bills reasoning tokens at the output rate', () => {
+    it('does not mix model cache pricing with custom input cost overrides', () => {
+      expect(calculateXAICost('grok-4-0709', { cost: 0.001 }, 1000, 500, 0, 800)).toBe(1.5);
+      expect(
+        calculateXAICost('grok-4-0709', { inputCost: 0.001, outputCost: 0.003 }, 1000, 500, 0, 800),
+      ).toBe(2.5);
+    });
+
+    it('does not double-count reasoning tokens already included in completion tokens', () => {
       // grok-3-mini-beta: input $0.30/M, output $0.50/M.
       const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
       // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004
       expect(baseline).toBeCloseTo(0.0004, 10);
 
+      // completion_tokens already INCLUDES reasoning_tokens (the OpenAI
+      // convention xAI follows), so passing reasoning separately must not add
+      // to the bill — the cost is identical to the baseline.
       const withReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
-      // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
-      expect(withReasoning).toBeCloseTo(0.0005, 10);
+      expect(withReasoning).toBeCloseTo(0.0004, 10);
+    });
+
+    it('bills a reasoning-only response (no other completion tokens)', () => {
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. A turn that reports
+      // zero completion tokens but non-zero reasoning still has a real cost: we
+      // fall back to billing the reasoning tokens at the output rate.
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 500, 0, 200);
+      // 500 input @ 0.30/M + 200 reasoning @ 0.50/M = 0.00015 + 0.0001
+      expect(cost).toBeCloseTo(0.00025, 10);
+    });
+
+    it('bills only completion tokens (reasoning included) when input tokens are zero', () => {
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 0, 200, 50);
+      // 0 input @ 0.30/M + 200 completion @ 0.50/M (the 50 reasoning tokens are
+      // already part of the 200 completion tokens, not added on top).
+      expect(cost).toBeCloseTo(0.0001, 10);
     });
   });
 
@@ -873,6 +1158,241 @@ describe('xAI Chat Provider', () => {
       expect(result.output).toBe('Test response');
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
+    });
+
+    it('should apply cache-read pricing from normalized token usage', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Cached response' } }],
+          usage: {
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            total_tokens: 1500,
+            prompt_tokens_details: { cached_tokens: 800 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            inputCost: 3e-6,
+            outputCost: 15e-6,
+            cacheReadCost: 0.75e-6,
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage?.completionDetails?.cacheReadInputTokens).toBe(800);
+      expect(result.cost).toBeCloseTo(0.0087, 10);
+    });
+
+    it('should leave cost undefined when usage is missing', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Response without usage' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4-0709', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Response without usage');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('adds reasoning tokens on top of completion tokens for chat completions', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'reasoned answer' } }],
+          usage: {
+            prompt_tokens: 500,
+            // xAI's chat-completions endpoint reports reasoning tokens SEPARATELY
+            // from completion tokens (prompt 500 + completion 500 + reasoning 200
+            // = total 1200) and bills them at the output rate — verified live
+            // against usage.cost_in_usd_ticks for grok-4.5, grok-4.3, grok-4.20,
+            // and grok-build-0.1 on 2026-07-09.
+            completion_tokens: 500,
+            total_tokens: 1200,
+            completion_tokens_details: { reasoning_tokens: 200 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-3-mini-beta', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M.
+      // 500 input @ 0.30/M + (500 + 200) output @ 0.50/M = 0.00015 + 0.00035 = 0.0005.
+      expect(result.tokenUsage?.completionDetails?.reasoning).toBe(200);
+      expect(result.cost).toBeCloseTo(0.0005, 10);
+    });
+
+    it('reproduces the live-verified grok-4.5 chat completion cost when ticks are absent', async () => {
+      // Real grok-4.5 response captured 2026-07-09; the API reported
+      // usage.cost_in_usd_ticks = 5_520_000 → $0.000552.
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: '4' } }],
+          usage: {
+            prompt_tokens: 219,
+            completion_tokens: 1,
+            total_tokens: 270,
+            prompt_tokens_details: { cached_tokens: 128 },
+            completion_tokens_details: { reasoning_tokens: 50 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // (91 uncached * $2/M) + (128 cached * $0.50/M) + (51 output * $6/M) = $0.000552.
+      expect(result.cost).toBeCloseTo(0.000552, 12);
+    });
+
+    it('prefers xAI exact billed ticks over catalog estimates for chat completions', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'priority response' } }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 10,
+            total_tokens: 110,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // Catalog math would be $0.00026. The API's exact billed amount includes
+      // any priority pricing, discounts, and other request-level adjustments.
+      expect(result.cost).toBe(0.0123456789);
+    });
+
+    it('preserves exact billed ticks on refusal responses', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: { content: null, refusal: 'I cannot help with that.' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 10,
+            total_tokens: 110,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.isRefusal).toBe(true);
+      expect(result.cost).toBe(0.0123456789);
+    });
+
+    it('preserves exact billed ticks on non-2xx invalid_prompt refusals', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          error: {
+            code: 'invalid_prompt',
+            message: 'The prompt was rejected by the safety system.',
+          },
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 10,
+            total_tokens: 110,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 400,
+        statusText: 'Bad Request',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('blocked prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.isRefusal).toBe(true);
+      expect(result.cached).toBe(false);
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 10, total: 110 });
+      expect(result.cost).toBe(0.0123456789);
+    });
+
+    it('honors explicit custom cost overrides instead of reported ticks', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'custom-priced response' } }],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+            total_tokens: 15,
+            cost_in_usd_ticks: 123_456_789,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-4.5', {
+        config: {
+          config: {
+            apiKey: 'test-key',
+            cost: 0.001,
+          },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBe(0.015);
     });
   });
 });

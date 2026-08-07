@@ -1,16 +1,20 @@
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
-import { StringDecoder } from 'string_decoder';
 
 import { PythonShell } from 'python-shell';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
 import { validatePythonPath } from './pythonUtils';
+import { PythonStderrLogger } from './stderr';
 
-const MAX_STDERR_BUFFER_LENGTH = 16_384;
+export { MAX_STDERR_BUFFER_LENGTH } from './stderr';
 
 export class PythonWorker {
   private process: PythonShell | null = null;
@@ -18,11 +22,10 @@ export class PythonWorker {
   private busy: boolean = false;
   private shuttingDown: boolean = false;
   private crashCount: number = 0;
-  private stderrBuffer: string = '';
-  private stderrDecoder = new StringDecoder('utf8');
-  private inTraceback: boolean = false;
+  private stderrLogger = new PythonStderrLogger('Python worker stderr: ');
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
+    responseFile: string;
     resolve: (result: unknown) => void;
     reject: (error: Error) => void;
   } | null = null;
@@ -79,8 +82,8 @@ export class PythonWorker {
             this.onReady();
           }
           resolve();
-        } else if (message.startsWith('DONE')) {
-          this.handleDone();
+        } else if (message.startsWith('DONE|')) {
+          this.handleDone(message.slice('DONE|'.length));
         }
       });
 
@@ -103,128 +106,11 @@ export class PythonWorker {
   }
 
   private handleStderr(data: Buffer | string): void {
-    const text = typeof data === 'string' ? data : this.stderrDecoder.write(data);
-    this.stderrBuffer += text;
-
-    // A trailing bare `\r` may be the first half of a `\r\n` pair split across
-    // chunks, so hold it back until the next chunk (or flush) disambiguates it.
-    const carry = this.stderrBuffer.endsWith('\r') ? '\r' : '';
-    const normalized = (carry ? this.stderrBuffer.slice(0, -1) : this.stderrBuffer).replace(
-      /\r\n?/g,
-      '\n',
-    );
-
-    const lines = normalized.split('\n');
-    this.stderrBuffer = (lines.pop() ?? '') + carry;
-
-    for (const line of lines) {
-      this.logStderrLine(line);
-    }
-
-    // Bound an unterminated line so a misbehaving provider cannot grow the
-    // buffer without limit. The flushed fragment is best-effort: it may be the
-    // middle of a longer line and is classified on its own.
-    if (this.stderrBuffer.length >= MAX_STDERR_BUFFER_LENGTH) {
-      this.logStderrLine(this.stderrBuffer);
-      this.stderrBuffer = '';
-    }
+    this.stderrLogger.handleData(data);
   }
 
   private flushStderr(): void {
-    const remaining = this.stderrBuffer + this.stderrDecoder.end();
-    this.stderrBuffer = '';
-
-    if (remaining) {
-      for (const line of remaining.split(/\r\n|[\r\n]/)) {
-        this.logStderrLine(line);
-      }
-    }
-
-    // Reset traceback state only after the buffered lines are logged, so a
-    // buffered final traceback line is still classified as an error. Refresh
-    // the decoder in case the worker restarts and reuses this instance.
-    this.inTraceback = false;
-    this.stderrDecoder = new StringDecoder('utf8');
-  }
-
-  private logStderrLine(line: string): void {
-    // Blank lines terminate any in-progress traceback.
-    if (!line.trim()) {
-      this.inTraceback = false;
-      return;
-    }
-
-    // Inside a traceback, indented lines are always continuation frames.
-    // Classify them before prefix detection so a source line such as
-    // `    info = get_info()` is not mistaken for an INFO log record.
-    if (this.inTraceback && /^\s/.test(line)) {
-      this.writeStderrLog('error', line);
-      return;
-    }
-
-    const trimmedStart = line.trimStart();
-
-    // The traceback header opens a new traceback block.
-    if (/^Traceback \(most recent call last\):/i.test(trimmedStart)) {
-      this.inTraceback = true;
-      this.writeStderrLog('error', line);
-      return;
-    }
-
-    // An explicit Python log-level prefix wins over everything else.
-    const prefixMatch = /^(DEBUG|INFO|WARN|WARNING|ERROR|CRITICAL|FATAL)\b[: ]?/i.exec(
-      trimmedStart,
-    );
-    if (prefixMatch) {
-      this.inTraceback = false;
-      this.writeStderrLog(this.normalizeStderrLevel(prefixMatch[1]), line);
-      return;
-    }
-
-    // A non-indented line while inside a traceback is the exception summary
-    // (e.g. `ValueError: boom`) that ends the traceback.
-    if (this.inTraceback) {
-      this.inTraceback = false;
-      this.writeStderrLog('error', line);
-      return;
-    }
-
-    // Connector lines bridge chained exceptions; keep them at error level so a
-    // multi-exception report reads coherently in the logs.
-    if (
-      /^(During handling of the above exception|The above exception was the direct cause)/i.test(
-        trimmedStart,
-      )
-    ) {
-      this.writeStderrLog('error', line);
-      return;
-    }
-
-    // Unclassified stderr stays visible without being treated as a failure.
-    this.writeStderrLog('warn', line);
-  }
-
-  private normalizeStderrLevel(level: string): 'debug' | 'info' | 'warn' | 'error' {
-    switch (level.toUpperCase()) {
-      case 'DEBUG':
-        return 'debug';
-      case 'INFO':
-        return 'info';
-      case 'WARN':
-      case 'WARNING':
-        return 'warn';
-      case 'ERROR':
-      case 'CRITICAL':
-      case 'FATAL':
-        return 'error';
-      default:
-        return 'warn';
-    }
-  }
-
-  private writeStderrLog(level: 'debug' | 'info' | 'warn' | 'error', line: string): void {
-    const message = `Python worker stderr: ${line}`;
-    logger[level](message);
+    this.stderrLogger.flush();
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -250,18 +136,16 @@ export class PythonWorker {
   }
 
   private async executeCall(functionName: string, args: unknown[]): Promise<unknown> {
-    const requestFile = path.join(
-      os.tmpdir(),
-      `promptfoo-worker-req-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-    );
-    const responseFile = path.join(
-      os.tmpdir(),
-      `promptfoo-worker-resp-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-    );
+    let tempDirectory: string | undefined;
 
     try {
-      // Write request
-      await fs.writeFile(requestFile, safeJsonStringify(args) as string, 'utf-8');
+      tempDirectory = await createSecureTempDirectory('promptfoo-worker-');
+      const requestFile = await writeSecureTempFile(
+        tempDirectory,
+        'request.json',
+        safeJsonStringify(args) as string,
+      );
+      const responseFile = await writeSecureTempFile(tempDirectory, 'response.json', '');
 
       // Send CALL command with function name
       // Note: PythonShell.send() adds newline automatically in 'text' mode
@@ -271,12 +155,12 @@ export class PythonWorker {
 
       // Wait for DONE
       await new Promise<unknown>((resolve, reject) => {
-        this.pendingRequest = { resolve, reject };
+        this.pendingRequest = { responseFile, resolve, reject };
       });
 
-      // Read response with exponential backoff retry
-      // Python verifies file readability before sending DONE, but OS-level delays may still occur
-      let responseData: string;
+      // Read response with exponential backoff retry.
+      // Python verifies file readability before sending DONE, but OS-level delays may still occur.
+      let responseData: string | undefined;
       let lastError: unknown;
 
       // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms, 2048ms, 4096ms, 5000ms (capped)...
@@ -285,38 +169,39 @@ export class PythonWorker {
         try {
           responseData = await fs.readFile(responseFile, 'utf-8');
           if (attempt > 0) {
-            logger.debug(`Response file read succeeded on attempt ${attempt + 1} after ${delay}ms`);
+            logger.debug(`Response file read succeeded on attempt ${attempt + 1}`);
           }
           break;
         } catch (error: unknown) {
           lastError = error;
           if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-            // File doesn't exist yet, wait and retry with exponential backoff
+            // File doesn't exist yet, wait and retry with exponential backoff.
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
-          // Non-ENOENT error, don't retry
+          // Non-ENOENT error, don't retry.
           throw error;
         }
       }
 
       // If we exhausted all retries, throw with debugging info
-      if (!responseData!) {
-        const tempDir = path.dirname(responseFile);
+      if (!responseData) {
         try {
-          const files = (await fs.readdir(tempDir)).filter((f) =>
-            f.startsWith('promptfoo-worker-'),
-          );
+          const files = await fs.readdir(tempDirectory);
           logger.error(
-            `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
+            `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in temporary directory: ${files.join(', ')}`,
           );
         } catch {
-          logger.error(`Failed to read response file: ${responseFile}`);
+          logger.error(
+            `Failed to read Python worker response file: ${path.basename(responseFile)}`,
+          );
         }
-        throw lastError;
+        throw lastError instanceof Error
+          ? lastError
+          : new Error('Python worker response file was empty after completion signal');
       }
 
-      const response = JSON.parse(responseData!);
+      const response = JSON.parse(responseData);
 
       if (response.type === 'error') {
         throw new Error(`Python error: ${response.error}\n${response.traceback || ''}`);
@@ -324,18 +209,13 @@ export class PythonWorker {
 
       return response.data;
     } finally {
-      // Cleanup temp files
-      await Promise.all(
-        [requestFile, responseFile].map(async (file) => {
-          try {
-            await fs.unlink(file);
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              logger.error(`Error removing ${file}: ${error}`);
-            }
-          }
-        }),
-      );
+      if (tempDirectory) {
+        try {
+          await removeSecureTempDirectory(tempDirectory);
+        } catch (error) {
+          logger.error(`Error removing temporary Python worker directory: ${error}`);
+        }
+      }
     }
   }
 
@@ -349,11 +229,19 @@ export class PythonWorker {
     });
   }
 
-  private handleDone(): void {
-    if (this.pendingRequest) {
+  private handleDone(responseFile: string): void {
+    const normalizedResponseFile = responseFile.replace(/[\r\n]+$/, '');
+    if (this.pendingRequest?.responseFile === normalizedResponseFile) {
       this.pendingRequest.resolve(undefined);
       this.pendingRequest = null;
+      return;
     }
+    // Either no request is in flight, or the path does not match the one we
+    // dispatched. Do not record either path: the received marker is
+    // provider-controlled and the pending path belongs to a private temp dir.
+    logger.debug('Python worker ignored DONE marker that did not match the in-flight request', {
+      hasPendingRequest: this.pendingRequest !== null,
+    });
   }
 
   private handleCrash(): void {

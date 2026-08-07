@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import path from 'path';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -8,17 +9,22 @@ import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
-import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { HttpProvider } from '../../providers/http';
-import { loadApiProvider, loadApiProviders } from '../../providers/index';
+import { loadApiProvider, loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { getCloudTargetIdFromProviders } from '../remoteGenerationContextFromProviders';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
@@ -34,6 +40,7 @@ const TargetPurposeDiscoveryStateSchema = z.object({
 export const TargetPurposeDiscoveryRequestSchema = z.object({
   state: TargetPurposeDiscoveryStateSchema,
   task: z.literal('target-purpose-discovery'),
+  targetId: z.string().optional(),
   version: z.string(),
   email: z.string().optional().nullable(),
 });
@@ -86,6 +93,8 @@ export type TargetPurposeDiscoveryResult = z.infer<typeof TargetPurposeDiscovery
 
 type Args = z.infer<typeof ArgsSchema>;
 
+type DiscoveryProviderConfig = NonNullable<UnifiedConfig['providers']>;
+
 // ========================================================
 // Constants
 // ========================================================
@@ -98,6 +107,27 @@ const COMMAND = 'discover';
 // ========================================================
 // Utils
 // ========================================================
+
+/**
+ * Expands provider file references and derives context from the first provider that discovery uses.
+ */
+export function resolveDiscoveryProviderContext(
+  providers: DiscoveryProviderConfig,
+  basePath?: string,
+): {
+  providers: DiscoveryProviderConfig;
+  cloudTargetId?: string;
+} {
+  const resolvedProviders = resolveProviderConfigs(providers, { basePath });
+  const selectedProvider = Array.isArray(resolvedProviders)
+    ? resolvedProviders[0]
+    : resolvedProviders;
+
+  return {
+    providers: resolvedProviders,
+    cloudTargetId: getCloudTargetIdFromProviders(selectedProvider),
+  };
+}
 
 // Helper function to check if a string value should be considered null
 const isNullLike = (value: string | null | undefined): boolean => {
@@ -183,12 +213,14 @@ async function buildRemoteErrorFromResponse(response: Response): Promise<Error> 
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
  * @param showProgress - Whether to show the progress bar.
+ * @param targetId - Cloud target database ID used to resolve target-owned task context.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
   showProgress: boolean = true,
+  targetId?: string,
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
@@ -196,7 +228,7 @@ export async function doTargetPurposeDiscovery(
   let pbar: cliProgress.SingleBar | undefined;
   if (showProgress) {
     pbar = new cliProgress.SingleBar({
-      format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+      format: 'Mapping the target {bar} {percentage}% | {value}/{total} turns',
       barCompleteChar: '\u2588',
       barIncompleteChar: '\u2591',
       hideCursor: true,
@@ -215,108 +247,108 @@ export async function doTargetPurposeDiscovery(
   });
   let turn = 0;
 
-  while (!done && turn < MAX_TURN_COUNT) {
-    try {
-      turn++;
+  try {
+    while (!done && turn < MAX_TURN_COUNT) {
+      try {
+        turn++;
 
-      logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
+        logger.debug(`${LOG_PREFIX} Discovery loop turn: ${turn}`);
 
-      const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${cloudConfig.getApiKey()}`,
-        },
-        body: JSON.stringify(
-          TargetPurposeDiscoveryRequestSchema.parse({
-            state: {
-              currentQuestionIndex: state.currentQuestionIndex,
-              answers: state.answers,
-            },
-            task: 'target-purpose-discovery',
-            version: VERSION,
-            email: getUserEmail(),
-          }),
-        ),
-      });
-
-      if (!response.ok) {
-        throw await buildRemoteErrorFromResponse(response);
-      }
-
-      const responseData = await response.json();
-      const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
-
-      logger.debug(
-        `${LOG_PREFIX} Received response from remote server: ${JSON.stringify(data, null, 2)}`,
-      );
-
-      done = data.done;
-      question = data.question;
-      discoveryResult = data.purpose;
-      state = data.state;
-
-      if (data.error) {
-        const errorMessage = `Error from remote server: ${data.error}`;
-        logger.error(`${LOG_PREFIX} ${errorMessage}`);
-        throw new Error(errorMessage);
-      }
-      // Should another question be asked?
-      else if (!done) {
-        invariant(question, 'Question should always be defined if `done` is falsy.');
-
-        const renderedPrompt = prompt
-          ? await renderPrompt(prompt, { prompt: question }, {}, target)
-          : question;
-
-        const targetResponse = await target.callApi(renderedPrompt, {
-          prompt: { raw: question, label: 'Target Discovery Question' },
-          vars: { sessionId },
-          bustCache: true,
+        const response = await fetchWithProxy(getRemoteGenerationUrl(), {
+          method: 'POST',
+          // Auth is injected centrally at the fetch layer for the configured cloud
+          // origin only, so the saved token is never sent to a custom
+          // PROMPTFOO_REMOTE_GENERATION_URL.
+          headers: getRemoteGenerationHeaders(),
+          body: JSON.stringify(
+            TargetPurposeDiscoveryRequestSchema.parse({
+              state: {
+                currentQuestionIndex: state.currentQuestionIndex,
+                answers: state.answers,
+              },
+              task: 'target-purpose-discovery',
+              ...remoteGenerationContextPayload(targetId),
+              version: VERSION,
+              email: getUserEmail(),
+            }),
+          ),
         });
 
-        if (targetResponse.error) {
-          const errorMessage = `Error from target: ${targetResponse.error}`;
-          logger.error(`${LOG_PREFIX} ${errorMessage}`);
-          throw new Error(errorMessage);
+        if (!response.ok) {
+          throw await buildRemoteErrorFromResponse(response);
         }
 
-        if (turn > MAX_TURN_COUNT) {
-          const errorMessage = `Too many retries, giving up.`;
-          logger.error(`${LOG_PREFIX} ${errorMessage}`);
-          throw new Error(errorMessage);
-        }
+        const responseData = await response.json();
+        const data = TargetPurposeDiscoveryTaskResponseSchema.parse(responseData);
 
         logger.debug(
-          `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
+          `${LOG_PREFIX} Received response from remote server: ${JSON.stringify(data, null, 2)}`,
         );
 
-        // If the target is an HTTP provider and has no transformResponse defined, and the response is an object,
-        // prompt the user to define a transformResponse.
-        if (
-          target instanceof HttpProvider &&
-          target.config.transformResponse === undefined &&
-          typeof targetResponse.output === 'object' &&
-          targetResponse.output !== null
-        ) {
-          logger.warn(
-            `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` function be defined?`,
-          );
-        }
+        done = data.done;
+        question = data.question;
+        discoveryResult = data.purpose;
+        state = data.state;
 
-        state.answers.push(targetResponse.output);
-      }
-    } finally {
-      if (showProgress) {
+        if (data.error) {
+          const errorMessage = `Error from remote server: ${data.error}`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+        // Should another question be asked?
+        else if (!done) {
+          invariant(question, 'Question should always be defined if `done` is falsy.');
+
+          if (turn >= MAX_TURN_COUNT) {
+            const errorMessage = `Too many retries, giving up.`;
+            logger.error(`${LOG_PREFIX} ${errorMessage}`);
+            throw new Error(errorMessage);
+          }
+
+          const renderedPrompt = prompt
+            ? await renderPrompt(prompt, { prompt: question }, {}, target)
+            : question;
+
+          const targetResponse = await target.callApi(renderedPrompt, {
+            prompt: { raw: question, label: 'Target Discovery Question' },
+            vars: { sessionId },
+            bustCache: true,
+          });
+
+          if (targetResponse.error) {
+            const errorMessage = `Error from target: ${targetResponse.error}`;
+            logger.error(`${LOG_PREFIX} ${errorMessage}`);
+            throw new Error(errorMessage);
+          }
+
+          logger.debug(
+            `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
+          );
+
+          // If the target is an HTTP provider and has no transformResponse defined, and the response is an object,
+          // prompt the user to define a transformResponse.
+          if (
+            target instanceof HttpProvider &&
+            target.config.transformResponse === undefined &&
+            typeof targetResponse.output === 'object' &&
+            targetResponse.output !== null
+          ) {
+            logger.warn(
+              `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` function be defined?`,
+            );
+          }
+
+          state.answers.push(targetResponse.output);
+        }
+      } finally {
         pbar?.increment(1);
       }
     }
-  }
-  if (showProgress) {
+
+    return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
+  } finally {
     pbar?.stop();
   }
-
-  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
 }
 
 // ========================================================
@@ -374,6 +406,7 @@ export function discoverCommand(
       // Although the providers/targets property supports multiple values, Redteaming only supports
       // a single target at a time.
       let target: ApiProvider | undefined = undefined;
+      let cloudTargetId: string | undefined;
       // Fallback to the default config path:
 
       // If user provides a config, read the target from it:
@@ -400,28 +433,33 @@ export function discoverCommand(
           throw new Error('Config must contain a target');
         }
 
-        const providers = await loadApiProviders(config.providers);
+        const basePath = path.dirname(path.resolve(args.config));
+        const resolved = resolveDiscoveryProviderContext(config.providers, basePath);
+        const providers = await loadApiProviders(resolved.providers, { basePath });
 
         target = providers[0];
+        cloudTargetId = resolved.cloudTargetId;
       }
       // If the target flag is provided, load it from Cloud:
       else if (args.target) {
         // Let the internal error handling bubble up:
         const providerOptions = await getProviderFromCloud(args.target);
         target = await loadApiProvider(providerOptions.id, { options: providerOptions });
+        cloudTargetId = args.target;
       }
       // Check the current working directory for a promptfooconfig.yaml file:
       else if (defaultConfig) {
-        if (!defaultConfig) {
-          throw new Error(`Config is invalid at ${defaultConfigPath}`);
-        }
-
         if (!defaultConfig.providers) {
           throw new Error('Config must contain a target or provider');
         }
 
-        const providers = await loadApiProviders(defaultConfig.providers);
+        const basePath = defaultConfigPath
+          ? path.dirname(path.resolve(defaultConfigPath))
+          : undefined;
+        const resolved = resolveDiscoveryProviderContext(defaultConfig.providers, basePath);
+        const providers = await loadApiProviders(resolved.providers, { basePath });
         target = providers[0];
+        cloudTargetId = resolved.cloudTargetId;
 
         // Alert the user that we're using a config from the current working directory:
         logger.info(`Using config from ${chalk.italic(defaultConfigPath)}`);
@@ -434,7 +472,12 @@ export function discoverCommand(
       }
 
       try {
-        const discoveryResult = await doTargetPurposeDiscovery(target);
+        const discoveryResult = await doTargetPurposeDiscovery(
+          target,
+          undefined,
+          true,
+          cloudTargetId,
+        );
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {

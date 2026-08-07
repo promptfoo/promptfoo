@@ -1,5 +1,3 @@
-import fs from 'fs';
-
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getSysExecutable,
@@ -9,32 +7,19 @@ import {
   validatePythonPath,
 } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../../src/util/secureTempFiles';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/esm');
 vi.mock('python-shell');
-const fsMock = vi.hoisted(() => ({
-  writeFileSync: vi.fn(),
-  readFileSync: vi.fn(),
-  unlinkSync: vi.fn(),
-}));
-
-vi.mock('fs', () => {
-  return {
-    ...fsMock,
-    default: fsMock,
-  };
-});
-
-vi.mock('fs/promises', () => ({
-  default: {
-    writeFile: fsMock.writeFileSync,
-    readFile: fsMock.readFileSync,
-    unlink: fsMock.unlinkSync,
-  },
-  writeFile: fsMock.writeFileSync,
-  readFile: fsMock.readFileSync,
-  unlink: fsMock.unlinkSync,
+vi.mock('../../src/util/secureTempFiles', () => ({
+  createSecureTempDirectory: vi.fn(),
+  removeSecureTempDirectory: vi.fn(),
+  writeSecureTempFile: vi.fn(),
 }));
 vi.mock('../../src/python/pythonUtils', async () => {
   const originalModule = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
@@ -72,7 +57,11 @@ describe('wrapper', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.values(fsMock).forEach((mock) => mock.mockReset());
+    vi.mocked(createSecureTempDirectory).mockResolvedValue('/tmp/promptfoo-python-code-test');
+    vi.mocked(removeSecureTempDirectory).mockResolvedValue(undefined);
+    vi.mocked(writeSecureTempFile).mockImplementation(
+      async (directory: string, filename: string) => `${directory}/${filename}`,
+    );
     vi.mocked(validatePythonPath).mockImplementation(
       (pythonPath: string, _isExplicit: boolean): Promise<string> => {
         state.cachedPythonPath = pythonPath;
@@ -82,38 +71,36 @@ describe('wrapper', () => {
   });
   describe('runPythonCode', () => {
     it('should clean up the temporary files after execution', async () => {
-      const mockWriteFileSync = vi.fn();
-      const mockUnlinkSync = vi.fn();
       const mockRunPython = vi.fn().mockResolvedValue('cleanup test');
-      vi.spyOn(fs, 'writeFileSync').mockImplementation(mockWriteFileSync);
-      vi.spyOn(fs, 'unlinkSync').mockImplementation(mockUnlinkSync);
       vi.mocked(runPython).mockImplementation(mockRunPython);
       await runPythonCode('print("cleanup test")', 'main', []);
-      expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
-      expect(mockWriteFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('temp-python-code-'),
+      expect(createSecureTempDirectory).toHaveBeenCalledWith('promptfoo-python-code-');
+      expect(writeSecureTempFile).toHaveBeenCalledWith(
+        '/tmp/promptfoo-python-code-test',
+        'script.py',
         'print("cleanup test")',
       );
       expect(mockRunPython).toHaveBeenCalledTimes(1);
       expect(mockRunPython).toHaveBeenCalledWith(
-        expect.stringContaining('temp-python-code-'),
+        '/tmp/promptfoo-python-code-test/script.py',
         'main',
         [],
       );
-      expect(mockUnlinkSync).toHaveBeenCalledTimes(1);
-      expect(mockUnlinkSync).toHaveBeenCalledWith(expect.stringContaining('temp-python-code-'));
+      expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-python-code-test');
     });
     it('should execute Python code from a string and read the output file', async () => {
       const mockOutput = { type: 'final_result', data: 'execution result' };
-      vi.spyOn(fs, 'writeFileSync').mockReturnValue();
-      vi.spyOn(fs, 'unlinkSync').mockReturnValue();
       const mockRunPython = vi.mocked(runPython);
       mockRunPython.mockResolvedValue(mockOutput.data);
       const code = 'print("Hello, world!")';
       const result = await runPythonCode(code, 'main', []);
       expect(result).toBe('execution result');
       expect(mockRunPython).toHaveBeenCalledWith(expect.stringContaining('.py'), 'main', []);
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expect.stringContaining('.py'), code);
+      expect(writeSecureTempFile).toHaveBeenCalledWith(
+        '/tmp/promptfoo-python-code-test',
+        'script.py',
+        code,
+      );
     });
   });
   describe('validatePythonPath race conditions', () => {

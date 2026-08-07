@@ -11,7 +11,7 @@ const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
 // Normalize the package.json engines range into comparator sets that the zero-dependency
 // CLI entrypoint can evaluate before importing any other modules.
-const enginesNode: string = packageJson.engines?.node ?? '>=20.0.0';
+const enginesNode: string = packageJson.engines?.node ?? '>=22.22.0';
 let nodeEngineComparatorSets: Array<
   Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
 >;
@@ -24,9 +24,9 @@ try {
   );
 } catch {
   console.warn(
-    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=20.0.0.`,
+    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=22.22.0.`,
   );
-  nodeEngineComparatorSets = [[{ operator: '>=', version: '20.0.0' }]];
+  nodeEngineComparatorSets = [[{ operator: '>=', version: '22.22.0' }]];
 }
 
 // Build-time constants injected into all builds
@@ -46,7 +46,7 @@ export default defineConfig([
   {
     entry: { 'server/index': 'src/server/index.ts' },
     format: ['esm'],
-    target: 'node20',
+    target: 'node22',
     outDir: 'dist/src',
     shims: true,
     sourcemap: true,
@@ -67,7 +67,7 @@ export default defineConfig([
   {
     entry: ['src/entrypoint.ts', 'src/main.ts'],
     format: ['esm'],
-    target: 'node20',
+    target: 'node22',
     outDir: 'dist/src',
     clean: false,
     shims: true, // Provides __dirname, __filename shims automatically
@@ -87,7 +87,6 @@ export default defineConfig([
       /^[a-z@][^:]*/,
       // Ensure critical native deps remain external
       '@huggingface/transformers',
-      'better-sqlite3',
       'playwright',
       'sharp',
       '@swc/core',
@@ -97,9 +96,12 @@ export default defineConfig([
   },
   // Library ESM build
   {
-    entry: ['src/index.ts'],
+    entry: {
+      contracts: 'src/contracts.ts',
+      index: 'src/index.ts',
+    },
     format: ['esm'],
-    target: 'node20',
+    target: 'node22',
     outDir: 'dist/src',
     treeshake: true,
     sourcemap: true,
@@ -119,9 +121,12 @@ export default defineConfig([
   },
   // Library CJS build for compatibility
   {
-    entry: ['src/index.ts'],
+    entry: {
+      contracts: 'src/contracts.ts',
+      index: 'src/index.ts',
+    },
     format: ['cjs'],
-    target: 'node20',
+    target: 'node22',
     outDir: 'dist/src',
     sourcemap: true,
     clean: false,

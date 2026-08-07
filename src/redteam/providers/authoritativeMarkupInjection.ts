@@ -6,7 +6,12 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 
 import type {
@@ -19,6 +24,7 @@ import type {
 
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;
+  targetId?: string;
 }
 
 export default class AuthoritativeMarkupInjectionProvider implements ApiProvider {
@@ -31,6 +37,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
   constructor(
     options: ProviderOptions & {
       injectVar?: string;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -41,6 +48,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.config = {
       injectVar: options.injectVar,
+      targetId: options.targetId,
     };
     logger.debug('[AuthoritativeMarkupInjection] Constructor options', {
       injectVar: options.injectVar,
@@ -66,6 +74,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       i: 0,
       prompt: context?.prompt?.raw,
       task: 'authoritative-markup-injection',
+      ...remoteGenerationContextPayload(this.config.targetId),
       version: VERSION,
       email: getUserEmail(),
       purpose: context?.test?.metadata?.purpose,
@@ -79,9 +88,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       getRemoteGenerationUrl(),
       {
         body,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         method: 'POST',
       },
       options?.abortSignal,

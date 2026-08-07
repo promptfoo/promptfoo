@@ -41,11 +41,13 @@ Swahili,Hello world,similar(0.8):hello world
 
 For private sheets, you'll need to set up Google's Default Application Credentials:
 
-1. **Install Peer Dependencies**
+1. **Install the authenticated Sheets package**
 
    ```bash
-   npm install googleapis
+   npm install @googleapis/sheets
    ```
+
+   `@googleapis/sheets` is an optional runtime dependency. Public-sheet CSV imports do not need it, but private-sheet reads and Google Sheets output writes do.
 
 2. **Set Up Authentication**
    - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud

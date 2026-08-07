@@ -1,9 +1,10 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { PythonWorker } from '../../src/python/worker';
+import { MAX_STDERR_BUFFER_LENGTH, PythonWorker } from '../../src/python/worker';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -28,11 +29,20 @@ const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe
 
 type TestablePythonWorker = {
   flushStderr(): void;
+  handleDone(responseFile: string): void;
   handleStderr(data: Buffer | string): void;
+  pendingRequest: {
+    responseFile: string;
+    resolve: (result: unknown) => void;
+    reject: (error: Error) => void;
+  } | null;
 };
 
 function createTestableWorker() {
-  return new PythonWorker('/tmp/provider.py', 'call_api') as unknown as TestablePythonWorker;
+  return new PythonWorker(
+    path.join(os.tmpdir(), 'provider.py'),
+    'call_api',
+  ) as unknown as TestablePythonWorker;
 }
 
 describe('PythonWorker stderr parsing', () => {
@@ -273,11 +283,25 @@ describe('PythonWorker stderr parsing', () => {
 
   it('bounds an unterminated stderr buffer', () => {
     const worker = createTestableWorker();
-    const longLine = 'x'.repeat(16_384);
+    const longLine = 'x'.repeat(MAX_STDERR_BUFFER_LENGTH);
 
     worker.handleStderr(longLine);
 
     expect(logger.warn).toHaveBeenCalledWith(`Python worker stderr: ${longLine}`);
+  });
+});
+
+describe('PythonWorker completion markers', () => {
+  it('accepts a valid response path terminated by a carriage return', () => {
+    const worker = createTestableWorker();
+    const responseFile = path.join(os.tmpdir(), 'response.json');
+    const resolve = vi.fn();
+
+    worker.pendingRequest = { responseFile, resolve, reject: vi.fn() };
+    worker.handleDone(`${responseFile}\r`);
+
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(worker.pendingRequest).toBeNull();
   });
 });
 
@@ -289,6 +313,9 @@ describeOrSkip('PythonWorker', () => {
   let wrongNameWorker: PythonWorker;
   let embeddingsOnlyWorker: PythonWorker;
   let loggingWorker: PythonWorker;
+  let protocolCollisionWorker: PythonWorker;
+  let forgedMarkerWorker: PythonWorker;
+  let noNewlineWorker: PythonWorker;
   const fixturesDir = path.join(__dirname, 'fixtures');
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
   const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
@@ -297,14 +324,15 @@ describeOrSkip('PythonWorker', () => {
   const wrongNamePath = path.join(__dirname, 'fixtures', 'test_wrong_function_name.py');
   const embeddingsOnlyPath = path.join(__dirname, 'fixtures', 'test_embeddings_only.py');
   const loggingPath = path.join(__dirname, 'fixtures', 'logging_provider.py');
+  const protocolCollisionPath = path.join(__dirname, 'fixtures', 'protocol_collision_provider.py');
+  const forgedMarkerPath = path.join(__dirname, 'fixtures', 'forged_marker_provider.py');
+  const noNewlinePath = path.join(__dirname, 'fixtures', 'no_trailing_newline_provider.py');
 
   beforeAll(async () => {
     // Create test fixture
-    if (!fs.existsSync(fixturesDir)) {
-      fs.mkdirSync(fixturesDir, { recursive: true });
-    }
+    await fs.promises.mkdir(fixturesDir, { recursive: true });
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       testScriptPath,
       `
 def call_api(prompt, options, context):
@@ -312,7 +340,7 @@ def call_api(prompt, options, context):
 `,
     );
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       multiApiPath,
       `
 def call_api(prompt, options, context):
@@ -326,7 +354,7 @@ def call_classification_api(prompt, options, context):
 `,
     );
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       errorPath,
       `
 def call_api(prompt, options, context):
@@ -338,7 +366,7 @@ def call_api(prompt, options, context):
 
     // Uses Python's default logging format (LEVEL:name:message) so the test
     // exercises what real providers emit when they don't customize logging.
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       loggingPath,
       `
 import logging
@@ -352,6 +380,56 @@ def call_api(prompt, options, context):
 `,
     );
 
+    await fs.promises.writeFile(
+      protocolCollisionPath,
+      `
+import time
+
+def call_api(prompt, options, context):
+    print("DONE", flush=True)
+    time.sleep(0.02)
+    return {"output": f"Completed: {prompt}"}
+`,
+    );
+
+    // Emits a DONE| line with attacker-controlled content. The wrapper's real
+    // DONE|<response_file> message must still resolve the request, and the
+    // unrelated marker must be ignored without being repeated in logs.
+    await fs.promises.writeFile(
+      forgedMarkerPath,
+      `
+import time
+
+def call_api(prompt, options, context):
+    print("DONE|sensitive-provider-marker", flush=True)
+    time.sleep(0.02)
+    return {"output": f"Completed: {prompt}"}
+`,
+    );
+
+    // Leaves the stdout cursor mid-line at import time and per call. Pre-fix,
+    // the wrapper's READY / DONE|<path> markers glued onto the partial line
+    // ("loading moduleREADY", "...DONE|/path"), Node's line-anchored matches
+    // never fired, and init/calls hung until their timeouts.
+    await fs.promises.writeFile(
+      noNewlinePath,
+      `
+import sys
+
+sys.stdout.write("loading module")
+
+def call_api(prompt, options, context):
+    sys.stdout.write(f"partial output for {prompt}")
+    return {"output": f"Completed: {prompt}"}
+`,
+    );
+
+    await Promise.all([
+      fs.promises.access(nonexistentPath),
+      fs.promises.access(wrongNamePath),
+      fs.promises.access(embeddingsOnlyPath),
+    ]);
+
     sharedWorker = new PythonWorker(testScriptPath, 'call_api');
     multiApiWorker = new PythonWorker(multiApiPath, 'call_api');
     errorWorker = new PythonWorker(errorPath, 'call_api');
@@ -359,6 +437,9 @@ def call_api(prompt, options, context):
     wrongNameWorker = new PythonWorker(wrongNamePath, 'call_api');
     embeddingsOnlyWorker = new PythonWorker(embeddingsOnlyPath, 'call_api');
     loggingWorker = new PythonWorker(loggingPath, 'call_api');
+    protocolCollisionWorker = new PythonWorker(protocolCollisionPath, 'call_api');
+    forgedMarkerWorker = new PythonWorker(forgedMarkerPath, 'call_api');
+    noNewlineWorker = new PythonWorker(noNewlinePath, 'call_api');
 
     await Promise.all([
       sharedWorker.initialize(),
@@ -368,6 +449,9 @@ def call_api(prompt, options, context):
       wrongNameWorker.initialize(),
       embeddingsOnlyWorker.initialize(),
       loggingWorker.initialize(),
+      protocolCollisionWorker.initialize(),
+      forgedMarkerWorker.initialize(),
+      noNewlineWorker.initialize(),
     ]);
   });
 
@@ -381,12 +465,23 @@ def call_api(prompt, options, context):
         wrongNameWorker,
         embeddingsOnlyWorker,
         loggingWorker,
+        protocolCollisionWorker,
+        forgedMarkerWorker,
+        noNewlineWorker,
       ]
         .filter((worker): worker is PythonWorker => Boolean(worker))
         .map((worker) => worker.shutdown()),
     );
 
-    for (const fixturePath of [testScriptPath, multiApiPath, errorPath, loggingPath]) {
+    for (const fixturePath of [
+      testScriptPath,
+      multiApiPath,
+      errorPath,
+      loggingPath,
+      protocolCollisionPath,
+      forgedMarkerPath,
+      noNewlinePath,
+    ]) {
       if (fs.existsSync(fixturePath)) {
         fs.unlinkSync(fixturePath);
       }
@@ -466,6 +561,64 @@ def call_api(prompt, options, context):
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Python worker stderr: INFO:root:provider startup details'),
       );
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should not treat provider stdout as a response completion marker',
+    async () => {
+      const result = (await protocolCollisionWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+      const secondResult = (await protocolCollisionWorker.call('call_api', ['again', {}, {}])) as {
+        output: string;
+      };
+
+      expect(result.output).toBe('Completed: hello');
+      expect(secondResult.output).toBe('Completed: again');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should ignore forged DONE| markers without logging provider-controlled content',
+    async () => {
+      const result = (await forgedMarkerWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+      const secondResult = (await forgedMarkerWorker.call('call_api', ['again', {}, {}])) as {
+        output: string;
+      };
+
+      // If the worker accepted the script's forged DONE marker,
+      // executeCall would resolve early, read the empty reserved response
+      // file, and either throw or return undefined.
+      expect(result.output).toBe('Completed: hello');
+      expect(secondResult.output).toBe('Completed: again');
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Python worker ignored DONE marker that did not match the in-flight request',
+        { hasPendingRequest: true },
+      );
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(
+        'sensitive-provider-marker',
+      );
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should complete when provider stdout ends without a trailing newline',
+    async () => {
+      const result = (await noNewlineWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+      const secondResult = (await noNewlineWorker.call('call_api', ['again', {}, {}])) as {
+        output: string;
+      };
+
+      expect(result.output).toBe('Completed: hello');
+      expect(secondResult.output).toBe('Completed: again');
     },
     TEST_TIMEOUT,
   );

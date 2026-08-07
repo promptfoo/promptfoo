@@ -41,6 +41,7 @@ The `promptfoo` command line utility includes these command groups:
   - `logs [file]`
   - `logs list`
 - `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
+- `optimize` - Improve one configured prompt against one configured provider.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
@@ -110,6 +111,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-n, --filter-first-n <number>`      | Only run the first N tests                                                                               |
 | `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
 | `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
+| `--filter-sample-seed <number>`      | Numeric seed used to make `--filter-sample` select the same tests on repeated runs                       |
 | `--filter-metadata <key=value>`      | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
 | `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
 | `--filter-prompts <pattern>`         | Only run tests with prompts whose id or label matches the regex pattern                                  |
@@ -165,6 +167,35 @@ Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3`
 When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+
+## `promptfoo optimize`
+
+Improve one configured prompt against one configured provider. The optimizer runs a baseline eval, proposes prompt candidates from observed failures and prior scores, evaluates those candidates, and prints the strongest prompt it found.
+
+```sh
+promptfoo optimize
+promptfoo optimize -c path/to/promptfooconfig.yaml
+promptfoo optimize --prompt-index 1 --provider-index 0
+promptfoo optimize --validation-split 0.2
+```
+
+The default config is loaded implicitly when `-c` is omitted. Optimization
+targets one resolved prompt/provider pair at a time.
+
+| Option                          | Description                                                                                                  | Default                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `-c, --config <path>`           | Path to the configuration file                                                                               | `promptfooconfig.yaml` |
+| `--prompt-index <index>`        | Zero-based resolved prompt index to optimize                                                                 | `0`                    |
+| `--provider-index <index>`      | Zero-based resolved provider index to optimize against                                                       | `0`                    |
+| `--validation-split <fraction>` | Hold out up to half of the configured test cases for validation scoring while search uses the remaining set. | none                   |
+
+When `--validation-split` is omitted, optimization uses the full eval set and
+may overfit to the configured cases.
+Validation splitting requires explicit `tests`; configs that use `scenarios`
+must be expanded into explicit test cases first.
+
+See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
+target selection details, and validation split recommendations.
 
 ### Pause and Resume
 
@@ -865,21 +896,30 @@ Start browser UI and open to red team setup.
 
 Run the complete red teaming process (init, generate, and evaluate).
 
-| Option                                             | Description                                                             | Default              |
-| -------------------------------------------------- | ----------------------------------------------------------------------- | -------------------- |
-| `-c, --config [path]`                              | Path to configuration file                                              | promptfooconfig.yaml |
-| `-o, --output [path]`                              | Path to output file for generated tests                                 | redteam.yaml         |
-| `-d, --description <text>`                         | Custom description/name for this scan run                               |                      |
-| `--no-cache`                                       | Do not read or write results to disk cache                              | false                |
-| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                  |                      |
-| `--delay <number>`                                 | Delay in milliseconds between API calls                                 |                      |
-| `--remote`                                         | Force remote inference wherever possible                                | false                |
-| `--force`                                          | Force generation even if no changes are detected                        | false                |
-| `--no-progress-bar`                                | Do not show progress bar                                                |                      |
-| `--strict`                                         | Fail if any plugins fail to generate test cases                         | false                |
-| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern |                      |
-| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                       |                      |
-| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                             |                      |
+| Option                                             | Description                                                                      | Default              |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| `-c, --config [path]`                              | Path to configuration file                                                       | promptfooconfig.yaml |
+| `-o, --output [path]`                              | Path to output file for generated tests                                          | redteam.yaml         |
+| `-d, --description <text>`                         | Custom description/name for this scan run                                        |                      |
+| `--tag <key=value>`                                | Set an eval tag. Can be specified multiple times; CLI tags override config tags. |                      |
+| `--no-cache`                                       | Do not read or write results to disk cache                                       | false                |
+| `-j, --max-concurrency <number>`                   | Maximum number of concurrent API calls                                           |                      |
+| `--delay <number>`                                 | Delay in milliseconds between API calls                                          |                      |
+| `--remote`                                         | Force remote inference wherever possible                                         | false                |
+| `--force`                                          | Force generation even if no changes are detected                                 | false                |
+| `--no-progress-bar`                                | Do not show progress bar                                                         |                      |
+| `--strict`                                         | Fail if any plugins fail to generate test cases                                  | false                |
+| `--filter-prompts <pattern>`                       | Only run tests with prompts whose id or label matches the regex pattern          |                      |
+| `--filter-providers, --filter-targets <providers>` | Only run tests with these providers (regex match)                                |                      |
+| `-t, --target <id>`                                | Cloud provider target ID to run the scan on                                      |                      |
+
+Use `--tag` to attach CI/CD context to the evaluation result without changing the
+scan template or generated `redteam.yaml`. CLI tags override matching tags from the
+configuration and are included when the eval is shared.
+
+```sh
+promptfoo redteam run --tag ci.run-id=$CI_RUN_ID --tag git.sha=$GIT_COMMIT
+```
 
 ## `promptfoo redteam discover`
 
@@ -959,7 +999,8 @@ Generate poisoned documents for RAG testing.
 
 ## `promptfoo redteam eval`
 
-Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `redteam.yaml`.
+Works the same as [`promptfoo eval`](#promptfoo-eval), including repeatable `--tag`
+options for run-specific labels, but defaults to loading `redteam.yaml`.
 
 ## `promptfoo redteam report`
 
@@ -1047,6 +1088,7 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` | Disables supported Promptfoo-hosted red team generation paths, including red team target/provider setup helpers that rely on remote generation, while leaving non-red-team hosted generation, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, sharing, telemetry, account, and Cloud-backed controls unchanged. Example: `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`                                                                | `false`                       |
 | `PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS`         | Disables OS environment variables in templates. When true, only config `env:` variables are available in templates.                                                                                                                                                                                                                                                                                                                                                                                              | `false` (true in self-hosted) |
 | `PROMPTFOO_DISABLE_TEMPLATING`                | Disables Nunjucks template processing                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `false`                       |
+| `PROMPTFOO_DISABLE_UPDATE`                    | Disables automatic update availability checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `false`                       |
 | `PROMPTFOO_DISABLE_VAR_EXPANSION`             | Prevents Array-type vars from being expanded into multiple test cases                                                                                                                                                                                                                                                                                                                                                                                                                                            |                               |
 | `PROMPTFOO_FAILED_TEST_EXIT_CODE`             | Override the exit code when there is at least 1 test case failure or when the pass rate is below PROMPTFOO_PASS_RATE_THRESHOLD                                                                                                                                                                                                                                                                                                                                                                                   | 100                           |
 | `PROMPTFOO_LOG_DIR`                           | Directory to write log files (both debug and error logs). Overrides the default `~/.promptfoo/logs` directory.                                                                                                                                                                                                                                                                                                                                                                                                   | `~/.promptfoo/logs`           |
@@ -1060,6 +1102,8 @@ These general-purpose environment variables are supported:
 | `PROMPTFOO_STRIP_PROMPT_TEXT`                 | Strip prompt text from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                            | false                         |
 | `PROMPTFOO_STRIP_RESPONSE_OUTPUT`             | Strip model response outputs from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                 | false                         |
 | `PROMPTFOO_STRIP_TEST_VARS`                   | Strip test variables from results to reduce memory usage                                                                                                                                                                                                                                                                                                                                                                                                                                                         | false                         |
+| `PROMPTFOO_OFFICIAL_DOCKER_IMAGE`             | Internal marker for upstream official-image update guidance. Official Promptfoo builds set this automatically, and derived images inherit it. The inherited guidance includes the extra rebuild step; set it to `false` in a derived image for tailored custom-image guidance.                                                                                                                                                                                                                                   | `false`                       |
+| `PROMPTFOO_RUNNING_IN_DOCKER`                 | Internal marker for container-aware update guidance. The Promptfoo Dockerfile sets this automatically. Other custom Dockerfiles that bake Promptfoo into an image must set it to `true` to receive rebuild-and-redeploy guidance instead of package-manager commands.                                                                                                                                                                                                                                            | `false`                       |
 | `PROMPTFOO_SELF_HOSTED`                       | Enables self-hosted mode. When true, disables OS environment variables in templates (only config `env:` values available), disables telemetry, and modifies other behaviors for controlled environments                                                                                                                                                                                                                                                                                                          | `false`                       |
 
 :::tip

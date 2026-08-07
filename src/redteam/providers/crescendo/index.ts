@@ -19,6 +19,7 @@ import {
   materializeInputVariablesWithMetadata,
 } from '../../inputVariables';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -222,6 +223,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
           // Pass inputs schema for multi-input mode
           inputs: this.config.inputs,
         });
@@ -243,6 +245,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         // Don't pass explicit provider - let getGradingProvider check CLI --grader first
@@ -496,6 +499,7 @@ export class CrescendoProvider implements ApiProvider {
           lastResponse: lastResponse.output,
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
+          targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -589,8 +593,11 @@ export class CrescendoProvider implements ApiProvider {
                 (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
               : undefined;
 
-            // Build grading context with tracing and exfil tracking data
-            let gradingContext: RedteamGradingContext | undefined;
+            // Build grading context with image outputs, tracing, and exfil tracking data.
+            let gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: lastResponse,
+              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
 
             // First try to get exfil data from provider response metadata (Playwright provider)
             if (lastResponse.metadata?.wasExfiltrated === undefined) {
@@ -606,6 +613,7 @@ export class CrescendoProvider implements ApiProvider {
                 const exfilData = await checkExfilTracking(webPageUuid, evalId);
                 if (exfilData) {
                   gradingContext = {
+                    ...(gradingContext ?? {}),
                     ...(tracingOptions.includeInGrading
                       ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
                       : {}),
@@ -618,6 +626,7 @@ export class CrescendoProvider implements ApiProvider {
             } else {
               logger.debug('[Crescendo] Using exfil data from provider response metadata');
               gradingContext = {
+                ...(gradingContext ?? {}),
                 ...(tracingOptions.includeInGrading
                   ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
                   : {}),
@@ -628,8 +637,9 @@ export class CrescendoProvider implements ApiProvider {
             }
 
             // Fallback to just tracing context if no exfil data found
-            if (!gradingContext && tracingOptions.includeInGrading) {
+            if (tracingOptions.includeInGrading && !gradingContext?.traceContext) {
               gradingContext = {
+                ...(gradingContext ?? {}),
                 traceContext: response.traceContext,
                 traceSummary: gradingTraceSummary,
               };
@@ -1091,6 +1101,7 @@ export class CrescendoProvider implements ApiProvider {
         this.perTurnLayers,
         Strategies,
         {
+          targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
           evaluationId: context?.evaluationId,
           testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
           purpose: context?.test?.metadata?.purpose as string | undefined,

@@ -24,7 +24,8 @@
 
 ## Quick Start
 
-Requires [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0` for npm and npx usage.
+Requires [Node.js](https://nodejs.org/en/download) `>=22.22.0` for npm and npx usage. Node.js 24 LTS
+is recommended; see the [runtime support guide](https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support).
 
 ```sh
 npm install -g promptfoo

@@ -8,15 +8,14 @@ providers:
   - id: vertex:gemini-2.5-flash
     config:
       region: us-central1
-      projectId: your-project-id # Replace with your actual project ID
       responseSchema: file://response-schema.json
 
 tests:
   - vars:
       topic: bananas
     assert:
-      - type: equals
-        value: 'Bananas are great'
+      - type: icontains
+        value: 'banana'
         transform: JSON.parse(output).tweet
 
   - vars:

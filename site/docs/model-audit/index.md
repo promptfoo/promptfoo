@@ -299,7 +299,7 @@ ModelAudit returns specific exit codes for automation:
 
 - **0**: No security issues found ✅
 - **1**: Security issues detected (warnings or critical) 🟡
-- **2**: Scan errors occurred (installation, file access, etc.) 🔴
+- **2**: Operational errors or inconclusive scans occurred (installation, file access, timeouts, no scanned files, etc.) 🔴
 
 :::tip CI/CD Best Practice
 In CI/CD pipelines, exit code 1 indicates findings that should be reviewed but don't necessarily block deployment. Only exit code 2 represents actual scan failures.

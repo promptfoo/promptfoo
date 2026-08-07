@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
@@ -55,10 +55,10 @@ export async function storeBlob(
   const result = await provider.store(data, mimeType);
 
   // Track asset and reference in DB for dedup/auth/cascade
-  const db = getDb();
+  const db = await getDb();
   try {
-    db.transaction(() => {
-      const assetInsert = db
+    await db.transaction(async (tx) => {
+      await tx
         .insert(blobAssetsTable)
         .values({
           hash: result.ref.hash,
@@ -69,9 +69,8 @@ export async function storeBlob(
         .onConflictDoNothing()
         .run();
 
-      const refInsert =
-        refContext?.evalId &&
-        db
+      if (refContext?.evalId) {
+        await tx
           .insert(blobReferencesTable)
           .values({
             id: randomUUID(),
@@ -84,9 +83,7 @@ export async function storeBlob(
           })
           .onConflictDoNothing()
           .run();
-
-      // Return a non-undefined value to satisfy Drizzle's sync transaction semantics
-      return refInsert ?? assetInsert;
+      }
     });
   } catch (error) {
     // Roll back filesystem write if DB persistence fails
@@ -107,6 +104,43 @@ export async function storeBlob(
 export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
   return provider.getByHash(hash);
+}
+
+export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
+  const db = await getDb();
+  // Result text may contain copied blob URIs, so only independently classified or imported refs
+  // authorize reading local bytes during a share.
+  const reference = await db
+    .select({ id: blobReferencesTable.id })
+    .from(blobReferencesTable)
+    .where(
+      and(
+        eq(blobReferencesTable.blobHash, hash),
+        eq(blobReferencesTable.evalId, evalId),
+        or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
+      ),
+    )
+    .get();
+
+  return Boolean(reference);
+}
+
+/**
+ * Read local blob bytes for sharing, but only when the eval has trusted provenance for
+ * the hash. Single chokepoint for every share path (remote upload and inline).
+ */
+export async function getShareAuthorizedBlob(
+  hash: string,
+  localEvalId: string,
+): Promise<StoredBlob | null> {
+  if (!(await isBlobAllowedForShare(hash, localEvalId))) {
+    logger.warn('[Share] Skipping blob reference that is not authorized for this eval', {
+      evalId: localEvalId,
+      hash,
+    });
+    return null;
+  }
+  return getBlobByHash(hash);
 }
 
 export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
@@ -139,9 +173,13 @@ export async function recordBlobReference(
     return;
   }
 
-  const db = getDb();
-  const existing = db
-    .select({ id: blobReferencesTable.id })
+  const db = await getDb();
+  const existing = await db
+    .select({
+      id: blobReferencesTable.id,
+      kind: blobReferencesTable.kind,
+      location: blobReferencesTable.location,
+    })
     .from(blobReferencesTable)
     .where(
       and(
@@ -152,10 +190,23 @@ export async function recordBlobReference(
     .get();
 
   if (existing) {
+    const strongerReference: { kind?: string; location?: string } = {
+      ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
+      ...(refContext.location === 'import' &&
+        existing.location !== 'import' && { location: 'import' }),
+    };
+    if (Object.keys(strongerReference).length > 0) {
+      await db
+        .update(blobReferencesTable)
+        .set(strongerReference)
+        .where(eq(blobReferencesTable.id, existing.id))
+        .run();
+    }
     return;
   }
 
-  db.insert(blobReferencesTable)
+  await db
+    .insert(blobReferencesTable)
     .values({
       id: randomUUID(),
       blobHash: hash,

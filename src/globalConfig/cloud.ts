@@ -1,13 +1,39 @@
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
-export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
+const CLOUD_HOSTNAMES = new Set([
+  new URL(CLOUD_API_HOST).hostname,
+  new URL('https://www.promptfoo.app').hostname,
+  new URL('https://promptfoo.app').hostname,
+]);
 
 // Free customers created before this date are grandfathered into auto-share.
 export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
+
+function isPromptfooCloudHost(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase().replace(/\.$/, '');
+    return CLOUD_HOSTNAMES.has(hostname);
+  } catch {
+    return false;
+  }
+}
+
+let hasWarnedAboutLegacyApiHost = false;
+
+function warnOnceAboutLegacyApiHost(): void {
+  if (hasWarnedAboutLegacyApiHost) {
+    return;
+  }
+  hasWarnedAboutLegacyApiHost = true;
+  logger.warn(
+    'Ignoring the API_HOST environment variable for Promptfoo Cloud routing. ' +
+      'To point at a self-hosted deployment, use PROMPTFOO_CLOUD_API_URL or ' +
+      '`promptfoo auth login --host <url>`.',
+  );
+}
 
 interface CloudUser {
   id: string;
@@ -44,30 +70,47 @@ interface CloudTokenValidation {
   hasActiveLicense?: boolean;
 }
 
-export class CloudConfig {
-  private config: {
-    appUrl: string;
-    apiHost?: string;
-    apiKey?: string;
-    sharing?: boolean;
-    currentOrganizationId?: string;
-    currentTeamId?: string;
-    teams?: {
-      [organizationId: string]: {
-        currentTeamId?: string;
-        cache?: Array<{
-          id: string;
-          name: string;
-          slug: string;
-          lastFetched: string;
-        }>;
-      };
+interface CloudConfigState {
+  appUrl: string;
+  apiHost?: string;
+  apiKey?: string;
+  sharing?: boolean;
+  currentOrganizationId?: string;
+  currentTeamId?: string;
+  teams?: {
+    [organizationId: string]: {
+      currentTeamId?: string;
+      cache?: Array<{
+        id: string;
+        name: string;
+        slug: string;
+        lastFetched: string;
+      }>;
     };
   };
+}
 
-  constructor() {
+export class CloudConfig {
+  private configState: CloudConfigState | null = null;
+
+  constructor(initializeImmediately: boolean = true) {
+    if (initializeImmediately) {
+      void this.config;
+    }
+  }
+
+  private get config(): CloudConfigState {
+    this.configState ??= this.readConfig();
+    return this.configState;
+  }
+
+  private set config(config: CloudConfigState) {
+    this.configState = config;
+  }
+
+  private readConfig(): CloudConfigState {
     const savedConfig = readGlobalConfig()?.cloud || {};
-    this.config = {
+    return {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
       apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
@@ -90,9 +133,31 @@ export class CloudConfig {
    * Returns the API host from config file, PROMPTFOO_CLOUD_API_URL environment variable,
    * or defaults to the standard cloud API host.
    * Config file takes precedence over environment variable.
+   *
+   * Trailing slashes are stripped so callers that append a path (e.g.
+   * `${getApiHost()}/api/v1/...`) never produce a double slash. On-prem hosts
+   * entered via `promptfoo auth login --host https://host/` commonly include one.
    */
   private resolveApiHost(): string {
-    return this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+    // The generic API_HOST env var is intentionally NOT consulted: the cloud
+    // origin decides where monkeyPatchFetch sends the saved bearer token, and
+    // env files routinely define API_HOST for the app under test. Self-hosted
+    // deployments must use `promptfoo auth login --api-host <url>` or
+    // PROMPTFOO_CLOUD_API_URL. process.env is read directly (not
+    // getEnvString) so an eval config's `env` block can never influence it.
+    const host = this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || CLOUD_API_HOST;
+    // monkeyPatchFetch resolves the host on every request, including evals that
+    // never touch Cloud, so only warn when a Cloud credential is actually in
+    // play — that's the only case where the legacy variable ever had an effect.
+    if (
+      !this.config.apiHost &&
+      !process.env.PROMPTFOO_CLOUD_API_URL &&
+      process.env.API_HOST &&
+      this.resolveApiKey()
+    ) {
+      warnOnceAboutLegacyApiHost();
+    }
+    return host.replace(/\/+$/, '');
   }
 
   isEnabled(): boolean {
@@ -100,7 +165,9 @@ export class CloudConfig {
   }
 
   setApiHost(apiHost: string): void {
-    this.config.apiHost = apiHost;
+    // Persist without a trailing slash so the stored host stays clean regardless of
+    // caller (defense in depth alongside the strip in resolveApiHost()).
+    this.config.apiHost = apiHost.replace(/\/+$/, '');
     this.saveConfig();
   }
 
@@ -151,16 +218,7 @@ export class CloudConfig {
   }
 
   private reload(): void {
-    const savedConfig = readGlobalConfig()?.cloud || {};
-    this.config = {
-      appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost,
-      apiKey: savedConfig.apiKey,
-      sharing: savedConfig.sharing,
-      currentOrganizationId: savedConfig.currentOrganizationId,
-      currentTeamId: savedConfig.currentTeamId,
-      teams: savedConfig.teams,
-    };
+    this.config = this.readConfig();
   }
 
   saveValidatedApiToken(
@@ -173,7 +231,15 @@ export class CloudConfig {
     this.setApiKey(token);
     this.setApiHost(apiHost);
     this.setAppUrl(app.url);
-    if (typeof hasActiveLicense === 'boolean') {
+    // On-prem installations are always enterprise deployments. Applying the
+    // public-cloud hasActiveLicense gate to on-prem hosts incorrectly disables
+    // auto-sharing to the on-prem Report Server when the server omits the field
+    // or returns false because it has no licence-check logic. The validated app
+    // URL keeps hosted Cloud behind an API proxy on the public-cloud license gate.
+    const isPublicCloud = isPromptfooCloudHost(apiHost) || isPromptfooCloudHost(app.url);
+    if (!isPublicCloud) {
+      this.setSharing(true);
+    } else if (typeof hasActiveLicense === 'boolean') {
       const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
       const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
       this.setSharing(hasActiveLicense || isGrandfathered);
@@ -182,7 +248,7 @@ export class CloudConfig {
 
   async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
     try {
-      const { fetchWithProxy } = await import('../util/fetch');
+      const { fetchWithProxy } = await import('../util/fetch/index');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -306,4 +372,6 @@ export class CloudConfig {
 }
 
 // singleton instance
-export const cloudConfig = new CloudConfig();
+// The CLI initializes this singleton lazily after early --env-file handling. Direct CloudConfig
+// instances retain eager initialization for backward compatibility.
+export const cloudConfig = new CloudConfig(false);

@@ -8,6 +8,96 @@ import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } f
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
 
+// Keep this parser local rather than importing it from src/assertions/contains.ts:
+// this module is bundled into the frontend (see the app layer's allowedImportPaths
+// in architecture/layers.json), so importing the assertion handlers would pull the
+// backend-only assertion code into the browser bundle and widen the
+// legacy-runtime -> core edge past its baseline. A drift-guard test in
+// test/csv.test.ts keeps this copy in sync with the canonical implementation.
+interface ParsedAssertionField {
+  field: string;
+  nextIndex: number;
+}
+
+function skipAssertionWhitespace(value: string, startIndex: number): number {
+  let i = startIndex;
+  while (i < value.length && /\s/.test(value[i])) {
+    i++;
+  }
+  return i;
+}
+
+function skipAssertionSeparators(value: string, startIndex: number): number {
+  let i = startIndex;
+  while (i < value.length) {
+    i = skipAssertionWhitespace(value, i);
+    if (value[i] !== ',') {
+      break;
+    }
+    i++;
+  }
+  return i;
+}
+
+function parseQuotedAssertionField(value: string, startIndex: number): ParsedAssertionField {
+  let i = startIndex + 1;
+  let field = '';
+  let terminated = false;
+
+  while (i < value.length) {
+    if (value[i] === '\\' && i + 1 < value.length && ['"', '\\'].includes(value[i + 1])) {
+      field += value[i + 1];
+      i += 2;
+    } else if (value[i] === '"' && i + 1 < value.length && value[i + 1] === '"') {
+      field += '"';
+      i += 2;
+    } else if (value[i] === '"') {
+      i++;
+      terminated = true;
+      break;
+    } else {
+      field += value[i];
+      i++;
+    }
+  }
+
+  invariant(terminated, 'Unterminated quoted field in contains assertion value');
+  return { field, nextIndex: i };
+}
+
+function parseUnquotedAssertionField(value: string, startIndex: number): ParsedAssertionField {
+  let i = startIndex;
+  while (i < value.length && value[i] !== ',') {
+    i++;
+  }
+  return { field: value.substring(startIndex, i).trim(), nextIndex: i };
+}
+
+function parseCommaSeparatedAssertionValues(value: string): string[] {
+  const results: string[] = [];
+  let i = 0;
+
+  while (i < value.length) {
+    i = skipAssertionSeparators(value, i);
+    if (i >= value.length) {
+      break;
+    }
+
+    const isQuotedField = value[i] === '"';
+    const parsed = isQuotedField
+      ? parseQuotedAssertionField(value, i)
+      : parseUnquotedAssertionField(value, i);
+    results.push(parsed.field);
+    i = isQuotedField ? skipAssertionWhitespace(value, parsed.nextIndex) : parsed.nextIndex;
+    invariant(
+      !isQuotedField || i >= value.length || value[i] === ',',
+      'Expected comma after quoted field in contains assertion value',
+    );
+  }
+
+  return results;
+}
+
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
@@ -17,6 +107,21 @@ function getAssertionRegex(): RegExp {
     );
   }
   return _assertionRegex;
+}
+
+/**
+ * Parse a CSV cell into a finite number, returning `undefined` when the cell is empty
+ * or not a complete numeric literal. Used for threshold fields so that a meaningful `0`
+ * is preserved while a blank/garbage cell is treated as "unset" rather than leaking
+ * `NaN` into the TestCase.
+ */
+function parseFiniteNumber(value: string | undefined): number | undefined {
+  const trimmed = value?.trim() ?? '';
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 export function assertionFromString(expected: string): Assertion {
@@ -75,8 +180,7 @@ export function assertionFromString(expected: string): Assertion {
       string?,
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
-    const parsedThreshold = thresholdStr ? Number.parseFloat(thresholdStr) : Number.NaN;
-    const threshold = Number.isFinite(parsedThreshold) ? parsedThreshold : undefined;
+    const threshold = parseFiniteNumber(thresholdStr);
 
     if (
       type === 'contains-all' ||
@@ -86,7 +190,7 @@ export function assertionFromString(expected: string): Assertion {
     ) {
       return {
         type: fullType as AssertionType,
-        value: value ? value.split(',').map((s) => s.trim()) : value,
+        value: value ? parseCommaSeparatedAssertionValues(value) : value,
       };
     } else if (type === 'contains-json' || type === 'is-json') {
       return {
@@ -185,7 +289,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     } else if (key === '__metric') {
       metric = value;
     } else if (key === '__threshold') {
-      threshold = Number.parseFloat(value);
+      threshold = parseFiniteNumber(value);
     } else if (key.startsWith('__metadata:')) {
       const metadataKey = key.slice('__metadata:'.length);
       if (metadataKey.endsWith('[]')) {
@@ -196,7 +300,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           const values = value
             .split(/(?<!\\),/)
             .map((v) => v.trim())
-            .map((v) => v.replace('\\,', ','));
+            .map((v) => v.replace(/\\,/g, ','));
           metadata[arrayKey] = values;
         }
       } else {
@@ -226,7 +330,13 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           // Extract the numeric index (e.g., __expected1 -> 0, __expected2 -> 1)
           const indexMatch = expectedKey.match(/^__expected(\d+)$/);
           if (indexMatch) {
-            targetIndex = Number.parseInt(indexMatch[1], 10) - 1; // Convert to 0-based index
+            const oneBasedIndex = Number.parseInt(indexMatch[1], 10);
+            // Indices are 1-based (__expected1 -> 0). Reject 0 so it falls
+            // through to the "positive integer" error below instead of
+            // silently writing the config to assertionConfigs[-1].
+            if (oneBasedIndex >= 1) {
+              targetIndex = oneBasedIndex - 1;
+            }
           }
         }
 
@@ -252,16 +362,12 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
           assertionConfigs[targetIndex] = {};
         }
 
-        // Parse the value based on the config key
-        let parsedValue: string | number = value.trim();
-        if (configKey === 'threshold') {
-          parsedValue = Number.parseFloat(value);
-          if (!Number.isFinite(parsedValue)) {
-            logger.error(
-              `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
-            );
-            throw new Error(`Invalid numeric value for ${configKey}`);
-          }
+        const parsedValue = parseFiniteNumber(value);
+        if (parsedValue === undefined) {
+          logger.error(
+            `Invalid numeric value "${value}" for config key "${configKey}" in column "${key}"`,
+          );
+          throw new Error(`Invalid numeric value for ${configKey}`);
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
@@ -297,7 +403,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     options,
     ...(description ? { description } : {}),
     ...(providerOutput ? { providerOutput } : {}),
-    ...(threshold ? { threshold } : {}),
+    // Gate on `=== undefined`, not a truthy check: a threshold of 0 is meaningful
+    // ("collect assertion scores without letting failures fail the test") and must
+    // be preserved. parseFiniteNumber already normalizes blank/invalid cells to undefined.
+    ...(threshold === undefined ? {} : { threshold }),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
   };
 }
@@ -310,6 +419,9 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 export function serializeObjectArrayAsCSV(vars: object[]): string {
   invariant(vars.length > 0, 'No variables to serialize');
   const columnNames = Object.keys(vars[0]).join(',');
+  // This generated test-case dataset is intentionally not formula-escaped because
+  // prefixing a cell would corrupt vars on round-trip. Formula escaping is applied
+  // only by the eval result export path.
   const rows = vars
     .map(
       (result) =>

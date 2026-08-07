@@ -5,8 +5,8 @@ import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
-import { doEval } from '../../src/commands/eval';
 import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
+import { doEval } from '../../src/node/doEval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
@@ -19,7 +19,7 @@ vi.mock('../../src/redteam/commands/generate');
 vi.mock('../../src/util/verboseToggle', () => ({
   initVerboseToggle: vi.fn(),
 }));
-vi.mock('../../src/commands/eval', async (importOriginal) => {
+vi.mock('../../src/node/doEval', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
@@ -108,7 +108,12 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
 });
 vi.mock('fs');
 vi.mock('fs/promises');
-vi.mock('js-yaml');
+// js-yaml v5 is native ESM with a sealed namespace, so vi.spyOn cannot patch it.
+// Wrap dump in a spy-able mock that keeps the real implementation.
+vi.mock('js-yaml', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('js-yaml')>();
+  return { ...actual, dump: vi.fn(actual.dump) };
+});
 vi.mock('os');
 
 describe('doRedteamRun', () => {
@@ -187,6 +192,23 @@ describe('doRedteamRun', () => {
         config: customConfig,
         output: path.normalize(`${dirPath}/redteam.yaml`),
       }),
+    );
+  });
+
+  it('should apply runtime tags to the eval without adding them to generated test cases', async () => {
+    const tags = {
+      'ci.run-id': '123',
+      'git.sha': 'abc123',
+    };
+
+    await doRedteamRun({ tags });
+
+    expect(vi.mocked(doGenerateRedteam).mock.calls[0][0]).not.toHaveProperty('tags');
+    expect(doEval).toHaveBeenCalledWith(
+      expect.objectContaining({ tags }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
     );
   });
 

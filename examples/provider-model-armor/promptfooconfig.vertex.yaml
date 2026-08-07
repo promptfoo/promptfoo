@@ -25,7 +25,7 @@ prompts:
 providers:
   # Gemini with Model Armor enabled via template
   # IMPORTANT: Update the projectId and promptTemplate with your actual values
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
     label: gemini-with-model-armor
     config:
       # Replace with your project ID or set VERTEX_PROJECT_ID env var
@@ -38,7 +38,7 @@ providers:
       maxOutputTokens: 1024
 
   # Baseline Gemini without Model Armor for comparison
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
     label: gemini-baseline
     config:
       projectId: your-project-id

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import { testProviderConnectivity, testProviderSession } from '../../node/testProvider';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
 import {
@@ -11,7 +13,6 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -146,7 +147,17 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     return;
   }
 
-  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+  // Strip any trailing slash so we never produce `//api/v1/...`.
+  const HOST = (
+    cloudConfig.isEnabled()
+      ? cloudConfig.getApiHost()
+      : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')
+  ).replace(/\/+$/, '');
+
+  // The fetch layer injects the cloud bearer token for the configured cloud origin
+  // (incl. on-prem) and won't override a header we set here, so attaching it
+  // explicitly keeps this request authenticated regardless of fetch-layer changes.
+  const apiKey = cloudConfig.isEnabled() ? cloudConfig.getApiKey() : undefined;
 
   try {
     logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
@@ -158,6 +169,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
       body: JSON.stringify({
         requestExample,

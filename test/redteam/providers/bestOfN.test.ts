@@ -29,6 +29,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
     (strategyName) =>
       `${strategyName} requires remote generation, which has been explicitly disabled.`,
   ),
+  getRemoteGenerationHeaders: vi.fn((extra) => ({ 'Content-Type': 'application/json', ...extra })),
   getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.api/generate'),
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
@@ -96,6 +97,22 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     );
   });
 
+  it('should include target context in remote generation requests', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+      targetId: 'cloud-target-123',
+    });
+
+    await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    const request = mockFetchWithProxy.mock.calls[0]?.[1] as { body?: string } | undefined;
+    expect(request?.body).toBeDefined();
+    expect(JSON.parse(request?.body ?? '{}')).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'jailbreak:best-of-n',
+    });
+  });
+
   it('should pass options to target provider callApi', async () => {
     const provider = new BestOfNProvider({
       injectVar: 'input',
@@ -147,33 +164,31 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(result.error).toContain('Network error');
   });
 
-  it.each([
-    42,
-    true,
-    null,
-    { prompt: 'candidate 0' },
-  ])('should skip non-string candidate prompt from remote generation: %j', async (invalidPrompt) => {
-    const provider = new BestOfNProvider({
-      injectVar: 'input',
-    });
-    const context = createMockContext(mockTargetProvider);
+  it.each([42, true, null, { prompt: 'candidate 0' }])(
+    'should skip non-string candidate prompt from remote generation: %j',
+    async (invalidPrompt) => {
+      const provider = new BestOfNProvider({
+        injectVar: 'input',
+      });
+      const context = createMockContext(mockTargetProvider);
 
-    mockFetchWithProxy.mockResolvedValue({
-      json: async () => ({
-        modifiedPrompts: [invalidPrompt, 'candidate 2'],
-      }),
-    });
+      mockFetchWithProxy.mockResolvedValue({
+        json: async () => ({
+          modifiedPrompts: [invalidPrompt, 'candidate 2'],
+        }),
+      });
 
-    await provider.callApi('test prompt', context);
+      await provider.callApi('test prompt', context);
 
-    expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
-      'candidate 2',
-      expect.any(Object),
-      undefined,
-    );
-  });
+      expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+        'candidate 2',
+        expect.any(Object),
+        undefined,
+      );
+    },
+  );
 
   it.each([
     'file://etc/passwd',

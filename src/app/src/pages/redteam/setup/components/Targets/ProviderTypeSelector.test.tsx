@@ -308,6 +308,28 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Go integration')).toBeVisible();
   });
 
+  it('selects the first-class Open Interpreter provider', async () => {
+    const user = userEvent.setup();
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', label: 'Coding target', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    const card = screen.getByText('Open Interpreter').closest('[role="button"]');
+    expect(card).toBeInTheDocument();
+    await user.click(card!);
+
+    expect(setProvider).toHaveBeenCalledWith(
+      { id: 'openinterpreter', label: 'Coding target', config: {} },
+      'openinterpreter',
+    );
+  });
+
   it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
@@ -1110,6 +1132,34 @@ describe('ProviderTypeSelector', () => {
       expect(callArgs.label).toBe('Python Integration');
       expect(callArgs.config.enabled).toBe(true);
       expect(callArgs.config.verbose).toBe(false);
+    });
+
+    it('should use minimal defaults when switching to A2A provider', async () => {
+      const user = userEvent.setup();
+      const mockSetProvider = vi.fn();
+      const initialProvider: ProviderOptions = {
+        id: 'python',
+        label: 'Python Integration',
+        config: {},
+      };
+
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={initialProvider}
+          setProvider={mockSetProvider}
+          providerType="python"
+        />,
+      );
+
+      const a2aProviderCard = screen.getByText('A2A Agent').closest('[role="button"]');
+      if (a2aProviderCard) {
+        await user.click(a2aProviderCard);
+      }
+
+      const callArgs = mockSetProvider.mock.calls[0][0];
+      expect(callArgs.label).toBe('Python Integration');
+      expect(callArgs.id).toBe('a2a');
+      expect(callArgs.config).toEqual({ url: '' });
     });
   });
 });

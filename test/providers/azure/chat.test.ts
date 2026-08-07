@@ -125,7 +125,7 @@ describe('AzureChatCompletionProvider', () => {
 
     it('should handle undefined prompt config', async () => {
       const context = {
-        prompt: { label: 'test prompt', raw: 'test prompt' },
+        prompt: { config: undefined, label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
       const { body } = await (provider as any).getOpenAiBody('test prompt', context);
@@ -310,6 +310,62 @@ describe('AzureChatCompletionProvider', () => {
       vi.resetAllMocks();
     });
 
+    it('uses audio-token pricing from chat completion usage details', async () => {
+      provider = new AzureChatCompletionProvider('gpt-audio-1.5-2026-02-23', {
+        config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 1_000,
+            prompt_tokens_details: { audio_tokens: 200, cached_tokens: 0 },
+            completion_tokens: 500,
+            completion_tokens_details: { audio_tokens: 100 },
+            total_tokens: 1_500,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo((800 * 2.5 + 200 * 32 + 400 * 10 + 100 * 64) / 1e6, 12);
+    });
+
+    it('reports API prompt-cache usage for a fresh chat response', async () => {
+      provider = new AzureChatCompletionProvider('gpt-5.6', {
+        config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 2_000,
+            prompt_tokens_details: { cached_tokens: 500 },
+            completion_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+    });
+
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',
@@ -480,15 +536,16 @@ describe('AzureChatCompletionProvider', () => {
         'Another-Header': 'another-value',
       };
 
-      const provider = new AzureChatCompletionProvider('test-deployment', {
+      const customProvider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           apiHost: 'test.azure.com',
           apiKey: 'test-key',
           headers: customHeaders,
         },
       });
+      setAuthHeaders(customProvider);
 
-      await provider.callApi('test prompt');
+      await customProvider.callApi('test prompt');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -710,24 +767,43 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
-    it('flags Claude Opus 4.7 via isClaudeOpus47 without treating it as reasoning', () => {
-      // Claude Opus 4.7 uses the chat body's standard max_tokens path but
-      // rejects `temperature` at the model level. Must NOT flip to the
+    it('auto-detects Microsoft MAI reasoning models by deployment name', () => {
+      for (const name of ['mai-thinking-1', 'MAI-Thinking-1', 'mai-ds-r1', 'prod-mai-reasoning']) {
+        const provider = new AzureChatCompletionProvider(name, { config: {} });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      }
+      // MAI-Code-* are fast coding models on the standard chat surface, not reasoning models.
+      const code = new AzureChatCompletionProvider('mai-code-1-flash', { config: {} });
+      expect((code as any).isReasoningModel()).toBe(false);
+    });
+
+    it('flags Claude Opus 4.7 and 4.8 as sampling-params-deprecated without treating them as reasoning', () => {
+      // Claude Opus 4.7 and 4.8 use the chat body's standard max_tokens path but
+      // reject `temperature` at the model level. Must NOT flip to the
       // reasoning-model branch (which would swap max_tokens and send
       // reasoning_effort).
       const opus47 = new AzureChatCompletionProvider('claude-opus-4-7', { config: {} });
       expect((opus47 as any).isReasoningModel()).toBe(false);
-      expect((opus47 as any).isClaudeOpus47()).toBe(true);
+      expect((opus47 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(true);
+
+      const opus48 = new AzureChatCompletionProvider('claude-opus-4-8', { config: {} });
+      expect((opus48 as any).isReasoningModel()).toBe(false);
+      expect((opus48 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(true);
 
       // Opus 4.6 regression: not matched.
       const opus46 = new AzureChatCompletionProvider('claude-opus-4-6-20260205', { config: {} });
       expect((opus46 as any).isReasoningModel()).toBe(false);
-      expect((opus46 as any).isClaudeOpus47()).toBe(false);
+      expect((opus46 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(false);
 
-      // Boundary: a hypothetical `claude-opus-4-70` or `claude-opus-4-7N`
-      // model must not be accidentally matched by the 4.7 predicate.
+      // Boundary: hypothetical suffix variants must not be accidentally matched.
       const opus470 = new AzureChatCompletionProvider('claude-opus-4-70', { config: {} });
-      expect((opus470 as any).isClaudeOpus47()).toBe(false);
+      expect((opus470 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(false);
+      const opus480 = new AzureChatCompletionProvider('claude-opus-4-80', { config: {} });
+      expect((opus480 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(false);
+
+      const fable5 = new AzureChatCompletionProvider('claude-fable-5', { config: {} });
+      expect((fable5 as any).isReasoningModel()).toBe(false);
+      expect((fable5 as any).isSamplingParamsDeprecatedClaudeModel()).toBe(true);
     });
 
     it('should detect reasoning models with isReasoningModel flag', () => {
@@ -763,6 +839,128 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('max_completion_tokens');
       expect(body).not.toHaveProperty('temperature');
       expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
+    it('omits temperature and top_p for Claude Opus 4.8 while keeping the standard chat body', async () => {
+      const provider = new AzureChatCompletionProvider('claude-opus-4-8', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+      expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
+    it('omits sampling params for Claude Fable 5 while keeping the standard chat body', async () => {
+      const provider = new AzureChatCompletionProvider('claude-fable-5', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+      expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
+    it('omits sampling params for a custom Claude deployment when configured explicitly', async () => {
+      const provider = new AzureChatCompletionProvider('prod-claude-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          isClaudeOpus47OrLater: true,
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('keeps temperature and top_p for a custom Claude deployment without isClaudeOpus47OrLater', async () => {
+      // Regression guard: an existing custom-named Claude deployment that has
+      // not opted in via isClaudeOpus47OrLater must keep its sampling params.
+      const provider = new AzureChatCompletionProvider('prod-claude-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).toHaveProperty('temperature', 0.5);
+      expect(body).toHaveProperty('top_p', 0.9);
+    });
+
+    it('omits sampling params for an opus-4-7-named deployment even without the flag', async () => {
+      // Baseline name-match path: deployment name matches opus-4-7, so sampling
+      // params are stripped without setting isClaudeOpus47OrLater.
+      const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('omits sampling params for an opus-4-8-named deployment even without the flag', async () => {
+      // Baseline name-match path for the 4.8 variant.
+      const provider = new AzureChatCompletionProvider('claude-opus-4-8', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('top_p');
+    });
+
+    it('keeps temperature and top_p for a plain non-Claude deployment', async () => {
+      // Non-Claude deployments (e.g. gpt-4o) must be unaffected by the Opus path.
+      const provider = new AzureChatCompletionProvider('gpt-4o', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+          top_p: 0.9,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).toHaveProperty('temperature', 0.5);
+      expect(body).toHaveProperty('top_p', 0.9);
     });
 
     it('should use max_completion_tokens for reasoning models', async () => {
@@ -954,6 +1152,70 @@ describe('AzureChatCompletionProvider', () => {
         flaggedOutput: true,
       });
       expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('does not crash when the API returns an empty choices array', async () => {
+      // An empty `choices` array (e.g. when every candidate is filtered) makes
+      // `choices[0]` undefined. The rest of the parser optional-chains `choice`,
+      // but the logProbs read dereferenced `data.choices[0]` directly and threw a
+      // TypeError, which surfaced as an opaque "API response error" instead of a
+      // normal empty result.
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        choices: [],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 0,
+          total_tokens: 10,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.logProbs).toBeUndefined();
+      // The nullish output is what routes the row to the evaluator's canonical
+      // "No output" outcome; token usage still reflects the billed prompt.
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, completion: 0 });
+    });
+
+    it('does not crash when the API response has no choices field at all', async () => {
+      const mockResponse = {
+        id: 'mock-id',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 0,
+          total_tokens: 10,
+        },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.logProbs).toBeUndefined();
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 10, prompt: 10, completion: 0 });
     });
 
     it('should detect input content filtering', async () => {

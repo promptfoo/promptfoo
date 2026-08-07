@@ -1,16 +1,17 @@
 import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 
-import WebSocket from 'ws';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { GOOGLE_MODELS } from './shared';
 import {
+  calculateGoogleCost,
   geminiFormatAndSystemInstructions,
   getGoogleAccessToken,
   loadCredentials,
@@ -19,7 +20,9 @@ import {
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   stripExecutableToolFileReferences,
+  validateFunctionCall,
 } from './util';
+import type WebSocket from 'ws';
 
 import type {
   ApiProvider,
@@ -30,7 +33,7 @@ import type {
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
-const formatContentMessage = (
+const formatContentMessages = (
   contents: GeminiFormat,
   contentIndex: number,
   useRealtimeTextInput = false,
@@ -38,18 +41,71 @@ const formatContentMessage = (
   if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
-  if (contents[contentIndex].parts.length !== 1) {
-    throw new Error('Unexpected number of parts in user input.');
-  }
-  const userMessage = contents[contentIndex].parts[0].text;
+  const parts = contents[contentIndex].parts;
 
   if (useRealtimeTextInput) {
-    return {
-      realtime_input: {
-        text: userMessage,
-      },
-    };
+    const mappedMessages = parts.map((part) => {
+      const userPart = part as {
+        text?: string;
+        inlineData?: { mimeType: string; data: string };
+        inline_data?: { mime_type: string; data: string };
+      };
+      if (userPart.text !== undefined) {
+        return { realtimeInput: { text: userPart.text } };
+      }
+      const inlineData = userPart.inlineData ?? userPart.inline_data;
+      if (inlineData) {
+        const mimeType = 'mimeType' in inlineData ? inlineData.mimeType : inlineData.mime_type;
+        if (mimeType.startsWith('video/')) {
+          throw new Error(
+            'Google Live video input must be sent as individual image/jpeg or image/png frames (maximum 1 frame per second).',
+          );
+        }
+        if (mimeType.startsWith('audio/') && !mimeType.startsWith('audio/pcm')) {
+          throw new Error(
+            `Unsupported Google Live realtime input MIME type: ${mimeType}. Audio input must be raw 16-bit PCM (for example, audio/pcm;rate=16000).`,
+          );
+        }
+        if (
+          !mimeType.startsWith('audio/') &&
+          mimeType !== 'image/jpeg' &&
+          mimeType !== 'image/png'
+        ) {
+          throw new Error(`Unsupported Google Live realtime input MIME type: ${mimeType}`);
+        }
+        const mediaType = mimeType.startsWith('audio/') ? 'audio' : 'video';
+        return {
+          realtimeInput: {
+            [mediaType]: { mimeType, data: inlineData.data },
+          },
+        };
+      }
+      throw new Error('Unsupported part in Google Live realtime input.');
+    });
+    const textMessages = mappedMessages.filter((message) => 'text' in message.realtimeInput);
+    const contentMessages = mappedMessages.filter((message) => !('text' in message.realtimeInput));
+    if (textMessages.length > 0) {
+      contentMessages.push({
+        realtimeInput: {
+          text: textMessages.map((message) => message.realtimeInput.text).join('\n'),
+        },
+      } as any);
+    }
+    if (contentMessages.some((message) => 'audio' in message.realtimeInput)) {
+      contentMessages.push({ realtimeInput: { audioStreamEnd: true } } as any);
+    } else if (
+      contentMessages.some((message) => 'video' in message.realtimeInput) &&
+      textMessages.length === 0
+    ) {
+      contentMessages.push({ clientContent: { turnComplete: true } } as any);
+    }
+    return contentMessages;
   }
+
+  if (parts.length !== 1) {
+    throw new Error('Unexpected number of parts in user input.');
+  }
+  const userMessage = parts[0].text;
 
   const contentMessage = {
     client_content: {
@@ -62,7 +118,24 @@ const formatContentMessage = (
       turn_complete: true,
     },
   };
-  return contentMessage;
+  return [contentMessage];
+};
+
+const getModalityTokenCount = (details: unknown, modality: string): number => {
+  if (!Array.isArray(details)) {
+    return 0;
+  }
+  return details.reduce((total, detail) => {
+    const count = detail?.tokenCount ?? detail?.token_count;
+    return detail?.modality === modality && typeof count === 'number' && Number.isFinite(count)
+      ? total + Math.max(count, 0)
+      : total;
+  }, 0);
+};
+
+const getTokenCount = (...values: unknown[]): number => {
+  const value = values.find((entry) => typeof entry === 'number' && Number.isFinite(entry));
+  return typeof value === 'number' ? Math.max(value, 0) : 0;
 };
 
 /**
@@ -115,6 +188,10 @@ export class GoogleLiveProvider implements ApiProvider {
     this.config = options.config || {};
   }
 
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    validateFunctionCall(output, this.config.tools, vars);
+  }
+
   id(): string {
     return `google:live:${this.modelName}`;
   }
@@ -123,8 +200,7 @@ export class GoogleLiveProvider implements ApiProvider {
     return `[Google Live Provider ${this.modelName}]`;
   }
 
-  private convertPcmToWav(base64PcmData: string): string {
-    const pcmBuffer = Buffer.from(base64PcmData, 'base64');
+  private convertPcmToWav(pcmBuffer: Buffer): string {
     const wavBuffer = this.createWavHeader(pcmBuffer.length, 24000, 16, 1);
     const wavData = Buffer.concat([wavBuffer, pcmBuffer]);
     return wavData.toString('base64');
@@ -260,9 +336,16 @@ export class GoogleLiveProvider implements ApiProvider {
       ? removeGoogleFunctionDeclarations(normalizedTools)
       : normalizedTools;
 
+    // Lazy-load the `ws` implementation so merely importing this module stays cheap;
+    // the Live provider is itself dynamically imported by the Google provider family.
+    const WebSocketCtor = (await import('ws')).default;
+
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
-      const usesRealtimeTextInput = this.modelName.startsWith('gemini-3.1-flash-live');
+      const prefersV1beta =
+        this.modelName.startsWith('gemini-3.1-flash-live') ||
+        this.modelName.startsWith('gemini-2.5-flash-native-audio-') ||
+        this.modelName.startsWith('gemini-live-2.5-flash-preview-native-audio-');
       let isResolved = false;
 
       const safeResolve = (response: ProviderResponse) => {
@@ -274,8 +357,9 @@ export class GoogleLiveProvider implements ApiProvider {
 
       let { apiVersion } = config;
       if (!apiVersion) {
-        apiVersion = 'v1alpha';
+        apiVersion = prefersV1beta ? 'v1beta' : 'v1alpha';
       }
+      const usesRealtimeTextInput = apiVersion === 'v1beta';
 
       // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
       let url: string;
@@ -288,33 +372,96 @@ export class GoogleLiveProvider implements ApiProvider {
         logger.debug('Using API key for Google Live API authentication (may not be supported)');
       }
 
-      const ws = new WebSocket(url);
+      const ws = new WebSocketCtor(url);
 
       let response_text_total = '';
-      let response_audio_total = '';
+      const responseAudioChunks: Buffer[] = [];
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: unknown = undefined;
+      const usageMetadata: any[] = [];
+      let pendingUsageMetadata: any;
+      let completedGenerations = 0;
+      let completedTurns = 0;
+      let hasPendingToolFollowup = false;
+      let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
 
-      const isTextExpected =
-        config.generationConfig?.response_modalities?.includes('text') ?? false;
-      const isAudioExpected =
-        config.generationConfig?.response_modalities?.includes('audio') ?? false;
+      const configuredResponseModalities = (
+        config.generationConfig?.response_modalities ?? config.generationConfig?.responseModalities
+      )?.map((modality) => modality.toUpperCase());
+      const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
+      const responseModalities = usesRealtimeTextInput
+        ? configuredResponseModalities?.filter((modality) => modality !== 'TEXT')
+        : configuredResponseModalities;
+      const effectiveResponseModalities =
+        usesRealtimeTextInput && !responseModalities?.length ? ['AUDIO'] : responseModalities;
+      if (requestedText && !effectiveResponseModalities?.includes('TEXT')) {
+        logger.warn(
+          `[Google Live] ${this.modelName} does not support TEXT response modality; requesting AUDIO with output transcription instead. Audio output is billed at audio rates.`,
+        );
+      }
+      const isTextExpected = effectiveResponseModalities?.includes('TEXT') ?? false;
+      const isAudioExpected = effectiveResponseModalities?.includes('AUDIO') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;
 
-      // Extract transcription config for use in message handler
-      const hasOutputTranscription = !!config.generationConfig?.outputAudioTranscription;
+      const sendContentMessages = async (contentMessages: any[]) => {
+        for (const contentMessage of contentMessages) {
+          if (contentMessage.realtimeInput?.video) {
+            const delayMs = Math.max(lastVideoFrameSentAt + 1_000 - Date.now(), 0);
+            if (delayMs > 0) {
+              await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+            }
+            if (isResolved) {
+              return;
+            }
+            lastVideoFrameSentAt = Date.now();
+          }
+          ws.send(JSON.stringify(contentMessage));
+        }
+      };
 
-      // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
-      const timeout = setTimeout(() => {
-        logger.error('WebSocket connection timed out after 30 seconds');
-        ws.close();
-        safeResolve({ error: 'WebSocket request timed out' });
-      }, config.timeoutMs || 30000);
+      // Extract transcription config for use in message handler
+      const hasOutputTranscription =
+        !!config.generationConfig?.outputAudioTranscription ||
+        (usesRealtimeTextInput && requestedText);
+
+      const videoFrameCount = contents.reduce(
+        (total, content) =>
+          total +
+          content.parts.filter((part) => {
+            const inlineData =
+              (part as { inlineData?: { mimeType?: string; mime_type?: string } }).inlineData ??
+              (part as { inline_data?: { mimeType?: string; mime_type?: string } }).inline_data;
+            const mimeType = inlineData?.mimeType ?? inlineData?.mime_type;
+            return mimeType === 'image/jpeg' || mimeType === 'image/png';
+          }).length,
+        0,
+      );
+      const framePacingAllowanceMs = Math.max(videoFrameCount - 1, 0) * 1_000;
+
+      // Idle guard rather than a hard deadline: it re-arms on every server message, so a
+      // long generation that keeps streaming output is never cut off mid-response, while a
+      // stream that stalls — before or after partial output — still errors out. The frame
+      // pacing allowance keeps the guard alive while outbound video frames are rate-limited.
+      const effectiveTimeoutMs = (config.timeoutMs || 30000) + framePacingAllowanceMs;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const armIdleTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          logger.error(
+            `WebSocket connection timed out after ${effectiveTimeoutMs}ms of inactivity`,
+          );
+          ws.close();
+          safeResolve({
+            error: `WebSocket request timed out after ${effectiveTimeoutMs}ms of inactivity`,
+          });
+        }, effectiveTimeoutMs);
+      };
+      armIdleTimeout();
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
@@ -324,7 +471,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
         hasFinalized = true;
 
-        if (ws.readyState === WebSocket.OPEN) {
+        if (ws.readyState === WebSocketCtor.OPEN) {
           ws.close();
         }
         clearTimeout(timeout);
@@ -373,9 +520,205 @@ export class GoogleLiveProvider implements ApiProvider {
           metadata: {},
         };
 
-        if (hasAudioContent) {
+        if (usageMetadata.length > 0) {
+          const promptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getTokenCount(usage.promptTokenCount, usage.prompt_token_count) +
+              getTokenCount(usage.toolUsePromptTokenCount, usage.tool_use_prompt_token_count),
+            0,
+          );
+          const responseTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getTokenCount(
+                usage.responseTokenCount,
+                usage.candidatesTokenCount,
+                usage.response_token_count,
+                usage.candidates_token_count,
+              ),
+            0,
+          );
+          const thoughtTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total + getTokenCount(usage.thoughtsTokenCount, usage.thoughts_token_count),
+            0,
+          );
+          const billableCompletionTokens = usageMetadata.reduce((total, usage) => {
+            const promptTokenCount = getTokenCount(
+              usage.promptTokenCount,
+              usage.prompt_token_count,
+            );
+            const toolUsePromptTokenCount = getTokenCount(
+              usage.toolUsePromptTokenCount,
+              usage.tool_use_prompt_token_count,
+            );
+            const responseTokenCount = getTokenCount(
+              usage.responseTokenCount,
+              usage.candidatesTokenCount,
+              usage.response_token_count,
+              usage.candidates_token_count,
+            );
+            const totalTokenCount = getTokenCount(usage.totalTokenCount, usage.total_token_count);
+            const thoughtsTokenCount = getTokenCount(
+              usage.thoughtsTokenCount,
+              usage.thoughts_token_count,
+            );
+            const thoughtsIncluded =
+              totalTokenCount > 0 &&
+              (totalTokenCount === promptTokenCount + responseTokenCount ||
+                totalTokenCount ===
+                  promptTokenCount + toolUsePromptTokenCount + responseTokenCount);
+
+            return total + responseTokenCount + (thoughtsIncluded ? 0 : thoughtsTokenCount);
+          }, 0);
+          const audioPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'AUDIO',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'AUDIO',
+              ),
+            0,
+          );
+          const audioCompletionTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.responseTokensDetails ??
+                  usage.candidatesTokensDetails ??
+                  usage.response_tokens_details ??
+                  usage.candidates_tokens_details,
+                'AUDIO',
+              ),
+            0,
+          );
+          const imagePromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'IMAGE',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'IMAGE',
+              ) +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'DOCUMENT',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'DOCUMENT',
+              ),
+            0,
+          );
+          const videoPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.promptTokensDetails ?? usage.prompt_tokens_details,
+                'VIDEO',
+              ) +
+              getModalityTokenCount(
+                usage.toolUsePromptTokensDetails ?? usage.tool_use_prompt_tokens_details,
+                'VIDEO',
+              ),
+            0,
+          );
+          const cachedPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getTokenCount(usage.cachedContentTokenCount, usage.cached_content_token_count),
+            0,
+          );
+          const cachedAudioPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'AUDIO',
+              ),
+            0,
+          );
+          const cachedImagePromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'IMAGE',
+              ) +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'DOCUMENT',
+              ),
+            0,
+          );
+          const cachedVideoPromptTokens = usageMetadata.reduce(
+            (total, usage) =>
+              total +
+              getModalityTokenCount(
+                usage.cacheTokensDetails ?? usage.cache_tokens_details,
+                'VIDEO',
+              ),
+            0,
+          );
+          const videoInputPerSecond = GOOGLE_MODELS.find((model) => model.id === this.modelName)
+            ?.cost?.videoInputPerSecond;
+          const billVideoPerSecond =
+            videoFrameCount > 0 &&
+            videoInputPerSecond !== undefined &&
+            (videoPromptTokens > 0 || imagePromptTokens === 0);
+          const billableVideoFrameCount =
+            videoPromptTokens > 0
+              ? Math.min(videoFrameCount, Math.ceil(videoPromptTokens / 263))
+              : videoFrameCount;
+
+          result.tokenUsage = {
+            prompt: promptTokens,
+            completion: responseTokens,
+            total: usageMetadata.reduce(
+              (total, usage) =>
+                total + getTokenCount(usage.totalTokenCount, usage.total_token_count),
+              0,
+            ),
+            numRequests: usageMetadata.length,
+            ...(cachedPromptTokens > 0 ? { cached: cachedPromptTokens } : {}),
+            ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
+          };
+          const tokenCost = calculateGoogleCost(
+            this.modelName,
+            config,
+            Math.max(promptTokens - (billVideoPerSecond ? videoPromptTokens : 0), 0),
+            billableCompletionTokens,
+            false,
+            audioPromptTokens,
+            audioCompletionTokens,
+            undefined,
+            imagePromptTokens + (billVideoPerSecond ? 0 : videoPromptTokens),
+            Math.max(cachedPromptTokens - (billVideoPerSecond ? cachedVideoPromptTokens : 0), 0),
+            cachedAudioPromptTokens,
+            cachedImagePromptTokens + (billVideoPerSecond ? 0 : cachedVideoPromptTokens),
+          );
+          result.cost =
+            tokenCost === undefined
+              ? undefined
+              : tokenCost +
+                (billVideoPerSecond ? billableVideoFrameCount * videoInputPerSecond : 0);
+        }
+
+        // `hasAudioContent` is also set when only a transcription arrives on an
+        // audio-expected stream, so gate the WAV on actual PCM bytes — otherwise
+        // convertPcmToWav emits a bare 44-byte header with no samples. The
+        // transcript is still preserved as the response output text above.
+        if (hasAudioContent && responseAudioChunks.length > 0) {
           result.audio = {
-            data: this.convertPcmToWav(response_audio_total),
+            data: this.convertPcmToWav(Buffer.concat(responseAudioChunks)),
             format: 'wav',
             transcript: response_audio_transcript || response_text_total || undefined,
           };
@@ -386,39 +729,46 @@ export class GoogleLiveProvider implements ApiProvider {
       ws.onopen = () => {
         logger.debug('WebSocket connection is opening...');
         const {
-          speechConfig,
-          outputAudioTranscription,
+          speechConfig: generationSpeechConfig,
+          response_modalities: _responseModalities,
+          responseModalities: _camelResponseModalities,
+          outputAudioTranscription: configuredOutputAudioTranscription,
           inputAudioTranscription,
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
         } = config.generationConfig || {};
+        const speechConfig = generationSpeechConfig ?? config.speechConfig;
+        const outputAudioTranscription =
+          configuredOutputAudioTranscription ??
+          (usesRealtimeTextInput && requestedText ? {} : undefined);
 
         let formattedSpeechConfig;
         if (speechConfig) {
           formattedSpeechConfig = {
             ...(speechConfig.voiceConfig && {
-              voice_config: {
-                prebuilt_voice_config: {
-                  voice_name: speechConfig.voiceConfig.prebuiltVoiceConfig?.voiceName,
+              [usesRealtimeTextInput ? 'voiceConfig' : 'voice_config']: {
+                [usesRealtimeTextInput ? 'prebuiltVoiceConfig' : 'prebuilt_voice_config']: {
+                  [usesRealtimeTextInput ? 'voiceName' : 'voice_name']:
+                    speechConfig.voiceConfig.prebuiltVoiceConfig?.voiceName,
                 },
               },
             }),
-            ...(speechConfig.languageCode && { language_code: speechConfig.languageCode }),
+            ...(speechConfig.languageCode && {
+              [usesRealtimeTextInput ? 'languageCode' : 'language_code']: speechConfig.languageCode,
+            }),
           };
         }
 
         let formattedProactivity;
-        if (proactivity) {
-          formattedProactivity = {
-            proactive_audio: proactivity.proactiveAudio,
-          };
+        if (proactivity && !usesRealtimeTextInput) {
+          formattedProactivity = { proactive_audio: proactivity.proactiveAudio };
         }
 
         const setupMessage = {
           setup: {
             model: `models/${this.modelName}`,
-            generation_config: {
+            [usesRealtimeTextInput ? 'generationConfig' : 'generation_config']: {
               context: config.context,
               examples: config.examples,
               stopSequences: config.stopSequences,
@@ -427,23 +777,47 @@ export class GoogleLiveProvider implements ApiProvider {
               topP: config.topP,
               topK: config.topK,
               ...restGenerationConfig,
-              ...(formattedSpeechConfig ? { speech_config: formattedSpeechConfig } : {}),
-              ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
+              ...(effectiveResponseModalities
+                ? {
+                    [usesRealtimeTextInput ? 'responseModalities' : 'response_modalities']:
+                      effectiveResponseModalities,
+                  }
+                : {}),
+              ...(formattedSpeechConfig
+                ? {
+                    [usesRealtimeTextInput ? 'speechConfig' : 'speech_config']:
+                      formattedSpeechConfig,
+                  }
+                : {}),
+              ...(enableAffectiveDialog && !usesRealtimeTextInput
+                ? { enable_affective_dialog: enableAffectiveDialog }
+                : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(toolConfig ? { toolConfig } : {}),
             ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
-              ? { output_audio_transcription: outputAudioTranscription }
+              ? {
+                  [usesRealtimeTextInput
+                    ? 'outputAudioTranscription'
+                    : 'output_audio_transcription']: outputAudioTranscription,
+                }
               : {}),
             ...(inputAudioTranscription
-              ? { input_audio_transcription: inputAudioTranscription }
+              ? {
+                  [usesRealtimeTextInput ? 'inputAudioTranscription' : 'input_audio_transcription']:
+                    inputAudioTranscription,
+                }
               : {}),
           },
         };
 
-        logger.debug(`Sending setup message: ${JSON.stringify(setupMessage, null, 2)}`);
+        logger.debug('Sending setup message', {
+          model: this.modelName,
+          hasTools: requestTools.length > 0,
+          hasSystemInstruction: !!systemInstruction,
+        });
         ws.send(JSON.stringify(setupMessage));
       };
 
@@ -454,6 +828,7 @@ export class GoogleLiveProvider implements ApiProvider {
         if (isResolved) {
           return;
         }
+        armIdleTimeout();
         // Handle different data types from WebSocket
         logger.debug('WebSocket message received');
         let responseData: string;
@@ -466,8 +841,7 @@ export class GoogleLiveProvider implements ApiProvider {
           } catch {
             hasAudioContent = true;
             const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
-            response_audio_total += audioBuffer.toString('base64');
-            clearTimeout(timeout);
+            responseAudioChunks.push(audioBuffer);
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
@@ -490,6 +864,15 @@ export class GoogleLiveProvider implements ApiProvider {
             return;
           }
           const response = JSON.parse(responseText);
+
+          const frameUsageMetadata = response.usageMetadata ?? response.usage_metadata;
+          if (frameUsageMetadata) {
+            pendingUsageMetadata = frameUsageMetadata;
+          }
+          if ((response.serverContent?.turnComplete || response.toolCall) && pendingUsageMetadata) {
+            usageMetadata.push(pendingUsageMetadata);
+            pendingUsageMetadata = undefined;
+          }
 
           if (response.error) {
             logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
@@ -516,27 +899,36 @@ export class GoogleLiveProvider implements ApiProvider {
           );
 
           if (response.setupComplete) {
-            const contentMessage = formatContentMessage(
+            const contentMessages = formatContentMessages(
               contents,
               contentIndex,
               usesRealtimeTextInput,
             );
             contentIndex += 1;
-            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
+            logger.debug('WebSocket sent', { messageCount: contentMessages.length });
+            await sendContentMessages(contentMessages);
           } else if (response.serverContent) {
             const { serverContent } = response;
+            const hasModelOutput =
+              Boolean(serverContent.modelTurn?.parts?.length) ||
+              Boolean(serverContent.outputTranscription?.text) ||
+              Boolean(serverContent.generationComplete);
+            if (hasModelOutput) {
+              hasPendingToolFollowup = false;
+            } else if (serverContent.turnComplete && hasPendingToolFollowup) {
+              hasPendingToolFollowup = false;
+              logger.debug('Ignoring Gemini Live bookkeeping turnComplete after a tool response.');
+              return;
+            }
 
             if (serverContent.modelTurn?.parts) {
               for (const part of serverContent.modelTurn.parts) {
                 if (part.text) {
                   response_text_total += part.text;
-                  clearTimeout(timeout);
                 }
                 if (part.inlineData?.mimeType?.includes('audio')) {
                   hasAudioContent = true;
-                  response_audio_total += part.inlineData.data;
-                  clearTimeout(timeout);
+                  responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
                   if (isAudioExpected) {
                     hasAudioStreamEnded = false;
                   }
@@ -547,15 +939,17 @@ export class GoogleLiveProvider implements ApiProvider {
                 if (isAudioExpected) {
                   hasAudioContent = true;
                 }
-                clearTimeout(timeout);
               }
             } else if (serverContent.outputTranscription?.text) {
               // Handle transcription-only messages when transcription arrives separately.
               response_audio_transcript += serverContent.outputTranscription.text;
-              clearTimeout(timeout);
+              if (isAudioExpected) {
+                hasAudioContent = true;
+              }
             }
 
             if (serverContent.generationComplete) {
+              completedGenerations += 1;
               logger.debug(
                 `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
               );
@@ -565,36 +959,25 @@ export class GoogleLiveProvider implements ApiProvider {
               if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
                 hasAudioStreamEnded = true;
               }
-              if (usesRealtimeTextInput && contentIndex < contents.length) {
-                const contentMessage = formatContentMessage(
-                  contents,
-                  contentIndex,
-                  usesRealtimeTextInput,
-                );
-                contentIndex += 1;
-                logger.debug(
-                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessage)}`,
-                );
-                ws.send(JSON.stringify(contentMessage));
-                hasTextStreamEnded = !isTextExpected;
-                hasAudioStreamEnded = !isAudioExpected;
-                return;
-              }
             }
 
             if (serverContent.turnComplete && contentIndex < contents.length) {
-              const contentMessage = formatContentMessage(
+              completedTurns += 1;
+              const contentMessages = formatContentMessages(
                 contents,
                 contentIndex,
                 usesRealtimeTextInput,
               );
               contentIndex += 1;
-              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
-              ws.send(JSON.stringify(contentMessage));
+              logger.debug('WebSocket sent (multi-turn)', { messageCount: contentMessages.length });
+              hasTextStreamEnded = !isTextExpected;
+              hasAudioStreamEnded = !isAudioExpected;
+              await sendContentMessages(contentMessages);
               return;
             }
 
             if (serverContent.turnComplete && contentIndex >= contents.length) {
+              completedTurns += 1;
               logger.debug(
                 `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
               );
@@ -606,7 +989,13 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
 
-            if (hasTextStreamEnded && hasAudioStreamEnded && contentIndex >= contents.length) {
+            if (
+              serverContent.turnComplete &&
+              Math.max(completedGenerations, completedTurns) >= contents.length &&
+              hasTextStreamEnded &&
+              hasAudioStreamEnded &&
+              contentIndex >= contents.length
+            ) {
               try {
                 await finalizeResponse();
               } catch (err) {
@@ -621,6 +1010,10 @@ export class GoogleLiveProvider implements ApiProvider {
             if (isResolved) {
               return;
             }
+            hasPendingToolFollowup = response.toolCall.functionCalls.some(
+              (functionCall: { id?: string; name?: string }) =>
+                Boolean(functionCall?.id && functionCall.name),
+            );
             if (toolsDisabled) {
               // Reply with an error tool_response so the model can complete its turn
               // instead of waiting for a response that will never come (which would
@@ -628,15 +1021,14 @@ export class GoogleLiveProvider implements ApiProvider {
               logger.warn('Ignoring function calls received while tools are disabled.');
               for (const functionCall of response.toolCall.functionCalls) {
                 if (functionCall?.id && functionCall.name) {
-                  const toolMessage = {
-                    tool_response: {
-                      function_responses: {
-                        id: functionCall.id,
-                        name: functionCall.name,
-                        response: { error: 'Tool calls are disabled for this request.' },
-                      },
-                    },
+                  const functionResponse = {
+                    id: functionCall.id,
+                    name: functionCall.name,
+                    response: { error: 'Tool calls are disabled for this request.' },
                   };
+                  const toolMessage = usesRealtimeTextInput
+                    ? { toolResponse: { functionResponses: [functionResponse] } }
+                    : { tool_response: { function_responses: functionResponse } };
                   ws.send(JSON.stringify(toolMessage));
                 }
               }
@@ -688,15 +1080,19 @@ export class GoogleLiveProvider implements ApiProvider {
                   if (isResolved) {
                     return;
                   }
-                  const toolMessage = {
-                    tool_response: {
-                      function_responses: {
-                        id: functionCall.id,
-                        name: functionName,
-                        response: callbackResponse,
-                      },
-                    },
+                  const functionResponse = {
+                    id: functionCall.id,
+                    name: functionName,
+                    response:
+                      callbackResponse !== null &&
+                      typeof callbackResponse === 'object' &&
+                      !Array.isArray(callbackResponse)
+                        ? callbackResponse
+                        : { result: callbackResponse },
                   };
+                  const toolMessage = usesRealtimeTextInput
+                    ? { toolResponse: { functionResponses: [functionResponse] } }
+                    : { tool_response: { function_responses: functionResponse } };
                   logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
                   ws.send(JSON.stringify(toolMessage));
                 }
@@ -710,14 +1106,14 @@ export class GoogleLiveProvider implements ApiProvider {
             for (const chunk of response.realtimeInput.mediaChunks) {
               if (chunk.mimeType?.includes('audio')) {
                 hasAudioContent = true;
-                response_audio_total += chunk.data;
+                responseAudioChunks.push(Buffer.from(chunk.data, 'base64'));
               }
             }
           } else if (response.candidates?.[0]?.content?.parts) {
             for (const part of response.candidates[0].content.parts) {
               if (part.inlineData?.mimeType?.includes('audio')) {
                 hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
+                responseAudioChunks.push(Buffer.from(part.inlineData.data, 'base64'));
               }
             }
           } else if (
@@ -758,9 +1154,10 @@ export class GoogleLiveProvider implements ApiProvider {
             }
           }
         } catch (err) {
-          logger.error(`Failed to process WebSocket response: ${JSON.stringify(err)}`);
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error(`Failed to process WebSocket response: ${message}`);
           ws.close();
-          safeResolve({ error: `Failed to process WebSocket response: ${JSON.stringify(err)}` });
+          safeResolve({ error: `Failed to process WebSocket response: ${message}` });
         }
       };
 
@@ -803,15 +1200,7 @@ export class GoogleLiveProvider implements ApiProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
+    const { filePath, functionName } = parseFileUrl(fileRef);
 
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', filePath);

@@ -87,6 +87,29 @@ assert:
 
 See the [llm-rubric grader override docs](/docs/configuration/expected-outputs/model-graded/llm-rubric#setting-grader-parameters-temperature-etc) for more detail.
 
+### Using LiteLLM as the G-Eval grader
+
+G-Eval makes one grader call to generate evaluation steps and another to score the output. To reuse a configured LiteLLM provider for both calls, reference its ID on the assertion and restrict the test target to the provider being evaluated:
+
+```yaml
+providers:
+  - id: openai:gpt-5
+  - id: litellm:gemini-pro
+    config:
+      apiBaseUrl: http://localhost:4000
+      temperature: 0
+
+tests:
+  - providers:
+      - openai:gpt-5
+    assert:
+      - type: g-eval
+        value: 'Check whether the answer is grounded and complete'
+        provider: litellm:gemini-pro
+```
+
+For LiteLLM proxy credentials and environment configuration, see the [LiteLLM provider guide](/docs/providers/litellm).
+
 ## Example
 
 Here's a complete example showing how to use G-Eval to assess multiple aspects of an LLM response:

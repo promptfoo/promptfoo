@@ -258,4 +258,31 @@ describe('AI21ChatCompletionProvider', () => {
       expect.any(Number),
     );
   });
+
+  it('invokes fetchWithCache once per call site even for duplicate provider configs', async () => {
+    const mockResponse = {
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider1 = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
+    const provider2 = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await Promise.all([provider1.callApi('test prompt'), provider2.callApi('test prompt')]);
+
+    // Each provider call delegates to fetchWithCache; the cache layer itself
+    // is responsible for collapsing identical requests, not the provider.
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+  });
 });

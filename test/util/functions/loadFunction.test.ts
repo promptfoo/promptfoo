@@ -308,10 +308,77 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should handle standard Windows file URLs on Windows', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: 'C:/path/to/file.js',
+      });
+      expect(parseFileUrl('file:///C:/path/to/file.js:functionName')).toEqual({
+        filePath: 'C:/path/to/file.js',
+        functionName: 'functionName',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
+  it('should preserve standard Windows-looking file URLs as POSIX paths on POSIX', () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    try {
+      expect(parseFileUrl('file:///C:/path/to/file.js')).toEqual({
+        filePath: '/C:/path/to/file.js',
+      });
+    } finally {
+      Object.defineProperty(process, 'platform', {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
+  });
+
   it('should handle relative paths', () => {
     const result = parseFileUrl('file://./path/to/file.js:functionName');
     expect(result).toEqual({
       filePath: './path/to/file.js',
+      functionName: 'functionName',
+    });
+  });
+
+  it('should parse Python file URLs with function names', () => {
+    const result = parseFileUrl('file://./path/to/file.py:function_name');
+    expect(result).toEqual({
+      filePath: './path/to/file.py',
+      functionName: 'function_name',
+    });
+  });
+
+  it('should preserve colons in default-export file paths', () => {
+    const result = parseFileUrl('file://./path/to/file:default.js');
+    expect(result).toEqual({
+      filePath: './path/to/file:default.js',
+    });
+  });
+
+  it('should parse named exports from file paths that contain colons', () => {
+    const result = parseFileUrl('file://./path/to/file:default.js:functionName');
+    expect(result).toEqual({
+      filePath: './path/to/file:default.js',
+      functionName: 'functionName',
+    });
+  });
+
+  it('should parse named exports from directory paths that contain colons', () => {
+    const result = parseFileUrl('file://path:with:colons/hooks.js:functionName');
+    expect(result).toEqual({
+      filePath: 'path:with:colons/hooks.js',
       functionName: 'functionName',
     });
   });

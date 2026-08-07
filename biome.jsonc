@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -28,7 +28,9 @@
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json",
       // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
-      "!!src/redteam/shared/runtimeTransform.ts"
+      "!!src/redteam/shared/runtimeTransform.ts",
+      "!!plugins/promptfoo/skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs",
+      "!!plugins/promptfoo/skills/promptfoo-redteam-setup/scripts/openapi-operation-to-redteam-config.mjs"
     ]
   },
   "formatter": {
@@ -96,7 +98,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": false,
+      "preset": "none",
       "complexity": {
         "noUselessConstructor": "error",
         "noUselessRename": "error",
@@ -182,12 +184,18 @@
         "noReExportAll": "off"
       },
       "a11y": {
-        "recommended": false,
+        "preset": "none",
         "useButtonType": "off"
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error",
+        // Disabled on the 2.5.5 upgrade. It cost 36s of a 45s `biome ci .` run on
+        // this repo (45.5s -> 9.5s with it off), which pushed the Style Check job
+        // past its timeout, and 4 of the 5 things it flagged were false positives:
+        // 2.5.5 does not unwrap `await` over `Promise<T> | null`, so it reports a
+        // resolved `string | null` as a promise in a conditional. Re-enable when
+        // upstream makes it cheaper and fixes the await-unwrapping.
+        "noMisusedPromises": "off",
         "noUselessTypeConversion": "error",
         "noIdenticalTestTitle": "error",
         "useReduceTypeParameter": "warn"
@@ -329,6 +337,7 @@
         "src/redteam/**/*",
         "src/util/**/*",
         "src/commands/**/*",
+        "src/node/doEval.ts",
         "src/contracts/**/*",
         "src/types/**/*",
         "src/tracing/**/*"
@@ -345,7 +354,7 @@
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
-          "recommended": false,
+          "preset": "none",
           "correctness": {
             "noUnusedImports": "off",
             "noUnusedVariables": "off",

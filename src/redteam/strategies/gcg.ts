@@ -7,9 +7,11 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase } from '../../types/index';
 
@@ -52,6 +54,7 @@ async function generateGcgPrompts(
         task: 'gcg',
         query: testCase.vars[injectVar],
         ...(config.n && { n: config.n }),
+        ...remoteGenerationContextPayload(config.targetId),
         email: getUserEmail(),
       };
 
@@ -64,10 +67,9 @@ async function generateGcgPrompts(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+          headers: getRemoteGenerationHeaders({
             'x-promptfoo-silent': 'true',
-          },
+          }),
           body: JSON.stringify(payload),
         },
         getRequestTimeoutMs(),
@@ -106,7 +108,7 @@ async function generateGcgPrompts(
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/GCG`,
+          metric: assertion.metric ? `${assertion.metric}/GCG` : assertion.metric,
         })),
         metadata: {
           ...testCase.metadata,

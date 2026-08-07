@@ -108,7 +108,7 @@ interface SarifLog {
   }>;
 }
 
-function isReportableFinding(comment: Comment): boolean {
+function isSarifReportableFinding(comment: Comment): boolean {
   // GitHub Code Scanning needs an artifact location to display a result, so we require
   // `file`. `line` is optional — SARIF allows results without a region (file-level
   // findings). CommentSchema marks `severity` optional and toSarifLevel falls back to
@@ -130,7 +130,7 @@ function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['leve
       return 'warning';
     case CodeScanSeverity.LOW:
     case CodeScanSeverity.NONE:
-      // NONE is filtered upstream by isReportableFinding; kept here for exhaustiveness.
+      // NONE is filtered upstream by isSarifReportableFinding; kept here for exhaustiveness.
       return 'note';
     default: {
       // Compile-time exhaustiveness: adding a CodeScanSeverity value forces this to break.
@@ -206,8 +206,16 @@ function toSarifResult(comment: Comment): SarifResult {
   };
 }
 
+// True when the response would produce at least one SARIF result. Callers gating on
+// "does this scan have findings worth uploading" must use this rather than
+// `comments.length`, because scanResponseToSarif drops severity:none and fileless
+// comments — so a non-empty comments array can still serialize to zero results.
+export function hasSarifReportableFindings(response: ScanResponse): boolean {
+  return response.comments.some(isSarifReportableFinding);
+}
+
 export function scanResponseToSarif(response: ScanResponse): SarifLog {
-  const results = response.comments.filter(isReportableFinding).map(toSarifResult);
+  const results = response.comments.filter(isSarifReportableFinding).map(toSarifResult);
 
   const driver: SarifLog['runs'][number]['tool']['driver'] = {
     name: 'Promptfoo Code Scan',

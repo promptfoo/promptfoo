@@ -42,6 +42,7 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ## Included Configs
 
 - `promptfooconfig.yaml` - Read-only structured repo summary.
+- `promptfooconfig.tracing.yaml` - Enables OTEL tracing and asserts on the `gen_ai.turn *` protocol-turn marker spans (see [Turn marker spans](https://www.promptfoo.dev/docs/tracing/#per-llm-turn-spans)).
 - `approval-policy/promptfooconfig.yaml` - Demonstrates deterministic approval request handling.
 - `review-diff/promptfooconfig.yaml` - Uses Codex app-server to review the current git diff.
 - `skills/promptfooconfig.yaml` - Demonstrates explicit skill input items.

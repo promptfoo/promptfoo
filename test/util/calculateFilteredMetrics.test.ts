@@ -20,7 +20,7 @@ describe('calculateFilteredMetrics', () => {
   });
 
   beforeEach(async () => {
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -575,7 +575,7 @@ describe('calculateFilteredMetrics', () => {
       });
 
       // Manually insert result with invalid prompt_idx
-      const db = getDb();
+      const db = await getDb();
       await db.run(`
         INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,

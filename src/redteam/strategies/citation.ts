@@ -1,16 +1,14 @@
 import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../../cache';
-import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
-  getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
+import { postRemoteGenerationTask } from '../remoteGenerationTask';
 
 import type { TestCase } from '../../types/index';
 
@@ -44,11 +42,11 @@ async function generateCitations(
 
       const payload = {
         task: 'citation',
-        testCases: [testCase],
-        injectVar,
         topic: testCase.vars[injectVar],
-        config,
-        email: getUserEmail(),
+        ...(typeof config.useAcademic === 'boolean' && { useAcademic: config.useAcademic }),
+        ...(typeof config.useJournals === 'boolean' && { useJournals: config.useJournals }),
+        ...(typeof config.useBooks === 'boolean' && { useBooks: config.useBooks }),
+        ...remoteGenerationContextPayload(config.targetId),
       };
 
       interface CitationGenerationResponse {
@@ -61,17 +59,7 @@ async function generateCitations(
         };
       }
 
-      const { data } = await fetchWithCache<CitationGenerationResponse>(
-        getRemoteGenerationUrl(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload),
-        },
-        getRequestTimeoutMs(),
-      );
+      const { data } = await postRemoteGenerationTask<CitationGenerationResponse>(payload);
 
       logger.debug(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
@@ -112,7 +100,7 @@ async function generateCitations(
         },
         assert: testCase.assert?.map((assertion) => ({
           ...assertion,
-          metric: `${assertion.metric}/Citation`,
+          metric: assertion.metric ? `${assertion.metric}/Citation` : assertion.metric,
         })),
         metadata: {
           ...testCase.metadata,

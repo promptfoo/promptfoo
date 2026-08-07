@@ -9,7 +9,7 @@ import asyncio
 import os
 from typing import Any, Dict
 
-from agent import run_weather_agent
+from agent import DEFAULT_MODEL, run_weather_agent
 
 
 def call_api(
@@ -18,7 +18,7 @@ def call_api(
     """Main provider function for PydanticAI weather agent."""
     try:
         config = options.get("config", {})
-        model = config.get("model", "openai:gpt-4o-mini")
+        model = config.get("model", DEFAULT_MODEL)
 
         result = asyncio.run(run_weather_agent(prompt, model))
         output_dict = result.model_dump() if hasattr(result, "model_dump") else result

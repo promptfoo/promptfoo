@@ -27,6 +27,8 @@ In machine learning, "Accuracy" is a metric that measures the proportion of corr
 
 To use assertions in your test cases, add an `assert` property to the test case with an array of assertion objects. Each assertion object should have a `type` property indicating the assertion type and any additional properties required for that assertion type.
 
+For a quick reference to available checks, jump to [Assertion types](#assertion-types).
+
 Example:
 
 ```yaml
@@ -45,11 +47,11 @@ tests:
 | ---------------- | ------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | type             | string             | Yes      | Type of assertion                                                                                                                                                                                                                                                                                                                                  |
 | value            | string             | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                                                  |
-| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                                                                            |
+| threshold        | number             | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`, `ruby`                                                                                                                                                                                                                                    |
 | weight           | number             | No       | How heavily to weigh the assertion. Defaults to 1.0                                                                                                                                                                                                                                                                                                |
 | provider         | string             | No       | Some assertions (similarity, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                                                                                               |
 | rubricPrompt     | string \| string[] | No       | Model-graded LLM prompt                                                                                                                                                                                                                                                                                                                            |
-| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python assertions                                                                                                                                                                                                                                                      |
+| config           | object             | No       | External mapping of arbitrary strings to values passed to custom javascript/python/ruby assertions                                                                                                                                                                                                                                                 |
 | transform        | string \| Function | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
 | metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
 | contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
@@ -114,8 +116,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | Assertion Type                                                                                                     | Returns true if...                                                 |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | [equals](/docs/configuration/expected-outputs/deterministic/#equality)                                             | output matches exactly                                             |
-| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains substring                                          |
-| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains substring, case insensitive                        |
+| [contains](/docs/configuration/expected-outputs/deterministic/#contains)                                           | output contains a string or number as text                         |
+| [icontains](/docs/configuration/expected-outputs/deterministic/#contains)                                          | output contains a string or number as text, case insensitive       |
 | [regex](/docs/configuration/expected-outputs/deterministic/#regex)                                                 | output matches regex                                               |
 | [starts-with](/docs/configuration/expected-outputs/deterministic/#starts-with)                                     | output starts with string                                          |
 | [contains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                   | output contains any of the listed substrings                       |
@@ -126,13 +128,14 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                       |
 | [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                               |
-| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                                |
-| [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                          |
-| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                                |
+| [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is a non-empty valid SQL statement                          |
+| [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
+| [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document                     |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task             |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                  |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                      |
+| [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                        |
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
@@ -170,6 +173,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [similar](/docs/configuration/expected-outputs/similar)                                              | Embeddings and cosine similarity are above a threshold                           |
 | [classifier](/docs/configuration/expected-outputs/classifier)                                        | Run LLM output through a classifier                                              |
+| [moderation](/docs/configuration/expected-outputs/moderation)                                        | Check output against safety policies and include provider-reported usage metrics |
 | [llm-rubric](/docs/configuration/expected-outputs/model-graded)                                      | LLM output matches a given rubric, using a Language Model to grade output        |
 | [g-eval](/docs/configuration/expected-outputs/model-graded/g-eval)                                   | Chain-of-thought evaluation based on custom criteria using the G-Eval framework  |
 | [answer-relevance](/docs/configuration/expected-outputs/model-graded)                                | Ensure that LLM output is related to original query                              |
@@ -209,7 +213,7 @@ If the LLM output is `Goodbye world`, the `equals` assertion fails but the `cont
 
 ### Setting a score requirement
 
-Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions exceeds the threshold value.
+Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions is greater than or equal to the threshold value.
 
 For example:
 
@@ -226,6 +230,8 @@ tests:
 ```
 
 If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contains` assertion passes and the final score is 0.33. Because this is below the 0.5 threshold, the test case fails. If the threshold were lowered to 0.2, the test case would succeed.
+
+A `threshold` of `0` makes the test case pass regardless of individual assertion failures, since the combined score is always at least 0. Use it to collect assertion scores without letting any single failure fail the test. The same applies to an `assert-set` threshold.
 
 :::info
 If weight is set to 0, the assertion automatically passes.
@@ -326,9 +332,10 @@ type AssertionValueFunctionContext = {
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
+  metadata?: ProviderResponse['metadata']; // Shortcut to providerResponse?.metadata
 };
 type AssertionResponse = string | boolean | number | GradingResult;
-type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertResponse;
+type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertionResponse;
 ```
 
 See [GradingResult definition](/docs/configuration/reference#gradingresult).
@@ -398,25 +405,27 @@ All assertion types can be used in `__expected`. The column supports exactly one
 
 The general format is `type:value` or `type(threshold):value`. Values without a prefix default to `equals`.
 
-| Syntax                     | Type            | Example                                     |
-| -------------------------- | --------------- | ------------------------------------------- |
-| `value`                    | `equals`        | `Paris`                                     |
-| `contains:value`           | `contains`      | `contains:Paris`                            |
-| `icontains:value`          | `icontains`     | `icontains:paris`                           |
-| `starts-with:value`        | `starts-with`   | `starts-with:The answer`                    |
-| `regex:pattern`            | `regex`         | `regex:^Hello.*world$`                      |
-| `is-json`                  | `is-json`       | `is-json`                                   |
-| `contains-json`            | `contains-json` | `contains-json`                             |
-| `similar(threshold):value` | `similar`       | `similar(0.8):Hello world`                  |
-| `llm-rubric:criteria`      | `llm-rubric`    | `llm-rubric:Is helpful and accurate`        |
-| `grade:criteria`           | `llm-rubric`    | `grade:Does not mention being an AI`        |
-| `factuality:reference`     | `factuality`    | `factuality:Paris is the capital of France` |
-| `javascript:code`          | `javascript`    | `javascript:output.length < 100`            |
-| `fn:code`                  | `javascript`    | `fn:output.includes('hello')`               |
-| `python:code`              | `python`        | `python:len(output) > 10`                   |
-| `file://path`              | External file   | `file://assertions/custom.js`               |
-| `not-type:value`           | Negated         | `not-contains:error`                        |
-| `levenshtein(N):value`     | `levenshtein`   | `levenshtein(5):expected text`              |
+| Syntax                       | Type            | Example                                     |
+| ---------------------------- | --------------- | ------------------------------------------- |
+| `value`                      | `equals`        | `Paris`                                     |
+| `contains:value`             | `contains`      | `contains:Paris`                            |
+| `icontains:value`            | `icontains`     | `icontains:paris`                           |
+| `contains-any:value1,value2` | `contains-any`  | `contains-any:Paris,London`                 |
+| `contains-all:value1,value2` | `contains-all`  | `contains-all:Paris,France`                 |
+| `starts-with:value`          | `starts-with`   | `starts-with:The answer`                    |
+| `regex:pattern`              | `regex`         | `regex:^Hello.*world$`                      |
+| `is-json`                    | `is-json`       | `is-json`                                   |
+| `contains-json`              | `contains-json` | `contains-json`                             |
+| `similar(threshold):value`   | `similar`       | `similar(0.8):Hello world`                  |
+| `llm-rubric:criteria`        | `llm-rubric`    | `llm-rubric:Is helpful and accurate`        |
+| `grade:criteria`             | `llm-rubric`    | `grade:Does not mention being an AI`        |
+| `factuality:reference`       | `factuality`    | `factuality:Paris is the capital of France` |
+| `javascript:code`            | `javascript`    | `javascript:output.length < 100`            |
+| `fn:code`                    | `javascript`    | `fn:output.includes('hello')`               |
+| `python:code`                | `python`        | `python:len(output) > 10`                   |
+| `file://path`                | External file   | `file://assertions/custom.js`               |
+| `not-type:value`             | Negated         | `not-contains:error`                        |
+| `levenshtein(N):value`       | `levenshtein`   | `levenshtein(5):expected text`              |
 
 When the `__expected` field is provided, the success and failure statistics in the evaluation summary will be based on whether the expected criteria are met.
 
@@ -440,7 +449,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-5.5
   - localai:chat:vicuna
 tests:
   - vars:

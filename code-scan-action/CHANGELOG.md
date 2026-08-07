@@ -2,6 +2,22 @@
 
 All notable changes to this package will be documented in this file.
 
+## [0.1.8](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.7...code-scan-action-0.1.8) (2026-06-16)
+
+### Bug Fixes
+
+- **code-scan:** process findings in mixed skip responses ([#9525](https://github.com/promptfoo/promptfoo/issues/9525)) ([aeae790](https://github.com/promptfoo/promptfoo/commit/aeae7904701f861a0a7ce8bfcdd16f67e74deec3))
+- **code-scan:** run GitHub Action on Node 24 runtime ([#9772](https://github.com/promptfoo/promptfoo/issues/9772)) ([c25974e](https://github.com/promptfoo/promptfoo/commit/c25974e8e74a5ba923c0318cb6576e2b4dfc9ad6))
+
+## [0.1.7](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.6...code-scan-action-0.1.7) (2026-05-29)
+
+### Bug Fixes
+
+- **code-scan:** emit structured fork PR skip output ([#9426](https://github.com/promptfoo/promptfoo/issues/9426)) ([61c624c](https://github.com/promptfoo/promptfoo/commit/61c624c7f91808a6f59d8b837dbb3896dd9a74c0))
+- **code-scan:** honor minimum-severity alias when min-severity is unset ([#9433](https://github.com/promptfoo/promptfoo/issues/9433)) ([ea5ea9e](https://github.com/promptfoo/promptfoo/commit/ea5ea9e741da0968431de25c0d67337f2e0e6e20))
+- **eval:** show test descriptions in HTML output ([#9390](https://github.com/promptfoo/promptfoo/issues/9390)) ([206f1dd](https://github.com/promptfoo/promptfoo/commit/206f1dd9848607ed9d4eba1f7998f90b8f87f0ff))
+- **providers:** honor Vertex default host overrides ([#9389](https://github.com/promptfoo/promptfoo/issues/9389)) ([11a8d9b](https://github.com/promptfoo/promptfoo/commit/11a8d9b1c4edf214e8e15dd6794690ab49d24430))
+
 ## [0.1.6](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.1.5...code-scan-action-0.1.6) (2026-05-21)
 
 ### Features

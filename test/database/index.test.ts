@@ -1,6 +1,9 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import {
   closeDb,
   DrizzleLogWriter,
@@ -12,16 +15,90 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { mockProcessEnv } from '../util/utils';
 
-vi.mock('../../src/envars');
+vi.mock('../../src/envars', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/envars')>();
+  return { ...actual, getEnvBool: vi.fn(actual.getEnvBool) };
+});
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: vi.fn(actual.homedir) };
+});
+
+// Passthrough fs mock with a fault-injection switch for statSync; the ESM namespace
+// itself cannot be spied on.
+const statSyncFault = vi.hoisted(() => ({ error: undefined as Error | undefined }));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    statSync: ((...args: Parameters<typeof actual.statSync>) => {
+      if (statSyncFault.error) {
+        throw statSyncFault.error;
+      }
+      return actual.statSync(...args);
+    }) as typeof actual.statSync,
+  };
+});
+
+const ORIGINAL_HOME_DIR = os.homedir();
+const VITEST_WORKER_MARKER = '__vitest_worker__';
+const JEST_NATIVE_PROMISE_MARKER = Symbol.for('jest-native-promise');
+
+function withTestRunnerMarkers<T>(
+  markers: { vitest?: boolean; jest?: boolean },
+  callback: () => T,
+): T {
+  const markerKeys: PropertyKey[] = [VITEST_WORKER_MARKER, JEST_NATIVE_PROMISE_MARKER];
+  const descriptors = markerKeys.map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+  );
+
+  try {
+    for (const key of markerKeys) {
+      Reflect.deleteProperty(globalThis, key);
+    }
+    if (markers.vitest) {
+      Object.defineProperty(globalThis, VITEST_WORKER_MARKER, {
+        configurable: true,
+        value: true,
+      });
+    }
+    if (markers.jest) {
+      Object.defineProperty(globalThis, JEST_NATIVE_PROMISE_MARKER, {
+        configurable: true,
+        value: Promise,
+      });
+    }
+    return callback();
+  } finally {
+    for (const [key, descriptor] of descriptors) {
+      if (descriptor) {
+        Object.defineProperty(globalThis, key, descriptor);
+      } else {
+        Reflect.deleteProperty(globalThis, key);
+      }
+    }
+  }
+}
 
 describe('database', () => {
-  beforeEach(() => {
+  let tempConfigDir: string;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
-    closeDb();
-    vi.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
+    statSyncFault.error = undefined;
+    vi.mocked(os.homedir).mockReset();
+    vi.mocked(os.homedir).mockReturnValue(ORIGINAL_HOME_DIR);
+    vi.mocked(getConfigDirectoryPath).mockReset();
+    vi.mocked(getEnvBool).mockReset();
+    await closeDb();
+    cliState.config = undefined;
+    tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-db-index-'));
+    vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
     vi.mocked(getEnvBool).mockImplementation((key) => {
       if (key === 'IS_TESTING') {
         return true;
@@ -30,8 +107,11 @@ describe('database', () => {
     });
   });
 
-  afterEach(() => {
-    closeDb();
+  afterEach(async () => {
+    await closeDb();
+    cliState.config = undefined;
+    vi.unstubAllEnvs();
+    fs.rmSync(tempConfigDir, { force: true, recursive: true });
   });
 
   describe('getDbPath', () => {
@@ -41,6 +121,337 @@ describe('database', () => {
 
       expect(getDbPath()).toBe(path.resolve(configPath, 'promptfoo.db'));
     });
+
+    it('should allow a missing isolated database directory', () => {
+      const configPath = path.join(tempConfigDir, 'missing-config');
+      vi.mocked(getConfigDirectoryPath).mockImplementation((createIfNotExists = false) => {
+        if (createIfNotExists) {
+          fs.mkdirSync(configPath, { recursive: true });
+        }
+        return configPath;
+      });
+      vi.stubEnv('VITEST', 'true');
+
+      expect(getDbPath()).toBe(path.join(configPath, 'promptfoo.db'));
+      expect(fs.existsSync(configPath)).toBe(true);
+    });
+
+    it('should refuse to use the default user database when the process is running tests', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => withTestRunnerMarkers({}, () => getDbPath())).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should allow the default user database when only NODE_ENV is test', () => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('NODE_ENV', 'test');
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', undefined);
+
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
+    });
+
+    it('should not use Promptfoo env overrides to identify a test process', () => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      cliState.config = { env: { VITEST: 'true', JEST_WORKER_ID: '1' } };
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', undefined);
+
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
+    });
+
+    it('should detect Vitest after the process environment is cleared', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      const restoreEnv = mockProcessEnv({}, { clear: true });
+      let error: unknown;
+
+      try {
+        getDbPath();
+      } catch (caught) {
+        error = caught;
+      } finally {
+        restoreEnv();
+      }
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should detect Jest after the process environment is cleared', () => {
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(path.join(os.homedir(), '.promptfoo'));
+      const restoreEnv = mockProcessEnv({}, { clear: true });
+      let error: unknown;
+
+      try {
+        withTestRunnerMarkers({ jest: true }, () => getDbPath());
+      } catch (caught) {
+        error = caught;
+      } finally {
+        restoreEnv();
+      }
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should not identify generic Jest workers as test processes', () => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('VITEST', undefined);
+      vi.stubEnv('JEST_WORKER_ID', '1');
+
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
+    });
+
+    it.each(['', '0', 'false'])('should ignore VITEST=%j outside Vitest', (value) => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('VITEST', value);
+      vi.stubEnv('JEST_WORKER_ID', undefined);
+
+      const dbPath = withTestRunnerMarkers({}, () => getDbPath());
+
+      expect(dbPath).toBe(path.join(defaultConfigDir, 'promptfoo.db'));
+    });
+
+    it('should refuse an alias that resolves to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'aliased-config');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.symlinkSync(
+        defaultConfigDir,
+        aliasedConfigDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should refuse an alias that resolves to a missing default database directory', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'missing-home');
+      const aliasedHomeDir = path.join(tempConfigDir, 'aliased-home');
+      const aliasedConfigDir = path.join(aliasedHomeDir, '.promptfoo');
+      fs.mkdirSync(fakeHomeDir);
+      fs.symlinkSync(
+        fakeHomeDir,
+        aliasedHomeDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockImplementation((createIfNotExists = false) => {
+        if (createIfNotExists) {
+          fs.mkdirSync(aliasedConfigDir, { recursive: true });
+        }
+        return aliasedConfigDir;
+      });
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(path.join(fakeHomeDir, '.promptfoo', 'promptfoo.db'))).toBe(false);
+    });
+
+    it('should refuse a hard link to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'hard-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'hard-link-config');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.writeFileSync(path.join(defaultConfigDir, 'promptfoo.db'), 'database');
+      fs.linkSync(
+        path.join(defaultConfigDir, 'promptfoo.db'),
+        path.join(aliasedConfigDir, 'promptfoo.db'),
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+    });
+
+    it('should refuse a dangling file symlink to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'dangling-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'dangling-link-config');
+      const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.symlinkSync(defaultDbPath, path.join(aliasedConfigDir, 'promptfoo.db'), 'file');
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(defaultDbPath)).toBe(false);
+    });
+
+    it('should refuse a relative dangling file symlink chain to the default user database', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'relative-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'relative-link-config');
+      const linkDirectory = path.join(tempConfigDir, 'relative-link-hop');
+      const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
+      const intermediateDbPath = path.join(linkDirectory, 'promptfoo.db');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.mkdirSync(linkDirectory, { recursive: true });
+      fs.symlinkSync(path.relative(linkDirectory, defaultDbPath), intermediateDbPath, 'file');
+      fs.symlinkSync(
+        path.relative(aliasedConfigDir, intermediateDbPath),
+        path.join(aliasedConfigDir, 'promptfoo.db'),
+        'file',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(() => getDbPath()).toThrow(
+        'Refusing to open the default Promptfoo database while running tests',
+      );
+      expect(fs.existsSync(defaultDbPath)).toBe(false);
+    });
+
+    it('should preserve filesystem semantics for dangling symlinks containing dot-dot', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'pivot-link-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const pivotTarget = path.join(fakeHomeDir, 'subdir');
+      const aliasedConfigDir = path.join(tempConfigDir, 'pivot-link-config');
+      const isolatedConfigDir = path.join(aliasedConfigDir, '.promptfoo');
+      const defaultDbPath = path.join(defaultConfigDir, 'promptfoo.db');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.mkdirSync(pivotTarget, { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      fs.mkdirSync(isolatedConfigDir, { recursive: true });
+      fs.symlinkSync(
+        pivotTarget,
+        path.join(aliasedConfigDir, 'pivot'),
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      fs.symlinkSync(
+        ['pivot', '..', '.promptfoo', 'promptfoo.db'].join(path.sep),
+        path.join(aliasedConfigDir, 'promptfoo.db'),
+        'file',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      const linkTarget = fs.readlinkSync(path.join(aliasedConfigDir, 'promptfoo.db'));
+      const pivotedConfigDir = path.isAbsolute(linkTarget)
+        ? path.dirname(linkTarget)
+        : `${aliasedConfigDir}${path.sep}${path.dirname(linkTarget)}`;
+      const reachesDefaultConfig =
+        fs.realpathSync.native(pivotedConfigDir) === fs.realpathSync.native(defaultConfigDir);
+
+      if (reachesDefaultConfig) {
+        expect(() => getDbPath()).toThrow(
+          'Refusing to open the default Promptfoo database while running tests',
+        );
+      } else {
+        expect(getDbPath()).toBe(path.join(aliasedConfigDir, 'promptfoo.db'));
+      }
+      expect(fs.existsSync(defaultDbPath)).toBe(false);
+    });
+
+    it('should fail closed when stat-based identity checks error', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'eio-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const aliasedConfigDir = path.join(tempConfigDir, 'eio-aliased-config');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.symlinkSync(
+        defaultConfigDir,
+        aliasedConfigDir,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      statSyncFault.error = Object.assign(new Error('EIO: i/o error, stat'), { code: 'EIO' });
+
+      try {
+        // An indeterminate identity error must propagate instead of being read
+        // as "different files", which would let the alias reach the user DB.
+        expect(() => getDbPath()).toThrow('EIO');
+      } finally {
+        statSyncFault.error = undefined;
+      }
+    });
+
+    it('should fail closed when realpath-based identity checks error', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'estale-home');
+      const aliasedConfigDir = path.join(tempConfigDir, 'estale-aliased-config');
+      fs.mkdirSync(path.join(fakeHomeDir, '.promptfoo'), { recursive: true });
+      fs.mkdirSync(aliasedConfigDir, { recursive: true });
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(aliasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      const injectedError = Object.assign(new Error('ESTALE: stale file handle'), {
+        code: 'ESTALE',
+      });
+      const realpathSpy = vi.spyOn(fs.realpathSync, 'native').mockImplementation(() => {
+        throw injectedError;
+      });
+
+      try {
+        expect(() => getDbPath()).toThrow('ESTALE');
+      } finally {
+        realpathSpy.mockRestore();
+      }
+    });
+
+    it('should respect filesystem case sensitivity for existing databases', () => {
+      const fakeHomeDir = path.join(tempConfigDir, 'case-home');
+      const defaultConfigDir = path.join(fakeHomeDir, '.promptfoo');
+      const differentlyCasedConfigDir = path.join(fakeHomeDir, '.PROMPTFOO');
+      fs.mkdirSync(defaultConfigDir, { recursive: true });
+      fs.writeFileSync(path.join(defaultConfigDir, 'promptfoo.db'), 'default database');
+      const isCaseInsensitive = fs.existsSync(differentlyCasedConfigDir);
+      if (!isCaseInsensitive) {
+        fs.mkdirSync(differentlyCasedConfigDir);
+        fs.writeFileSync(path.join(differentlyCasedConfigDir, 'promptfoo.db'), 'other database');
+      }
+
+      vi.mocked(os.homedir).mockReturnValue(fakeHomeDir);
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(differentlyCasedConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      if (isCaseInsensitive) {
+        expect(() => getDbPath()).toThrow(
+          'Refusing to open the default Promptfoo database while running tests',
+        );
+      } else {
+        expect(getDbPath()).toBe(path.join(differentlyCasedConfigDir, 'promptfoo.db'));
+      }
+    });
   });
 
   describe('getDbSignalPath', () => {
@@ -49,6 +460,14 @@ describe('database', () => {
       vi.mocked(getConfigDirectoryPath).mockReturnValue(configPath);
 
       expect(getDbSignalPath()).toBe(path.resolve(configPath, 'evalLastWritten'));
+    });
+
+    it('should allow the default signal path for in-memory tests', () => {
+      const defaultConfigDir = path.join(os.homedir(), '.promptfoo');
+      vi.mocked(getConfigDirectoryPath).mockReturnValue(defaultConfigDir);
+      vi.stubEnv('VITEST', 'true');
+
+      expect(getDbSignalPath()).toBe(path.join(defaultConfigDir, 'evalLastWritten'));
     });
   });
 
@@ -62,20 +481,138 @@ describe('database', () => {
       });
     });
 
-    it('should return in-memory database when testing', () => {
-      const db = getDb();
+    it('should return a database when testing', async () => {
+      const db = await getDb();
       expect(db).toBeDefined();
     });
 
-    it('should initialize database with WAL mode', () => {
-      const db = getDb();
+    it('should use an in-memory database when testing', async () => {
+      await getDb();
+
+      expect(fs.existsSync(getDbPath())).toBe(false);
+    });
+
+    it('should initialize database with WAL mode', async () => {
+      const db = await getDb();
       expect(db).toBeDefined();
     });
 
-    it('should return same instance on subsequent calls', () => {
-      const db1 = getDb();
-      const db2 = getDb();
+    it('should return same instance on subsequent calls', async () => {
+      const db1 = await getDb();
+      const db2 = await getDb();
       expect(db1).toBe(db2);
+    });
+
+    it('should serialize concurrent top-level transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE transaction_queue_test (id TEXT PRIMARY KEY)');
+
+      await Promise.all([
+        db.transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_queue_test (id) VALUES ('a')");
+        }),
+        db.transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_queue_test (id) VALUES ('b')");
+        }),
+      ]);
+
+      await expect(
+        db.all<{ id: string }>('SELECT id FROM transaction_queue_test ORDER BY id'),
+      ).resolves.toEqual([{ id: 'a' }, { id: 'b' }]);
+    });
+
+    it('should serialize plain statements with top-level transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE transaction_plain_statement_test (id TEXT PRIMARY KEY)');
+
+      let markTransactionStarted: () => void;
+      const transactionStarted = new Promise<void>((resolve) => {
+        markTransactionStarted = resolve;
+      });
+      let releaseTransaction!: () => void;
+      const transactionRelease = new Promise<void>((resolve) => {
+        releaseTransaction = resolve;
+      });
+
+      const transactionPromise = db.transaction(async (tx) => {
+        await tx.run("INSERT INTO transaction_plain_statement_test (id) VALUES ('transaction')");
+        markTransactionStarted();
+        await transactionRelease;
+      });
+
+      await transactionStarted;
+      const statementPromise = db.run(
+        "INSERT INTO transaction_plain_statement_test (id) VALUES ('statement')",
+      );
+      releaseTransaction();
+
+      await Promise.all([transactionPromise, statementPromise]);
+      await expect(
+        db.all<{ id: string }>('SELECT id FROM transaction_plain_statement_test ORDER BY id'),
+      ).resolves.toEqual([{ id: 'statement' }, { id: 'transaction' }]);
+    });
+
+    it('should reuse the active transaction for nested root transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE nested_transaction_test (id TEXT PRIMARY KEY)');
+
+      await expect(
+        Promise.race([
+          db.transaction(async (tx) => {
+            await tx.run("INSERT INTO nested_transaction_test (id) VALUES ('outer')");
+            await db.transaction(async (nestedTx) => {
+              await nestedTx.run("INSERT INTO nested_transaction_test (id) VALUES ('inner')");
+            });
+          }),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('nested transaction timed out')), 1_000);
+          }),
+        ]),
+      ).resolves.toBeUndefined();
+
+      await expect(
+        db.all<{ id: string }>('SELECT id FROM nested_transaction_test ORDER BY id'),
+      ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
+    });
+
+    it('does not deadlock when a transaction callback calls root db.* helpers', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY, val TEXT)');
+
+      await expect(
+        Promise.race([
+          db.transaction(async (tx) => {
+            await tx.run("INSERT INTO root_call_inside_tx_test (id, val) VALUES (1, 'in-tx')");
+            const rows = await db.all<{ value: number }>('SELECT 1 AS value');
+            expect(rows[0]?.value).toBe(1);
+          }),
+          new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error('root db call inside transaction deadlocked')),
+              1_000,
+            );
+          }),
+        ]),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should enforce foreign keys inside top-level transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE transaction_fk_parent (id TEXT PRIMARY KEY)');
+      await db.run(`
+        CREATE TABLE transaction_fk_child (
+          id TEXT PRIMARY KEY,
+          parent_id TEXT NOT NULL REFERENCES transaction_fk_parent(id)
+        )
+      `);
+
+      await expect(
+        db.transaction(async (tx) => {
+          await tx.run(
+            "INSERT INTO transaction_fk_child (id, parent_id) VALUES ('child', 'missing')",
+          );
+        }),
+      ).rejects.toThrow();
     });
   });
 
@@ -101,47 +638,47 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
-    it('should close database connection and reset instances', () => {
-      const _db = getDb();
+    it('should close database connection and reset instances', async () => {
+      const _db = await getDb();
       expect(isDbOpen()).toBe(true);
-      closeDb();
+      await closeDb();
       expect(isDbOpen()).toBe(false);
-      const newDb = getDb();
+      const newDb = await getDb();
       expect(newDb).toBeDefined();
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should handle errors when closing database', () => {
-      const _db = getDb();
-      closeDb();
-      closeDb(); // Second close should be handled gracefully
+    it('should handle errors when closing database', async () => {
+      const _db = await getDb();
+      await closeDb();
+      await closeDb(); // Second close should be handled gracefully
       expect(logger.error).not.toHaveBeenCalled();
     });
 
-    it('should handle close errors gracefully', () => {
-      const _db = getDb();
+    it('should handle close errors gracefully', async () => {
+      const _db = await getDb();
       // Force an error by closing twice
-      closeDb();
-      closeDb();
+      await closeDb();
+      await closeDb();
       expect(logger.error).not.toHaveBeenCalled();
     });
   });
 
   describe('isDbOpen', () => {
-    it('should return false when database is not initialized', () => {
-      closeDb(); // Ensure clean state
+    it('should return false when database is not initialized', async () => {
+      await closeDb(); // Ensure clean state
       expect(isDbOpen()).toBe(false);
     });
 
-    it('should return true when database is open', () => {
-      const _db = getDb();
+    it('should return true when database is open', async () => {
+      const _db = await getDb();
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should return false after closing database', () => {
-      const _db = getDb();
+    it('should return false after closing database', async () => {
+      const _db = await getDb();
       expect(isDbOpen()).toBe(true);
-      closeDb();
+      await closeDb();
       expect(isDbOpen()).toBe(false);
     });
   });

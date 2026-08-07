@@ -4,17 +4,20 @@ import { hasSpecificDocumentation } from './providerDocumentationMap';
 describe('hasSpecificDocumentation', () => {
   it.each([
     { providerType: 'openai', description: 'a common foundation model provider' },
+    { providerType: 'a2a', description: 'an Agent2Agent provider' },
+    { providerType: 'openinterpreter', description: 'a coding-agent provider' },
     { providerType: 'go', description: 'a newly added code-based provider' },
     { providerType: 'http', description: 'an API endpoint provider' },
     { providerType: 'custom', description: 'a provider with a general documentation page' },
     { providerType: 'aws-bedrock', description: 'a provider with an alias in the map' },
-  ])('should return true when providerType ($description) is a key in the documentation map', ({
-    providerType,
-  }) => {
-    const result = hasSpecificDocumentation(providerType);
+  ])(
+    'should return true when providerType ($description) is a key in the documentation map',
+    ({ providerType }) => {
+      const result = hasSpecificDocumentation(providerType);
 
-    expect(result).toBe(true);
-  });
+      expect(result).toBe(true);
+    },
+  );
 
   it.each([
     { providerType: undefined, description: 'undefined' },

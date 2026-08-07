@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import { withOAuthSpan } from '../../tracing/oauthTracer';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 
@@ -76,8 +76,11 @@ const oauthTokenCache = new Map<string, OAuthTokenCache>();
 /**
  * Get the cache key for an OAuth config
  */
-function getOAuthCacheKey(auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth): string {
-  return `${auth.tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}`;
+function getOAuthCacheKey(
+  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+  tokenUrl: string,
+): string {
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
@@ -179,7 +182,7 @@ export async function getOAuthTokenWithExpiry(
     tokenUrl = await discoverTokenEndpoint(serverUrl);
   }
 
-  const cacheKey = getOAuthCacheKey(auth);
+  const cacheKey = getOAuthCacheKey(auth, tokenUrl);
   const cached = oauthTokenCache.get(cacheKey);
   const now = Date.now();
 

@@ -10,6 +10,7 @@ import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
+  emitTurnMarkerSpan,
   getGenAITracer,
   getTraceparent,
   sanitizeBody,
@@ -36,9 +37,10 @@ import type {
   HookEvent,
   OnElicitation,
   OutputFormat,
-  PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKAssistantMessage,
+  SDKAssistantMessageError,
   SDKResultMessage,
   SettingSource,
   Settings,
@@ -70,8 +72,26 @@ export interface ToolCallEntry {
   parentToolUseId: string | null;
 }
 
+/**
+ * Error reported by an assistant message during a Claude Agent SDK session. The
+ * SDK started populating `SDKAssistantMessage.error` with discriminated codes
+ * like `'model_not_found'` and `'rate_limit'` in 0.3.144 (previously these were
+ * collapsed into a generic `'invalid_request'`). Available in
+ * `response.metadata.assistantErrors` after a session completes.
+ */
+export interface AssistantErrorEntry {
+  error: SDKAssistantMessageError;
+  uuid: string;
+  parentToolUseId: string | null;
+  request_id?: string;
+  subagent_type?: string;
+  task_description?: string;
+}
+
 /** Hard cap for attribute body length on synthesized tool spans. */
 const TOOL_SPAN_BODY_LIMIT = 4096;
+const REDACTED_SUBAGENT_TRANSCRIPT =
+  '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -142,6 +162,7 @@ function emitToolSpan(
   endTimeMs: number,
   isError: boolean,
   incomplete = false,
+  turnIndex?: number,
 ): void {
   try {
     const tracer = getGenAITracer();
@@ -163,6 +184,9 @@ function emitToolSpan(
     if (entry.parentToolUseId) {
       attributes['tool.parent_id'] = entry.parentToolUseId;
     }
+    if (typeof turnIndex === 'number') {
+      attributes['gen_ai.turn.index'] = turnIndex;
+    }
 
     const span = tracer.startSpan(`tool ${entry.name}`, {
       startTime: startTimeMs,
@@ -175,6 +199,64 @@ function emitToolSpan(
   } catch (err) {
     logger.warn(`[ClaudeAgentSDK] Failed to emit tool span for ${entry.name}: ${err}`);
   }
+}
+
+function isRawSubagentTranscript(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) {
+    return false;
+  }
+  if ('isRawTranscript' in result && result.isRawTranscript === true) {
+    return true;
+  }
+  return (
+    'task' in result &&
+    typeof result.task === 'object' &&
+    result.task !== null &&
+    'isRawTranscript' in result.task &&
+    result.task.isRawTranscript === true
+  );
+}
+
+function redactRawSubagentToolOutput(result: unknown): unknown {
+  if (!isRawSubagentTranscript(result)) {
+    return result;
+  }
+
+  const output = result as Record<string, unknown>;
+  const nestedTask = 'task' in output && typeof output.task === 'object' && output.task !== null;
+  const task = (nestedTask ? output.task : output) as Record<string, unknown>;
+  const redactedTask = {
+    ...task,
+    output: REDACTED_SUBAGENT_TRANSCRIPT,
+    ...('result' in task ? { result: REDACTED_SUBAGENT_TRANSCRIPT } : {}),
+    isRawTranscript: false,
+  };
+
+  return nestedTask ? { ...output, task: redactedTask } : redactedTask;
+}
+
+function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
+  return {
+    matcher: 'TaskOutput',
+    hooks: [
+      async (input) => {
+        if (
+          input.hook_event_name !== 'PostToolUse' ||
+          input.tool_name !== 'TaskOutput' ||
+          !isRawSubagentTranscript(input.tool_response)
+        ) {
+          return {};
+        }
+
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
+            updatedToolOutput: redactRawSubagentToolOutput(input.tool_response),
+          },
+        };
+      },
+    ],
+  };
 }
 
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
@@ -270,7 +352,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -294,6 +376,7 @@ export interface ClaudeCodeOptions {
   /**
    * 'model' and 'fallback_model' are optional
    * if not supplied, Claude Agent SDK uses default models
+   * 'fallback_model' accepts a comma-separated list, tried in order (SDK >= 0.3.160)
    */
   model?: string;
   fallback_model?: string;
@@ -315,13 +398,21 @@ export interface ClaudeCodeOptions {
   /**
    * Permission mode for controlling how tool executions are handled:
    * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'manual' - Alias for 'default', prompts for dangerous operations
    * - 'plan' - Planning mode, no actual tool execution
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
    * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
+  permission_mode?:
+    | 'default'
+    | 'manual'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'dontAsk'
+    | 'auto';
 
   /**
    * Custom workflow instructions for plan mode. Only takes effect when
@@ -449,6 +540,18 @@ export interface ClaudeCodeOptions {
    * Keys are agent names, values are agent definitions with description, tools, and prompt.
    */
   agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Maximum nesting depth for subagents. Defaults to five to preserve the
+   * behavior of Claude Agent SDK versions before 0.3.217.
+   */
+  max_subagent_spawn_depth?: number;
+
+  /**
+   * Maximum number of subagents that can run concurrently. When omitted, the
+   * Claude Agent SDK applies its own default (20 as of version 0.3.217).
+   */
+  max_concurrent_subagents?: number;
 
   /**
    * Output format specification for structured outputs.
@@ -676,6 +779,9 @@ export interface ClaudeCodeOptions {
    *   - `allowAllUnixSockets` - Allow all Unix socket connections
    *   - `httpProxyPort` - HTTP proxy port for network access
    *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `credentials` - Credential protection configuration:
+   *   - `envVars` - Environment variables to deny or mask, with optional `injectHosts`
+   *   - `allowPlaintextInject` - Allow masked credentials over plain HTTP (unsafe)
    * - `ripgrep` - Custom ripgrep configuration:
    *   - `command` - Path to ripgrep executable
    *   - `args` - Additional arguments for ripgrep
@@ -896,7 +1002,7 @@ function createAskUserQuestionCanUseTool(
   behavior: 'first_option' | 'random' | 'deny' = 'first_option',
   wrappedCanUseTool?: CanUseTool,
 ): CanUseTool {
-  return async (toolName, input, options): Promise<PermissionResult> => {
+  return async (toolName, input, options) => {
     // Only handle AskUserQuestion tool
     if (toolName !== 'AskUserQuestion') {
       // Defer to wrapped callback or allow by default
@@ -980,14 +1086,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       logger.warn(`Using unknown model for Claude Agent SDK: ${this.config.model}`);
     }
 
-    if (
-      this.config.fallback_model &&
-      !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(this.config.fallback_model) &&
-      !CLAUDE_CODE_MODEL_ALIASES.includes(this.config.fallback_model)
-    ) {
-      logger.warn(
-        `Using unknown model for Claude Agent SDK fallback: ${this.config.fallback_model}`,
-      );
+    // Since SDK 0.3.160, fallback_model accepts a comma-separated list tried in order.
+    for (const fallbackModel of (this.config.fallback_model ?? '')
+      .split(',')
+      .map((m) => m.trim())
+      .filter(Boolean)) {
+      if (
+        !ClaudeCodeSDKProvider.ANTHROPIC_MODELS_NAMES.includes(fallbackModel) &&
+        !CLAUDE_CODE_MODEL_ALIASES.includes(fallbackModel)
+      ) {
+        logger.warn(`Using unknown model for Claude Agent SDK fallback: ${fallbackModel}`);
+      }
     }
   }
 
@@ -1032,6 +1141,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         }
       }
     }
+
+    const subagentLimits = [
+      ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],
+      ['max_concurrent_subagents', 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS'],
+    ] as const;
+
+    for (const [option, environmentVariable] of subagentLimits) {
+      const value = config[option];
+      if (value === undefined) {
+        continue;
+      }
+      if (!Number.isSafeInteger(value) || value < 1) {
+        throw new Error(`${option} must be a positive safe integer`);
+      }
+      env[environmentVariable] = String(value);
+    }
+
+    // Claude Agent SDK 0.3.217 lowered this default from five to one. Keep
+    // existing nested-agent evals working unless an env override opts out.
+    env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ??= '5';
 
     // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {
@@ -1099,6 +1228,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ).sort();
     }
 
+    // Bare allowedTools entries bypass canUseTool, so keep AskUserQuestion out of
+    // the allow list when the convenience callback needs to answer it.
+    if (config.ask_user_question) {
+      allowedTools = allowedTools?.filter((tool) => tool !== 'AskUserQuestion');
+    }
+
     const disallowedTools = config.disallowed_tools
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
@@ -1124,6 +1259,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
+    // Sanitize raw background-agent transcripts before TaskOutput reaches the
+    // main model. User-provided hook matchers remain installed after this one.
+    const hooks = config.forward_subagent_text
+      ? config.hooks
+      : {
+          ...config.hooks,
+          PostToolUse: [
+            createTaskOutputTranscriptRedactionHook(),
+            ...(config.hooks?.PostToolUse ?? []),
+          ],
+        };
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     // Keys listed here are excluded from the cache key because they're either
@@ -1144,7 +1291,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode,
+      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt
@@ -1172,7 +1319,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       continue: config.continue,
       agents: config.agents,
       outputFormat: config.output_format,
-      hooks: config.hooks,
+      hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
       forwardSubagentText: config.forward_subagent_text,
@@ -1357,9 +1504,65 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           // Collect tool calls and results from intermediate messages
           const toolCallsMap = new Map<string, ToolCallEntry>();
+          // Assistant message errors (model_not_found, rate_limit, etc.).
+          // The SDK only populates `SDKAssistantMessage.error` when the model
+          // call itself fails, so this stays empty on healthy runs.
+          const assistantErrors: AssistantErrorEntry[] = [];
           // Wall-clock start time per tool_use.id, captured when we first see the tool_use
           // message so we can synthesize child spans with realistic durations.
           const toolStartTimes = new Map<string, number>();
+          // Counter for LLM turns observed in this run. Each `assistant` message
+          // emitted by the SDK corresponds to one LLM round; we surface that as a
+          // `gen_ai.turn N` marker span so trace assertions can count rounds.
+          // Tool spans are tagged with the active turn index via `toolTurnIndex`.
+          let turnCount = 0;
+          const toolTurnIndex = new Map<string, number>();
+          const emitTurnSpan = (msg: SDKAssistantMessage): number => {
+            const index = turnCount + 1;
+            turnCount = index;
+            const attributes: Record<string, string | number | boolean> = {
+              'gen_ai.turn.index': index,
+              'gen_ai.system': 'anthropic',
+            };
+            if (msg.parent_tool_use_id) {
+              attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
+              attributes['gen_ai.turn.is_subagent'] = true;
+            }
+            if (msg.subagent_type) {
+              attributes['gen_ai.turn.subagent_type'] = msg.subagent_type;
+            }
+            if (msg.message?.model) {
+              attributes['gen_ai.response.model'] = msg.message.model;
+            }
+            const usage = msg.message?.usage;
+            if (usage) {
+              if (typeof usage.input_tokens === 'number') {
+                attributes['gen_ai.usage.input_tokens'] = usage.input_tokens;
+              }
+              if (typeof usage.output_tokens === 'number') {
+                attributes['gen_ai.usage.output_tokens'] = usage.output_tokens;
+              }
+            }
+            if (msg.error) {
+              // The SDK exposes discriminated codes like `model_not_found` /
+              // `rate_limit` on failed assistant messages. Surface them so
+              // trace assertions can spot failed rounds instead of silently
+              // reporting them as OK.
+              attributes['gen_ai.turn.error'] = msg.error;
+            }
+            // A turn marker is a point-in-time event, so start and end at the same instant.
+            const now = Date.now();
+            emitTurnMarkerSpan({
+              tracer: getGenAITracer(),
+              index,
+              startTime: now,
+              endTime: now,
+              attributes,
+              errorMessage: msg.error,
+              logLabel: 'ClaudeAgentSDK',
+            });
+            return index;
+          };
 
           // Drain any tool_use entries that never saw a matching tool_result. Without
           // this, aborted runs and stop-hook terminations silently drop the tool span.
@@ -1371,10 +1574,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             for (const [toolUseId, startMs] of toolStartTimes) {
               const entry = toolCallsMap.get(toolUseId);
               if (entry) {
-                emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true);
+                emitToolSpan(
+                  entry,
+                  startMs,
+                  endedAt,
+                  false,
+                  /* incomplete */ true,
+                  toolTurnIndex.get(toolUseId),
+                );
               }
             }
             toolStartTimes.clear();
+            toolTurnIndex.clear();
           };
 
           // The Claude Agent SDK interleaves a `result` message for each background
@@ -1395,6 +1606,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
+              const turnIndex = emitTurnSpan(msg);
               // Extract tool_use content blocks from assistant messages
               for (const block of msg.message.content) {
                 if (block.type === 'tool_use') {
@@ -1407,7 +1619,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                     parentToolUseId: msg.parent_tool_use_id,
                   });
                   toolStartTimes.set(block.id, Date.now());
+                  toolTurnIndex.set(block.id, turnIndex);
                 }
+              }
+              if (msg.error) {
+                assistantErrors.push({
+                  error: msg.error,
+                  uuid: msg.uuid,
+                  parentToolUseId: msg.parent_tool_use_id,
+                  ...(msg.request_id ? { request_id: msg.request_id } : {}),
+                  ...(msg.subagent_type ? { subagent_type: msg.subagent_type } : {}),
+                  ...(msg.task_description ? { task_description: msg.task_description } : {}),
+                });
               }
             } else if (msg.type === 'user') {
               // Extract tool_result content blocks and match to tool calls
@@ -1417,12 +1640,25 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   if (block.type === 'tool_result') {
                     const entry = toolCallsMap.get(block.tool_use_id);
                     if (entry) {
-                      entry.output = block.content;
+                      entry.output =
+                        entry.name === 'TaskOutput' &&
+                        isRawSubagentTranscript(msg.tool_use_result) &&
+                        !config.forward_subagent_text
+                          ? REDACTED_SUBAGENT_TRANSCRIPT
+                          : block.content;
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {
-                        emitToolSpan(entry, startMs, Date.now(), entry.is_error);
+                        emitToolSpan(
+                          entry,
+                          startMs,
+                          Date.now(),
+                          entry.is_error,
+                          false,
+                          toolTurnIndex.get(block.tool_use_id),
+                        );
                         toolStartTimes.delete(block.tool_use_id);
+                        toolTurnIndex.delete(block.tool_use_id);
                       }
                     }
                   }
@@ -1515,6 +1751,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             });
           }
 
+          // Only SDKResultSuccess carries `api_error_status` per the SDK types;
+          // guarding with `'api_error_status' in finalMsg` avoids leaking the
+          // field as `undefined` onto unrelated result shapes.
+          const apiErrorStatus =
+            'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
+
           if (finalMsg.subtype === 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
@@ -1543,6 +1785,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 ...(finalMsg.structured_output === undefined
                   ? {}
                   : { structuredOutput: finalMsg.structured_output }),
+                ...(apiErrorStatus === undefined || apiErrorStatus === null
+                  ? {}
+                  : { apiErrorStatus }),
+                ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
               },
             };
 
@@ -1551,8 +1797,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return response;
           }
 
+          // Surface the last assistant error code (`model_not_found`,
+          // `rate_limit`, etc.) alongside the subtype so callers can tell
+          // apart "ran out of turns" from "model doesn't exist" without
+          // digging into metadata.
+          const lastAssistantError =
+            assistantErrors.length > 0
+              ? assistantErrors[assistantErrors.length - 1].error
+              : undefined;
+          const errorMessage = lastAssistantError
+            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
+            : `Claude Agent SDK call failed: ${finalMsg.subtype}`;
           return {
-            error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+            error: errorMessage,
             tokenUsage,
             cost,
             raw,
@@ -1568,6 +1825,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               ...(finalMsg.terminal_reason === undefined
                 ? {}
                 : { terminalReason: finalMsg.terminal_reason }),
+              ...(apiErrorStatus === undefined || apiErrorStatus === null
+                ? {}
+                : { apiErrorStatus }),
+              ...(assistantErrors.length > 0 ? { assistantErrors } : {}),
             },
           };
         },

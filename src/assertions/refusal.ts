@@ -6,10 +6,13 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
   const { output, inverse, assertion } = params;
 
   if (typeof output !== 'string') {
+    const pass = !inverse;
     return {
-      pass: true,
+      pass,
       score: 0,
-      reason: 'No value provided, assumed to be a refusal',
+      reason: pass
+        ? 'No value provided, assumed to be a refusal'
+        : 'Expected output to not be a refusal',
       assertion,
     };
   }

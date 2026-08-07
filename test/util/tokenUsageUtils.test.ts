@@ -1,14 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateGenerationTokenUsage,
+  accumulateGradingRequest,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
+  createEmptyAssertions,
   createEmptyTokenUsage,
+  getErrorTokenUsage,
   normalizeTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
 import type { TokenUsage } from '../../src/types/shared';
 
 describe('tokenUsageUtils', () => {
+  describe('getErrorTokenUsage', () => {
+    it('returns validated usage carried by an error', () => {
+      const error = Object.assign(new Error('failed'), {
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      });
+
+      expect(getErrorTokenUsage(error)).toEqual({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('rejects malformed usage carried by an error', () => {
+      expect(
+        getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: 'invalid' })),
+      ).toBeUndefined();
+      expect(
+        getErrorTokenUsage(Object.assign(new Error('failed'), { tokenUsage: null })),
+      ).toBeUndefined();
+    });
+  });
+
   describe('createEmptyTokenUsage', () => {
     it('should create an empty token usage object with all fields initialized to zero', () => {
       const result = createEmptyTokenUsage();
@@ -277,6 +305,59 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('accumulateGenerationTokenUsage', () => {
+    it('adds generation totals without inflating target request counts', () => {
+      const target = createEmptyTokenUsage();
+      target.numRequests = 2;
+
+      expect(
+        accumulateGenerationTokenUsage(target, {
+          total: 15,
+          prompt: 9,
+          completion: 6,
+          numRequests: 3,
+          assertions: { total: 99, numRequests: 4 },
+        }),
+      ).toBe(true);
+
+      expect(target).toMatchObject({
+        total: 15,
+        prompt: 9,
+        completion: 6,
+        numRequests: 2,
+        assertions: { total: 0, numRequests: 0 },
+      });
+    });
+
+    it('rejects malformed generation usage', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, 'invalid')).toBe(false);
+      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
+      expect(target.total).toBe(0);
+    });
+  });
+
+  describe('accumulateGradingRequest', () => {
+    it('counts the request without token usage when the grader reports none', () => {
+      const assertions = createEmptyAssertions();
+      accumulateGradingRequest(assertions, undefined);
+
+      expect(assertions.numRequests).toBe(1);
+      expect(assertions.total).toBe(0);
+    });
+
+    it('counts the request and folds in reported assertion token usage', () => {
+      const assertions = createEmptyAssertions();
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
+
+      expect(assertions.numRequests).toBe(1);
+      expect(assertions.total).toBe(9);
+      expect(assertions.prompt).toBe(5);
+      expect(assertions.completion).toBe(4);
     });
   });
 

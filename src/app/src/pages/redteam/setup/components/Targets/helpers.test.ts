@@ -4,6 +4,11 @@ import { getProviderType } from './helpers';
 describe('getProviderType', () => {
   it.each([
     {
+      providerId: 'a2a:https://agent.example.com/a2a/v1',
+      expected: 'a2a',
+      description: 'an A2A provider URL',
+    },
+    {
       providerId: 'openrouter:openai/gpt-5.4',
       expected: 'openrouter',
       description: 'a standard provider ID with a model',
@@ -13,14 +18,14 @@ describe('getProviderType', () => {
       expected: 'azure',
       description: 'a provider ID with a trailing colon',
     },
-  ])('should return the substring before the first colon for $description ("$providerId")', ({
-    providerId,
-    expected,
-  }) => {
-    const result = getProviderType(providerId);
+  ])(
+    'should return the substring before the first colon for $description ("$providerId")',
+    ({ providerId, expected }) => {
+      const result = getProviderType(providerId);
 
-    expect(result).toBe(expected);
-  });
+      expect(result).toBe(expected);
+    },
+  );
 
   it('should return "exec" for provider IDs like "exec: python script.py"', () => {
     const providerId = 'exec: python script.py';
@@ -42,14 +47,14 @@ describe('getProviderType', () => {
     { providerId: 'http', expected: 'http', description: 'http provider' },
     { providerId: 'websocket', expected: 'websocket', description: 'websocket provider' },
     { providerId: 'custom', expected: 'custom', description: 'custom provider' },
-  ])('should return the providerId itself for direct provider types like $description ("$providerId")', ({
-    providerId,
-    expected,
-  }) => {
-    const result = getProviderType(providerId);
+  ])(
+    'should return the providerId itself for direct provider types like $description ("$providerId")',
+    ({ providerId, expected }) => {
+      const result = getProviderType(providerId);
 
-    expect(result).toBe(expected);
-  });
+      expect(result).toBe(expected);
+    },
+  );
 
   describe('file:// path handling', () => {
     it.each([

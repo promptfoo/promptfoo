@@ -2,7 +2,7 @@ import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
 import { getRequestTimeoutMs } from './providers/shared';
-import { getRemoteGenerationUrl } from './redteam/remoteGeneration';
+import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from './redteam/remoteGeneration';
 
 import type { GradingResult } from './types/index';
 
@@ -11,20 +11,52 @@ type RemoteGradingPayload = {
   [key: string]: unknown;
 };
 
+function redactImagePayloads(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactImagePayloads(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => {
+      if (key === 'images' && Array.isArray(item)) {
+        return [
+          key,
+          item.map((image) => {
+            if (!image || typeof image !== 'object' || Array.isArray(image)) {
+              return redactImagePayloads(image);
+            }
+
+            return Object.fromEntries(
+              Object.entries(image).map(([imageKey, imageValue]) => [
+                imageKey,
+                imageKey === 'data' ? '[REDACTED_IMAGE_DATA]' : redactImagePayloads(imageValue),
+              ]),
+            );
+          }),
+        ];
+      }
+
+      return [key, redactImagePayloads(item)];
+    }),
+  );
+}
+
 export async function doRemoteGrading(
   payload: RemoteGradingPayload,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   try {
     payload.email = getUserEmail();
     const body = JSON.stringify(payload);
-    logger.debug(`Performing remote grading: ${body}`);
+    logger.debug('Performing remote grading', { body: redactImagePayloads(payload) });
     const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRemoteGenerationHeaders(),
         body,
       },
       getRequestTimeoutMs(),
@@ -50,6 +82,7 @@ export async function doRemoteGrading(
       score: result.score,
       reason: result.reason,
       tokensUsed: result.tokensUsed,
+      metadata: result.metadata,
     };
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);

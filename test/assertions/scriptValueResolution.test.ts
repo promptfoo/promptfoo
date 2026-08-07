@@ -14,7 +14,7 @@ vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('better-sqlite3');
+vi.mock('libsql');
 
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
@@ -209,12 +209,28 @@ describe('Script value resolution', () => {
         },
         test: { vars: {} },
         providerResponse: {
-          output: 'The answer is 42',
+          output: 'There are 0 errors',
           tokenUsage: { total: 0, prompt: 0, completion: 0 },
         },
       });
 
       expect(result.pass).toBe(true);
+    });
+
+    it('should reject NaN script output for inverse contains assertions', async () => {
+      await expect(
+        runAssertion({
+          assertion: {
+            type: 'not-contains',
+            value: 'file://rubric-generator.cjs:nanValue',
+          },
+          test: { vars: {} },
+          providerResponse: {
+            output: 'ordinary output',
+            tokenUsage: { total: 0, prompt: 0, completion: 0 },
+          },
+        }),
+      ).rejects.toThrow('"contains" assertion type must have a string or number value');
     });
   });
 

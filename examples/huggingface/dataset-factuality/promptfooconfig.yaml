@@ -14,7 +14,7 @@ providers:
   # Uncomment to add more providers
   # - bedrock:us.meta.llama3-2-1b-instruct-v1:0
   # - openai:gpt-4.1-mini
-  # - google:gemini-2.0-flash
+  # - google:gemini-2.5-flash
 
 defaultTest:
   options:
@@ -22,7 +22,7 @@ defaultTest:
     # provider: anthropic:messages:claude-sonnet-4-6
     # provider: bedrock:us.meta.llama3-2-1b-instruct-v1:0
     # provider: openai:gpt-4.1-mini
-    # provider: google:gemini-2.0-flash
+    # provider: google:gemini-2.5-flash
 
     # Optional: Custom scoring weights for different factuality categories
     factuality:

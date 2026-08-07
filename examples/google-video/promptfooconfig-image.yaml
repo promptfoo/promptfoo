@@ -10,7 +10,7 @@ providers:
       # Provide your own image path here
       image: file://assets/start-frame.jpg
       aspectRatio: '16:9'
-      duration: 5
+      durationSeconds: 5
 
 tests:
   - vars:

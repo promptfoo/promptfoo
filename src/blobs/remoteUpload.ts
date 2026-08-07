@@ -55,7 +55,7 @@ export async function uploadBlobRemote(
   }
 
   try {
-    const { fetchWithProxy } = await import('../util/fetch');
+    const { fetchWithProxy } = await import('../util/fetch/index');
     const response = await fetchWithProxy(target.url, {
       method: 'POST',
       headers: {

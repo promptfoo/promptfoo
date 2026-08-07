@@ -25,10 +25,10 @@ function createContext(payload: Record<string, unknown>) {
 describe('MCPProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mcpClientMock.initialize.mockResolvedValue(undefined);
-    mcpClientMock.getAllTools.mockReturnValue([]);
+    mcpClientMock.initialize.mockReset().mockResolvedValue(undefined);
+    mcpClientMock.getAllTools.mockReset().mockReturnValue([]);
     mcpClientMock.callTool.mockReset();
-    mcpClientMock.cleanup.mockResolvedValue(undefined);
+    mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
   });
 
   it('should preserve existing output behavior without a response transform', async () => {

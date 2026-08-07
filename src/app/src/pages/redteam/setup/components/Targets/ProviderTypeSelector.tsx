@@ -16,6 +16,7 @@ import type { ProviderOptions } from '../../types';
 const priorityOrder = [
   // Most common ways to test your own application
   'http',
+  'a2a',
   'python',
   'javascript',
   // Most popular AI providers (direct API access)
@@ -42,6 +43,13 @@ const allProviderOptions = [
     label: 'WebSocket',
     description: 'Real-time WebSocket connections',
     tag: 'app',
+  },
+  {
+    value: 'a2a',
+    label: 'A2A Agent',
+    description: 'Connect to Agent2Agent HTTP+JSON agents',
+    tag: 'agents',
+    recommended: true,
   },
   {
     value: 'python',
@@ -92,6 +100,12 @@ const allProviderOptions = [
     description: "Anthropic's official SDK for building agents",
     tag: 'agents',
     recommended: true,
+  },
+  {
+    value: 'openinterpreter',
+    label: 'Open Interpreter',
+    description: 'Local coding agent with sandbox and approval controls',
+    tag: 'agents',
   },
   {
     value: 'openai-agents-sdk',
@@ -526,6 +540,17 @@ export default function ProviderTypeSelector({
         },
         'websocket',
       );
+    } else if (value === 'a2a') {
+      setProvider(
+        {
+          id: 'a2a',
+          label: currentLabel,
+          config: {
+            url: '',
+          },
+        },
+        'a2a',
+      );
     } else if (value === 'browser') {
       setProvider(
         {
@@ -635,7 +660,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'bedrock') {
       setProvider(
         {
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          id: 'bedrock:global.anthropic.claude-sonnet-5',
           config: {},
           label: currentLabel,
         },
@@ -940,6 +965,15 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'claude-agent-sdk',
+      );
+    } else if (value === 'openinterpreter') {
+      setProvider(
+        {
+          id: 'openinterpreter',
+          config: {},
+          label: currentLabel,
+        },
+        'openinterpreter',
       );
     } else if (value === 'fireworks') {
       setProvider(

@@ -41,7 +41,7 @@ npx promptfoo@latest redteam run
 
 ## Prerequisites
 
-- Node.js `^20.20.0` or `>=22.22.0` installed in your CI environment
+- Node.js `>=22.22.0` installed in your CI environment (Node.js 24 LTS recommended)
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments
@@ -65,6 +65,20 @@ npx promptfoo@latest redteam run
 ```
 
 See our [red team quickstart](/docs/red-team/quickstart) for security testing details.
+
+#### Attach CI/CD Context with Tags
+
+Use repeatable `--tag key=value` flags to attach pipeline context to an evaluation
+without modifying `promptfooconfig.yaml` or a red team scan template. Tags are saved
+with the eval and included when results are shared.
+
+```bash
+npx promptfoo@latest eval --tag ci.run-id="$CI_PIPELINE_ID" --tag git.sha="$CI_COMMIT_SHA"
+npx promptfoo@latest redteam run --tag ci.run-id="$CI_PIPELINE_ID" --tag git.sha="$CI_COMMIT_SHA"
+```
+
+`promptfoo redteam eval` accepts the same `--tag` option when running previously
+generated probes from `redteam.yaml`.
 
 ### 2. Output Formats
 
@@ -131,7 +145,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
 
       - name: Cache promptfoo
@@ -187,6 +201,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+
       - name: Run red team scan
         uses: promptfoo/promptfoo-action@v1
         with:
@@ -203,7 +222,7 @@ See also: [Standalone GitHub Action example](https://github.com/promptfoo/prompt
 See our [detailed GitLab CI guide](/docs/integrations/gitlab-ci).
 
 ```yaml title=".gitlab-ci.yml"
-image: node:20
+image: node:24
 
 evaluate:
   script:
@@ -286,7 +305,7 @@ pipeline {
 Create a custom Docker image with promptfoo pre-installed:
 
 ```dockerfile title="Dockerfile"
-FROM node:20-slim
+FROM node:24-slim
 WORKDIR /app
 COPY . .
 CMD ["npx", "promptfoo@latest", "eval"]
@@ -300,7 +319,7 @@ Test multiple models or configurations in parallel:
 # GitHub Actions example
 strategy:
   matrix:
-    model: [gpt-4, gpt-3.5-turbo, claude-3-opus]
+    model: [gpt-5.6, claude-opus-4-8, gemini-3.1-pro-preview]
 steps:
   - name: Test ${{ matrix.model }}
     run: |
@@ -327,7 +346,7 @@ jobs:
         run: |
           npx promptfoo@latest redteam generate \
             --plugins harmful,pii,contracts \
-            --strategies jailbreak,prompt-injection
+            --strategies jailbreak,jailbreak-templates
           npx promptfoo@latest redteam run
 ```
 
@@ -446,7 +465,8 @@ gh pr comment --body "
 
 ## Caching Strategies
 
-Optimize CI/CD performance with proper caching [[memory:3455374]]:
+<!-- prettier-ignore -->
+Optimize CI/CD performance with proper caching:
 
 ```yaml
 # Set cache location

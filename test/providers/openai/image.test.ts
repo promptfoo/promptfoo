@@ -44,6 +44,19 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Basic functionality', () => {
+    it('should reject a per-prompt Codex-only image model override before dispatch', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1.5', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await expect(
+        provider.callApi('Generate a cat', {
+          prompt: { config: { model: 'gpt-5.3-codex-spark' } },
+        } as any),
+      ).rejects.toThrow('only available through openai:codex-sdk');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should generate an image successfully', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
@@ -58,6 +71,7 @@ describe('OpenAiImageProvider', () => {
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
             Authorization: 'Bearer test-key',
+            'X-OpenAI-Originator': 'promptfoo',
           }),
           body: expect.stringContaining('"prompt":"Generate a cat"'),
         }),
@@ -90,6 +104,47 @@ describe('OpenAiImageProvider', () => {
         cached: true,
         cost: 0, // Cost is 0 for cached responses
       });
+    });
+
+    it('should preserve caching for the default OpenAI endpoint with an API key', async () => {
+      // Positive control for the cache-bust escape hatch: an Authorization
+      // header on api.openai.com must NOT disable caching. When caching is
+      // preserved, fetchWithCache receives exactly (url, request, timeout) —
+      // the bust path appends ('json', true).
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(result.error).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(callArgs?.[0]).toContain('api.openai.com');
+      expect(callArgs).toHaveLength(3);
+    });
+
+    it('should preserve caching for an unauthenticated custom gateway', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3', {
+          config: { apiKeyRequired: false, apiBaseUrl: 'https://gateway.example/v1' },
+        });
+
+        const result = await provider.callApi('Generate a cat');
+
+        expect(result.error).toBeUndefined();
+        const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(callArgs?.[0]).toBe('https://gateway.example/v1/images/generations');
+        // No credential was sent, so the custom gateway stays cacheable.
+        expect((callArgs?.[1] as RequestInit | undefined)?.headers).not.toHaveProperty(
+          'Authorization',
+        );
+        expect(callArgs).toHaveLength(3);
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
     });
 
     it('should include all generated URL images in images array', async () => {
@@ -552,6 +607,8 @@ describe('OpenAiImageProvider', () => {
         `${customApiUrl}/images/generations`,
         expect.any(Object),
         expect.any(Number),
+        'json',
+        true,
       );
     });
   });
@@ -650,6 +707,38 @@ describe('OpenAiImageProvider', () => {
         },
       });
       expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('should treat chatgpt-image-latest as a GPT Image model and price exact API usage', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockGptImage2Response,
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+            output_tokens_details: { text_tokens: 0, image_tokens: 34 },
+          },
+        },
+      });
+
+      const provider = new OpenAiImageProvider('chatgpt-image-latest', {
+        config: { apiKey: 'test-key', quality: 'high', output_format: 'webp' },
+      });
+      const result = await provider.callApi('test prompt');
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).toMatchObject({
+        model: 'chatgpt-image-latest',
+        quality: 'high',
+        output_format: 'webp',
+      });
+      expect(body).not.toHaveProperty('response_format');
+      expect(result.output).toBe('data:image/webp;base64,base64EncodedImageData');
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 32) / 1e6, 12);
     });
 
     it('should handle gpt-image-2 parameters and custom sizes', async () => {

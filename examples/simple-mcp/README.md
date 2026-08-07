@@ -25,9 +25,15 @@ cd simple-mcp
    cd simple-mcp
    ```
 
-3. Configure your MCP server in `promptfooconfig.yaml`
+3. Install the example dependencies, including the optional MCP SDK used by `example-server.js`:
 
-4. Run the evaluation:
+   ```bash
+   npm install
+   ```
+
+4. Configure your MCP server in `promptfooconfig.yaml`
+
+5. Run the evaluation:
    ```bash
    npx promptfoo eval
    ```
