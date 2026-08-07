@@ -346,6 +346,7 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'mcp:tool-response-poisoning',
   'model-identification',
   'medical:anchoring-bias',
   'medical:fda:ai-disclosure',
@@ -467,8 +468,16 @@ export const DATASET_EXEMPT_PLUGINS = [
   'xstest',
 ] as const;
 
-// Plugins excluded from multi-input mode (in addition to dataset plugins)
-export const MULTI_INPUT_EXCLUDED_PLUGINS = ['cca', 'cross-session-leak'] as const;
+// Plugins excluded from multi-input mode (in addition to dataset plugins).
+// `mcp:tool-response-poisoning` emits a single JSON tool-call envelope
+// (`{"tool": ..., "args": ...}`) that MCPProvider.callApi strictly JSON.parses;
+// multi-input mode swaps in the `<Prompt>{...input keys...}</Prompt>` formatter,
+// which both fails to parse the plugin's output and destroys the envelope.
+export const MULTI_INPUT_EXCLUDED_PLUGINS = [
+  'cca',
+  'cross-session-leak',
+  'mcp:tool-response-poisoning',
+] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
