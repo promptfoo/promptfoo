@@ -286,6 +286,27 @@ describe('Script value resolution', () => {
     });
   });
 
+  describe('JSON schema assertions with file:// script', () => {
+    it.each([
+      'is-json',
+      'contains-json',
+    ] as const)('should evaluate a false schema for %s', async (type) => {
+      const result = await runAssertion({
+        assertion: {
+          type,
+          value: 'file://rubric-generator.cjs:booleanValue',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: '{"value": 1}',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+    });
+  });
+
   describe('error handling', () => {
     it('should throw error when script returns function for non-script assertion', async () => {
       await expect(
