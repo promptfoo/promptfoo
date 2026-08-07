@@ -1223,6 +1223,237 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('map-secret');
     });
 
+    // Pins that the credential-bearing provider-options-map KEY is scrubbed (not just the
+    // value): `tests: [{ providers: [{ 'https://user:pass@host?token=secret': {...} }] }]`.
+    it('redacts provider-map identifiers in raw test filters', () => {
+      const urlProvider =
+        'https://filter-user:filter-password@api.example.com/v1?token=filter-secret&region=us';
+      const scrubbedUrlProvider =
+        'https://[REDACTED]@api.example.com/v1?token=[REDACTED]&region=us';
+      const sasProvider =
+        'az://account/container/provider.yaml?sp=r&sig=filter-sas-secret&se=2026-06-01';
+      const scrubbedSasProvider =
+        'az://account/container/provider.yaml?sp=r&sig=[REDACTED]&se=2026-06-01';
+      const providerMaps = [
+        { [urlProvider]: { config: { region: 'url-region' } } },
+        { [sasProvider]: { config: { region: 'sas-region' } } },
+      ];
+      const scrubbedProviderMaps = [
+        { [scrubbedUrlProvider]: { config: { region: 'url-region' } } },
+        { [scrubbedSasProvider]: { config: { region: 'sas-region' } } },
+      ];
+
+      useStore.getState().setConfig({
+        defaultTest: { providers: providerMaps },
+        tests: [{ providers: providerMaps }],
+        scenarios: [{ tests: [{ providers: providerMaps }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.providers).toEqual(scrubbedProviderMaps);
+      expect(persisted.tests[0].providers).toEqual(scrubbedProviderMaps);
+      expect(persisted.scenarios[0].tests[0].providers).toEqual(scrubbedProviderMaps);
+      expect(JSON.stringify(persisted)).not.toContain('filter-user');
+      expect(JSON.stringify(persisted)).not.toContain('filter-password');
+      expect(JSON.stringify(persisted)).not.toContain('filter-secret');
+      expect(JSON.stringify(persisted)).not.toContain('filter-sas-secret');
+    });
+
+    it('redacts provider-map identifiers that share an entry with a non-record sibling', () => {
+      // Regression: a provider-options map that pairs a credential-bearing id key
+      // with a non-record sibling (e.g. `prompts: [...]`) previously failed the
+      // `every(isRecord)` map check, fell through to value-only scrubbing, and
+      // persisted the credential URL verbatim in the key. No shape may bypass
+      // redaction. This malformed shape takes the walk path: an id key whose name
+      // matches the credential patterns (`token`) is dropped entirely (fail
+      // closed), while a userinfo-only id key is preserved with the key scrubbed.
+      const credentialNamedKeyProvider =
+        'https://mixed-user:mixed-password@api.example.com/v1?token=mixed-token-secret&region=us';
+      const userinfoOnlyProvider = 'https://mixed-svc:mixed-hunter2@api.example.com/v1?region=us';
+      const scrubbedUserinfoOnlyProvider = 'https://[REDACTED]@api.example.com/v1?region=us';
+      const providerMap = {
+        [credentialNamedKeyProvider]: { config: { region: 'us' } },
+        [userinfoOnlyProvider]: { config: { region: 'eu' } },
+        prompts: ['Hello {{topic}}'],
+      };
+
+      useStore.getState().setConfig({
+        defaultTest: { providers: [providerMap] },
+        tests: [{ providers: [providerMap] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const expectedEntry = {
+        [scrubbedUserinfoOnlyProvider]: { config: { region: 'eu' } },
+        prompts: ['Hello {{topic}}'],
+      };
+      expect(persisted.tests[0].providers[0]).toEqual(expectedEntry);
+      expect(persisted.defaultTest.providers[0]).toEqual(expectedEntry);
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('mixed-user');
+      expect(persistedJson).not.toContain('mixed-password');
+      expect(persistedJson).not.toContain('mixed-token-secret');
+      expect(persistedJson).not.toContain('mixed-svc');
+      expect(persistedJson).not.toContain('mixed-hunter2');
+    });
+
+    it('redacts credentials in object-shaped providers within test filters', () => {
+      const provider = {
+        id: 'http',
+        config: {
+          apiKey: 'object-provider-secret',
+          headers: {
+            Authorization: 'Bearer object-provider-token',
+            'x-request-id': 'visible-id',
+          },
+          endpoint: 'https://example.com',
+        },
+      };
+      useStore.getState().setConfig({
+        defaultTest: { providers: [provider] },
+        tests: [{ providers: [provider] }],
+        scenarios: [{ tests: [{ providers: [provider] }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      const expectedConfig = {
+        headers: { 'x-request-id': 'visible-id' },
+        endpoint: 'https://example.com',
+      };
+      expect(persisted.defaultTest.providers[0].config).toEqual(expectedConfig);
+      expect(persisted.tests[0].providers[0].config).toEqual(expectedConfig);
+      expect(persisted.scenarios[0].tests[0].providers[0].config).toEqual(expectedConfig);
+      expect(JSON.stringify(persisted)).not.toContain('object-provider-secret');
+      expect(JSON.stringify(persisted)).not.toContain('object-provider-token');
+
+      // Persistence redaction must not mutate the live store: eval runs read the
+      // in-memory config and need the real credentials.
+      const inMemory = useStore.getState().config as any;
+      expect(inMemory.tests[0].providers[0].config.apiKey).toBe('object-provider-secret');
+      expect(inMemory.tests[0].providers[0].config.headers.Authorization).toBe(
+        'Bearer object-provider-token',
+      );
+    });
+
+    it('redacts a single non-array provider in raw test filters', () => {
+      // Schema says providers is an array, but the raw YAML editor can persist a
+      // single provider object or map; no shape may bypass redaction.
+      useStore.getState().setConfig({
+        tests: [
+          {
+            providers: {
+              id: 'http',
+              config: { apiKey: 'single-provider-secret', endpoint: 'https://example.com' },
+            },
+          },
+          {
+            providers: {
+              'https://map-user:map-pass@api.example.com/v1': { config: { region: 'us' } },
+            },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].providers.config).toEqual({ endpoint: 'https://example.com' });
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('single-provider-secret');
+      expect(persistedJson).not.toContain('map-user');
+      expect(persistedJson).not.toContain('map-pass');
+    });
+
+    it('keeps ordinary provider ids intact in test filters', () => {
+      useStore.getState().setConfig({
+        tests: [{ providers: ['openai:gpt-4o', 'file://provider.py'] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tests[0].providers).toEqual(['openai:gpt-4o', 'file://provider.py']);
+    });
+
+    it('redacts provider-map identifiers in every singular provider slot', () => {
+      // Userinfo-only credential: the key name itself does not match the credential
+      // name patterns, so nothing masks a key-scrubbing bypass by luck.
+      const urlProvider = 'https://svc-account:hunter2value@grader.example.com/v1?region=us';
+      const scrubbedUrlProvider = 'https://[REDACTED]@grader.example.com/v1?region=us';
+      const providerMap = { [urlProvider]: { config: { temperature: 0 } } };
+      const scrubbedProviderMap = { [scrubbedUrlProvider]: { config: { temperature: 0 } } };
+
+      useStore.getState().setConfig({
+        defaultTest: { provider: providerMap },
+        tests: [{ provider: providerMap, assert: [{ type: 'llm-rubric', provider: providerMap }] }],
+        scenarios: [{ tests: [{ provider: providerMap }] }],
+        redteam: { provider: providerMap },
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.defaultTest.provider).toEqual(scrubbedProviderMap);
+      expect(persisted.tests[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.tests[0].assert[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.scenarios[0].tests[0].provider).toEqual(scrubbedProviderMap);
+      expect(persisted.redteam.provider).toEqual(scrubbedProviderMap);
+      expect(JSON.stringify(persisted)).not.toContain('hunter2value');
+    });
+
+    it('drops stray top-level credential fields on provider objects', () => {
+      // A credential mistakenly placed at provider top level (outside config) must
+      // still be dropped: the stray key must not flip the object into the
+      // options-map path, which only URL-scrubs keys.
+      useStore.getState().setConfig({
+        providers: [{ id: 'http', apiKey: 'top-level-stray-credential' }],
+        targets: [{ id: 'http', accessToken: 'stray-target-credential' }],
+        tests: [{ providers: [{ id: 'http', apiKey: 'filter-stray-credential' }] }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers).toEqual([{ id: 'http' }]);
+      expect(persisted.targets).toEqual([{ id: 'http' }]);
+      expect(persisted.tests[0].providers).toEqual([{ id: 'http' }]);
+      const persistedJson = JSON.stringify(persisted);
+      expect(persistedJson).not.toContain('top-level-stray-credential');
+      expect(persistedJson).not.toContain('stray-target-credential');
+      expect(persistedJson).not.toContain('filter-stray-credential');
+    });
+
+    it('scrubs a top-level headers bag on provider objects with stray fields', () => {
+      // The non-record stray field keeps this off the options-map path, so the
+      // walk's header-aware scrubbing must still apply to the headers bag.
+      useStore.getState().setConfig({
+        providers: [
+          {
+            id: 'http',
+            stray: 'unrelated',
+            headers: { 'X-Auth': 'short-header-credential', 'Content-Type': 'application/json' },
+          },
+        ],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].headers).toEqual({ 'Content-Type': 'application/json' });
+      expect(JSON.stringify(persisted)).not.toContain('short-header-credential');
+    });
+
+    it('preserves opaque tool schemas on provider objects with stray fields', () => {
+      // tools/functions schemas are model-facing contracts: a parameter literally
+      // named `password` must survive persistence even when a stray field keeps
+      // the provider off the canonical shape.
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'login',
+            parameters: { type: 'object', properties: { password: { type: 'string' } } },
+          },
+        },
+      ];
+      useStore.getState().setConfig({
+        providers: [{ id: 'openai:gpt-4', config: {}, stray: 'unrelated', tools }],
+      } as any);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.providers[0].tools).toEqual(tools);
+    });
+
     it('redacts provider identifiers in raw editor providerPromptMap fields', () => {
       const provider =
         'https://router-user:router-password@api.example.com/v1?token=routing-secret&region=us';

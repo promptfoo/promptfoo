@@ -148,6 +148,73 @@ describe('retry command', () => {
   });
 
   describe('retryCommand', () => {
+    it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
+      const artifactId = randomUUID();
+      const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);
+      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+      const completedPrompt = { ...prompt, provider: 'selected-target' };
+      const evalRecord = await Eval.create(
+        {
+          prompts: [prompt.raw],
+          providers: [{ id: 'echo', label: 'selected-target' }],
+          tests: [{ vars: { name: 'World' } }],
+        },
+        [prompt],
+        {
+          id: uniqueEvalId(),
+          runtimeOptions: { providerFilter: 'selected-target' },
+          completedPrompts: [completedPrompt],
+        },
+      );
+      const db = await getDb();
+      const staleResultId = `${evalRecord.id}-stale-error`;
+      await db.insert(evalResultsTable).values({
+        id: staleResultId,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt,
+        testCase: { vars: { name: 'World' } },
+        provider: { id: 'echo', label: 'selected-target' },
+        response: { output: 'stale error' },
+        error: 'stale error',
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        namedScores: {},
+      });
+      fs.writeFileSync(
+        configPath,
+        [
+          'providers:',
+          '  - id: echo',
+          '    label: replacement-target',
+          'prompts:',
+          `  - "${prompt.raw}"`,
+          'tests:',
+          '  - vars:',
+          '      name: World',
+        ].join('\n'),
+      );
+
+      try {
+        const persistedEval = await Eval.findById(evalRecord.id);
+        expect(persistedEval?.runtimeOptions?.providerFilter).toBe('selected-target');
+        expect(persistedEval?.prompts).toEqual([expect.objectContaining(completedPrompt)]);
+
+        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
+          `Stored provider filter "selected-target" matched no providers in the retry config "${configPath}"`,
+        );
+
+        expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
+        expect((await Eval.findById(evalRecord.id))?.prompts).toEqual([
+          expect.objectContaining(completedPrompt),
+        ]);
+      } finally {
+        fs.rmSync(configPath, { force: true });
+      }
+    });
+
     it('rewrites the original JSONL output after partial cleanup with an override config', async () => {
       const artifactId = randomUUID();
       const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.JSONL`);

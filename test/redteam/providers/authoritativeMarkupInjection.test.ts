@@ -80,6 +80,21 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     );
   });
 
+  it('should include target context in remote generation requests', async () => {
+    const provider = new AuthoritativeMarkupInjectionProvider({
+      injectVar: 'input',
+      targetId: 'cloud-target-123',
+    });
+
+    await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+
+    const request = mockFetchWithProxy.mock.calls[0]?.[1] as { body?: string } | undefined;
+    expect(JSON.parse(request?.body ?? '{}')).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'authoritative-markup-injection',
+    });
+  });
+
   it('should pass options to target provider callApi', async () => {
     const provider = new AuthoritativeMarkupInjectionProvider({
       injectVar: 'input',

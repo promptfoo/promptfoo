@@ -18,6 +18,7 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -117,6 +118,7 @@ export async function runMetaAgentRedteam({
   excludeTargetOutputFromAgenticAttackGeneration = false,
   perTurnLayers = [],
   inputs,
+  targetId,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -132,6 +134,7 @@ export async function runMetaAgentRedteam({
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   inputs?: Inputs;
   perTurnLayers?: LayerConfig[];
+  targetId?: string;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -305,6 +308,7 @@ export async function runMetaAgentRedteam({
 
       // Build context for runtime transforms (needed by indirect-web-pwn for server-side tracking)
       const transformContext: RuntimeTransformContext = {
+        targetId,
         evaluationId: context?.evaluationId,
         testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
         purpose: test?.metadata?.purpose as string | undefined,
@@ -526,9 +530,10 @@ export async function runMetaAgentRedteam({
           vars: iterationVars,
         };
 
-        // Build grading context with provider raw output, tracing, and exfil tracking data.
+        // Build grading context with image outputs, tracing, and exfil tracking data.
         const gradingContext: RedteamGradingContext = {
           providerResponse: targetResponse,
+          ...(targetResponse.images?.length ? { imageOutputs: targetResponse.images } : {}),
           ...(tracingOptions.includeInGrading
             ? { traceContext, traceSummary: gradingTraceSummary }
             : {}),
@@ -717,11 +722,13 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       task: 'judge',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(config.targetId),
     });
     this.agentProvider = new PromptfooChatCompletionProvider({
       task: 'meta-agent-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      ...remoteGenerationContextPayload(config.targetId),
       // Pass inputs schema for multi-input mode
       inputs: this.inputs,
     });
@@ -768,6 +775,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }
 }

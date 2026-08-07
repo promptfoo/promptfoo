@@ -10,6 +10,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -46,6 +47,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
@@ -129,6 +131,7 @@ export interface CustomResponse extends ProviderResponse {
 interface CustomConfig {
   injectVar: string;
   strategyText: string;
+  targetId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
   redteamProvider: RedteamFileConfig['provider'];
@@ -222,6 +225,7 @@ export class CustomProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -241,6 +245,7 @@ export class CustomProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: false,
           preferSmallModel: false,
+          ...remoteGenerationContextPayload(this.config.targetId),
         });
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({
@@ -451,6 +456,7 @@ export class CustomProvider implements ApiProvider {
           lastResponse: lastResponse.output,
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
+          targetId: this.config.targetId,
         });
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
@@ -542,6 +548,10 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
+            const gradingContext: RedteamGradingContext | undefined = {
+              providerResponse: lastResponse,
+              ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
+            };
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
@@ -549,6 +559,8 @@ export class CustomProvider implements ApiProvider {
               provider,
               getGraderAssertionValue(assertToUse),
               additionalRubric,
+              undefined,
+              gradingContext,
             );
             graderPassed = grade.pass;
             storedGraderResult = {
@@ -843,6 +855,7 @@ export class CustomProvider implements ApiProvider {
         this.config.injectVar,
         this.perTurnLayers,
         Strategies,
+        { targetId: this.config.targetId },
       );
 
       if (lastTransformResult.error) {

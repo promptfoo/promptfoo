@@ -34,7 +34,7 @@ When the strategy hits a refusal, it backtracks to an earlier point in the conve
 
 ## Use in Promptfoo
 
-Promptfoo supports three types of multi-turn [strategies](/docs/red-team/strategies/):
+Promptfoo supports five types of multi-turn [strategies](/docs/red-team/strategies/):
 
 #### 1. Crescendo
 
@@ -44,11 +44,15 @@ Gradually increases the intensity or harmfulness of the prompt with each turn, s
 
 Hydra coordinates an attacker agent that branches across multiple conversational paths. It remembers every refusal, automatically manages backtracking, and shares successful tactics across the entire scan. Use Hydra when you need the attacker to pivot rapidly and reuse prior learnings.
 
-#### 3. GOAT
+#### 3. Goblin
+
+[Goblin](/docs/red-team/strategies/goblin/) reuses Hydra's adaptive multi-turn mechanics with an attacker prompt inspired by IICL-style abstract few-shot pattern completion and occasional encoding shifts.
+
+#### 4. GOAT
 
 The [GOAT strategy](/docs/red-team/strategies/goat/) is based on [Meta's GOAT research](https://arxiv.org/abs/2311.04300). It stands for Generalized Offensive Adversarial Testing and uses a set of attack templates and iteratively refines them over multiple turns to bypass defenses.
 
-#### 4. Mischievous User
+#### 5. Mischievous User
 
 Simulates a persistent, creative user who tries different phrasings and approaches over several turns to elicit a harmful or policy-violating response from the model.
 
@@ -64,6 +68,7 @@ redteam:
     - crescendo
     - goat
     - jailbreak:hydra
+    - jailbreak:goblin
     - mischievous-user
 ```
 
@@ -79,6 +84,10 @@ redteam:
         stateful: false # Sends the entire conversation history with each turn (Default)
         continueAfterSuccess: false # Stop after first successful attack (Default)
     - id: jailbreak:hydra
+      config:
+        maxTurns: 10
+        stateful: false # Replays the full conversation history by default
+    - id: jailbreak:goblin
       config:
         maxTurns: 10
         stateful: false # Replays the full conversation history by default

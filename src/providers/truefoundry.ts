@@ -35,6 +35,160 @@ type TrueFoundryProviderOptions = ProviderOptions & {
   config?: TrueFoundryCompletionOptions;
 };
 
+type JsonRecord = Record<string, unknown>;
+
+const TRUEFOUNDRY_GUARDRAIL_ERROR_TYPE = 'guardrail_checks_failed';
+const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set(['content_filter', 'content_policy_violation']);
+const DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS = [
+  /\bresponse content blocked by label\b/i,
+  /\b(?:prompt|input|response|output|completion) (?:was )?(?:blocked|filtered)\b/i,
+  /\bcontent management policy\b/i,
+  /\bresponsible\s*ai\s*policy(?:\s*violation)?\b/i,
+];
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function hasGuardrailCheck(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (isJsonRecord(value)) {
+    return Object.keys(value).length > 0;
+  }
+  return Boolean(value);
+}
+
+function hasFilteredContent(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasFilteredContent);
+  }
+  if (!isJsonRecord(value)) {
+    return false;
+  }
+  if (value.filtered === true) {
+    return true;
+  }
+  return Object.values(value).some(hasFilteredContent);
+}
+
+function parseHttpErrorBody(response: ProviderResponse): JsonRecord | undefined {
+  if (response.metadata?.http?.status !== 400 || typeof response.error !== 'string') {
+    return undefined;
+  }
+
+  const bodyStart = response.error.indexOf('\n');
+  if (bodyStart < 0) {
+    return undefined;
+  }
+
+  try {
+    const body = JSON.parse(response.error.slice(bodyStart + 1));
+    return isJsonRecord(body) ? body : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getInnerError(error: JsonRecord): JsonRecord | undefined {
+  const innerError = error.innererror ?? error.inner_error;
+  return isJsonRecord(innerError) ? innerError : undefined;
+}
+
+function isGuardrailError(payload: JsonRecord, error: JsonRecord, message: string): boolean {
+  if (getString(error.type) === TRUEFOUNDRY_GUARDRAIL_ERROR_TYPE) {
+    return true;
+  }
+
+  const innerError = getInnerError(error);
+  const errorCode = getString(error.code)?.toLowerCase();
+  const innerErrorCode = getString(innerError?.code)?.toLowerCase();
+  if (
+    (errorCode && DOWNSTREAM_GUARDRAIL_ERROR_CODES.has(errorCode)) ||
+    innerErrorCode === 'responsibleaipolicyviolation'
+  ) {
+    return true;
+  }
+
+  const contentFilterResults = [
+    error.content_filter_result,
+    error.content_filter_results,
+    innerError?.content_filter_result,
+    innerError?.content_filter_results,
+    payload.content_filter_result,
+    payload.content_filter_results,
+  ];
+  if (contentFilterResults.some(hasFilteredContent)) {
+    return true;
+  }
+
+  if (errorCode === 'content_filter_error' || innerErrorCode === 'content_filter_error') {
+    return false;
+  }
+
+  return DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+function getGuardrailDirection(
+  payload: JsonRecord,
+  message: string,
+): Pick<NonNullable<ProviderResponse['guardrails']>, 'flaggedInput' | 'flaggedOutput'> {
+  const checks = payload.guardrail_checks;
+  if (isJsonRecord(checks)) {
+    const flaggedInput = hasGuardrailCheck(checks.llm_input_guardrails);
+    const flaggedOutput = hasGuardrailCheck(checks.llm_output_guardrails);
+    if (flaggedInput || flaggedOutput) {
+      return { flaggedInput, flaggedOutput };
+    }
+  }
+
+  if (/\b(prompt|input)\b/i.test(message)) {
+    return { flaggedInput: true, flaggedOutput: false };
+  }
+  if (/\b(response|output|completion)\b/i.test(message)) {
+    return { flaggedInput: false, flaggedOutput: true };
+  }
+  return {};
+}
+
+/**
+ * Normalize blocked gateway and downstream-model responses into guardrail results.
+ *
+ * The OpenAI-compatible parent provider returns unrecognized HTTP 400 responses
+ * as an error string. TrueFoundry can return its own guardrail envelope or proxy
+ * a downstream model's safety envelope, so recover the serialized response body
+ * and only convert known safety signals. Other 400s remain ordinary API errors.
+ */
+function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderResponse {
+  const payload = parseHttpErrorBody(response);
+  const error = payload?.error;
+  if (!payload || !isJsonRecord(error)) {
+    return response;
+  }
+
+  const message = getString(error.message) ?? 'Content blocked by provider guardrail';
+  if (!isGuardrailError(payload, error, message)) {
+    return response;
+  }
+
+  const { error: _error, ...responseWithoutError } = response;
+  return {
+    ...responseWithoutError,
+    output: message,
+    isRefusal: true,
+    guardrails: {
+      flagged: true,
+      ...getGuardrailDirection(payload, message),
+      reason: message,
+    },
+  };
+}
+
 /**
  * TrueFoundry AI Gateway Provider
  *
@@ -123,6 +277,15 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
         headers,
       },
     };
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const response = await super.callApi(prompt, context, callApiOptions);
+    return normalizeGuardrailErrorResponse(response);
   }
 
   id(): string {

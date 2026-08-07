@@ -48,6 +48,7 @@ describe('AzureEmbeddingProvider', () => {
 
     expect(result).toEqual({
       embedding: [0.1, 0.2, 0.3],
+      cached: true,
       tokenUsage: {
         cached: 10,
         total: 10,
@@ -132,7 +133,7 @@ describe('AzureEmbeddingProvider', () => {
     });
   });
 
-  it('should handle API response error with cached true and missing usage fields', async () => {
+  it('handles a cached response with missing usage fields gracefully (no throw)', async () => {
     const mockResponse = {
       data: {
         data: [{}],
@@ -143,8 +144,16 @@ describe('AzureEmbeddingProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse as any);
 
-    await expect(provider.callEmbeddingApi('test text')).rejects.toThrow(
-      /Cannot read (?:properties|property) of undefined/,
-    );
+    // Previously the cached error path dereferenced data.usage.total_tokens and threw a
+    // TypeError; it must now degrade to a clean error object.
+    const result = await provider.callEmbeddingApi('test text');
+    expect(result).toEqual({
+      error: expect.stringContaining('No embedding returned'),
+      tokenUsage: {
+        cached: undefined,
+        total: undefined,
+        numRequests: 1,
+      },
+    });
   });
 });

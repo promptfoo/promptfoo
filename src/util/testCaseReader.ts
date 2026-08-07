@@ -6,7 +6,6 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
-import yaml from 'js-yaml';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -17,10 +16,11 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
+import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
+import { loadYaml } from './yamlLoad';
 
 import type {
   CsvRow,
@@ -36,7 +36,6 @@ type StandaloneTestsFileMetadata = {
   pathWithoutFunction: string;
   maybeFunctionName: string | undefined;
   fileExtension: string;
-  extensionWithoutSheet: string;
 };
 
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
@@ -60,7 +59,7 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = yaml.load(await fsPromises.readFile(p, 'utf-8'));
+      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
@@ -140,17 +139,19 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
     });
     return csvRowsToTestCases(parseCsvRows(fileContent));
   }
+  // Use the sanitized URI in parse errors so SAS tokens never leak into logs.
+  const sanitizedVarsPath = sanitizeAzureBlobUriForError(varsPath);
   if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file - azure blob',
     });
-    return parseJsonTestCases(fileContent);
+    return parseJsonTestCases(fileContent, sanitizedVarsPath);
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file - azure blob',
     });
-    return parseJsonlTestCases(fileContent);
+    return parseJsonlTestCases(fileContent, sanitizedVarsPath);
   }
 
   telemetry.record('feature_used', {
@@ -180,13 +181,8 @@ async function readLocalStandaloneTestsFile(
   basePath: string,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
-  const {
-    resolvedVarsPath,
-    pathWithoutFunction,
-    maybeFunctionName,
-    fileExtension,
-    extensionWithoutSheet,
-  } = getStandaloneTestsFileMetadata(varsPath, basePath);
+  const { resolvedVarsPath, pathWithoutFunction, maybeFunctionName, fileExtension } =
+    getStandaloneTestsFileMetadata(varsPath, basePath);
 
   if (isJavascriptFile(pathWithoutFunction)) {
     telemetry.record('feature_used', {
@@ -207,7 +203,7 @@ async function readLocalStandaloneTestsFile(
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
   }
-  if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
+  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
@@ -229,7 +225,7 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
-    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
+    const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
@@ -266,16 +262,20 @@ function getStandaloneTestsFileMetadata(
     lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  const fileExtension = parsePath(pathWithoutFunction).ext.slice(1);
-  // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
-  const extensionWithoutSheet = fileExtension.split('#')[0];
+  // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
+  // characters in parent directories and non-Excel filenames.
+  const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
+  const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
+  const fileExtension =
+    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
+      ? sheetAwareExtension
+      : parsePath(pathWithoutFunction).ext.slice(1);
 
   return {
     resolvedVarsPath,
     pathWithoutFunction,
     maybeFunctionName,
     fileExtension,
-    extensionWithoutSheet,
   };
 }
 
@@ -343,10 +343,17 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
   return parseJsonTestCases(fileContent, resolvedVarsPath);
 }
 
-function parseJsonTestCases(fileContent: string, sourcePath?: string): TestCase[] {
-  const jsonData = yaml.load(fileContent) as unknown;
+function parseJsonTestCases(fileContent: string, filePath: string): TestCase[] {
+  let jsonData: unknown;
+  try {
+    jsonData = loadYaml(fileContent);
+  } catch (err) {
+    throw new Error(
+      `Failed to parse JSON test file ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 
-  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData, sourcePath);
+  const agentSkillsCases = maybeConvertAgentSkillsEvalsJson(jsonData, filePath);
   if (agentSkillsCases) {
     return agentSkillsCases;
   }
@@ -510,24 +517,47 @@ function buildAgentSkillsMetadata(
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-  return parseJsonlTestCases(fileContent);
+  return parseJsonlTestCases(fileContent, resolvedVarsPath);
 }
 
-function parseJsonlTestCases(fileContent: string): TestCase[] {
-  return fileContent
-    .split('\n')
-    .filter((line) => line.trim())
-    .map((line, idx) => {
-      const row = JSON.parse(line);
-      return {
-        ...row,
-        description: `Row #${idx + 1}`,
-      };
-    });
+/**
+ * Parse JSON, throwing a user-friendly error prefixed with `context` so the
+ * raw `JSON.parse` SyntaxError is attributed to its source file.
+ */
+function parseJsonOrThrow(text: string, context: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error(`${context}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Parse the non-empty lines of a JSONL file into raw test cases. */
+function parseJsonlLines(fileContent: string, filePath: string): TestCase[] {
+  const rows: TestCase[] = [];
+  for (const [lineIndex, line] of fileContent.split('\n').entries()) {
+    if (!line.trim()) {
+      continue;
+    }
+    rows.push(
+      parseJsonOrThrow(
+        line,
+        `Failed to parse JSONL test file ${filePath} on line ${lineIndex + 1}`,
+      ) as TestCase,
+    );
+  }
+  return rows;
+}
+
+function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] {
+  return parseJsonlLines(fileContent, filePath).map((testCase, idx) => ({
+    ...testCase,
+    description: testCase.description || `Row #${idx + 1}`,
+  }));
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
-  const rawContent = yaml.load(fileContent);
+  const rawContent = loadYaml(fileContent);
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
@@ -561,7 +591,7 @@ export async function readTest(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
-    const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
+    const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
@@ -675,19 +705,20 @@ export async function loadTestsFromGlob(
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
+      const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
-      const rawCases = fileContent
-        .split('\n')
-        .filter((line) => line.trim())
-        .map((line) => JSON.parse(line));
+      const rawCases = parseJsonlLines(fileContent, testFile);
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
+      const fileContent = await fsPromises.readFile(testFile, 'utf8');
+      const rawContent = parseJsonOrThrow(
+        fileContent,
+        `Failed to parse JSON test file ${testFile}`,
+      );
       testCases =
         maybeConvertAgentSkillsEvalsJson(rawContent, testFile) ??
         (maybeLoadConfigFromExternalFile(rawContent) as TestCase[]);

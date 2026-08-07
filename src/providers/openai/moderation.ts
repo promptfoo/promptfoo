@@ -4,6 +4,7 @@ import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { appendOpenAiApiPath } from './util';
 
 import type {
   ApiModerationProvider,
@@ -282,7 +283,7 @@ export class OpenAiModerationProvider
         getScopedCacheKey(cacheKey),
         async () =>
           fetchWithCache<OpenAIModerationResponse>(
-            `${this.getApiUrl()}/moderations`,
+            appendOpenAiApiPath(this.getApiUrl(), 'moderations'),
             {
               method: 'POST',
               headers,

@@ -4,6 +4,7 @@ import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { isBlobStorageEnabled } from './blobs/extractor';
+import { createRemoteBlobUploadCache, uploadBlobRefsForShare } from './blobs/shareUpload';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -120,6 +121,18 @@ function findLargestResultSize(results: EvalResult[], sampleSize: number = 1000)
   return maxSize;
 }
 
+function getEffectiveShareTeamId(eval_: Eval): string | undefined {
+  const unifiedConfigTeamId = eval_.config?.metadata?.configId
+    ? eval_.config.metadata.teamId
+    : undefined;
+  if (unifiedConfigTeamId) {
+    return unifiedConfigTeamId;
+  }
+
+  const currentOrgId = cloudConfig.getCurrentOrganizationId();
+  return cloudConfig.getCurrentTeamId(currentOrgId);
+}
+
 // This sends the eval record to the remote server
 async function sendEvalRecord(
   evalRecord: Eval,
@@ -130,8 +143,8 @@ async function sendEvalRecord(
   const traces = await evalRecord.getTraces();
   const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
 
-  // Inject current team ID into config metadata if cloud is enabled
-  // This ensures the eval is created in the correct team (not the default team)
+  // Preserve the verified runtime team on server-issued unified configs. For
+  // other configs, use the current CLI team to avoid falling back to default.
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
@@ -139,16 +152,15 @@ async function sendEvalRecord(
     traces,
   };
   if (cloudConfig.isEnabled()) {
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
-    if (currentTeamId) {
+    const effectiveTeamId = getEffectiveShareTeamId(evalRecord);
+    if (effectiveTeamId) {
       evalData = {
         ...evalData,
         config: {
           ...(redactedConfig || {}),
           metadata: {
             ...(redactedConfig?.metadata || {}),
-            teamId: currentTeamId,
+            teamId: effectiveTeamId,
           },
         },
       };
@@ -372,6 +384,33 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
+async function prepareChunkForShare(
+  chunk: EvalResult[],
+  localEvalId: string,
+  remoteEvalId: string,
+  inlineCache: ReturnType<typeof createBlobInlineCache> | null,
+  remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+): Promise<EvalResult[]> {
+  const chunkToSend = inlineCache
+    ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
+    : chunk;
+
+  if (remoteBlobUploadCache) {
+    await Promise.all(
+      chunk.map((result) =>
+        uploadBlobRefsForShare(result, remoteBlobUploadCache, {
+          localEvalId,
+          remoteEvalId,
+          promptIdx: result.promptIdx,
+          testIdx: result.testIdx,
+        }),
+      ),
+    );
+  }
+
+  return chunkToSend;
+}
+
 async function sendChunkedResults(
   evalRecord: Eval,
   url: string,
@@ -383,9 +422,13 @@ async function sendChunkedResults(
 
   await checkCloudPermissions(evalRecord.config);
 
+  // Cloud shares upload referenced blobs at share time; self-hosted shares inline blob
+  // bytes into the payload instead. At most one of these caches is active.
   const inlineBlobs =
     isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
   const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
+  const remoteBlobUploadCache =
+    cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
@@ -393,7 +436,7 @@ async function sendChunkedResults(
     return null;
   }
   if (inlineBlobs && inlineCache) {
-    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
+    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache, evalRecord.id);
   }
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
@@ -472,10 +515,13 @@ async function sendChunkedResults(
           chunkNumber++;
           logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-          const chunkToSend =
-            inlineBlobs && inlineCache
-              ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-              : currentChunk;
+          const chunkToSend = await prepareChunkForShare(
+            currentChunk,
+            evalRecord.id,
+            evalId,
+            inlineCache,
+            remoteBlobUploadCache,
+          );
 
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
           currentChunk = [];
@@ -488,10 +534,13 @@ async function sendChunkedResults(
       chunkNumber++;
       logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-      const chunkToSend =
-        inlineBlobs && inlineCache
-          ? await inlineBlobRefsForShare(currentChunk, inlineCache)
-          : currentChunk;
+      const chunkToSend = await prepareChunkForShare(
+        currentChunk,
+        evalRecord.id,
+        evalId,
+        inlineCache,
+        remoteBlobUploadCache,
+      );
 
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
     }
@@ -499,6 +548,16 @@ async function sendChunkedResults(
     logger.debug(
       `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
     );
+
+    if (remoteBlobUploadCache && remoteBlobUploadCache.size > 0) {
+      const uploadOutcomes = await Promise.all(remoteBlobUploadCache.values());
+      const failedUploads = uploadOutcomes.filter((uploaded) => !uploaded).length;
+      if (failedUploads > 0) {
+        logger.warn(
+          `${failedUploads} of ${remoteBlobUploadCache.size} referenced media blob(s) were not uploaded and may be unavailable in the shared eval. Run with LOG_LEVEL=debug for details.`,
+        );
+      }
+    }
 
     return evalId;
   } catch (e) {
@@ -667,27 +726,24 @@ export async function createShareableUrl(
 }
 
 /**
- * Checks whether an eval has been shared to the current team.
+ * Checks whether an eval has been shared to its effective runtime team.
  * @param eval_ The eval to check.
- * @returns True if the eval has been shared to the current team, false otherwise.
+ * @returns True if the eval has been shared to the effective team, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    // Get current team ID to scope the check to current team only
-    // This prevents false positives when eval exists in a different team
-    const currentOrgId = cloudConfig.getCurrentOrganizationId();
-    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const effectiveTeamId = getEffectiveShareTeamId(eval_);
 
     // GET /api/results/:id with optional teamId scope
-    const url = currentTeamId
-      ? `results/${eval_.id}?teamId=${currentTeamId}`
+    const url = effectiveTeamId
+      ? `results/${eval_.id}?teamId=${encodeURIComponent(effectiveTeamId)}`
       : `results/${eval_.id}`;
     const res = await makeCloudRequest(url, 'GET');
     switch (res.status) {
-      // 200: Eval already exists in the current team.
+      // 200: Eval already exists in the effective team.
       case 200:
         return true;
-      // 404: Eval not found in the current team.
+      // 404: Eval not found in the effective team.
       case 404:
         return false;
       default:

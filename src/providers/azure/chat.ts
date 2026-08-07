@@ -426,12 +426,15 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         }
       } else {
         const hasDataSources = !!config.dataSources || !!config.data_sources;
+        // Optional-chain `data.choices` too: a degenerate 200 response with no
+        // `choices` field must take the same graceful no-output path as an
+        // empty array instead of throwing on `.find`/`[0]`.
         const choice = hasDataSources
-          ? data.choices.find(
+          ? data.choices?.find(
               (choice: { message: { role: string; content: string } }) =>
                 choice.message.role === 'assistant',
             )
-          : data.choices[0];
+          : data.choices?.[0];
 
         const message = choice?.message;
 
@@ -443,7 +446,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         output = message?.content;
 
         // Check for errors indicating that the content filters did not run on the completion.
-        if (choice.content_filter_results && choice.content_filter_results.error) {
+        // Optional-chain `choice`: in dataSources mode `find(...)` can return undefined (no
+        // assistant message), and an empty `choices` array makes `choices[0]` undefined.
+        if (choice?.content_filter_results?.error) {
           const { code, message } = choice.content_filter_results.error;
           logger.warn(
             `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
@@ -455,8 +460,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
         if (output == null) {
           // Handle tool_calls and function_call
-          const toolCalls = message.tool_calls;
-          const functionCall = message.function_call;
+          const toolCalls = message?.tool_calls;
+          const functionCall = message?.function_call;
 
           // Process function/tool calls if callbacks are configured or MCP is available
           if (
@@ -491,7 +496,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         }
 
-        logProbs = data.choices[0].logprobs?.content?.map(
+        logProbs = choice?.logprobs?.content?.map(
           (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
         );
       }
@@ -504,6 +509,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               total: data.usage?.total_tokens,
               prompt: data.usage?.prompt_tokens,
               completion: data.usage?.completion_tokens,
+              ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
+                cached: data.usage.prompt_tokens_details.cached_tokens,
+              }),
               ...(data.usage?.completion_tokens_details
                 ? {
                     completionDetails: {
@@ -525,6 +533,13 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens,
+          data.usage?.prompt_tokens_details?.audio_tokens,
+          data.usage?.completion_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.image_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
+          data.usage?.completion_tokens_details?.image_tokens,
         ),
         guardrails: {
           flagged: flaggedInput || flaggedOutput,

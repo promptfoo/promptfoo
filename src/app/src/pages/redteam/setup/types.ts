@@ -101,6 +101,7 @@ export interface ProviderOptions {
     headers?: Record<string, string>;
     body?: string | object;
     messageTemplate?: string;
+    protocols?: string[];
     // Browser specific options
     steps?: BrowserStep[];
     headless?: boolean;

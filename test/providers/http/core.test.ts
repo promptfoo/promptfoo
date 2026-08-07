@@ -1819,6 +1819,13 @@ describe('HttpProvider', () => {
   });
 
   describe('Authentication header sanitization', () => {
+    let debugSpy: MockInstance | undefined;
+
+    afterEach(() => {
+      debugSpy?.mockRestore();
+      debugSpy = undefined;
+    });
+
     it('should redact authentication headers in metadata', async () => {
       const provider = new HttpProvider(mockUrl, {
         config: {
@@ -2094,6 +2101,7 @@ describe('HttpProvider', () => {
     });
 
     it('should redact transformed raw request strings in debug metadata', async () => {
+      debugSpy = vi.spyOn(logger, 'debug');
       const transformedRawRequest = dedent`
         GET /api/data?api_key=transform-query-secret HTTP/1.1
         Host: example.com
@@ -2149,9 +2157,15 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).not.toContain('raw-transform-token');
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('transform-query-secret');
+      expect(debugOutput).not.toContain('raw-transform-token');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
 
     it('should redact form-urlencoded transformed requests in debug metadata', async () => {
+      debugSpy = vi.spyOn(logger, 'debug');
       const formBody =
         'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890';
       const provider = new HttpProvider('http://example.com/api', {
@@ -2172,10 +2186,10 @@ describe('HttpProvider', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-      const result = await provider.callApi('test prompt', {
+      const result = await provider.callApi('username=bob&password=original-secret', {
         debug: true,
         vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
+        prompt: { raw: 'username=bob&password=original-secret', label: 'test' },
       });
 
       expect(result.metadata?.transformedRequest).toContain('username=alice');
@@ -2190,6 +2204,60 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('original-secret');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
+    });
+
+    it('should redact form-urlencoded transformed raw request debug logs', async () => {
+      debugSpy = vi.spyOn(logger, 'debug');
+      const formBody =
+        'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890';
+      const provider = new HttpProvider('http', {
+        config: {
+          request: dedent`
+            POST /api/data HTTP/1.1
+            Host: example.com
+            Content-Type: application/x-www-form-urlencoded
+
+            {{ prompt }}
+          `,
+          transformRequest: () => formBody,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const result = await provider.callApi('username=bob&password=original-secret', {
+        debug: true,
+        vars: {},
+        prompt: { raw: 'username=bob&password=original-secret', label: 'test' },
+      });
+
+      expect(result.metadata?.transformedRequest).toContain('username=alice');
+      expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.transformedRequest).not.toContain('plain-secret');
+      expect(result.metadata?.transformedRequest).not.toContain(
+        'sk-123456789012345678901234567890',
+      );
+      expect(result.metadata?.finalRequestBody).toContain('username=alice');
+      expect(result.metadata?.finalRequestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
+      expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
+      expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = JSON.stringify(debugSpy.mock.calls);
+      expect(debugOutput).not.toContain('original-secret');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
 
     it('should handle case-insensitive header matching', async () => {
@@ -2684,9 +2752,81 @@ describe('urlEncodeRawRequestPath', () => {
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
   });
 
+  it('should not leak sensitive query values when logging URL encoding', () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
+    try {
+      const rawRequest = 'GET /api/data?api_key=secret%zz&query=hello world HTTP/1.1';
+      const result = urlEncodeRawRequestPath(rawRequest);
+
+      expect(result).toBe('GET /api/data?api_key=secret%zz&query=hello%20world HTTP/1.1');
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).toContain('api_key=%5BREDACTED%5D');
+      expect(debugOutput).not.toContain('secret%zz');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('should not leak secret-looking query values with non-sensitive parameter names', () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
+    try {
+      const rawRequest =
+        'GET /api/data?cursor=sk-123456789012345678901234567890&query=hello world HTTP/1.1';
+      const result = urlEncodeRawRequestPath(rawRequest);
+
+      expect(result).toBe(
+        'GET /api/data?cursor=sk-123456789012345678901234567890&query=hello%20world HTTP/1.1',
+      );
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).toContain('cursor=%5BREDACTED%5D');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
   it('should throw error when modifying malformed request with no URL', () => {
     const rawRequest = 'GET HTTP/1.1';
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);
+  });
+
+  it('should not leak query credentials from a malformed first line in errors or logs', () => {
+    const errorSpy = vi.spyOn(logger, 'error');
+    try {
+      // A non-HTTP protocol token triggers the protocol-invalid path; the
+      // request target carries a secret in its query string.
+      const rawRequest = 'GET /v1/chat?api_key=sk-realsecret1234567890&note=foo FTP/1.1';
+      expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/protocol is not valid/);
+
+      const thrownMessage = (() => {
+        try {
+          urlEncodeRawRequestPath(rawRequest);
+          return '';
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      })();
+      const loggedOutput = errorSpy.mock.calls.flat().join('\n');
+
+      // The secret never appears in the thrown message or the error log.
+      expect(thrownMessage).not.toContain('sk-realsecret1234567890');
+      expect(loggedOutput).not.toContain('sk-realsecret1234567890');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should not warn when encoding a valid raw request line', () => {
+    // The first line is not a URL, so eagerly sanitizing it would console.warn on
+    // every valid raw request. The sanitize must be deferred to the error branches.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = urlEncodeRawRequestPath('GET /api/data?q=hello world HTTP/1.1');
+      expect(result).toBe('GET /api/data?q=hello%20world HTTP/1.1');
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('should handle complete raw request with headers', () => {
@@ -3342,6 +3482,71 @@ describe('HttpProvider - Sanitization', () => {
     expect(contextStr).not.toContain('[REDACTED]');
   });
 
+  it('should sanitize form-urlencoded bodies with raw spaces in debug logs', async () => {
+    const provider = new HttpProvider(testUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'username=alice&password=plain-secret&note=hello world',
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{"result": "test"}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await provider.callApi('test prompt');
+
+    const debugCall = loggerDebugSpy.mock.calls.find(
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+    );
+    expect(debugCall).toBeDefined();
+
+    const contextStr = JSON.stringify(debugCall?.[1]);
+    expect(contextStr).toContain('username=alice');
+    expect(contextStr).toContain('password=%5BREDACTED%5D');
+    expect(contextStr).toContain('note=hello world');
+    expect(contextStr).not.toContain('plain-secret');
+  });
+
+  it('should sanitize newline-terminated form-urlencoded bodies in debug logs', async () => {
+    // A trailing newline (e.g. a body loaded from a file) makes the
+    // looksLikeUrlEncodedFormData heuristic reject the string, so only the
+    // Content-Type-gated branch redacts it. Pin that branch independently.
+    const provider = new HttpProvider(testUrl, {
+      config: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'username=alice&password=plain-secret\n',
+      },
+    });
+
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: '{"result": "test"}',
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    await provider.callApi('test prompt');
+
+    const debugCall = loggerDebugSpy.mock.calls.find(
+      (call: any) => call[0]?.includes('Calling') && call[0]?.includes('with config'),
+    );
+    expect(debugCall).toBeDefined();
+    const contextStr = JSON.stringify(debugCall?.[1]);
+    expect(contextStr).toContain('username=alice');
+    expect(contextStr).toContain('password=%5BREDACTED%5D');
+    expect(contextStr).not.toContain('plain-secret');
+  });
+
   describe('Header sanitization in logs', () => {
     it('should sanitize sensitive headers while preserving functionality', async () => {
       const provider = new HttpProvider('https://api.example.com/test', {
@@ -3610,6 +3815,20 @@ describe('HttpProvider - Sanitization', () => {
       // Test null/undefined separately as they return the input as-is
       expect(sanitizeUrl(null as any)).toBeNull();
       expect(sanitizeUrl(undefined as any)).toBeUndefined();
+    });
+
+    it('should not leak malformed URL secrets when sanitization fails', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const result = sanitizeUrl('https://[invalid-host]/api?api_key=plain-secret');
+        const warningOutput = warnSpy.mock.calls.flat().join('\n');
+
+        expect(result).toBe('[REDACTED]');
+        expect(warningOutput).not.toContain('plain-secret');
+        expect(warningOutput).not.toContain('api_key=');
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });

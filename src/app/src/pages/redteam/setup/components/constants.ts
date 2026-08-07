@@ -1,13 +1,17 @@
 import type { RedteamUITarget } from '../types';
 
 export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.5';
-export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.5, openai:gpt-5.5-pro, openai:gpt-5.4';
+export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.6-sol, openai:gpt-5.5, openai:gpt-5.4';
 
 export const predefinedTargets: RedteamUITarget[] = [
   { value: '', label: 'Select a target' },
   { value: 'http', label: 'HTTP/HTTPS Endpoint' },
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
+  { value: 'openai:gpt-5.6', label: 'OpenAI GPT-5.6 (Sol alias)' },
+  { value: 'openai:gpt-5.6-sol', label: 'OpenAI GPT-5.6 Sol' },
+  { value: 'openai:gpt-5.6-terra', label: 'OpenAI GPT-5.6 Terra' },
+  { value: 'openai:gpt-5.6-luna', label: 'OpenAI GPT-5.6 Luna' },
   { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-5.5' },
   { value: 'openai:gpt-5.5-pro', label: 'OpenAI GPT-5.5 Pro' },
   { value: 'openai:gpt-5.4', label: 'OpenAI GPT-5.4' },
@@ -16,14 +20,15 @@ export const predefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
   { value: 'openai:gpt-4.1', label: 'OpenAI GPT-4.1' },
   { value: 'openai:gpt-4.1-mini', label: 'OpenAI GPT-4.1 Mini' },
+  { value: 'claude-fable-5', label: 'Anthropic Claude Fable 5' },
+  { value: 'claude-opus-5', label: 'Anthropic Claude Opus 5' },
   { value: 'claude-opus-4-8', label: 'Anthropic Claude 4.8 Opus' },
+  { value: 'claude-sonnet-5', label: 'Anthropic Claude Sonnet 5' },
   { value: 'claude-sonnet-4-6', label: 'Anthropic Claude 4.6 Sonnet' },
   { value: 'claude-opus-4-6', label: 'Anthropic Claude 4.6 Opus' },
   { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
-  { value: 'claude-sonnet-4-20250514', label: 'Anthropic Claude 4 Sonnet' },
   { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
-  { value: 'claude-opus-4-20250514', label: 'Anthropic Claude 4 Opus' },
-  { value: 'claude-3-7-sonnet-latest', label: 'Anthropic Claude 3.7 Sonnet' },
+  { value: 'claude-haiku-4-5', label: 'Anthropic Claude 4.5 Haiku' },
   { value: 'vertex:gemini-3.1-pro-preview', label: 'Google Vertex AI Gemini 3.1 Pro' },
   { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
