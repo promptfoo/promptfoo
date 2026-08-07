@@ -1271,7 +1271,11 @@ function getImageSourceForCell({
   headVars: string[];
   injectVarName: string;
 }): string | undefined {
-  if (typeof value !== 'string' || hasFileMetadataForColumn({ columnId, row, headVars })) {
+  if (
+    columnId === 'description' ||
+    typeof value !== 'string' ||
+    hasFileMetadataForColumn({ columnId, row, headVars })
+  ) {
     return undefined;
   }
 
