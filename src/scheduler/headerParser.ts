@@ -157,6 +157,17 @@ function parseFirstMatch(headers: Record<string, string>, names: string[]): numb
 }
 
 /**
+ * A bare non-negative decimal number and nothing else: "0", "120", "1.5".
+ *
+ * `Number.parseFloat` stops at the first character it cannot consume, so
+ * without this guard it silently reads the leading digits of a timestamp
+ * ("2026-08-07T21:00:00Z" -> 2026) and the magnitude heuristic below then
+ * treats them as relative seconds. Same intent as the `String(seconds) ===
+ * value.trim()` check in `parseRetryAfter`.
+ */
+const BARE_NUMBER_RE = /^\d+(?:\.\d+)?$/;
+
+/**
  * Parse reset time from various formats.
  * Returns absolute Unix timestamp in milliseconds.
  */
@@ -167,23 +178,26 @@ function parseResetTime(value: string): number | null {
     return Date.now() + durationMs;
   }
 
-  // Try as numeric
-  const num = Number.parseFloat(value);
-  if (Number.isFinite(num) && num >= 0) {
-    // Disambiguate by magnitude:
-    // - < 1 billion: relative seconds
-    // - 1-10 billion: Unix seconds (10 digits)
-    // - > 10 billion: Unix milliseconds (13 digits)
-    if (num < 1_000_000_000) {
-      return Date.now() + num * 1000;
-    } else if (num < 10_000_000_000) {
-      return num * 1000;
-    } else {
-      return num;
+  // Try as numeric, but only when the whole value is a bare number
+  if (BARE_NUMBER_RE.test(value.trim())) {
+    const num = Number.parseFloat(value);
+    if (Number.isFinite(num) && num >= 0) {
+      // Disambiguate by magnitude:
+      // - < 1 billion: relative seconds
+      // - 1-10 billion: Unix seconds (10 digits)
+      // - > 10 billion: Unix milliseconds (13 digits)
+      if (num < 1_000_000_000) {
+        return Date.now() + num * 1000;
+      } else if (num < 10_000_000_000) {
+        return num * 1000;
+      } else {
+        return num;
+      }
     }
   }
 
-  // Try HTTP-date format
+  // Try HTTP-date format, plus the RFC 3339 timestamps Anthropic returns in
+  // `anthropic-ratelimit-*-reset`.
   const httpDate = parseHttpDate(value);
   if (httpDate !== null) {
     return httpDate;
