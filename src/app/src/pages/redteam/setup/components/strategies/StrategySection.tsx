@@ -1,4 +1,5 @@
 import { Button } from '@app/components/ui/button';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { StrategyItem } from './StrategyItem';
 
@@ -50,10 +51,18 @@ export function StrategySection({
     <div className="mb-8">
       <div className="mb-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className={cn('text-lg font-semibold', highlighted && 'font-bold text-primary')}>
+          <Typography
+            variant="subtitle"
+            as="h3"
+            className={cn(highlighted && 'font-bold text-primary')}
+          >
             {title}
-          </h3>
-          {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+          </Typography>
+          {description && (
+            <Typography variant="muted" className="mt-1">
+              {description}
+            </Typography>
+          )}
         </div>
         {strategies.length > 0 && (
           <Button
