@@ -332,6 +332,36 @@ describe('json utilities', () => {
       expect(extractJsonObjects(input)).toEqual(expectedOutput);
     });
 
+    it('should not treat braces inside string values as structural', () => {
+      expect(extractJsonObjects('{"a": "}"}')).toEqual([{ a: '}' }]);
+      expect(extractJsonObjects('{"note": "closing brace } inside", "status": "ok"}')).toEqual([
+        { note: 'closing brace } inside', status: 'ok' },
+      ]);
+      expect(extractJsonObjects('{"open": "{ unbalanced"}')).toEqual([{ open: '{ unbalanced' }]);
+    });
+
+    it('should extract JSON with string braces from surrounding text', () => {
+      const input = 'The result is {"status": "ok", "note": "brace } here"} done';
+      expect(extractJsonObjects(input)).toEqual([{ status: 'ok', note: 'brace } here' }]);
+    });
+
+    it('should not be confused by an escaped quote before a string brace', () => {
+      const input = '{"quote": "say \\"}\\" now"}';
+      expect(extractJsonObjects(input)).toEqual([{ quote: 'say "}" now' }]);
+    });
+
+    it('should not treat a bare quote inside a plain scalar as opening a string', () => {
+      const input = '{reason: mentions "admin, score: 1}';
+      expect(extractJsonObjects(input)).toEqual([{ reason: 'mentions "admin', score: 1 }]);
+    });
+
+    it('should not treat braces inside a string that is the first array element as structural', () => {
+      expect(extractJsonObjects('{"messages":["}"]}')).toEqual([{ messages: ['}'] }]);
+      expect(extractJsonObjects('{"tags": ["{open", "close}"]}')).toEqual([
+        { tags: ['{open', 'close}'] },
+      ]);
+    });
+
     describe('convertSlashCommentsToHash', () => {
       it('should convert basic // comments to # comments', () => {
         const input = 'some text // this is a comment';
