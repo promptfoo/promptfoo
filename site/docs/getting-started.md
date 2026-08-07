@@ -49,7 +49,12 @@ Most providers need authentication. For OpenAI:
 export OPENAI_API_KEY=sk-abc123
 ```
 
-This command only applies to the current terminal session. If you want the key to be available in future sessions on a local, trusted machine, you can add the equivalent command for your shell (such as an `export` statement in your `.bashrc`/`.zshrc`, a `set` command in Fish, or setting a user environment variable on Windows) to your shell's startup or profile configuration.
+This command only applies to the current terminal session. If you want the key to be available in future sessions on a local, trusted machine, you can configure it permanently in your shell:
+- **Bash / Zsh:** Add `export OPENAI_API_KEY="your-key"` to your shell profile (e.g., `~/.bashrc` or `~/.zshrc`).
+- **Fish:** Add `set -gx OPENAI_API_KEY "your-key"` to your `~/.config/fish/config.fish` file.
+- **Windows (PowerShell):** Set a user environment variable through your system settings.
+
+**Security Best Practice:** Never commit API keys or hardcode secrets into source control. For long-term storage or production use, prefer utilizing a dedicated secret manager or your operating system's secure credential keychain.
 
 Then navigate to the example directory, run the eval, and view results:
 
