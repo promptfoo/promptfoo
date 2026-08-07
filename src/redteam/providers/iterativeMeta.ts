@@ -464,6 +464,7 @@ export async function runMetaAgentRedteam({
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
           providerConfig: tracingOptions.provider,
           queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
 
         if (traceContext) {

@@ -1,11 +1,16 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from './tracing';
 import type OpenAI from 'openai';
 
 import type {

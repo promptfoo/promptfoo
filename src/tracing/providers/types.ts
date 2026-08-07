@@ -50,6 +50,21 @@ export interface FetchTraceOptions {
 
   /** Whether to sanitize sensitive attributes */
   sanitizeAttributes?: boolean;
+
+  /** Abort signal shared with the evaluation that requested the trace. */
+  abortSignal?: AbortSignal;
+}
+
+export class TraceProviderError extends Error {
+  readonly statusCode?: number;
+  readonly retryable: boolean;
+
+  constructor(message: string, options: { statusCode?: number; retryable?: boolean } = {}) {
+    super(message);
+    this.name = 'TraceProviderError';
+    this.statusCode = options.statusCode;
+    this.retryable = options.retryable ?? false;
+  }
 }
 
 /**

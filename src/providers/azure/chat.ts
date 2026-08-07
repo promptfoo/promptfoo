@@ -1,12 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -21,6 +15,13 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from '../tracing';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';

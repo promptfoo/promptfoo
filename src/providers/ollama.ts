@@ -1,10 +1,15 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from './tracing';
 
 import type {
   ApiProvider,

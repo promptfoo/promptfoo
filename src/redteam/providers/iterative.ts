@@ -488,6 +488,7 @@ export async function runRedteamConversation({
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
           providerConfig: tracingOptions.provider,
           queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
         if (traceContext) {
           traceSnapshots.push(traceContext);

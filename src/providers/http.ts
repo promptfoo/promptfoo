@@ -12,18 +12,6 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  getTraceparent,
-  withGenAISpan,
-} from '../tracing/genaiTracer';
-import { withOAuthSpan } from '../tracing/oauthTracer';
-import {
-  type TargetSpanContext,
-  withHttpRequestSpan,
-  withTargetSpan,
-} from '../tracing/targetTracer';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
@@ -62,6 +50,16 @@ import {
   transformToolChoice,
   transformTools,
 } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  getTraceparent,
+  type TargetSpanContext,
+  withGenAISpan,
+  withHttpRequestSpan,
+  withOAuthSpan,
+  withTargetSpan,
+} from './tracing';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';

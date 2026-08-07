@@ -4,13 +4,13 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
 import { getSafeProviderId, sanitizeProviderObject } from './providerLogging';
 import { getRequestTimeoutMs } from './shared';
+import { type TargetSpanContext, withTargetSpan } from './tracing';
 import { normalizeResponseTransformResult } from './transformResult';
 import { parseFileTransformReference } from './transformUtils';
 

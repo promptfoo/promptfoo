@@ -3,7 +3,7 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { isMcpToolNameFilter } from '../../providers/mcp/util';
-import { withGraderSpan } from '../../tracing/graderTracer';
+import { withGraderSpan } from '../../tracing/traceContext';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -36,6 +36,8 @@ import type {
   TestCase,
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
+
+export { withGraderSpan };
 
 /**
  * Abstract base class for creating plugins that generate test cases.

@@ -2,12 +2,6 @@ import { APIError } from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -16,6 +10,13 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from '../tracing';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
   CLAUDE_CODE_OAUTH_BETA_FEATURES,

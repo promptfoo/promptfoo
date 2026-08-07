@@ -1,5 +1,6 @@
-import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
 import type {
@@ -9,36 +10,26 @@ import type {
   TraceProviderConfig,
 } from './types';
 
-/**
- * Tempo API response format (OTLP JSON)
- * See: https://grafana.com/docs/tempo/latest/api_docs/
- */
-interface TempoResourceSpan {
-  resource: {
-    attributes: Array<{ key: string; value: TempoAttributeValue }>;
-  };
-  scopeSpans: Array<{
-    scope?: {
-      name?: string;
-      version?: string;
-    };
-    spans: TempoSpan[];
-  }>;
+interface TempoAttributeValue {
+  stringValue?: string;
+  intValue?: string;
+  doubleValue?: number;
+  boolValue?: boolean;
+  bytesValue?: string;
+  arrayValue?: { values?: TempoAttributeValue[] };
+  kvlistValue?: { values?: Array<{ key: string; value: TempoAttributeValue }> };
 }
 
 interface TempoSpan {
-  traceId: string;
+  traceId?: string;
   spanId: string;
   parentSpanId?: string;
   name: string;
-  kind?: number;
+  kind?: number | string;
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
-  status?: {
-    code?: number | string;
-    message?: string;
-  };
+  status?: { code?: number | string; message?: string };
   events?: Array<{
     timeUnixNano: string;
     name: string;
@@ -46,36 +37,35 @@ interface TempoSpan {
   }>;
 }
 
-interface TempoAttributeValue {
-  stringValue?: string;
-  intValue?: string;
-  doubleValue?: number;
-  boolValue?: boolean;
-  arrayValue?: { values: TempoAttributeValue[] };
-  kvlistValue?: { values: Array<{ key: string; value: TempoAttributeValue }> };
-}
-
 interface TempoTraceResponse {
-  batches: TempoResourceSpan[];
+  batches?: Array<{
+    resource?: { attributes?: Array<{ key: string; value: TempoAttributeValue }> };
+    scopeSpans?: Array<{
+      scope?: { name?: string; version?: string };
+      spans?: TempoSpan[];
+    }>;
+  }>;
 }
 
-/**
- * Convert nanoseconds (as string) to milliseconds
- */
-function nanoToMs(nanoStr: string): number {
-  const nanos = BigInt(nanoStr);
-  return Number.parseInt((nanos / 1_000_000n).toString(), 10);
+const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+const MAX_SPANS = 10_000;
+const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
+
+function nanoToMs(value: string): number {
+  const milliseconds = BigInt(value) / 1_000_000n;
+  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('Span timestamp is outside the supported range');
+  }
+  return Number.parseInt(milliseconds.toString(), 10);
 }
 
-/**
- * Extract a primitive value from Tempo's attribute value format
- */
-function extractAttributeValue(value: TempoAttributeValue): string | number | boolean | unknown[] {
+function extractAttributeValue(value: TempoAttributeValue): unknown {
   if (value.stringValue !== undefined) {
     return value.stringValue;
   }
   if (value.intValue !== undefined) {
-    return parseInt(value.intValue, 10);
+    const number = Number(value.intValue);
+    return Number.isSafeInteger(number) ? number : value.intValue;
   }
   if (value.doubleValue !== undefined) {
     return value.doubleValue;
@@ -83,69 +73,48 @@ function extractAttributeValue(value: TempoAttributeValue): string | number | bo
   if (value.boolValue !== undefined) {
     return value.boolValue;
   }
+  if (value.bytesValue !== undefined) {
+    return value.bytesValue;
+  }
   if (value.arrayValue) {
-    return value.arrayValue.values.map(extractAttributeValue);
+    return (value.arrayValue.values ?? []).map(extractAttributeValue);
   }
-  return String(value);
+  if (value.kvlistValue) {
+    return attributesToRecord(value.kvlistValue.values);
+  }
+  return undefined;
 }
 
-/**
- * Convert Tempo attributes array to a Record
- */
 function attributesToRecord(
-  attrs?: Array<{ key: string; value: TempoAttributeValue }>,
+  attributes?: Array<{ key: string; value: TempoAttributeValue }>,
 ): Record<string, unknown> {
-  if (!attrs) {
-    return {};
-  }
-  const record: Record<string, unknown> = {};
-  for (const attr of attrs) {
-    record[attr.key] = extractAttributeValue(attr.value);
-  }
-  return record;
+  return Object.fromEntries(
+    (attributes ?? []).map(({ key, value }) => [key, extractAttributeValue(value)]),
+  );
 }
 
-/**
- * Decode hex-encoded or base64-encoded span/trace IDs to hex
- */
 function decodeId(id: string | undefined): string | undefined {
   if (!id) {
     return undefined;
   }
-  // If already hex (only contains hex chars), return as-is
-  if (/^[0-9a-fA-F]+$/.test(id)) {
+  if (/^[0-9a-f]+$/i.test(id)) {
     return id.toLowerCase();
   }
-  // Try base64 decode
-  try {
-    const buffer = Buffer.from(id, 'base64');
-    return buffer.toString('hex').toLowerCase();
-  } catch {
-    return id.toLowerCase();
-  }
+  return Buffer.from(id, 'base64').toString('hex').toLowerCase();
 }
 
-/**
- * Normalize Tempo status codes to OTEL numeric codes:
- * 0 = UNSET, 1 = OK, 2 = ERROR
- */
 function normalizeStatusCode(code: number | string | undefined): number | undefined {
-  if (code === undefined || code === null) {
-    return undefined;
-  }
-
   if (typeof code === 'number') {
     return code;
   }
-
-  // Handle strings like "1", "2"
+  if (!code) {
+    return undefined;
+  }
   const numeric = Number(code);
   if (!Number.isNaN(numeric)) {
     return numeric;
   }
-
-  const upper = code.toUpperCase();
-  switch (upper) {
+  switch (code.toUpperCase()) {
     case 'STATUS_CODE_OK':
     case 'OK':
       return 1;
@@ -160,181 +129,192 @@ function normalizeStatusCode(code: number | string | undefined): number | undefi
   }
 }
 
-/**
- * Grafana Tempo trace provider.
- * Queries Tempo's HTTP API to retrieve traces by ID.
- */
+function matchesSpanFilter(name: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+    return new RegExp(`^${escaped.replace(/\*/g, '.*').replace(/\\\?/g, '.')}$`, 'i').test(name);
+  });
+}
+
+function transformSpan(
+  span: TempoSpan,
+  resourceAttributes: Record<string, unknown>,
+  scopeName: string | undefined,
+  options?: FetchTraceOptions,
+): SpanData | null {
+  const startTime = nanoToMs(span.startTimeUnixNano);
+  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
+    return null;
+  }
+  if (options?.spanFilter?.length && !matchesSpanFilter(span.name, options.spanFilter)) {
+    return null;
+  }
+
+  const events = span.events?.map((event) => ({
+    name: event.name,
+    timestamp: nanoToMs(event.timeUnixNano),
+    attributes: attributesToRecord(event.attributes),
+  }));
+
+  return {
+    spanId: decodeId(span.spanId) ?? span.spanId,
+    parentSpanId: decodeId(span.parentSpanId),
+    name: span.name,
+    startTime,
+    endTime: span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined,
+    attributes: {
+      ...resourceAttributes,
+      ...attributesToRecord(span.attributes),
+      ...(scopeName && { 'otel.scope.name': scopeName }),
+      ...(typeof span.kind === 'number' && { 'otel.span.kind_code': span.kind }),
+      ...(typeof span.kind === 'string' && {
+        'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
+      }),
+    },
+    statusCode: normalizeStatusCode(span.status?.code),
+    statusMessage: span.status?.message,
+    ...(events?.length && { events }),
+  };
+}
+
 export class TempoProvider implements TraceProvider {
   readonly id = 'tempo';
-  private readonly config: TraceProviderConfig;
   private readonly baseUrl: string;
 
-  constructor(config: TraceProviderConfig) {
-    this.config = config;
+  constructor(private readonly config: TraceProviderConfig) {
     if (!config.endpoint) {
       throw new Error('Tempo provider requires endpoint configuration');
+    }
+
+    let endpoint: URL;
+    try {
+      endpoint = new URL(config.endpoint);
+    } catch {
+      throw new Error('Tempo provider endpoint must be a valid HTTP or HTTPS URL');
+    }
+    if (
+      !['http:', 'https:'].includes(endpoint.protocol) ||
+      endpoint.username ||
+      endpoint.password
+    ) {
+      throw new Error('Tempo provider endpoint must be an HTTP or HTTPS URL without credentials');
+    }
+    if (
+      config.timeout !== undefined &&
+      (!Number.isSafeInteger(config.timeout) || config.timeout <= 0)
+    ) {
+      throw new Error('Tempo provider timeout must be a positive integer');
     }
     this.baseUrl = config.endpoint.replace(/\/$/, '');
   }
 
-  /**
-   * Build request headers including auth if configured
-   */
   private buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...this.config.headers,
     };
-
     if (this.config.auth?.token) {
-      headers['Authorization'] = `Bearer ${this.config.auth.token}`;
+      headers.Authorization = `Bearer ${this.config.auth.token}`;
     } else if (this.config.auth?.username && this.config.auth?.password) {
       const credentials = Buffer.from(
         `${this.config.auth.username}:${this.config.auth.password}`,
       ).toString('base64');
-      headers['Authorization'] = `Basic ${credentials}`;
+      headers.Authorization = `Basic ${credentials}`;
     }
-
     return headers;
   }
 
-  /**
-   * Transform Tempo response to SpanData array
-   */
   private transformSpans(data: TempoTraceResponse, options?: FetchTraceOptions): SpanData[] {
     const spans: SpanData[] = [];
+    const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
 
-    for (const batch of data.batches || []) {
-      const resourceAttrs = attributesToRecord(batch.resource?.attributes);
-      const serviceName = resourceAttrs['service.name'] as string | undefined;
-
-      for (const scopeSpan of batch.scopeSpans || []) {
-        for (const span of scopeSpan.spans || []) {
-          const startTime = nanoToMs(span.startTimeUnixNano);
-          const endTime = span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined;
-
-          // Apply earliestStartTime filter
-          if (options?.earliestStartTime && startTime < options.earliestStartTime) {
-            continue;
+    for (const batch of data.batches ?? []) {
+      const resourceAttributes = attributesToRecord(batch.resource?.attributes);
+      for (const scopeSpan of batch.scopeSpans ?? []) {
+        for (const span of scopeSpan.spans ?? []) {
+          if (spans.length >= limit) {
+            return spans;
           }
-
-          const attributes = {
-            ...resourceAttrs,
-            ...attributesToRecord(span.attributes),
-            ...(serviceName && { 'service.name': serviceName }),
-            ...(scopeSpan.scope?.name && { 'otel.scope.name': scopeSpan.scope.name }),
-            ...(span.kind !== undefined && { 'otel.span.kind_code': span.kind }),
-          };
-
-          // Apply span name filter if provided
-          if (options?.spanFilter && options.spanFilter.length > 0) {
-            const nameMatches = options.spanFilter.some((pattern) => {
-              const regex = new RegExp(
-                '^' + pattern.replace(/\*/g, '.*').replace(/\?/g, '.') + '$',
-                'i',
-              );
-              return regex.test(span.name);
-            });
-            if (!nameMatches) {
-              continue;
+          try {
+            const normalizedSpan = transformSpan(
+              span,
+              resourceAttributes,
+              scopeSpan.scope?.name,
+              options,
+            );
+            if (normalizedSpan) {
+              spans.push(normalizedSpan);
             }
+          } catch (error) {
+            logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
           }
-
-          spans.push({
-            spanId: decodeId(span.spanId) || span.spanId,
-            parentSpanId: decodeId(span.parentSpanId),
-            name: span.name,
-            startTime,
-            endTime,
-            attributes,
-            statusCode: normalizeStatusCode(span.status?.code),
-            statusMessage: span.status?.message,
-          });
         }
       }
     }
-
-    // Apply maxSpans limit
-    if (options?.maxSpans && spans.length > options.maxSpans) {
-      return spans.slice(0, options.maxSpans);
-    }
-
     return spans;
   }
 
-  /**
-   * Extract unique service names from the trace
-   */
-  private extractServices(data: TempoTraceResponse): string[] {
-    const services = new Set<string>();
-    for (const batch of data.batches || []) {
-      const attrs = attributesToRecord(batch.resource?.attributes);
-      const serviceName = attrs['service.name'];
-      if (typeof serviceName === 'string') {
-        services.add(serviceName);
-      }
-    }
-    return Array.from(services);
-  }
-
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
-    const url = `${this.baseUrl}/api/traces/${traceId}`;
+    if (!TRACE_ID_PATTERN.test(traceId) || /^0+$/.test(traceId)) {
+      throw new TraceProviderError('Trace ID must contain 32 hexadecimal characters');
+    }
 
-    logger.debug(`[TempoProvider] Fetching trace ${traceId} from ${url}`);
+    const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
+    const signal = options?.abortSignal
+      ? AbortSignal.any([timeoutSignal, options.abortSignal])
+      : timeoutSignal;
+    const response = await fetchWithProxy(`${this.baseUrl}/api/traces/${traceId}`, {
+      method: 'GET',
+      headers: this.buildHeaders(),
+      signal,
+    });
 
-    try {
-      const response = await fetchWithCache<TempoTraceResponse>(
-        url,
-        {
-          method: 'GET',
-          headers: this.buildHeaders(),
-        },
-        this.config.timeout || 10000,
-        'json',
-        true, // Always bust cache - traces should be fresh
-      );
-
-      if (response.status === 404) {
-        logger.debug(`[TempoProvider] Trace ${traceId} not found (404)`);
-        return null;
-      }
-
-      if (response.status !== 200) {
-        logger.warn(
-          `[TempoProvider] Unexpected status ${response.status} for trace ${traceId}: ${response.statusText}`,
-        );
-        return null;
-      }
-
-      const spans = this.transformSpans(response.data, options);
-
-      logger.debug(`[TempoProvider] Retrieved ${spans.length} spans for trace ${traceId}`);
-
-      return {
-        traceId,
-        spans,
-        services: this.extractServices(response.data),
-        fetchedAt: Date.now(),
-      };
-    } catch (error) {
-      logger.error(`[TempoProvider] Failed to fetch trace ${traceId}: ${error}`);
+    if (response.status === 404) {
       return null;
     }
+    if (!response.ok) {
+      throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
+        statusCode: response.status,
+        retryable: response.status === 429 || response.status >= 500,
+      });
+    }
+
+    const contentLength = Number(response.headers.get('content-length'));
+    if (contentLength > MAX_RESPONSE_BYTES) {
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+    const body = await response.text();
+    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+    const data = JSON.parse(body) as TempoTraceResponse;
+    if (!Array.isArray(data.batches)) {
+      throw new TraceProviderError('Tempo returned an invalid trace response');
+    }
+
+    const services = new Set<string>();
+    for (const batch of data.batches) {
+      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+      if (typeof service === 'string') {
+        services.add(service);
+      }
+    }
+
+    return {
+      traceId,
+      spans: this.transformSpans(data, options),
+      services: [...services],
+      fetchedAt: Date.now(),
+    };
   }
 
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetchWithCache(
-        `${this.baseUrl}/ready`,
-        {
-          method: 'GET',
-          headers: this.buildHeaders(),
-        },
-        5000,
-        'text',
-        true,
-      );
-      return response.status === 200;
+      const response = await fetchWithProxy(`${this.baseUrl}/ready`, {
+        headers: this.buildHeaders(),
+        signal: AbortSignal.timeout(5_000),
+      });
+      return response.ok;
     } catch {
       return false;
     }

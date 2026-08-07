@@ -1,8 +1,8 @@
 import logger from '../../logger';
-import { withOAuthSpan } from '../../tracing/oauthTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { withOAuthSpan } from '../tracing';
 
 import type { VarValue } from '../../types/shared';
 import type {

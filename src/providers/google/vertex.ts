@@ -4,12 +4,6 @@ import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
@@ -26,6 +20,13 @@ import {
   parseMessages,
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from '../tracing';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCostFromUsage,

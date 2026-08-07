@@ -19,12 +19,6 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import {
-  type GenAISpanContext,
-  type GenAISpanResult,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
@@ -42,6 +36,13 @@ import {
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
 } from '../shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from '../tracing';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateBedrockCost } from './pricing';
 import type Anthropic from '@anthropic-ai/sdk';

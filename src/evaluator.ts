@@ -1265,14 +1265,19 @@ async function gradeRunEvalResponse({
       logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
       await fetchTraceContext(traceId, {
         providerConfig: tracingConfig?.provider,
-        queryDelay: tracingConfig?.queryDelay ?? 7000,
-        maxRetries: 5,
+        queryDelay: tracingConfig?.queryDelay,
+        maxRetries: hasTraceAwareAssertions(test.assert) ? 5 : 0,
         retryDelayMs: 1000,
         includeInternalSpans: true,
         sanitizeAttributes: true,
+        redactAttributes: tracingConfig?.otlp?.http?.redactAttributes,
+        abortSignal,
       });
       logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
     } catch (error) {
+      if (abortSignal?.aborted) {
+        throw error;
+      }
       logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
     }
   }

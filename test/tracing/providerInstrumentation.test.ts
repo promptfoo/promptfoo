@@ -22,6 +22,7 @@ import {
   PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+import { withTargetSpan } from '../../src/tracing/targetTracer';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -247,6 +248,34 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
   });
 
   describe('Trace Context Propagation', () => {
+    it('parents provider spans to the active target span when both receive the traceparent', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-1123456789abcdef-01';
+
+      await withTargetSpan(
+        { targetType: 'http', providerId: 'openai:gpt-4', traceparent },
+        async () => {
+          return withGenAISpan(
+            {
+              system: 'openai',
+              operationName: 'chat',
+              model: 'gpt-4',
+              providerId: 'openai:gpt-4',
+              traceparent,
+            },
+            async () => ({ output: 'test' }),
+          );
+        },
+      );
+
+      const spans = memoryExporter.getFinishedSpans();
+      const targetSpan = spans.find((span) => span.name === 'openai:gpt-4');
+      const providerSpan = spans.find((span) => span.name === 'chat gpt-4');
+
+      expect(targetSpan).toBeDefined();
+      expect(providerSpan?.parentSpanContext?.spanId).toBe(targetSpan?.spanContext().spanId);
+      expect(targetSpan?.parentSpanContext?.spanId).toBe('1123456789abcdef');
+    });
+
     it('should generate valid W3C traceparent header', async () => {
       let capturedTraceparent: string | undefined;
 

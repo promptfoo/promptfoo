@@ -3,9 +3,9 @@ import path from 'path';
 import cliState from '../../cliState';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { withMCPToolCallSpan } from '../../tracing/targetTracer';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { withMCPToolCallSpan } from '../tracing';
 import {
   applyQueryParams,
   getAuthHeaders,

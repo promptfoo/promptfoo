@@ -4,11 +4,16 @@ import { z } from 'zod';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from './tracing';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 

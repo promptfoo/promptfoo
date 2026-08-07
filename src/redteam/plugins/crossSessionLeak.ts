@@ -1,12 +1,11 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import { withGraderSpan } from '../../tracing/graderTracer';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
 import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase, withGraderSpan } from './base';
 
 import type {
   ApiProvider,

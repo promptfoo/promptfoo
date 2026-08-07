@@ -3,10 +3,15 @@ import { createHmac } from 'crypto';
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from './tracing';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';

@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
+import { type TargetSpanContext, withTargetSpan } from '../tracing';
 import { loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
 import { createTransformResponse, type MCPTransformResponseContext } from './transforms';

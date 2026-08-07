@@ -1,6 +1,5 @@
 import dedent from 'dedent';
-import { withGraderSpan } from '../../tracing/graderTracer';
-import { RedteamGraderBase } from './base';
+import { RedteamGraderBase, withGraderSpan } from './base';
 
 import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';

@@ -1217,6 +1217,7 @@ export class CrescendoProvider implements ApiProvider {
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
           providerConfig: tracingOptions.provider,
           queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
 
         if (traceContext) {

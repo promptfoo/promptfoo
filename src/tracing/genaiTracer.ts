@@ -225,7 +225,9 @@ export async function withGenAISpan<T>(
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
   let parentContext = context.active();
-  if (ctx.traceparent) {
+  const activeSpan = trace.getSpan(parentContext);
+  const explicitTraceId = ctx.traceparent?.split('-')[1]?.toLowerCase();
+  if (ctx.traceparent && activeSpan?.spanContext().traceId.toLowerCase() !== explicitTraceId) {
     const carrier = { traceparent: ctx.traceparent };
     parentContext = propagation.extract(ROOT_CONTEXT, carrier);
   }

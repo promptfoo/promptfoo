@@ -4,12 +4,17 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from './tracing';
 
 import type { EnvOverrides } from '../types/env';
 import type {

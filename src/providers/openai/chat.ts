@@ -5,12 +5,6 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import {
-  extractProviderResponseAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
@@ -29,6 +23,13 @@ import {
   transformToolChoice,
   transformTools,
 } from '../shared';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  type TargetSpanContext,
+  withGenAISpan,
+  withTargetSpan,
+} from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
 import {

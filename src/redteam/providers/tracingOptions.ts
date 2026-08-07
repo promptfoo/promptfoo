@@ -1,7 +1,8 @@
 import cliState from '../../cliState';
 
-import type { TraceProviderConfig } from '../../tracing/providers/types';
-import type { AtomicTestCase } from '../../types/index';
+import type { AtomicTestCase, UnifiedConfig } from '../../types/index';
+
+type TraceProviderConfig = NonNullable<NonNullable<UnifiedConfig['tracing']>['provider']>;
 
 export interface RedteamTracingOptions {
   enabled: boolean;
@@ -18,6 +19,8 @@ export interface RedteamTracingOptions {
   provider?: TraceProviderConfig;
   /** Delay in ms before querying external provider (read from root tracing config) */
   queryDelay?: number;
+  /** Evaluation-level attributes that must be redacted before span persistence. */
+  redactAttributes?: string[];
 }
 
 export type RawTracingConfig = Partial<
@@ -62,7 +65,11 @@ function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): Ra
 
 function normalizeTracingOptions(
   config: RawTracingConfig,
-  rootTracingConfig?: { provider?: TraceProviderConfig; queryDelay?: number },
+  rootTracingConfig?: {
+    provider?: TraceProviderConfig;
+    queryDelay?: number;
+    otlp?: { http?: { redactAttributes?: string[] } };
+  },
 ): RedteamTracingOptions {
   const merged = { ...DEFAULT_TRACING_OPTIONS, ...config };
 
@@ -81,6 +88,7 @@ function normalizeTracingOptions(
     // Read provider and queryDelay from root tracing config
     provider: rootTracingConfig?.provider,
     queryDelay: rootTracingConfig?.queryDelay ?? DEFAULT_QUERY_DELAY,
+    redactAttributes: rootTracingConfig?.otlp?.http?.redactAttributes,
   };
 }
 
@@ -128,7 +136,11 @@ export function resolveTracingOptions({
 
   // Read provider and queryDelay from root tracing config (not redteam config)
   const rootTracingConfig = cliState.config?.tracing as
-    | { provider?: TraceProviderConfig; queryDelay?: number }
+    | {
+        provider?: TraceProviderConfig;
+        queryDelay?: number;
+        otlp?: { http?: { redactAttributes?: string[] } };
+      }
     | undefined;
 
   return normalizeTracingOptions(merged, rootTracingConfig);

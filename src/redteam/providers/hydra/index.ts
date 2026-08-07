@@ -694,6 +694,7 @@ export class HydraProvider implements ApiProvider {
             sanitizeAttributes: tracingOptions.sanitizeAttributes,
             providerConfig: tracingOptions.provider,
             queryDelay: tracingOptions.queryDelay,
+            redactAttributes: tracingOptions.redactAttributes,
           });
 
           if (traceContext) {

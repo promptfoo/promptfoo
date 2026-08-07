@@ -11,15 +11,10 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     warn: vi.fn(),
   },
-  sleep: vi.fn(),
 }));
 
 vi.mock('../../src/logger', () => ({
   default: mocks.logger,
-}));
-
-vi.mock('../../src/util/time', () => ({
-  sleep: mocks.sleep,
 }));
 
 vi.mock('../../src/tracing/providers', () => ({
@@ -27,11 +22,12 @@ vi.mock('../../src/tracing/providers', () => ({
   isExternalTraceProvider: mocks.isExternalTraceProvider,
 }));
 
-vi.mock('../../src/tracing/store', () => ({
+vi.mock('../../src/tracing/store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/tracing/store')>()),
   getTraceStore: mocks.getTraceStore,
 }));
 
-import { fetchTraceContext } from '../../src/tracing/traceContext';
+import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
 describe('fetchTraceContext', () => {
   beforeEach(() => {
@@ -42,7 +38,6 @@ describe('fetchTraceContext', () => {
       getSpans: mocks.getSpans,
     });
     mocks.isExternalTraceProvider.mockReturnValue(true);
-    mocks.sleep.mockResolvedValue(undefined);
   });
 
   it('fetches external traces before applying local filters and limits', async () => {
@@ -80,7 +75,7 @@ describe('fetchTraceContext', () => {
     expect(mocks.addSpans).toHaveBeenCalledWith(
       'trace-1',
       [expect.objectContaining({ name: 'target.call' })],
-      { skipTraceCheck: true },
+      { deduplicate: true, warnIfMissingTrace: false },
     );
   });
 
@@ -122,5 +117,130 @@ describe('fetchTraceContext', () => {
 
     expect(result).toBeNull();
     expect(mocks.addSpans).not.toHaveBeenCalled();
+  });
+
+  it('recognizes numeric client span kinds and uses the shared redaction policy', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-4',
+      spans: [
+        {
+          spanId: 'client',
+          name: 'target.call',
+          startTime: 1,
+          attributes: {
+            'otel.span.kind_code': 3,
+            'gen_ai.usage.total_tokens': 12,
+            'X-API-Key': 'secret',
+            customer_email: 'private@example.com',
+          },
+          events: [
+            {
+              name: 'request',
+              timestamp: 1,
+              attributes: { authorization: 'secret' },
+            },
+          ],
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-4', {
+      includeInternalSpans: false,
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      redactAttributes: ['email'],
+    });
+
+    expect(result?.spans).toHaveLength(1);
+    expect(result?.spans[0]).toMatchObject({
+      kind: 'client',
+      attributes: {
+        'gen_ai.usage.total_tokens': 12,
+        'X-API-Key': '<redacted>',
+        customer_email: '[REDACTED]',
+      },
+      events: [{ attributes: { authorization: '<redacted>' } }],
+    });
+  });
+
+  it('fetches immediately and uses query delay only when a retry is necessary', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchTrace = vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          fetchedAt: 1,
+          spans: [{ spanId: 'a', name: 'target.call', startTime: 1 }],
+          traceId: 'trace-5',
+        });
+      mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+      const resultPromise = fetchTraceContext('trace-5', {
+        maxRetries: 1,
+        providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+        queryDelay: 3000,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchTrace).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await resultPromise).not.toBeNull();
+      expect(fetchTrace).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops retrying immediately when the evaluation is cancelled', async () => {
+    const controller = new AbortController();
+    const fetchTrace = vi.fn().mockResolvedValue(null);
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const resultPromise = fetchTraceContext('trace-6', {
+      abortSignal: controller.signal,
+      maxRetries: 1,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 60_000,
+    });
+    await vi.waitFor(() => expect(fetchTrace).toHaveBeenCalledTimes(1));
+    controller.abort();
+
+    await expect(resultPromise).rejects.toThrow('cancelled by user');
+  });
+
+  it('shares concurrent requests for the same external provider and trace', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      spans: [{ spanId: 'a', name: 'target.call', startTime: 1 }],
+      traceId: 'trace-7',
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+    const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+
+    await Promise.all([
+      fetchTraceContext('trace-7', { maxRetries: 0, providerConfig }),
+      fetchTraceContext('trace-7', { maxRetries: 0, providerConfig }),
+    ]);
+
+    expect(fetchTrace).toHaveBeenCalledTimes(1);
+    expect(mocks.addSpans).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    '',
+    'oops-../../admin-nothex-01',
+    '00-00000000000000000000000000000000-0123456789abcdef-01',
+    '00-0123456789abcdef0123456789abcdef-0000000000000000-01',
+  ])('rejects malformed or all-zero traceparent values: %s', (traceparent) => {
+    expect(extractTraceIdFromTraceparent(traceparent)).toBeNull();
+  });
+
+  it('extracts and normalizes valid W3C trace IDs', () => {
+    expect(
+      extractTraceIdFromTraceparent('00-0123456789ABCDEF0123456789ABCDEF-0123456789abcdef-01'),
+    ).toBe('0123456789abcdef0123456789abcdef');
   });
 });
