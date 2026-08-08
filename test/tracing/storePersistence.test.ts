@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,6 +11,7 @@ import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
+import { removeTempDir } from '../util/utils';
 
 describe('TraceStore span persistence', () => {
   beforeAll(async () => {
@@ -111,7 +112,7 @@ describe('span uniqueness migration', () => {
       ).rejects.toThrow(/unique/i);
     } finally {
       client.close();
-      await rm(directory, { force: true, recursive: true });
+      removeTempDir(directory);
     }
   });
 });
