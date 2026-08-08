@@ -50,6 +50,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.timeoutMs       | number                                                                                                                                                | No                             | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                                     |
 | evaluateOptions.maxEvalTimeMs   | number                                                                                                                                                | No                             | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                                             | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
+| defaultColumnVisibility         | [DefaultColumnVisibility](#defaultcolumnvisibility)                                                                                                   | No                             | Default column visibility settings for the web viewer. See [column visibility](/docs/usage/web-ui#column-visibility).                                                                                                           |
 
 ### Test Case
 
@@ -275,6 +276,30 @@ npx promptfoo eval
 # Overrides maxConcurrency to 5
 npx promptfoo eval --max-concurrency 5
 ```
+
+### DefaultColumnVisibility
+
+Configure default column visibility for the web viewer. Browser preferences take priority after a viewer changes columns locally.
+
+| Property    | Type                    | Default   | Description                                                                 |
+| ----------- | ----------------------- | --------- | --------------------------------------------------------------------------- |
+| variables   | `'visible' \| 'hidden'` | `visible` | Default visibility for all variable columns                                 |
+| prompts     | `'visible' \| 'hidden'` | `visible` | Default visibility for all prompt columns                                   |
+| hideColumns | `string[]`              | `[]`      | Variable names or display column IDs to hide by default                     |
+| showColumns | `string[]`              | `[]`      | Variable names or display column IDs to always show (overrides hideColumns) |
+
+#### Example
+
+```yaml
+defaultColumnVisibility:
+  variables: visible
+  prompts: visible
+  hideColumns:
+    - context
+    - system_prompt
+```
+
+See [column visibility](/docs/usage/web-ui#column-visibility) for details on how preferences are resolved.
 
 ### AssertionValueFunctionContext
 
