@@ -37,11 +37,10 @@ ENV VITE_IS_HOSTED=1 \
 COPY package.json package-lock.json ./
 COPY src/app/package.json ./src/app/package.json
 COPY site/package.json ./site/package.json
-# The site workspace postinstall writes a generated stats placeholder.
-RUN mkdir -p site/src
-# Leverage BuildKit cache
+# Build only the native packages needed by the application.
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --install-links --include=peer
+    npm ci --install-links --include=peer --ignore-scripts && \
+    npm rebuild esbuild @swc/core
 
 # Copy the rest of the application code
 COPY . .
