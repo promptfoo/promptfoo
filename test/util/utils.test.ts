@@ -137,38 +137,3 @@ describe('removeTempDir', () => {
     expect(rmSync).not.toHaveBeenCalled();
   });
 });
-
-describe('removeTempDirAsync', () => {
-  it('retries transient recursive cleanup failures without blocking the event loop', async () => {
-    vi.resetModules();
-    const rm = vi.fn().mockResolvedValue(undefined);
-    vi.doMock('node:fs', async (importOriginal) => {
-      const actual = await importOriginal<typeof import('node:fs')>();
-      return { ...actual, promises: { ...actual.promises, rm } };
-    });
-    const { removeTempDirAsync } = await import('./utils');
-
-    await removeTempDirAsync('/tmp/promptfoo-test-dir');
-
-    expect(rm).toHaveBeenCalledWith('/tmp/promptfoo-test-dir', {
-      force: true,
-      maxRetries: 3,
-      recursive: true,
-      retryDelay: 100,
-    });
-  });
-
-  it('does not attempt cleanup without a directory', async () => {
-    vi.resetModules();
-    const rm = vi.fn();
-    vi.doMock('node:fs', async (importOriginal) => {
-      const actual = await importOriginal<typeof import('node:fs')>();
-      return { ...actual, promises: { ...actual.promises, rm } };
-    });
-    const { removeTempDirAsync } = await import('./utils');
-
-    await removeTempDirAsync(undefined);
-
-    expect(rm).not.toHaveBeenCalled();
-  });
-});

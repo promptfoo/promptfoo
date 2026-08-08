@@ -185,25 +185,6 @@ export function removeTempDir(tempDir: string | undefined): void {
 }
 
 /**
- * Removes a temporary directory without blocking native file handles from closing.
- *
- * Use this variant when cleanup immediately follows closing a database or another
- * resource whose underlying Windows file handle may be released asynchronously.
- */
-export async function removeTempDirAsync(tempDir: string | undefined): Promise<void> {
-  if (!tempDir) {
-    return;
-  }
-
-  await fs.promises.rm(tempDir, {
-    recursive: true,
-    force: true,
-    maxRetries: 3,
-    retryDelay: 100,
-  });
-}
-
-/**
  * Builds environment overrides that make a spawned Node process report `version` as its own
  * `process.version`, for exercising runtime-version guards against versions that are not
  * installed. The override is applied through a `--import` preload so it takes effect before
