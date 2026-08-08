@@ -434,9 +434,10 @@ Show details of a specific resource. If no ID is provided, promptfoo shows the m
 
 Deletes a specific resource.
 
-| Option      | Description                                     |
-| ----------- | ----------------------------------------------- |
-| `eval <id>` | Delete an eval by ID; accepts `latest` or `all` |
+| Option             | Description                                                                |
+| ------------------ | -------------------------------------------------------------------------- |
+| `eval <id>`        | Delete an eval by ID; accepts `latest` or `all`                            |
+| `eval-result <id>` | Delete a single result row within an eval session, leaving the rest intact |
 
 ## `promptfoo retry <evalId>`
 
