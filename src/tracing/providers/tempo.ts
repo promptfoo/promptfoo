@@ -1,0 +1,310 @@
+import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { TraceProviderError } from './types';
+
+import type { SpanData } from '../store';
+import type {
+  FetchTraceOptions,
+  FetchTraceResult,
+  TraceProvider,
+  TraceProviderConfig,
+} from './types';
+
+interface TempoAttributeValue {
+  stringValue?: string;
+  intValue?: string;
+  doubleValue?: number;
+  boolValue?: boolean;
+  bytesValue?: string;
+  arrayValue?: { values?: TempoAttributeValue[] };
+  kvlistValue?: { values?: Array<{ key: string; value: TempoAttributeValue }> };
+}
+
+interface TempoSpan {
+  traceId?: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  kind?: number | string;
+  startTimeUnixNano: string;
+  endTimeUnixNano?: string;
+  attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  status?: { code?: number | string; message?: string };
+}
+
+interface TempoTraceResponse {
+  batches?: Array<{
+    resource?: { attributes?: Array<{ key: string; value: TempoAttributeValue }> };
+    scopeSpans?: Array<{
+      scope?: { name?: string; version?: string };
+      spans?: TempoSpan[];
+    }>;
+  }>;
+}
+
+const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+const MAX_SPANS = 10_000;
+const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
+
+function nanoToMs(value: string): number {
+  const milliseconds = BigInt(value) / 1_000_000n;
+  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('Span timestamp is outside the supported range');
+  }
+  return Number.parseInt(milliseconds.toString(), 10);
+}
+
+function extractAttributeValue(value: TempoAttributeValue): unknown {
+  if (value.stringValue !== undefined) {
+    return value.stringValue;
+  }
+  if (value.intValue !== undefined) {
+    const number = Number(value.intValue);
+    return Number.isSafeInteger(number) ? number : value.intValue;
+  }
+  if (value.doubleValue !== undefined) {
+    return value.doubleValue;
+  }
+  if (value.boolValue !== undefined) {
+    return value.boolValue;
+  }
+  if (value.bytesValue !== undefined) {
+    return value.bytesValue;
+  }
+  if (value.arrayValue) {
+    return (value.arrayValue.values ?? []).map(extractAttributeValue);
+  }
+  if (value.kvlistValue) {
+    return attributesToRecord(value.kvlistValue.values);
+  }
+  return undefined;
+}
+
+function attributesToRecord(
+  attributes?: Array<{ key: string; value: TempoAttributeValue }>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    (attributes ?? []).map(({ key, value }) => [key, extractAttributeValue(value)]),
+  );
+}
+
+function decodeId(id: string | undefined): string | undefined {
+  if (!id) {
+    return undefined;
+  }
+  if (/^[0-9a-f]+$/i.test(id)) {
+    return id.toLowerCase();
+  }
+  return Buffer.from(id, 'base64').toString('hex').toLowerCase();
+}
+
+function normalizeStatusCode(code: number | string | undefined): number | undefined {
+  if (typeof code === 'number') {
+    return code;
+  }
+  if (!code) {
+    return undefined;
+  }
+  const numeric = Number(code);
+  if (!Number.isNaN(numeric)) {
+    return numeric;
+  }
+  switch (code.toUpperCase()) {
+    case 'STATUS_CODE_OK':
+    case 'OK':
+      return 1;
+    case 'STATUS_CODE_ERROR':
+    case 'ERROR':
+      return 2;
+    case 'STATUS_CODE_UNSET':
+    case 'UNSET':
+      return 0;
+    default:
+      return undefined;
+  }
+}
+
+function matchesSpanFilter(name: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => {
+    const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+    return new RegExp(`^${escaped.replace(/\*/g, '.*').replace(/\\\?/g, '.')}$`, 'i').test(name);
+  });
+}
+
+function transformSpan(
+  span: TempoSpan,
+  resourceAttributes: Record<string, unknown>,
+  scopeName: string | undefined,
+  options?: FetchTraceOptions,
+): SpanData | null {
+  const startTime = nanoToMs(span.startTimeUnixNano);
+  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
+    return null;
+  }
+  if (options?.spanFilter?.length && !matchesSpanFilter(span.name, options.spanFilter)) {
+    return null;
+  }
+
+  return {
+    spanId: decodeId(span.spanId) ?? span.spanId,
+    parentSpanId: decodeId(span.parentSpanId),
+    name: span.name,
+    startTime,
+    endTime: span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined,
+    attributes: {
+      ...resourceAttributes,
+      ...attributesToRecord(span.attributes),
+      ...(scopeName && { 'otel.scope.name': scopeName }),
+      ...(typeof span.kind === 'number' && { 'otel.span.kind_code': span.kind }),
+      ...(typeof span.kind === 'string' && {
+        'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
+      }),
+    },
+    statusCode: normalizeStatusCode(span.status?.code),
+    statusMessage: span.status?.message,
+  };
+}
+
+export class TempoProvider implements TraceProvider {
+  readonly id = 'tempo';
+  private readonly baseUrl: string;
+
+  constructor(private readonly config: TraceProviderConfig) {
+    if (!config.endpoint) {
+      throw new Error('Tempo provider requires endpoint configuration');
+    }
+
+    let endpoint: URL;
+    try {
+      endpoint = new URL(config.endpoint);
+    } catch {
+      throw new Error('Tempo provider endpoint must be a valid HTTP or HTTPS URL');
+    }
+    if (
+      !['http:', 'https:'].includes(endpoint.protocol) ||
+      endpoint.username ||
+      endpoint.password
+    ) {
+      throw new Error('Tempo provider endpoint must be an HTTP or HTTPS URL without credentials');
+    }
+    if (
+      config.timeout !== undefined &&
+      (!Number.isSafeInteger(config.timeout) || config.timeout <= 0)
+    ) {
+      throw new Error('Tempo provider timeout must be a positive integer');
+    }
+    this.baseUrl = config.endpoint.replace(/\/$/, '');
+  }
+
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...this.config.headers,
+    };
+    if (this.config.auth?.token) {
+      headers.Authorization = `Bearer ${this.config.auth.token}`;
+    } else if (this.config.auth?.username && this.config.auth?.password) {
+      const credentials = Buffer.from(
+        `${this.config.auth.username}:${this.config.auth.password}`,
+      ).toString('base64');
+      headers.Authorization = `Basic ${credentials}`;
+    }
+    return headers;
+  }
+
+  private transformSpans(data: TempoTraceResponse, options?: FetchTraceOptions): SpanData[] {
+    const spans: SpanData[] = [];
+    const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+
+    for (const batch of data.batches ?? []) {
+      const resourceAttributes = attributesToRecord(batch.resource?.attributes);
+      for (const scopeSpan of batch.scopeSpans ?? []) {
+        for (const span of scopeSpan.spans ?? []) {
+          if (spans.length >= limit) {
+            return spans;
+          }
+          try {
+            const normalizedSpan = transformSpan(
+              span,
+              resourceAttributes,
+              scopeSpan.scope?.name,
+              options,
+            );
+            if (normalizedSpan) {
+              spans.push(normalizedSpan);
+            }
+          } catch (error) {
+            logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
+          }
+        }
+      }
+    }
+    return spans;
+  }
+
+  async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
+    if (!TRACE_ID_PATTERN.test(traceId) || /^0+$/.test(traceId)) {
+      throw new TraceProviderError('Trace ID must contain 32 hexadecimal characters');
+    }
+
+    const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
+    const signal = options?.abortSignal
+      ? AbortSignal.any([timeoutSignal, options.abortSignal])
+      : timeoutSignal;
+    const response = await fetchWithProxy(`${this.baseUrl}/api/traces/${traceId}`, {
+      method: 'GET',
+      headers: this.buildHeaders(),
+      signal,
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+    if (!response.ok) {
+      throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
+        statusCode: response.status,
+        retryable: response.status === 429 || response.status >= 500,
+      });
+    }
+
+    const contentLength = Number(response.headers.get('content-length'));
+    if (contentLength > MAX_RESPONSE_BYTES) {
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+    const body = await response.text();
+    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+    const data = JSON.parse(body) as TempoTraceResponse;
+    if (!Array.isArray(data.batches)) {
+      throw new TraceProviderError('Tempo returned an invalid trace response');
+    }
+
+    const services = new Set<string>();
+    for (const batch of data.batches) {
+      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+      if (typeof service === 'string') {
+        services.add(service);
+      }
+    }
+
+    return {
+      traceId,
+      spans: this.transformSpans(data, options),
+      services: [...services],
+      fetchedAt: Date.now(),
+    };
+  }
+
+  async healthCheck(): Promise<boolean> {
+    try {
+      const response = await fetchWithProxy(`${this.baseUrl}/ready`, {
+        headers: this.buildHeaders(),
+        signal: AbortSignal.timeout(5_000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+}
