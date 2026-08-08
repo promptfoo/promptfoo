@@ -1,3 +1,15 @@
 packages:
   - 'src/app'
   - 'site'
+
+minimumReleaseAge: 14400
+
+allowBuilds:
+  '@huggingface/transformers': true
+  '@playwright/browser-chromium': true
+  '@swc/core': true
+  core-js: true
+  core-js-pure: true
+  esbuild: true
+  protobufjs: true
+  sharp: true
