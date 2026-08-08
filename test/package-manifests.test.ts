@@ -559,6 +559,39 @@ describe('package manifests', () => {
     }
   });
 
+  it('prevents Renovate from independently updating the pinned Chevrotain parser family', () => {
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const pinnedParserPackages = [
+      'chevrotain',
+      '@chevrotain/gast',
+      '@chevrotain/types',
+      '@chevrotain/regexp-to-ast',
+      '@chevrotain/utils',
+    ];
+
+    for (const packageName of pinnedParserPackages) {
+      expect(
+        renovateConfig.packageRules?.some(
+          (rule) => rule.enabled === false && rule.matchPackageNames?.includes(packageName),
+        ),
+        `Renovate must not independently update the pinned ${packageName} package`,
+      ).toBe(true);
+    }
+
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false && rule.matchPackageNames?.includes('@chevrotain/cst-dts-gen'),
+      ),
+      'The independently versioned Chevrotain CST generator must remain updateable',
+    ).toBe(false);
+  });
+
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
