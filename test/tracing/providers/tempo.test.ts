@@ -50,13 +50,6 @@ const traceResponse = {
                   },
                 },
               ],
-              events: [
-                {
-                  name: 'tool.called',
-                  timeUnixNano: '1704067200500000000',
-                  attributes: [{ key: 'tool.name', value: { stringValue: 'search' } }],
-                },
-              ],
               status: { code: 'STATUS_CODE_OK' },
             },
             {
@@ -99,7 +92,7 @@ describe('TempoProvider', () => {
     },
   );
 
-  it('normalizes resource attributes, numeric and textual kinds, events, and nested values', async () => {
+  it('normalizes resource attributes, numeric and textual kinds, and nested values', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200/' });
     const result = await provider.fetchTrace(TRACE_ID);
 
@@ -117,13 +110,6 @@ describe('TempoProvider', () => {
         'gen_ai.usage.total_tokens': 42,
         nested: { enabled: true },
       },
-      events: [
-        {
-          name: 'tool.called',
-          timestamp: 1704067200500,
-          attributes: { 'tool.name': 'search' },
-        },
-      ],
     });
     expect(result?.spans[1].attributes?.['otel.span.kind']).toBe('internal');
     expect(mockedFetch).toHaveBeenCalledWith(

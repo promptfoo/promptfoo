@@ -1,12 +1,8 @@
 import logger from '../logger';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import { type TraceProviderConfig, TraceProviderError } from './providers/types';
-import {
-  getTraceStore,
-  type SpanData,
-  sanitizeTraceAttributes,
-  type TraceSpanQueryOptions,
-} from './store';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './store';
 import { getToolNameFromAttributes } from './toolAttributes';
 
 export interface TraceEvent {
@@ -149,11 +145,7 @@ function createTraceSpans(spans: SpanData[]): TraceSpan[] {
         message: span.statusMessage,
       },
       depth: depthMap.get(span.spanId) ?? 0,
-      events: (span.events ?? []).map((event) => ({
-        name: event.name,
-        timestamp: event.timestamp,
-        attributes: event.attributes ?? {},
-      })),
+      events: [],
     };
   });
 }
@@ -294,15 +286,6 @@ function postProcessExternalSpans(
         redactAttributes: options.redactAttributes,
         sanitizeSensitiveAttributes: sanitizeAttributes,
       }),
-      ...(span.events && {
-        events: span.events.map((event) => ({
-          ...event,
-          attributes: sanitizeTraceAttributes(event.attributes, {
-            redactAttributes: options.redactAttributes,
-            sanitizeSensitiveAttributes: sanitizeAttributes,
-          }),
-        })),
-      }),
     }));
   }
 
@@ -317,7 +300,6 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<v
   try {
     const traceStore = getTraceStore();
     const result = await traceStore.addSpans(traceId, spans, {
-      deduplicate: true,
       warnIfMissingTrace: false,
     });
     if (result.stored) {

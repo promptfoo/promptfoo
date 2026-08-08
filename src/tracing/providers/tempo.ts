@@ -30,11 +30,6 @@ interface TempoSpan {
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
   status?: { code?: number | string; message?: string };
-  events?: Array<{
-    timeUnixNano: string;
-    name: string;
-    attributes?: Array<{ key: string; value: TempoAttributeValue }>;
-  }>;
 }
 
 interface TempoTraceResponse {
@@ -150,12 +145,6 @@ function transformSpan(
     return null;
   }
 
-  const events = span.events?.map((event) => ({
-    name: event.name,
-    timestamp: nanoToMs(event.timeUnixNano),
-    attributes: attributesToRecord(event.attributes),
-  }));
-
   return {
     spanId: decodeId(span.spanId) ?? span.spanId,
     parentSpanId: decodeId(span.parentSpanId),
@@ -173,7 +162,6 @@ function transformSpan(
     },
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
-    ...(events?.length && { events }),
   };
 }
 
