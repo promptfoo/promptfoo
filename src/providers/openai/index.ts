@@ -63,24 +63,53 @@ export class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
+  private sendsToOpenAiApi(): boolean {
+    try {
+      return new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+    } catch {
+      // Leave malformed custom URLs to the request path to validate.
+      return false;
+    }
+  }
+
+  /**
+   * The organization value that should actually reach the wire for this provider's
+   * configured endpoint, or `undefined` when it must be suppressed.
+   *
+   * Suppressed when a custom (non-OpenAI) endpoint is configured without an explicit
+   * `organization`, so an ambient `OPENAI_ORGANIZATION` cannot leak to a third-party
+   * gateway, and when a custom header already supplies the organization.
+   *
+   * SDK-backed paths must use this rather than {@link getOrganization} for the SDK's
+   * `organization` client option: the SDK injects `OpenAI-Organization` from that
+   * option in a layer beneath `defaultHeaders`, so omitting the key from
+   * {@link getOpenAiRequestHeaders} alone does not suppress it.
+   */
+  getRequestOrganization(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): string | undefined {
+    if (hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER)) {
+      return undefined;
+    }
+    const usesOpenAiEndpointConfiguration =
+      this.sendsToOpenAiApi() ||
+      (!this.config.apiHost &&
+        !this.config.apiBaseUrl &&
+        this.getApiUrlDefault() === 'https://api.openai.com/v1');
+    return usesOpenAiEndpointConfiguration || Boolean(this.config.organization)
+      ? this.getOrganization()
+      : undefined;
+  }
+
   getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
   ): Record<string, string> {
-    let sendsToOpenAiApi = false;
-    try {
-      sendsToOpenAiApi = new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
-    } catch {
-      // Leave malformed custom URLs to the request path to validate.
-    }
-
     // Custom headers win over both injected defaults. The override checks are
     // case-insensitive because a differently-cased duplicate key would survive
     // the spread and be sent as two header values (e.g. "test-org, custom").
     const hasOriginatorOverride = hasHeaderOverride(customHeaders, OPENAI_ORIGINATOR_HEADER);
-    const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
-
-    const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
-    const organization = hasOrganizationOverride ? undefined : this.getOrganization();
+    const sendOriginatorDefault = !hasOriginatorOverride && this.sendsToOpenAiApi();
+    const organization = this.getRequestOrganization(customHeaders);
 
     return {
       ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
@@ -114,15 +143,14 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.OPENAI_API_KEY ||
-      getEnvString('OPENAI_API_KEY')
-    );
+    if (typeof this.config.apiKey === 'string' && this.config.apiKey !== '') {
+      return this.config.apiKey;
+    }
+    if (this.config.apiKeyEnvar) {
+      const key = this.config.apiKeyEnvar as EnvVarKey;
+      return this.env?.[key as keyof EnvOverrides] ?? getEnvString(key);
+    }
+    return this.env?.OPENAI_API_KEY ?? getEnvString('OPENAI_API_KEY');
   }
 
   requiresApiKey(): boolean {

@@ -13,7 +13,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
-import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
+import { OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
@@ -247,22 +247,18 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    // When the caller supplies an OpenAI-Organization header override (any case), drop
-    // the SDK `organization` option so only the override is sent. The current SDK's
-    // Headers-based merge already lets defaultHeaders beat the organization option
-    // case-insensitively; doing this explicitly keeps the intent visible and independent
-    // of the SDK's merge semantics.
-    const orgHeaderOverridden = hasHeaderOverride(
-      this.assistantConfig.headers,
-      OPENAI_ORGANIZATION_HEADER,
-    );
+    // The SDK injects `OpenAI-Organization` from its `organization` client option in a
+    // header layer *beneath* `defaultHeaders`, so a key we merely omit from
+    // getOpenAiRequestHeaders() survives and is still sent. Feed the SDK the same
+    // already-resolved value the headers use so custom-endpoint suppression and
+    // header overrides hold on this path too.
     const apiUrl = new URL(this.getApiUrl());
     const defaultQuery = Object.fromEntries(apiUrl.searchParams.entries());
     apiUrl.search = '';
     apiUrl.hash = '';
     const openai = new OpenAI({
       apiKey: this.getApiKey(),
-      organization: orgHeaderOverridden ? undefined : this.getOrganization(),
+      organization: this.getRequestOrganization(this.assistantConfig.headers),
       baseURL: apiUrl.toString(),
       defaultQuery,
       maxRetries: 3,
