@@ -53,7 +53,7 @@
     "diff": "^9.0.0",
     "idb-keyval": "^6.2.2",
     "js-yaml": "5.2.2",
-    "jsdom": "^29.0.0",
+    "jsdom": "^30.0.0",
     "lucide-react": "^1.0.0",
     "postcss": "^8.5.18",
     "posthog-js": "1.379.1",
