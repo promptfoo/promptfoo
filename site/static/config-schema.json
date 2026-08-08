@@ -59,13 +59,13 @@
           "$ref": "#/definitions/__schema40"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema45"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema46"
+          "$ref": "#/definitions/__schema47"
         },
         "targets": {
-          "$ref": "#/definitions/__schema47"
+          "$ref": "#/definitions/__schema48"
         }
       },
       "required": ["prompts"],
@@ -3187,48 +3187,95 @@
           "additionalProperties": false
         },
         "provider": {
-          "type": "object",
-          "properties": {
-            "id": {
-              "type": "string",
-              "const": "tempo"
-            },
-            "endpoint": {
-              "type": "string",
-              "format": "uri"
-            },
-            "auth": {
+          "oneOf": [
+            {
               "type": "object",
               "properties": {
-                "token": {
+                "id": {
+                  "type": "string",
+                  "const": "tempo"
+                },
+                "endpoint": {
                   "$ref": "#/definitions/__schema41"
                 },
-                "username": {
-                  "$ref": "#/definitions/__schema42"
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "$ref": "#/definitions/__schema42"
+                    },
+                    "username": {
+                      "$ref": "#/definitions/__schema43"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema44"
+                    }
+                  },
+                  "additionalProperties": false
                 },
-                "password": {
-                  "$ref": "#/definitions/__schema43"
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
                 }
               },
+              "required": ["id", "endpoint"],
               "additionalProperties": false
             },
-            "headers": {
+            {
               "type": "object",
-              "propertyNames": {
-                "type": "string"
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "braintrust"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "projectId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["token"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
               },
-              "additionalProperties": {
-                "type": "string"
-              }
-            },
-            "timeout": {
-              "type": "integer",
-              "exclusiveMinimum": 0,
-              "maximum": 300000
+              "required": ["id", "endpoint", "projectId", "auth"],
+              "additionalProperties": false
             }
-          },
-          "required": ["id", "endpoint"],
-          "additionalProperties": false
+          ]
         },
         "queryDelay": {
           "type": "integer",
@@ -3241,7 +3288,7 @@
     },
     "__schema41": {
       "type": "string",
-      "minLength": 1
+      "format": "uri"
     },
     "__schema42": {
       "type": "string",
@@ -3252,6 +3299,10 @@
       "minLength": 1
     },
     "__schema44": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema45": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3294,15 +3345,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema45"
+          "$ref": "#/definitions/__schema46"
         }
       },
       "additionalProperties": false
     },
-    "__schema45": {
+    "__schema46": {
       "type": "string"
     },
-    "__schema46": {
+    "__schema47": {
       "type": "object",
       "properties": {
         "description": {
@@ -3430,7 +3481,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema45"
+              "$ref": "#/definitions/__schema46"
             }
           ]
         },
@@ -3504,7 +3555,7 @@
       },
       "additionalProperties": false
     },
-    "__schema47": {
+    "__schema48": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

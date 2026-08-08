@@ -425,6 +425,23 @@ tracing:
 
 Fetched spans follow the same redaction policy as received spans: credential-like attributes are removed automatically, and names configured in `tracing.otlp.http.redactAttributes` are redacted before the spans are stored.
 
+### Fetching Traces From Braintrust
+
+Promptfoo can retrieve application spans from a Braintrust project's logs:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: braintrust
+    endpoint: 'https://api.braintrust.dev'
+    projectId: '12345678-1234-4123-8123-123456789abc'
+    auth:
+      token: '{{ env.BRAINTRUST_API_KEY }}'
+```
+
+Braintrust's native trace identifiers are not necessarily the same as OpenTelemetry trace IDs. Your application must copy the trace ID from Promptfoo's `traceparent` into Braintrust span metadata as `trace_id`, `promptfoo_trace_id`, or `promptfoo.trace_id`. Promptfoo then queries the Braintrust project's recent traces and imports all spans belonging to the matching trace.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript

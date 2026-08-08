@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { createTraceProvider, isExternalTraceProvider } from '../../../src/tracing/providers';
+import { BraintrustProvider } from '../../../src/tracing/providers/braintrust';
 import { TempoProvider } from '../../../src/tracing/providers/tempo';
 
 describe('tracing/providers', () => {
   describe('createTraceProvider', () => {
+    it('creates a Braintrust provider for a configured project', () => {
+      const provider = createTraceProvider({
+        id: 'braintrust',
+        endpoint: 'https://api.braintrust.dev',
+        projectId: '12345678-1234-4123-8123-123456789abc',
+        auth: { token: 'test-token' },
+      });
+
+      expect(provider).toBeInstanceOf(BraintrustProvider);
+      expect(provider.id).toBe('braintrust');
+    });
+
     it('should create TempoProvider for id "tempo"', () => {
       const provider = createTraceProvider({
         id: 'tempo',
