@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
+import { wilsonInterval } from './passRateStats';
 
 import type { TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
@@ -278,6 +279,11 @@ function formatResultLine(
   )} ${chalk.gray(`(${formatResultPercentage(count, totalTests)})`)}`;
 }
 
+function formatPassRateInterval(successes: number, totalTests: number): string {
+  const { low, high } = wilsonInterval(successes, totalTests);
+  return `95% CI ${(low * 100).toFixed(1)}–${(high * 100).toFixed(1)}%`;
+}
+
 function getResultsLines({
   successes,
   failures,
@@ -288,10 +294,22 @@ function getResultsLines({
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
 
+  const passedLine =
+    totalTests > 0
+      ? `  ${successes > 0 ? `${chalk.green('✓')} ` : ''}${chalk.white.bold(
+          successes.toLocaleString(),
+        )} ${chalk.white('passed')} ${chalk.gray(
+          `(${formatResultPercentage(successes, totalTests)}; ${formatPassRateInterval(
+            successes,
+            totalTests,
+          )})`,
+        )}`
+      : formatResultLine(successes, 'passed', undefined, chalk.green, totalTests);
+
   return [
     '',
     chalk.bold('Results:'),
-    formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
+    passedLine,
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
     chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
