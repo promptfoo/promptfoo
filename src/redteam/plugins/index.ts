@@ -65,6 +65,7 @@ import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import { RoleConfusionPlugin } from './roleConfusion';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
@@ -528,6 +529,20 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory(RoleConfusionPlugin, 'role-confusion', (config) => {
+    if (config.examples !== undefined) {
+      invariant(
+        Array.isArray(config.examples),
+        'Role confusion plugin config.examples must be an array of strings',
+      );
+      config.examples.forEach((example, index) => {
+        invariant(
+          typeof example === 'string' && example.trim().length > 0,
+          `Role confusion plugin config.examples[${index}] must be a non-empty string`,
+        );
+      });
+    }
+  }),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(

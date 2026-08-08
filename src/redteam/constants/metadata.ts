@@ -191,6 +191,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
+  'role-confusion':
+    'Tests whether AI assumes ungranted roles, authority, credentials, or capabilities',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
@@ -443,6 +445,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'reasoning-dos': 'Reasoning DoS',
   'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
+  'role-confusion': 'Role Confusion',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
@@ -650,6 +653,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
+  'role-confusion': Severity.Medium,
   'shell-injection': Severity.High,
   'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
@@ -676,6 +680,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
+    'role-confusion',
     'reasoning-dos',
     'shell-injection',
     'special-token-injection',
@@ -1007,6 +1012,7 @@ export const categoryAliases: Record<Plugin, string> = {
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
+  'role-confusion': 'RoleConfusion',
   'shell-injection': 'ShellInjection',
   'special-token-injection': 'SpecialTokenInjection',
   'sql-injection': 'SqlInjection',
@@ -1251,6 +1257,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
+  'role-confusion':
+    'Tests whether AI assumes ungranted roles, authority, credentials, or capabilities',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',
