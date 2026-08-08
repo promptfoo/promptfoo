@@ -1033,29 +1033,40 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
-const TraceProviderConfigSchema = z.object({
-  id: z.literal('tempo'),
-  endpoint: z.url().refine((endpoint) => {
-    const url = new URL(endpoint);
-    return (
-      (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password
-    );
-  }, 'Trace provider endpoint must use HTTP or HTTPS without embedded credentials'),
-  auth: z
-    .object({
-      token: z.string().min(1).optional(),
-      username: z.string().min(1).optional(),
-      password: z.string().min(1).optional(),
-    })
-    .refine(
-      ({ token, username, password }) =>
-        !(token && (username || password)) && Boolean(username) === Boolean(password),
-      'Configure either a bearer token or both basic-auth credentials',
-    )
-    .optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  timeout: z.number().int().positive().max(300_000).optional(),
-});
+const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
+  const url = new URL(endpoint);
+  return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password;
+}, 'Trace provider endpoint must use HTTP or HTTPS without embedded credentials');
+
+const TraceProviderAuthSchema = z
+  .object({
+    token: z.string().min(1).optional(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+  })
+  .refine(
+    ({ token, username, password }) =>
+      !(token && (username || password)) && Boolean(username) === Boolean(password),
+    'Configure either a bearer token or both basic-auth credentials',
+  );
+
+const TraceProviderConfigSchema = z.discriminatedUnion('id', [
+  z.object({
+    id: z.literal('tempo'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: TraceProviderAuthSchema.optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('braintrust'),
+    endpoint: TraceProviderEndpointSchema,
+    projectId: z.uuid(),
+    auth: z.object({ token: z.string().min(1) }),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+]);
 
 const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
 

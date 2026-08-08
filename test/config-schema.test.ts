@@ -189,10 +189,23 @@ describe('config-schema.json', () => {
         schema.definitions?.PromptfooConfigSchema?.properties?.tracing,
       );
       const provider = resolveRef(tracingConfig.properties.provider);
+      const providers = provider.oneOf;
+      const tempo = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'tempo',
+      );
+      const braintrust = providers.find(
+        (option: { properties: { id: { const: string } } }) =>
+          option.properties.id.const === 'braintrust',
+      );
 
-      expect(provider.properties.id.const).toBe('tempo');
-      expect(provider.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
-      expect(provider.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(providers).toHaveLength(2);
+      expect(tempo.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
+      expect(tempo.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(braintrust.required).toEqual(
+        expect.arrayContaining(['id', 'endpoint', 'projectId', 'auth']),
+      );
+      expect(braintrust.properties.auth.required).toContain('token');
       expect(tracingConfig.properties.queryDelay.minimum).toBe(0);
     });
 
