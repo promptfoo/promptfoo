@@ -17,6 +17,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   hijacking: `${BASE_DOCS_URL}/hijacking/`,
   'indirect-prompt-injection': `${BASE_DOCS_URL}/indirect-prompt-injection/`,
   rbac: `${BASE_DOCS_URL}/rbac/`,
+  'path-traversal': `${BASE_DOCS_URL}/path-traversal/`,
   'shell-injection': `${BASE_DOCS_URL}/shell-injection/`,
   'sql-injection': `${BASE_DOCS_URL}/sql-injection/`,
   ssrf: `${BASE_DOCS_URL}/ssrf/`,
