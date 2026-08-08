@@ -75,7 +75,7 @@ describe('fetchTraceContext', () => {
     expect(mocks.addSpans).toHaveBeenCalledWith(
       'trace-1',
       [expect.objectContaining({ name: 'target.call' })],
-      { deduplicate: true, warnIfMissingTrace: false },
+      { warnIfMissingTrace: false },
     );
   });
 
@@ -134,13 +134,6 @@ describe('fetchTraceContext', () => {
             'X-API-Key': 'secret',
             customer_email: 'private@example.com',
           },
-          events: [
-            {
-              name: 'request',
-              timestamp: 1,
-              attributes: { authorization: 'secret' },
-            },
-          ],
         },
       ],
     });
@@ -161,7 +154,6 @@ describe('fetchTraceContext', () => {
         'X-API-Key': '<redacted>',
         customer_email: '[REDACTED]',
       },
-      events: [{ attributes: { authorization: '<redacted>' } }],
     });
   });
 

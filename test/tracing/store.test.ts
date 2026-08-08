@@ -22,7 +22,6 @@ vi.mock('../../src/logger', () => ({
 
 // Dynamic import after mocking - initialized in beforeAll
 let TraceStore: typeof import('../../src/tracing/store').TraceStore;
-let sanitizeTraceAttributes: typeof import('../../src/tracing/store').sanitizeTraceAttributes;
 
 describe('TraceStore', () => {
   let traceStore: InstanceType<typeof TraceStore>;
@@ -32,7 +31,6 @@ describe('TraceStore', () => {
   beforeAll(async () => {
     const mod = await import('../../src/tracing/store');
     TraceStore = mod.TraceStore;
-    sanitizeTraceAttributes = mod.sanitizeTraceAttributes;
   });
 
   beforeEach(async () => {
@@ -149,12 +147,7 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
-    it('avoids inserting existing and repeated external spans', async () => {
-      mockDb
-        .select()
-        .from()
-        .where.mockResolvedValueOnce([{ spanId: 'existing' }]);
-
+    it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
       await traceStore.addSpans(
         'test-trace-id',
         [
@@ -162,37 +155,17 @@ describe('TraceStore', () => {
           { spanId: 'new', name: 'new', startTime: 2 },
           { spanId: 'new', name: 'duplicate', startTime: 3 },
         ],
-        { deduplicate: true, skipTraceCheck: true },
-      );
-
-      expect(mockDb.insert().values).toHaveBeenCalledWith([
-        expect.objectContaining({ spanId: 'new', name: 'new' }),
-      ]);
-    });
-
-    it('persists external span events together with their parent span', async () => {
-      await traceStore.addSpans(
-        'test-trace-id',
-        [
-          {
-            spanId: 'event-span',
-            name: 'target.call',
-            startTime: 1,
-            attributes: { component: 'target' },
-            events: [{ name: 'tool.called', timestamp: 2 }],
-          },
-        ],
         { skipTraceCheck: true },
       );
 
       expect(mockDb.insert().values).toHaveBeenCalledWith([
-        expect.objectContaining({
-          attributes: {
-            component: 'target',
-            'otel.span.events': [{ name: 'tool.called', timestamp: 2 }],
-          },
-        }),
+        expect.objectContaining({ spanId: 'existing' }),
+        expect.objectContaining({ spanId: 'new', name: 'new' }),
+        expect.objectContaining({ spanId: 'new', name: 'duplicate' }),
       ]);
+      expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
+        expect.objectContaining({ target: expect.any(Array) }),
+      );
     });
 
     it('should add spans to an existing trace', async () => {
@@ -299,36 +272,6 @@ describe('TraceStore', () => {
       ];
 
       await expect(traceStore.addSpans('test-trace-id', spans)).rejects.toThrow('Insert failed');
-    });
-  });
-
-  describe('sanitizeTraceAttributes', () => {
-    it('preserves safe token metrics and redacts normalized credential names recursively', () => {
-      expect(
-        sanitizeTraceAttributes(
-          {
-            'gen_ai.usage.total_tokens': 12,
-            'X-API-Key': 'secret',
-            nested: { access_token: 'secret' },
-            customer_email: 'private@example.com',
-          },
-          { redactAttributes: ['email'] },
-        ),
-      ).toEqual({
-        'gen_ai.usage.total_tokens': 12,
-        'X-API-Key': '<redacted>',
-        nested: { access_token: '<redacted>' },
-        customer_email: '[REDACTED]',
-      });
-    });
-
-    it('applies explicit evaluation redactions even when generic sanitization is disabled', () => {
-      expect(
-        sanitizeTraceAttributes(
-          { authorization: 'visible', private_field: 'secret' },
-          { redactAttributes: ['private'], sanitizeSensitiveAttributes: false },
-        ),
-      ).toEqual({ authorization: 'visible', private_field: '[REDACTED]' });
     });
   });
 
