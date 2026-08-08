@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
+import { JsonDiffView } from '@app/components/JsonDiffView';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -7,6 +8,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { cn } from '@app/lib/utils';
+import { getJsonDiffExpectedValue, tryParseJson } from '@app/utils/jsonDiff';
 import { Check, ChevronDown, CircleCheck, CircleX, Copy, CornerDownRight } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 import type { Assertion, GradingResult } from '@promptfoo/types';
@@ -92,7 +94,22 @@ function getAssertionType(result: GradingResult): string {
 }
 
 export function stringifyAssertionValue(value: unknown): string {
-  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+  return typeof value === 'object'
+    ? (JSON.stringify(value, null, 2) ?? String(value))
+    : String(value);
+}
+
+export function getRenderedAssertionValue(result: GradingResult): { value: unknown } | undefined {
+  const metadata = result.metadata;
+  if (
+    metadata &&
+    Object.prototype.hasOwnProperty.call(metadata, 'renderedAssertionValue') &&
+    metadata.renderedAssertionValue !== undefined
+  ) {
+    return { value: metadata.renderedAssertionValue };
+  }
+
+  return undefined;
 }
 
 function isMatchingAssertion(
@@ -199,8 +216,9 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   }
 
   // Prefer rendered assertion value with substituted variables over raw template
-  if (result.metadata?.renderedAssertionValue != null) {
-    const renderedValue = stringifyAssertionValue(result.metadata.renderedAssertionValue);
+  const renderedAssertionValue = getRenderedAssertionValue(result);
+  if (renderedAssertionValue) {
+    const renderedValue = stringifyAssertionValue(renderedAssertionValue.value);
     const rawAssertionValue =
       result.assertion?.value === undefined
         ? undefined
@@ -255,16 +273,33 @@ function formatGraderOutputLabel(key: string, totalOutputs: number): string {
   return totalOutputs === 1 ? `Grader output (${formattedKey})` : formattedKey;
 }
 
-function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
+function AssertionResults({
+  gradingResults,
+  actualOutput,
+}: {
+  gradingResults?: GradingResult[];
+  actualOutput?: string;
+}) {
   const [expandedValues, setExpandedValues] = useState<{ [key: string]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
+
+  const assertionRows = useMemo(
+    () => (gradingResults ? buildAssertionRows(gradingResults) : []),
+    [gradingResults],
+  );
+  const shouldParseActualOutput = assertionRows.some(
+    ({ result }) => !result.pass && getJsonDiffExpectedValue(result) !== undefined,
+  );
+  const parsedActualOutput = useMemo(
+    () => (shouldParseActualOutput ? tryParseJson(actualOutput) : undefined),
+    [actualOutput, shouldParseActualOutput],
+  );
 
   if (!gradingResults) {
     return null;
   }
 
-  const assertionRows = buildAssertionRows(gradingResults);
   const hasMetrics = assertionRows.some(({ result }) => getMetric(result));
 
   const toggleExpand = (rowId: string) => {
@@ -311,6 +346,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
             const metric = getMetric(result);
             const graderOutputs = getGraderOutputs(result);
             const indentationStyle = { paddingLeft: depth * ASSERTION_ROW_INDENT_PX };
+            const jsonDiffExpectedValue = getJsonDiffExpectedValue(result);
 
             return (
               <tr
@@ -418,6 +454,16 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                         )}
                       </Button>
                     )}
+                  {/* JSON diff view for failed JSON assertions */}
+                  {!result.pass &&
+                    jsonDiffExpectedValue !== undefined &&
+                    parsedActualOutput !== undefined && (
+                      <JsonDiffView
+                        expected={jsonDiffExpectedValue}
+                        actual={parsedActualOutput}
+                        className="mt-2"
+                      />
+                    )}
                 </td>
               </tr>
             );
@@ -484,12 +530,13 @@ function GradingPromptSection({ gradingResults }: { gradingResults?: GradingResu
 
 interface EvaluationPanelProps {
   gradingResults?: GradingResult[];
+  actualOutput?: string;
 }
 
-export function EvaluationPanel({ gradingResults }: EvaluationPanelProps) {
+export function EvaluationPanel({ gradingResults, actualOutput }: EvaluationPanelProps) {
   return (
     <div>
-      <AssertionResults gradingResults={gradingResults} />
+      <AssertionResults gradingResults={gradingResults} actualOutput={actualOutput} />
       <GradingPromptSection gradingResults={gradingResults} />
     </div>
   );
