@@ -53,6 +53,19 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('should accept and preserve the metricOnly property', () => {
+    const metricOnlyAssertion = {
+      type: 'javascript',
+      value: '1',
+      metric: 'tp',
+      metricOnly: true,
+    };
+
+    const result = AssertionSchema.safeParse(metricOnlyAssertion);
+    expect(result.success).toBe(true);
+    expect(result.data?.metricOnly).toBe(true);
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 

@@ -13,6 +13,7 @@ import {
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
+  countedComponentResults,
   type EvaluateTableOutput,
   type GradingResult,
   type ImageOutput,
@@ -234,23 +235,37 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
-  const failReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  // Metric-only outcomes stay out of the aggregate reason lists; they remain
+  // visible in the per-assertion details.
+  const countedResults = countedComponentResults(output.gradingResult?.componentResults);
 
-  const passReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  const failReasons = countedResults
+    .filter((result) => !result.pass)
+    .map((result) => result.reason)
+    .filter((reason) => reason);
+
+  const passReasons = countedResults
+    .filter((result) => result.pass)
+    .map((result) => result.reason)
+    .filter((reason) => reason);
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
       failReasons: [output.error, ...failReasons],
       passReasons,
     };
+  }
+
+  // A failing row can have no counted failing assertions (e.g. an
+  // all-metricOnly test failing a test-level threshold); fall back to the
+  // aggregate grading reason so the failure is still explained.
+  if (
+    !output.pass &&
+    countedResults.length === 0 &&
+    (output.gradingResult?.componentResults?.length ?? 0) > 0 &&
+    output.gradingResult?.reason
+  ) {
+    return { failReasons: [output.gradingResult.reason], passReasons };
   }
 
   return { failReasons, passReasons };
@@ -607,10 +622,12 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   let passCount = 0;
   let failCount = 0;
 
-  const componentResults = output.gradingResult?.componentResults;
-  if (componentResults?.length) {
+  // Metric-only assertions are excluded from the aggregate pill counts. If
+  // every assertion is metric-only, fall through to the overall grading result.
+  const componentResults = countedComponentResults(output.gradingResult?.componentResults);
+  if (componentResults.length) {
     componentResults.forEach((result) => {
-      if (result?.pass) {
+      if (result.pass) {
         passCount++;
       } else {
         failCount++;

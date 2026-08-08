@@ -85,6 +85,6 @@ tests:
       - type: contains
         value: 'MCP Tool Result'
         metric: mcp_tool_used
-        weight: 0
+        metricOnly: true
       - type: llm-rubric
         value: 'The response describes the OpenAI Python client library or API features'

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AssertValidationError, validateAssertions } from '../../src/assertions/validateAssertions';
+import logger from '../../src/logger';
 
 import type { TestCase } from '../../src/types/index';
 
@@ -137,6 +138,107 @@ describe('validateAssertions', () => {
       ];
 
       expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('rejects metricOnly on the assert-set itself', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              metricOnly: true,
+              assert: [
+                {
+                  type: 'equals',
+                  value: 'Expected output',
+                },
+              ],
+            } as any,
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('rejects metricOnly on max-score', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'max-score', metricOnly: true } as any],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('rejects metricOnly on select-best', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'select-best', value: 'best criteria', metricOnly: true } as any],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('allows metricOnly on assertions inside an assert-set', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'javascript',
+                  value: '1',
+                  metric: 'tp',
+                  metricOnly: true,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('warns on the legacy weight: 0 metric-counter pattern and suggests metricOnly', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      try {
+        const legacyCounter: TestCase[] = [
+          {
+            vars: {},
+            assert: [{ type: 'javascript', value: '1', metric: 'tp', weight: 0 }],
+          },
+        ];
+        validateAssertions(legacyCounter);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('metricOnly: true'));
+
+        warnSpy.mockClear();
+        const migrated: TestCase[] = [
+          {
+            vars: {},
+            // weight: 0 left behind by a migration is fine once metricOnly is set,
+            // and weight: 0 without a metric is the documented force-pass usage.
+            assert: [
+              { type: 'javascript', value: '1', metric: 'tp', weight: 0, metricOnly: true },
+              { type: 'javascript', value: '1', weight: 0 },
+            ],
+          },
+        ];
+        validateAssertions(migrated);
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('validates assert-set has assert property', () => {

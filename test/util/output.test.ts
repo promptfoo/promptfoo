@@ -1080,6 +1080,52 @@ describe('writeOutput', () => {
     expect(xml).not.toContain('TOP_SECRET_OUTPUT_42');
   });
 
+  it('excludes metricOnly assertions from JUnit failed-assertion details', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: { fp: 0 },
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: 'out' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Expected output to equal "safe"',
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Expected output to equal "safe"',
+            assertion: { type: 'equals', value: 'safe' },
+          },
+          {
+            // A failing metric-only counter must not be blamed for the failure.
+            pass: false,
+            score: 0,
+            reason: 'Counter scored 0',
+            assertion: { type: 'javascript', metric: 'fp', metricOnly: true },
+          },
+        ],
+      },
+      promptId: 'metric-only-junit',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.failure['#text']).toBe(
+      'Score: 0\nReason: Assertion failed\nFailed assertions:\n- equals',
+    );
+  });
+
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-expect-error getDb is mocked with a partial test double.

@@ -28,6 +28,26 @@ function buildAssertionSetMetadata(assertionSet: AssertionSet) {
   };
 }
 
+/**
+ * Mark a metric-only result (and any nested component results a script
+ * assertion returned) so downstream assertion pass/fail stats can exclude
+ * them via their `assertion.metricOnly` filters. Results with no assertion
+ * object (e.g. a failed grader) still get a marker stub — downstream filters
+ * only read `assertion?.metricOnly` / `assertion?.type`, hence the cast.
+ */
+function withMetricOnlyMarkers(result: GradingResult): GradingResult {
+  return {
+    ...result,
+    assertion: { ...result.assertion, metricOnly: true } as GradingResult['assertion'],
+    ...(result.componentResults && {
+      componentResults: result.componentResults.map((child) => ({
+        ...child,
+        ...(child.assertion && { assertion: { ...child.assertion, metricOnly: true } }),
+      })),
+    }),
+  };
+}
+
 function mergeMetadata(
   baseMetadata: GradingResult['metadata'],
   incomingMetadata: GradingResult['metadata'],
@@ -87,33 +107,44 @@ export class AssertionsResult {
     result,
     metric,
     weight = 1,
+    metricOnly = false,
   }: {
     index: number;
     result: GradingResult;
     metric?: string;
     weight?: number;
+    metricOnly?: boolean;
   }) {
-    this.totalScore += result.score * weight;
-    this.totalWeight += weight;
-    this.componentResults[index] = result;
+    // Metric-only assertions emit named scores but are excluded from the
+    // test's pass/fail determination and its weighted score.
+    if (!metricOnly) {
+      this.totalScore += result.score * weight;
+      this.totalWeight += weight;
+    }
+    this.componentResults[index] = metricOnly ? withMetricOnlyMarkers(result) : result;
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
 
-    if (isRedteamGuardrail && !result.pass) {
+    if (isRedteamGuardrail && !result.pass && !metricOnly) {
       this.failedContentSafetyChecks = true;
     }
 
+    // Weight has no effect on metric-only assertions: they're already excluded
+    // from the weighted score, and honoring weight here would zero the named
+    // score for legacy `weight: 0` workaround configs.
+    const metricWeight = metricOnly ? 1 : weight;
+
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
+      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * metricWeight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + metricWeight;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
           const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
-          const weightedIncomingWeight = incomingWeight * weight;
+          const weightedIncomingWeight = incomingWeight * metricWeight;
           this.namedScores[metricName] =
             (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
           this.namedScoreWeights[metricName] =
@@ -130,7 +161,7 @@ export class AssertionsResult {
       this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
     }
 
-    if (result.pass) {
+    if (result.pass || metricOnly) {
       return;
     }
 

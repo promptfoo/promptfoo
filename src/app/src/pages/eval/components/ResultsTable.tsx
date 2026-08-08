@@ -21,6 +21,7 @@ import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
+  countedComponentResults,
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
@@ -801,7 +802,7 @@ function averageComponentResultScore(
   return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
 }
 
-function getManualRatingUpdate({
+export function getManualRatingUpdate({
   existingOutput,
   isPass,
   score,
@@ -839,10 +840,17 @@ function getManualRatingUpdate({
       componentResults.splice(humanResultIndex, 1);
     }
 
-    if (componentResults.length > 0) {
-      finalPass =
-        componentResults.filter((result) => result.pass).length === componentResults.length;
-      finalScore = averageComponentResultScore(componentResults, finalScore);
+    const countedResults = countedComponentResults(componentResults);
+    if (countedResults.length > 0) {
+      finalPass = countedResults.filter((result) => result.pass).length === countedResults.length;
+      finalScore = averageComponentResultScore(countedResults, finalScore);
+    } else if (componentResults.length > 0) {
+      // Every remaining assertion is metric-only: mirror the server-side
+      // aggregate (score 0; pass unless a numeric test-level threshold demands
+      // more — same gate as AssertionsResult, honoring threshold 0).
+      const threshold = existingOutput.testCase?.threshold;
+      finalScore = 0;
+      finalPass = typeof threshold === 'number' && !Number.isNaN(threshold) ? threshold <= 0 : true;
     }
 
     return {
