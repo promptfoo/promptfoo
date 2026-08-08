@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
 
 import type { TraceData } from '../types/tracing';
 
@@ -20,11 +21,6 @@ export interface SpanData {
   attributes?: Record<string, any>;
   statusCode?: number;
   statusMessage?: string;
-  events?: Array<{
-    name: string;
-    timestamp: number;
-    attributes?: Record<string, unknown>;
-  }>;
 }
 
 export interface ParsedTrace {
@@ -47,99 +43,6 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
-  deduplicate?: boolean;
-}
-
-export interface AttributeSanitizationOptions {
-  redactAttributes?: string[];
-  sanitizeSensitiveAttributes?: boolean;
-}
-
-const SPAN_EVENTS_ATTRIBUTE = 'otel.span.events';
-
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
-
-const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
-  'gen_ai.request.max_tokens',
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  'gen_ai.usage.cached_tokens',
-  'gen_ai.usage.reasoning_tokens',
-  'gen_ai.usage.accepted_prediction_tokens',
-  'gen_ai.usage.rejected_prediction_tokens',
-  'gen_ai.usage.cache_read_input_tokens',
-  'gen_ai.usage.cache_creation_input_tokens',
-]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
-  }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
-}
-
-export function sanitizeTraceAttributes(
-  attributes: Record<string, any> | null | undefined,
-  options: AttributeSanitizationOptions = {},
-): Record<string, any> {
-  if (!attributes) {
-    return {};
-  }
-
-  const { redactAttributes = [], sanitizeSensitiveAttributes = true } = options;
-  const customPatterns = redactAttributes.map((pattern) => pattern.toLowerCase());
-
-  const sanitizeValue = (value: any): any => {
-    if (typeof value === 'string') {
-      return value.length > 400 ? `${value.slice(0, 400)}…` : value;
-    }
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
-    }
-    if (value && typeof value === 'object') {
-      return sanitizeTraceAttributes(value as Record<string, any>, options);
-    }
-    return value;
-  };
-
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (customPatterns.some((pattern) => key.toLowerCase().includes(pattern))) {
-      sanitized[key] = '[REDACTED]';
-      continue;
-    }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
 }
 
 function serializeSpan(
@@ -147,7 +50,6 @@ function serializeSpan(
   shouldSanitizeAttributes = true,
 ): SpanData {
   const rawAttributes = span.attributes ?? undefined;
-  const events = rawAttributes?.[SPAN_EVENTS_ATTRIBUTE] as SpanData['events'] | undefined;
 
   return {
     spanId: span.spanId,
@@ -162,7 +64,6 @@ function serializeSpan(
       : undefined,
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
-    ...(events && { events }),
   };
 }
 
@@ -293,24 +194,7 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      let spansToInsert = spans;
-      if (options?.deduplicate && spans.length > 0) {
-        const spanIds = [...new Set(spans.map((span) => span.spanId))];
-        const existingSpans = await db
-          .select({ spanId: spansTable.spanId })
-          .from(spansTable)
-          .where(and(eq(spansTable.traceId, traceId), inArray(spansTable.spanId, spanIds)));
-        const seenSpanIds = new Set(existingSpans.map((span) => span.spanId));
-        spansToInsert = spans.filter((span) => {
-          if (seenSpanIds.has(span.spanId)) {
-            return false;
-          }
-          seenSpanIds.add(span.spanId);
-          return true;
-        });
-      }
-
-      const spanRecords = spansToInsert.map((span) => {
+      const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
           id: crypto.randomUUID(),
@@ -320,9 +204,7 @@ export class TraceStore {
           name: span.name,
           startTime: span.startTime,
           endTime: span.endTime,
-          attributes: span.events?.length
-            ? { ...span.attributes, [SPAN_EVENTS_ATTRIBUTE]: span.events }
-            : span.attributes,
+          attributes: span.attributes,
           statusCode: span.statusCode,
           statusMessage: span.statusMessage,
         };
@@ -332,7 +214,11 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db.insert(spansTable).values(spanRecords).run();
+      await db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+        .run();
       logger.debug(
         `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
       );
@@ -513,9 +399,6 @@ export class TraceStore {
           attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
-          ...(Array.isArray(rawAttributes[SPAN_EVENTS_ATTRIBUTE]) && {
-            events: rawAttributes[SPAN_EVENTS_ATTRIBUTE] as unknown as SpanData['events'],
-          }),
         };
 
         const spanKind = deriveSpanKind({
