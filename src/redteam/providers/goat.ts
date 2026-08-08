@@ -36,7 +36,12 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
+import {
+  extractInputVarsFromPrompt,
+  extractPromptFromTags,
+  getSessionId,
+  stripPromptBlockPrefix,
+} from '../util';
 import { getGoalRubric } from './prompts';
 import {
   buildGraderResultAssertion,
@@ -420,14 +425,14 @@ export default class GoatProvider implements ApiProvider {
         }
         const attackerMessage = data.message;
 
-        previousAttackerMessage = attackerMessage?.content;
-
         // Extract JSON from <Prompt> tags if present (multi-input mode)
         let processedMessage = attackerMessage.content;
         const extractedPrompt = extractPromptFromTags(attackerMessage.content);
         if (extractedPrompt) {
           processedMessage = extractedPrompt;
         }
+        processedMessage = stripPromptBlockPrefix(processedMessage);
+        previousAttackerMessage = processedMessage;
 
         // Extract input vars from the attack message for multi-input mode
         if (this.config.inputs) {

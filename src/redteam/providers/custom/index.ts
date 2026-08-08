@@ -18,7 +18,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { getSessionId, isBasicRefusal, stripPromptBlockPrefix } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
@@ -791,7 +791,7 @@ export class CustomProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion: parsedOutput.generatedQuestion,
+      generatedQuestion: stripPromptBlockPrefix(parsedOutput.generatedQuestion),
       tokenUsage: response.tokenUsage,
     };
   }

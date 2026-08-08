@@ -43,6 +43,7 @@ import {
   extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
   getSessionId,
+  stripPromptBlockPrefix,
 } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -663,6 +664,7 @@ async function runRedteamConversation({
         if (extractedPrompt) {
           newInjectVar = extractedPrompt;
         }
+        newInjectVar = stripPromptBlockPrefix(newInjectVar);
 
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
@@ -1135,6 +1137,7 @@ async function runRedteamConversation({
   if (extractedBestPrompt) {
     bestPrompt = extractedBestPrompt;
   }
+  bestPrompt = stripPromptBlockPrefix(bestPrompt);
 
   // Build final vars - handle multi-input mode
   const finalUpdatedVars: Record<string, VarValue> = {
