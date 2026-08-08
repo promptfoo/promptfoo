@@ -11,7 +11,7 @@ import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
-import { removeTempDir } from '../util/utils';
+import { removeTempDirAsync } from '../util/utils';
 
 describe('TraceStore span persistence', () => {
   beforeAll(async () => {
@@ -112,7 +112,7 @@ describe('span uniqueness migration', () => {
       ).rejects.toThrow(/unique/i);
     } finally {
       client.close();
-      removeTempDir(directory);
+      await removeTempDirAsync(directory);
     }
   });
 });
