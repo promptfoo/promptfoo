@@ -49,6 +49,7 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { getActiveTargetTraceparent, withTargetSpan } from './tracing/targetTracer';
 import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
@@ -948,7 +949,41 @@ async function callActiveProvider({
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = () => activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+  const callApi = () => {
+    if (!traceContext?.traceparent) {
+      return activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+    }
+
+    const providerId = activeProvider.id();
+    const targetType = providerId.startsWith('mcp')
+      ? 'mcp'
+      : providerId.startsWith('ws')
+        ? 'websocket'
+        : providerId.startsWith('http')
+          ? 'http'
+          : 'provider';
+
+    return withTargetSpan(
+      {
+        targetType,
+        providerId,
+        label: activeProvider.label,
+        traceparent: traceContext.traceparent,
+        promptLabel: promptForRender.label,
+        evalId: callApiContext.evaluationId,
+        testIndex: test.vars?.__testIdx as number | undefined,
+      },
+      async () =>
+        activeProvider.callApi(
+          renderedPrompt,
+          {
+            ...callApiContext,
+            traceparent: getActiveTargetTraceparent(traceContext.traceparent!),
+          },
+          callApiOptions,
+        ),
+    );
+  };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();

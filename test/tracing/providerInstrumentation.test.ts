@@ -22,6 +22,7 @@ import {
   PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+import { withTargetSpan } from '../../src/tracing/targetTracer';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -67,6 +68,37 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
   });
 
   describe('GenAI Semantic Conventions Compliance', () => {
+    it('parents existing model spans beneath the evaluator target span', async () => {
+      const traceId = '0123456789abcdef0123456789abcdef';
+
+      await withTargetSpan(
+        {
+          targetType: 'provider',
+          providerId: 'openai:gpt-4',
+          traceparent: `00-${traceId}-0123456789abcdef-01`,
+        },
+        async () =>
+          withGenAISpan(
+            {
+              system: 'openai',
+              operationName: 'chat',
+              model: 'gpt-4',
+              providerId: 'openai:gpt-4',
+              traceparent: `00-${traceId}-0123456789abcdef-01`,
+            },
+            async () => ({ output: 'ok' }),
+          ),
+      );
+
+      const spans = memoryExporter.getFinishedSpans();
+      const targetSpan = spans.find((span) => span.name === 'openai:gpt-4');
+      const modelSpan = spans.find((span) => span.name === 'chat gpt-4');
+
+      expect(targetSpan?.spanContext().traceId).toBe(traceId);
+      expect(modelSpan?.spanContext().traceId).toBe(traceId);
+      expect(modelSpan?.parentSpanContext?.spanId).toBe(targetSpan?.spanContext().spanId);
+    });
+
     it('should set all required GenAI attributes on spans', async () => {
       const spanContext: GenAISpanContext = {
         system: 'openai',
