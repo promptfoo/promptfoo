@@ -147,9 +147,11 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:08': {
-    // Hidden Context Exposure (broadens LLM07 System Prompt Leakage from the 2025 edition)
+    // Hidden Context Exposure (broadens LLM07 System Prompt Leakage from the 2025 edition
+    // to cover tool/function schemas and other assembled context)
     plugins: [
       'prompt-extraction',
+      'tool-discovery',
       'rbac',
       'harmful:privacy',
       'pii:api-db',
