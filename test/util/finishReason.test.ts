@@ -20,6 +20,7 @@ describe('normalizeFinishReason', () => {
       expect(normalizeFinishReason('end_turn')).toBe('stop');
       expect(normalizeFinishReason('stop_sequence')).toBe('stop');
       expect(normalizeFinishReason('max_tokens')).toBe('length');
+      expect(normalizeFinishReason('model_context_window_exceeded')).toBe('length');
       expect(normalizeFinishReason('tool_use')).toBe('tool_calls');
       expect(normalizeFinishReason('refusal')).toBe('content_filter');
     });
