@@ -132,11 +132,43 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toHaveProperty('error');
     });
 
+    it('should return error when URL response data array is empty', () => {
+      const data = { data: [] };
+      const result = formatOutput(data, 'prompt');
+      expect(result).toEqual({
+        error: `No image URL found in response: ${JSON.stringify(data)}`,
+      });
+    });
+
+    it('should return error when URL response data field is missing', () => {
+      const data = { created: 123 };
+      const result = formatOutput(data, 'prompt');
+      expect(result).toEqual({
+        error: `No image URL found in response: ${JSON.stringify(data)}`,
+      });
+    });
+
     it('should return error when base64 data is missing', () => {
       const data = { data: [{}] };
       const result = formatOutput(data, 'prompt', 'b64_json');
       expect(typeof result).toBe('object');
       expect(result).toHaveProperty('error');
+    });
+
+    it('should return error when base64 response data array is empty', () => {
+      const data = { data: [] };
+      const result = formatOutput(data, 'prompt', 'b64_json');
+      expect(result).toEqual({
+        error: `No base64 image data found in response: ${JSON.stringify(data)}`,
+      });
+    });
+
+    it('should return error when base64 response data field is missing', () => {
+      const data = { created: 123 };
+      const result = formatOutput(data, 'prompt', 'b64_json');
+      expect(result).toEqual({
+        error: `No base64 image data found in response: ${JSON.stringify(data)}`,
+      });
     });
   });
 
@@ -588,9 +620,8 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+      expect(result.error).toContain('No image URL found in response');
+      expect(mockDeleteFromCache).not.toHaveBeenCalled();
     });
 
     it('should handle a specific error case with malformed response', async () => {
@@ -611,8 +642,8 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error:');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+      expect(result.error).toContain('No image URL found in response');
+      expect(mockDeleteFromCache).not.toHaveBeenCalled();
     });
   });
 
