@@ -13,7 +13,7 @@ This feature allows you to collect detailed performance metrics and debug comple
 
 ## Overview
 
-Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing.
+Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing. If your application already sends traces to another service, Promptfoo can also pull them from there.
 
 Tracing provides visibility into:
 
@@ -29,6 +29,7 @@ Tracing provides visibility into:
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
+- **Existing tracing services**: Pull traces from the service your application already uses
 
 ## Built-in Provider Instrumentation
 
@@ -403,14 +404,27 @@ tracing:
       'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
 ```
 
-### Fetching Traces From Grafana Tempo
+### Pulling Traces From Another Service
 
-Promptfoo can also retrieve spans that your application has already sent to Grafana Tempo. This is separate from forwarding: Promptfoo passes its `traceparent` header to the target, then queries Tempo for the matching trace after the target responds.
+If your application already sends traces to another service, you do not need to change where they go. Promptfoo can look up the trace for each request and bring those steps into your eval.
+
+Here's how it works:
+
+1. Promptfoo includes a `traceparent` header when it calls your application.
+2. Your application adds its own steps to that trace and sends them to its usual tracing service.
+3. After the response, Promptfoo pulls the matching trace from that service.
+4. The results appear in the trace viewer and are available to assertions and red-team strategies.
+
+Trace providers work like model providers: each one tells Promptfoo how to connect to a particular service. Set `tracing.provider.id` to choose the provider you need.
+
+#### Grafana Tempo
+
+Use the `tempo` trace provider to pull traces from Grafana Tempo:
 
 ```yaml
 tracing:
   enabled: true
-  queryDelay: 3000 # Wait before retrying when spans are not indexed yet
+  queryDelay: 3000 # Wait before checking again if the trace is not ready
   provider:
     id: tempo
     endpoint: 'http://tempo:3200'
@@ -421,9 +435,9 @@ tracing:
     timeout: 10000
 ```
 
-`queryDelay` and `timeout` are measured in milliseconds. Promptfoo queries Tempo immediately and waits for `queryDelay` only if the first request does not find the trace. Bearer tokens and username/password authentication are supported. The target must propagate the supplied W3C `traceparent` header into its own OpenTelemetry spans so Promptfoo and Tempo use the same trace ID.
+Promptfoo checks for the trace as soon as your application responds. If the trace is not ready yet, `queryDelay` controls how long to wait before trying again. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
 
-Fetched spans follow the same redaction policy as received spans: credential-like attributes are removed automatically, and names configured in `tracing.otlp.http.redactAttributes` are redacted before the spans are stored.
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Common secrets and any attributes you list in `tracing.otlp.http.redactAttributes` are redacted before traces are saved.
 
 ## Provider Implementation Guide
 
