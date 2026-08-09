@@ -1269,22 +1269,22 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.cost).toBeCloseTo(0.0035, 6);
     });
 
-    it.each([
-      'us.anthropic.claude-fable-5',
-      'eu.anthropic.claude-fable-5',
-    ])('should apply the regional premium for %s', async (modelId) => {
-      const provider = new AwsBedrockConverseProvider(modelId, {
-        config: { region: 'us-east-1' },
-      });
+    it.each(['us.anthropic.claude-fable-5', 'eu.anthropic.claude-fable-5'])(
+      'should apply the regional premium for %s',
+      async (modelId) => {
+        const provider = new AwsBedrockConverseProvider(modelId, {
+          config: { region: 'us-east-1' },
+        });
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Response'));
 
-      const result = await provider.callApi('Test');
+        const result = await provider.callApi('Test');
 
-      // Geo-prefixed inference profiles bill at the 10% premium over the
-      // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
-      expect(result.cost).toBeCloseTo(0.00385, 6);
-    });
+        // Geo-prefixed inference profiles bill at the 10% premium over the
+        // $10/$50 base rates: (100/1M * 11) + (50/1M * 55) = 0.00385
+        expect(result.cost).toBeCloseTo(0.00385, 6);
+      },
+    );
 
     it('should apply cache pricing at base rate on the global endpoint for Claude Opus 4.8', async () => {
       // The global endpoint bills at base rate (no regional premium); regional/geo profiles
@@ -1894,36 +1894,36 @@ Third line`;
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 
-    it.each([
-      'any',
-      { tool: { name: 'test_tool' } },
-    ])('omits forced tool choice for Claude Fable 5 while preserving tools: %j', async (toolChoice) => {
-      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
-        config: {
-          region: 'us-east-1',
-          tools: [{ name: 'test_tool', description: 'Test' }],
-          toolChoice: toolChoice as any,
-        },
-      });
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+    it.each(['any', { tool: { name: 'test_tool' } }])(
+      'omits forced tool choice for Claude Fable 5 while preserving tools: %j',
+      async (toolChoice) => {
+        const provider = new AwsBedrockConverseProvider('global.anthropic.claude-fable-5', {
+          config: {
+            region: 'us-east-1',
+            tools: [{ name: 'test_tool', description: 'Test' }],
+            toolChoice: toolChoice as any,
+          },
+        });
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          toolConfig: expect.objectContaining({
-            tools: expect.any(Array),
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            toolConfig: expect.objectContaining({
+              tools: expect.any(Array),
+            }),
           }),
-        }),
-      );
-      const request = (
-        ConverseCommand as unknown as { mock: { calls: unknown[][] } }
-      ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
-      expect(request.toolConfig).not.toHaveProperty('toolChoice');
-    });
+        );
+        const request = (
+          ConverseCommand as unknown as { mock: { calls: unknown[][] } }
+        ).mock.calls.at(-1)?.[0] as { toolConfig?: Record<string, unknown> };
+        expect(request.toolConfig).not.toHaveProperty('toolChoice');
+      },
+    );
 
     it('warns only once per provider instance when forced tool choice is dropped for Claude Fable 5', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
@@ -2057,6 +2057,32 @@ Third line`;
         expect.objectContaining({
           guardrailConfig: {
             guardrailIdentifier: 'my-guardrail',
+            guardrailVersion: '2',
+          },
+        }),
+      );
+    });
+
+    it('should coerce numeric YAML guardrail identifiers and versions to strings', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          guardrailIdentifier: 12345 as unknown as string,
+          guardrailVersion: 2 as unknown as string,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          guardrailConfig: {
+            guardrailIdentifier: '12345',
             guardrailVersion: '2',
           },
         }),
@@ -3014,34 +3040,37 @@ Third line`;
       );
     });
 
-    it.each([
-      { tool: null },
-      { tool: {} },
-    ])('should fall back to auto for malformed native toolChoice objects: %j', async (toolChoice) => {
-      mockSend.mockReset();
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          tools: [{ name: 'test_tool', description: 'Test' }],
-          toolChoice: toolChoice as any,
-        },
-      });
+    it.each([{ tool: null }, { tool: {} }])(
+      'should fall back to auto for malformed native toolChoice objects: %j',
+      async (toolChoice) => {
+        mockSend.mockReset();
+        const provider = new AwsBedrockConverseProvider(
+          'anthropic.claude-3-5-sonnet-20241022-v2:0',
+          {
+            config: {
+              region: 'us-east-1',
+              tools: [{ name: 'test_tool', description: 'Test' }],
+              toolChoice: toolChoice as any,
+            },
+          },
+        );
 
-      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
 
-      await provider.callApi('Test');
+        await provider.callApi('Test');
 
-      const { ConverseCommand } = (await import(
-        '@aws-sdk/client-bedrock-runtime'
-      )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          toolConfig: expect.objectContaining({
-            toolChoice: { auto: {} },
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        expect(ConverseCommand).toHaveBeenCalledWith(
+          expect.objectContaining({
+            toolConfig: expect.objectContaining({
+              toolChoice: { auto: {} },
+            }),
           }),
-        }),
-      );
-    });
+        );
+      },
+    );
 
     it('should handle toolSpec format directly', async () => {
       mockSend.mockReset();

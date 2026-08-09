@@ -106,23 +106,22 @@ describe('ESM utilities', () => {
       { extension: 'TS', source: "export const value = 'ts';", value: 'ts' },
       { extension: 'MTS', source: "export const value = 'mts';", value: 'mts' },
       { extension: 'CTS', source: "export const value = 'cts';", value: 'cts' },
-    ])('imports modules referenced with an uppercase .$extension extension', async ({
-      extension,
-      source,
-      value,
-    }) => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));
-      const lowerCasePath = path.join(tempDir, `provider.${extension.toLowerCase()}`);
-      const upperCasePath = path.join(tempDir, `provider.${extension}`);
-      fs.writeFileSync(lowerCasePath, source);
+    ])(
+      'imports modules referenced with an uppercase .$extension extension',
+      async ({ extension, source, value }) => {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));
+        const lowerCasePath = path.join(tempDir, `provider.${extension.toLowerCase()}`);
+        const upperCasePath = path.join(tempDir, `provider.${extension}`);
+        fs.writeFileSync(lowerCasePath, source);
 
-      try {
-        const result = await importModule(upperCasePath);
-        expect(result.value).toBe(value);
-      } finally {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
-    });
+        try {
+          const result = await importModule(upperCasePath);
+          expect(result.value).toBe(value);
+        } finally {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+      },
+    );
 
     it('does not substitute a different module on case-sensitive file systems', async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-case-test-'));

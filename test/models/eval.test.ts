@@ -2512,19 +2512,18 @@ describe('evaluator', () => {
 
     // The UI's ResultsFilter type is 'and' | 'or', so the server always receives
     // lowercase operators; an exact-match against 'OR' silently combined with AND.
-    it.each([
-      'or',
-      'Or',
-      'OR',
-    ])('should combine with OR for logicOperator %j', (logicOperator: string) => {
-      const result = combineFilterConditions([
-        { condition: sql`field1 = ${1}`, logicOperator },
-        { condition: sql`field2 = ${2}`, logicOperator },
-      ]);
-      const sqlText = toSqlText(result);
-      expect(sqlText).toContain('OR');
-      expect(sqlText).not.toContain('AND');
-    });
+    it.each(['or', 'Or', 'OR'])(
+      'should combine with OR for logicOperator %j',
+      (logicOperator: string) => {
+        const result = combineFilterConditions([
+          { condition: sql`field1 = ${1}`, logicOperator },
+          { condition: sql`field2 = ${2}`, logicOperator },
+        ]);
+        const sqlText = toSqlText(result);
+        expect(sqlText).toContain('OR');
+        expect(sqlText).not.toContain('AND');
+      },
+    );
 
     // Filters are unvalidated JSON from the query string, so a non-string operator
     // must fall back to AND rather than throwing (which would 500 the table route).
