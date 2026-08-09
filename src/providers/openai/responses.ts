@@ -807,6 +807,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
+        regionalProcessing: this.modelName.startsWith('openai.'),
         serviceTier,
       },
     );

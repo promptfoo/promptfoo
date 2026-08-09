@@ -2,241 +2,22 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Alert } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
-import { useTelemetry } from '@app/hooks/useTelemetry';
-import {
-  type RuntimeCompatibilityNotice,
-  useVersionCheck,
-  type VersionInfo,
-} from '@app/hooks/useVersionCheck';
+import { useVersionCheck } from '@app/hooks/useVersionCheck';
 import { cn } from '@app/lib/utils';
-import { hasRuntimeSupportEnded, parseUtcMidnight } from '@app/utils/runtimeCompatibility';
-import { Check, Copy, ExternalLink, RefreshCw, TriangleAlert, X } from 'lucide-react';
+import { Check, Copy, ExternalLink, RefreshCw, X } from 'lucide-react';
 
-function formatRemovalDate(removalDate: string): string {
-  const timestamp = parseUtcMidnight(removalDate);
-  // The Web UI does not validate /version responses; fall back to the raw value rather than
-  // letting Intl.DateTimeFormat throw a RangeError on an unexpected/invalid date string.
-  if (timestamp === null) {
-    return removalDate;
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    day: 'numeric',
-    month: 'long',
-    timeZone: 'UTC',
-    year: 'numeric',
-  }).format(new Date(timestamp));
-}
-
-function RuntimeUpgradeMessage({
-  notice,
-  commandType,
-  isBlockedUpdate,
-}: {
-  notice: RuntimeCompatibilityNotice;
-  commandType: string | null | undefined;
-  isBlockedUpdate: boolean;
-}) {
-  if (commandType === 'docker') {
-    return (
-      <>
-        Pull the latest Promptfoo Docker image. If this is a derived image, update its Promptfoo
-        base and rebuild it. Then redeploy the container to upgrade its bundled Node.js runtime.
-      </>
-    );
-  }
-  if (commandType === 'container') {
-    if (isBlockedUpdate) {
-      return (
-        <>
-          Update the Promptfoo source, dependency, or parent image to the latest release and this
-          custom image&apos;s Node.js base to {notice.recommendedVersion}, then rebuild and
-          redeploy.
-        </>
-      );
-    }
-    return (
-      <>
-        Update this custom image&apos;s Node.js base to {notice.recommendedVersion}, then rebuild
-        and redeploy the container.
-      </>
-    );
-  }
-  if (isBlockedUpdate) {
-    return (
-      <>
-        This Promptfoo server is running {notice.currentVersion}. Upgrade to Node.js{' '}
-        {notice.minimumVersion} or newer, then update Promptfoo to the latest release.
-      </>
-    );
-  }
-  return (
-    <>
-      This Promptfoo server is running {notice.currentVersion}. Upgrade to Node.js{' '}
-      {notice.minimumVersion} or newer; Node.js {notice.recommendedVersion} is recommended.
-    </>
-  );
-}
-
-function getCopyCommandLabel(commandType: string | null | undefined, copied: boolean): string {
-  if (copied) {
-    return 'Copied';
-  }
-  if (commandType === 'docker') {
-    return 'Copy Docker Command';
-  }
-  if (commandType === 'npx') {
-    return 'Copy npx Command';
-  }
-  return 'Copy Update Command';
-}
-
-function copyCommandWithFallback(command: string): void {
-  const textarea = document.createElement('textarea');
-  textarea.value = command;
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  document.body.appendChild(textarea);
-
-  try {
-    textarea.select();
-    if (!document.execCommand('copy')) {
-      throw new Error('Fallback copy command was rejected');
-    }
-  } finally {
-    document.body.removeChild(textarea);
-  }
-}
-
-async function copyUpdateCommand(command: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(command);
-    return true;
-  } catch (error) {
-    console.error('Failed to copy to clipboard:', error);
-  }
-
-  try {
-    copyCommandWithFallback(command);
-    return true;
-  } catch (error) {
-    console.error('Fallback copy also failed:', error);
-    alert(`Failed to copy. Command: ${command}`);
-    return false;
-  }
-}
-
-function getCopyStatus(copied: boolean): string {
-  return copied ? 'Command copied' : '';
-}
-
-function ContainerUpdateMessage({ commandType }: { commandType: string | null | undefined }) {
-  if (commandType === 'docker') {
-    return (
-      <span className="text-sm text-muted-foreground">
-        If this is a derived image, update its Promptfoo base and rebuild before redeploying.
-      </span>
-    );
-  }
-  if (commandType === 'container') {
-    return (
-      <span className="text-sm text-muted-foreground">
-        Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the
-        container.
-      </span>
-    );
-  }
-  return null;
-}
-
-function getUpdateMode(versionInfo: VersionInfo | null): string | null | undefined {
-  if (versionInfo?.updateCommands?.isCustomContainer) {
-    return 'container';
-  }
-  return versionInfo?.commandType;
-}
-
-function getBlockedUpdateNotice(
-  versionInfo: VersionInfo | null,
-  updateDismissed: boolean | undefined,
-  updateBlockedByRuntime: boolean,
-): RuntimeCompatibilityNotice | null {
-  return versionInfo?.runtimeNotice || updateDismissed || !updateBlockedByRuntime
-    ? null
-    : (versionInfo?.blockedUpdateNotice ?? null);
-}
-
-function getRuntimeGuidanceHeading(
-  notice: RuntimeCompatibilityNotice,
-  isRuntimeReminder: boolean,
-  runtimeSupportEnded: boolean,
-): string {
-  return isRuntimeReminder
-    ? `Node.js 20 support ${runtimeSupportEnded ? 'ended' : 'ends'} ${formatRemovalDate(notice.removalDate)} at 00:00 UTC`
-    : 'Upgrade Node.js before updating Promptfoo';
-}
-
-function shouldRenderBanner(
-  loading: boolean,
-  error: Error | null,
-  runtimeGuidance: RuntimeCompatibilityNotice | null,
-  shouldShowUpdate: boolean,
-): boolean {
-  return !loading && !error && (!!runtimeGuidance || shouldShowUpdate);
-}
+const COPY_COMMAND_LABELS = {
+  docker: 'Copy Docker Command',
+  npx: 'Copy npx Command',
+  npm: 'Copy Update Command',
+} as const;
 
 export default function UpdateBanner() {
-  const {
-    versionInfo,
-    loading,
-    error,
-    runtimeNoticeDismissed,
-    updateDismissed,
-    dismissRuntimeNotice,
-    dismissUpdate,
-    runtimePolicyUpdatedAt,
-  } = useVersionCheck();
-  const { isInitialized, recordEvent } = useTelemetry();
+  const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
-  const recordedRuntimeNoticeRef = useRef<string | null>(null);
-  const runtimeNotice = versionInfo?.runtimeNotice ?? null;
-  const updateMode = getUpdateMode(versionInfo);
-  const activeRuntimeNotice = runtimeNotice && !runtimeNoticeDismissed ? runtimeNotice : null;
-  const runtimeSupportEndDate =
-    runtimeNotice?.removalDate ??
-    versionInfo?.blockedUpdateNotice?.removalDate ??
-    versionInfo?.runtimePolicy?.supportEndDate;
-  const runtimeSupportEnded = runtimeSupportEndDate
-    ? hasRuntimeSupportEnded(runtimeSupportEndDate, runtimePolicyUpdatedAt)
-    : false;
-  const updateBlockedByRuntime =
-    !!versionInfo?.updateBlockedByRuntime ||
-    (runtimeSupportEnded && versionInfo?.commandType !== 'docker');
-  const blockedUpdateNotice = getBlockedUpdateNotice(
-    versionInfo,
-    updateDismissed,
-    updateBlockedByRuntime,
-  );
-  const isBlockedUpdate =
-    !!versionInfo?.blockedUpdateNotice && updateBlockedByRuntime && !updateDismissed;
-  const activeRuntimeGuidance = activeRuntimeNotice ?? blockedUpdateNotice;
-  const shouldShowUpdate =
-    !activeRuntimeNotice &&
-    !updateDismissed &&
-    !!versionInfo?.updateAvailable &&
-    !updateBlockedByRuntime;
-  const shouldShowDockerAction =
-    !!activeRuntimeNotice &&
-    versionInfo?.commandType === 'docker' &&
-    !!versionInfo.updateAvailable &&
-    !updateBlockedByRuntime;
-  const shouldShowBanner = shouldRenderBanner(
-    loading,
-    error,
-    activeRuntimeGuidance,
-    shouldShowUpdate,
-  );
   const dismissLabel = "Don't remind me of this version";
+  const shouldShowBanner = !loading && !error && !!versionInfo?.updateAvailable && !dismissed;
 
   useEffect(() => {
     if (!shouldShowBanner) {
@@ -286,151 +67,109 @@ export default function UpdateBanner() {
     }
   }, [copied]);
 
-  useEffect(() => {
-    if (!shouldShowBanner || !activeRuntimeNotice) {
-      recordedRuntimeNoticeRef.current = null;
-      return;
-    }
-
-    if (isInitialized && recordedRuntimeNoticeRef.current !== activeRuntimeNotice.id) {
-      recordEvent('feature_used', {
-        action: 'shown',
-        feature: 'runtime_compatibility_notice',
-        noticeId: activeRuntimeNotice.id,
-        runtimeMajor: activeRuntimeNotice.currentMajor,
-        surface: 'webui_banner',
-      });
-      recordedRuntimeNoticeRef.current = activeRuntimeNotice.id;
-    }
-  }, [activeRuntimeNotice, isInitialized, recordEvent, shouldShowBanner]);
-
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
 
-    if (command && (await copyUpdateCommand(command))) {
-      setCopied(true);
+    if (command) {
+      const onSuccess = () => {
+        setCopied(true);
+      };
+
+      try {
+        await navigator.clipboard.writeText(command);
+        onSuccess();
+      } catch (err) {
+        // Fallback for browsers that don't support clipboard API or when it fails
+        console.error('Failed to copy to clipboard:', err);
+        // Create a temporary textarea element as fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = command;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          // execCommand reports rejection via its return value, not by throwing. Without this
+          // check a refused copy would still render the "Copied!" success state.
+          if (!document.execCommand('copy')) {
+            throw new Error('Fallback copy command was rejected');
+          }
+          onSuccess();
+        } catch (fallbackError) {
+          console.error('Fallback copy also failed:', fallbackError);
+          // Show the command in an alert as last resort
+          alert(`Failed to copy. Command: ${command}`);
+        } finally {
+          document.body.removeChild(textarea);
+        }
+      }
     }
   };
 
-  const handleDismiss = () => {
-    if (activeRuntimeNotice) {
-      recordEvent('feature_used', {
-        action: 'remind_later',
-        feature: 'runtime_compatibility_notice',
-        noticeId: activeRuntimeNotice.id,
-        runtimeMajor: activeRuntimeNotice.currentMajor,
-        surface: 'webui_banner',
-      });
-      dismissRuntimeNotice?.();
-      return;
-    }
-    dismissUpdate?.();
-  };
-
-  const handleRuntimeGuideClick = () => {
-    if (!activeRuntimeNotice) {
-      return;
-    }
-    recordEvent('feature_used', {
-      action: 'guide_clicked',
-      feature: 'runtime_compatibility_notice',
-      noticeId: activeRuntimeNotice.id,
-      runtimeMajor: activeRuntimeNotice.currentMajor,
-      surface: 'webui_banner',
-    });
-  };
-
-  // Render only the highest-priority active notice. A dismissed runtime notice may
-  // yield to an ordinary update while that update is still compatible.
-  if (!shouldShowBanner || !versionInfo) {
+  // Don't show banner if loading, error, no update available, or dismissed
+  if (!shouldShowBanner) {
     return null;
   }
 
   return (
     <Alert
       ref={bannerRef}
-      // `role="group"` intentionally overrides Alert's default `role="alert"` (Alert spreads
-      // {...props} after its own role, so this wins). The live region is the inner div below, which
-      // switches between role="status" and role="alert" by severity. Label off activeRuntimeGuidance
-      // so the blocked-update (runtime) case is announced as a runtime notice like its visible copy.
+      variant="info"
+      // An available update is informational, not urgent. `Alert` defaults to role="alert",
+      // which is an assertive live region and interrupts screen readers; role="group" keeps
+      // the banner passive and lets the inner polite live region own announcements.
       role="group"
-      aria-label={activeRuntimeGuidance ? 'Node.js runtime notice' : 'Promptfoo update notice'}
-      variant={activeRuntimeGuidance ? 'warning' : 'info'}
+      aria-label="Update available"
       className={cn(
         'relative z-(--z-banner) rounded-none px-4 py-2',
         'flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         // Use solid background to prevent content showing through the banner
-        activeRuntimeGuidance ? 'dark:bg-amber-950' : 'dark:bg-blue-950',
+        'dark:bg-blue-950',
       )}
     >
       <div
-        role={activeRuntimeGuidance && runtimeSupportEnded ? 'alert' : 'status'}
+        role="status"
+        aria-live="polite"
         aria-atomic="true"
         className="flex items-start gap-3 sm:items-center"
       >
-        {activeRuntimeGuidance ? (
-          <TriangleAlert className="size-4 shrink-0" />
-        ) : (
-          <RefreshCw className="size-4 shrink-0" />
-        )}
-        {activeRuntimeGuidance ? (
-          <div className="flex max-w-4xl flex-col gap-0.5">
-            <span className="text-sm font-medium">
-              {getRuntimeGuidanceHeading(
-                activeRuntimeGuidance,
-                !!activeRuntimeNotice,
-                runtimeSupportEnded,
-              )}
-            </span>
-            <span className="text-sm text-muted-foreground dark:text-amber-200">
-              <RuntimeUpgradeMessage
-                notice={activeRuntimeGuidance}
-                commandType={updateMode}
-                isBlockedUpdate={isBlockedUpdate}
-              />
-            </span>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-sm font-medium">
-              Update available: v{versionInfo.latestVersion}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              (current: v{versionInfo.currentVersion})
-            </span>
-            <ContainerUpdateMessage commandType={updateMode} />
-          </div>
-        )}
+        <RefreshCw className="size-4 shrink-0" />
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-medium">
+            Update available: v{versionInfo.latestVersion}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            (current: v{versionInfo.currentVersion})
+          </span>
+          {versionInfo.commandType === 'docker' &&
+            !versionInfo.updateCommands?.isCustomContainer && (
+              <span className="text-sm text-muted-foreground">
+                If this is a derived image, update its Promptfoo base and rebuild before
+                redeploying.
+              </span>
+            )}
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-        <span className="sr-only" aria-live="polite" aria-atomic="true">
-          {getCopyStatus(copied)}
-        </span>
-        {activeRuntimeGuidance ? (
-          <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
-            <a
-              href={activeRuntimeGuidance.documentationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleRuntimeGuideClick}
-            >
-              View upgrade guide
-              <ExternalLink className="size-3" />
-            </a>
-          </Button>
+        <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
+          <a
+            href="https://github.com/promptfoo/promptfoo/releases/latest"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Release Notes
+            <ExternalLink className="size-3" />
+          </a>
+        </Button>
+        {/* Custom containers have no copyable command: the image owner has to update the
+            Promptfoo source or parent image and rebuild. Without this branch the banner would
+            render version numbers and no instruction at all. */}
+        {versionInfo?.updateCommands?.isCustomContainer ? (
+          <span className="text-xs text-muted-foreground">
+            Update the Promptfoo source, dependency, or parent image, then rebuild and redeploy the
+            container.
+          </span>
         ) : (
-          <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
-            <a
-              href="https://github.com/promptfoo/promptfoo/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Release Notes
-              <ExternalLink className="size-3" />
-            </a>
-          </Button>
-        )}
-        {(!activeRuntimeGuidance || shouldShowDockerAction) &&
           versionInfo?.updateCommands?.primary && (
             <Button
               variant="outline"
@@ -444,29 +183,29 @@ export default function UpdateBanner() {
               ) : (
                 <Copy className="size-3" />
               )}
-              {getCopyCommandLabel(versionInfo.commandType, copied)}
+              {copied ? 'Copied' : COPY_COMMAND_LABELS[versionInfo.commandType ?? 'npm']}
             </Button>
-          )}
-        {activeRuntimeNotice ? (
-          <Button variant="ghost" size="sm" onClick={handleDismiss} className="text-xs">
-            Remind me later
-          </Button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleDismiss}
-            aria-label={dismissLabel}
-            title={dismissLabel}
-            className={cn(
-              'inline-flex size-6 items-center justify-center rounded-md',
-              'text-current opacity-70 hover:opacity-100',
-              'hover:bg-black/10 dark:hover:bg-white/10',
-              'cursor-pointer transition-colors',
-            )}
-          >
-            <X className="size-4" />
-          </button>
+          )
         )}
+        {/* Polite live region so screen readers get the copy confirmation the icon swap alone
+            does not convey. */}
+        <span aria-live="polite" aria-atomic="true" className="sr-only">
+          {copied ? 'Update command copied to clipboard' : ''}
+        </span>
+        <button
+          type="button"
+          onClick={dismiss}
+          aria-label={dismissLabel}
+          title={dismissLabel}
+          className={cn(
+            'inline-flex size-6 items-center justify-center rounded-md',
+            'text-current opacity-70 hover:opacity-100',
+            'hover:bg-black/10 dark:hover:bg-white/10',
+            'cursor-pointer transition-colors',
+          )}
+        >
+          <X className="size-4" />
+        </button>
       </div>
     </Alert>
   );

@@ -2206,28 +2206,27 @@ describe('readConfig', () => {
     expect(result.commandLineOptions?.filterSampleSeed).toBe(42);
   });
 
-  it.each([
-    'named-seed',
-    1.5,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])('should reject invalid configured filter sample seed %p', async (filterSampleSeed) => {
-    const mockConfig = {
-      providers: ['openai:gpt-4o'],
-      prompts: ['Hello, world!'],
-      commandLineOptions: {
-        filterSampleSeed,
-      },
-    };
-    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
-    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+  it.each(['named-seed', 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'should reject invalid configured filter sample seed %p',
+    async (filterSampleSeed) => {
+      const mockConfig = {
+        providers: ['openai:gpt-4o'],
+        prompts: ['Hello, world!'],
+        commandLineOptions: {
+          filterSampleSeed,
+        },
+      };
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+      vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
 
-    await expect(readConfig('config.yaml')).rejects.toMatchObject({
-      name: 'ConfigResolutionError',
-      message: expect.stringContaining(
-        'Invalid commandLineOptions in configuration file config.yaml',
-      ),
-    });
-  });
+      await expect(readConfig('config.yaml')).rejects.toMatchObject({
+        name: 'ConfigResolutionError',
+        message: expect.stringContaining(
+          'Invalid commandLineOptions in configuration file config.yaml',
+        ),
+      });
+    },
+  );
 
   it('should read JavaScript config file', async () => {
     const mockConfig = {

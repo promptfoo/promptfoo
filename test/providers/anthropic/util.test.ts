@@ -1810,6 +1810,26 @@ describe('Anthropic utilities', () => {
       expect(result).toContain('explanation: This request involves prohibited cyber activities');
     });
 
+    it('should preserve the general_harms refusal category added in SDK 0.112.5', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'general_harms',
+          explanation: 'The request may involve a harmful area',
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+
+      expect(getRefusalDetails(message)).toContain('category: general_harms');
+    });
+
     it('should handle refusal with null category and explanation', () => {
       const message = {
         id: 'msg_1',
