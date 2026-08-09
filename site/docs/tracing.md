@@ -419,7 +419,7 @@ Here's how it works:
 3. After the response, Promptfoo pulls the matching trace from that service.
 4. Promptfoo uses the trace in assertions, grading, and red-team strategies, and shows it alongside your results.
 
-Trace providers work like model providers: each one tells Promptfoo how to connect to a particular service. Set `tracing.provider.id` to choose the provider you need.
+To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
 
 #### Grafana Tempo
 
