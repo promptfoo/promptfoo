@@ -5,19 +5,21 @@ description: Implement OpenTelemetry tracing in your LLM evaluations to monitor 
 
 # Tracing
 
-Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the internal operations of your LLM providers during evaluations.
+Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did behind each response and bring that information into your evals.
 
-This feature allows you to collect detailed performance metrics and debug complex provider implementations.
+Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
 ![traces in promptfoo](/img/docs/trace.png)
 
 ## Overview
 
-Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing. If your application already sends traces to another service, Promptfoo can also pull them from there.
+Promptfoo can receive traces directly from your application or pull them from a tracing service you already use. Either way, those traces become part of the eval, not just something to inspect afterward. The built-in receiver works without additional infrastructure during development and testing.
 
 Tracing provides visibility into:
 
 - **Provider execution flow**: See how your providers process requests internally
+- **Tool calls and agent actions**: Check which tools ran, in what order, and with which inputs
+- **Grading and red teaming**: Evaluate the steps behind a response and use them to guide attacks
 - **Performance bottlenecks**: Identify slow operations in RAG pipelines or multi-step workflows
 - **Error tracking**: Trace failures to specific operations
 - **Resource usage**: Monitor external API calls, database queries, and other operations
@@ -26,6 +28,8 @@ Tracing provides visibility into:
 
 - **Standard OpenTelemetry support**: Use any OpenTelemetry SDK in any language
 - **Built-in OTLP receiver**: No external collector required for basic usage
+- **Trace-aware assertions**: Check tool usage, execution paths, timing, and errors
+- **Trace-informed grading and attacks**: Give graders and red-team strategies more context
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
@@ -413,7 +417,7 @@ Here's how it works:
 1. Promptfoo includes a `traceparent` header when it calls your application.
 2. Your application adds its own steps to that trace and sends them to its usual tracing service.
 3. After the response, Promptfoo pulls the matching trace from that service.
-4. The results appear in the trace viewer and are available to assertions and red-team strategies.
+4. Promptfoo uses the trace in assertions, grading, and red-team strategies, and shows it alongside your results.
 
 Trace providers work like model providers: each one tells Promptfoo how to connect to a particular service. Set `tracing.provider.id` to choose the provider you need.
 
