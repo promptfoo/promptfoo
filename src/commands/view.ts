@@ -20,6 +20,7 @@ export function viewCommand(program: Command) {
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
+    .option('--id <evalId>', 'Open the browser directly to a specific eval')
     .action(
       async (
         directory: string | undefined,
@@ -30,6 +31,7 @@ export function viewCommand(program: Command) {
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
+          id?: string;
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
@@ -49,6 +51,27 @@ export function viewCommand(program: Command) {
           : cmdObj.no
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
+
+        if (cmdObj.id) {
+          if (cmdObj.id === '.' || cmdObj.id === '..') {
+            logger.error(
+              'Eval IDs "." and ".." cannot be opened with --id because browsers normalize dot-segment URL paths.',
+            );
+            process.exitCode = 1;
+            return;
+          }
+
+          if (/%2f/i.test(cmdObj.id)) {
+            logger.error(
+              'Eval IDs containing a literal "%2F" sequence cannot be opened with --id because routers may decode it as a path separator.',
+            );
+            process.exitCode = 1;
+            return;
+          }
+
+          await startServer(cmdObj.port, browserBehavior, `/eval/${encodeURIComponent(cmdObj.id)}`);
+          return;
+        }
 
         await startServer(cmdObj.port, browserBehavior);
       },

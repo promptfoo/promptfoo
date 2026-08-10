@@ -4,6 +4,7 @@ import { downloadResultsFile } from './downloads';
 
 vi.mock('../api', () => ({
   callApi: vi.fn(),
+  getEvalApiPath: (evalId: string, suffix = '') => `/eval/${encodeURIComponent(evalId)}${suffix}`,
 }));
 
 const createSuccessfulMockResponse = (mockBlob: Blob) =>

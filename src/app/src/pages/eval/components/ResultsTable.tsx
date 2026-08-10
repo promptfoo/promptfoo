@@ -12,10 +12,10 @@ import {
 } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApi, getEvalApiPath } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -979,14 +979,14 @@ async function saveManualRating({
 
   const response =
     version && version >= 4
-      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
+      ? await callApi(getEvalApiPath(evalId, `/results/${encodeURIComponent(resultId)}/rating`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ ...gradingResult }),
         })
-      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
+      : await callApi(getEvalApiPath(evalId), {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
