@@ -60,7 +60,7 @@
     "satori": "^0.26.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^4.1.0",
-    "webpack": "5.109.0"
+    "webpack": "5.109.2"
   },
   "optionalDependencies": {
     "sharp": "^0.35.3"

@@ -214,11 +214,11 @@
       ".": "0.4.4",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.109.0",
-    "dompurify": "3.4.12",
+    "webpack": "5.109.2",
+    "dompurify": "3.4.13",
     "monaco-editor": {
       ".": "0.56.0",
-      "dompurify": "3.4.12"
+      "dompurify": "3.4.13"
     }
   },
   "devDependencies": {
@@ -349,7 +349,7 @@
     "async": "^3.2.6",
     "binary-extensions": "^3.1.0",
     "cache-manager": ">=7.2.8 <7.2.10",
-    "chalk": "^5.6.2",
+    "chalk": "^6.0.0",
     "chokidar": "5.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
