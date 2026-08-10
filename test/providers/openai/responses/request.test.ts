@@ -715,79 +715,94 @@ describe('OpenAiResponsesProvider request building', () => {
     'Bearer short-lived-token',
     'Basic dXNlcjpwdw==',
     'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
-  ])('should bypass background persistence for the credential-valued routing header %s', async (credential) => {
-    const hashSpy = vi.spyOn(createHash, 'sha256');
-    let creates = 0;
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
-      if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        creates++;
-        return {
-          data: {
-            id: `resp_route_secret_${creates}`,
-            status: 'completed',
-            output: [],
-            usage: null,
-          },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
-    });
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: {
-        apiKey: 'test-key',
-        background: true,
-        headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
-      },
-    });
+  ])(
+    'should bypass background persistence for the credential-valued routing header %s',
+    async (credential) => {
+      const hashSpy = vi.spyOn(createHash, 'sha256');
+      let creates = 0;
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+        if (String(url).endsWith('/responses') && options?.method === 'POST') {
+          creates++;
+          return {
+            data: {
+              id: `resp_route_secret_${creates}`,
+              status: 'completed',
+              output: [],
+              usage: null,
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          };
+        }
+        throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKey: 'test-key',
+          background: true,
+          headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
+        },
+      });
 
-    await provider.callApi('Credential-dependent task');
-    await provider.callApi('Credential-dependent task');
+      await provider.callApi('Credential-dependent task');
+      await provider.callApi('Credential-dependent task');
 
-    expect(creates).toBe(2);
-    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
-    expect(hashSpy).toHaveBeenCalled();
-    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
-  });
+      expect(creates).toBe(2);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(
+        true,
+      );
+      expect(hashSpy).toHaveBeenCalled();
+      expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+    },
+  );
 
   it.each([
     '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
     'token_2e163f4d28e24f84b6d205e13058d6aa',
     'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signature',
-  ])('should bypass background persistence for the opaque gateway path credential %s', async (credential) => {
-    const hashSpy = vi.spyOn(createHash, 'sha256');
-    let creates = 0;
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
-      if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        creates++;
-        return {
-          data: { id: `resp_path_secret_${creates}`, status: 'completed', output: [], usage: null },
-          cached: false,
-          status: 200,
-          statusText: 'OK',
-        };
-      }
-      throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
-    });
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: {
-        apiKeyRequired: false,
-        apiBaseUrl: `https://gateway.example/v1/${credential}`,
-        background: true,
-      },
-      env: { OPENAI_API_KEY: undefined },
-    });
+  ])(
+    'should bypass background persistence for the opaque gateway path credential %s',
+    async (credential) => {
+      const hashSpy = vi.spyOn(createHash, 'sha256');
+      let creates = 0;
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+        if (String(url).endsWith('/responses') && options?.method === 'POST') {
+          creates++;
+          return {
+            data: {
+              id: `resp_path_secret_${creates}`,
+              status: 'completed',
+              output: [],
+              usage: null,
+            },
+            cached: false,
+            status: 200,
+            statusText: 'OK',
+          };
+        }
+        throw new Error(`Unexpected request: ${options?.method} ${String(url)}`);
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: {
+          apiKeyRequired: false,
+          apiBaseUrl: `https://gateway.example/v1/${credential}`,
+          background: true,
+        },
+        env: { OPENAI_API_KEY: undefined },
+      });
 
-    await provider.callApi('Credential-dependent task');
-    await provider.callApi('Credential-dependent task');
+      await provider.callApi('Credential-dependent task');
+      await provider.callApi('Credential-dependent task');
 
-    expect(creates).toBe(2);
-    expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(true);
-    expect(hashSpy).toHaveBeenCalled();
-    expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
-  });
+      expect(creates).toBe(2);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls.every((call) => call[4] === true)).toBe(
+        true,
+      );
+      expect(hashSpy).toHaveBeenCalled();
+      expect(hashSpy.mock.calls.some(([value]) => String(value).includes(credential))).toBe(false);
+    },
+  );
 
   it('should not coalesce background requests from different OpenAI projects sharing an organization', async () => {
     let creates = 0;
@@ -2426,54 +2441,54 @@ describe('OpenAiResponsesProvider request building', () => {
     }
   });
 
-  it.each([
-    true,
-    false,
-  ])('should not cancel a shareable background job when its local polling subscriber aborts (cache hit: %s)', async (cached) => {
-    const controller = new AbortController();
-    let notifyPoll: (() => void) | undefined;
-    const polling = new Promise<void>((resolve) => {
-      notifyPoll = resolve;
-    });
-    const deleteFromCache = vi.fn();
-    vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
-      if (String(url).endsWith('/responses') && options?.method === 'POST') {
-        return {
-          data: { id: 'resp_shared_process', status: 'queued', output: [], usage: null },
-          cached,
-          status: 200,
-          statusText: 'OK',
-          deleteFromCache,
-        };
-      }
-      if (String(url).endsWith('/cancel')) {
-        return { data: {}, cached: false, status: 200, statusText: 'OK' };
-      }
-      notifyPoll?.();
-      return await new Promise<any>((_resolve, reject) => {
-        options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+  it.each([true, false])(
+    'should not cancel a shareable background job when its local polling subscriber aborts (cache hit: %s)',
+    async (cached) => {
+      const controller = new AbortController();
+      let notifyPoll: (() => void) | undefined;
+      const polling = new Promise<void>((resolve) => {
+        notifyPoll = resolve;
       });
-    });
-    const provider = new OpenAiResponsesProvider('gpt-4.1', {
-      config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
-    });
-    const pending = provider.callApi('Resume the shared job', undefined, {
-      abortSignal: controller.signal,
-    });
-    await polling;
-    controller.abort(new Error('caller cancelled'));
+      const deleteFromCache = vi.fn();
+      vi.mocked(cache.fetchWithCache).mockImplementation(async (url, options) => {
+        if (String(url).endsWith('/responses') && options?.method === 'POST') {
+          return {
+            data: { id: 'resp_shared_process', status: 'queued', output: [], usage: null },
+            cached,
+            status: 200,
+            statusText: 'OK',
+            deleteFromCache,
+          };
+        }
+        if (String(url).endsWith('/cancel')) {
+          return { data: {}, cached: false, status: 200, statusText: 'OK' };
+        }
+        notifyPoll?.();
+        return await new Promise<any>((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason));
+        });
+      });
+      const provider = new OpenAiResponsesProvider('gpt-4.1', {
+        config: { apiKey: 'test-key', background: true, headers: { 'X-Tenant-Id': 'tenant-a' } },
+      });
+      const pending = provider.callApi('Resume the shared job', undefined, {
+        abortSignal: controller.signal,
+      });
+      await polling;
+      controller.abort(new Error('caller cancelled'));
 
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
-      expect.stringContaining('/cancel'),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-    );
-    expect(deleteFromCache).not.toHaveBeenCalled();
-  });
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+        expect.stringContaining('/cancel'),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(deleteFromCache).not.toHaveBeenCalled();
+    },
+  );
 
   it('should cancel an accepted replacement background job when recovery is aborted', async () => {
     const controller = new AbortController();

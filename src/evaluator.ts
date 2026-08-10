@@ -3317,7 +3317,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }: ProcessEvalStepOptions,
     context: EvalProcessingContext,
   ) {
-    return withCacheNamespace(
+    return await withCacheNamespace(
       getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
       async () => {
         const rows =
@@ -3497,7 +3497,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
-      return this.processEvalStep(evalStep, index, { deferGrading, providerCallQueue }, context);
+      return await this.processEvalStep(
+        evalStep,
+        index,
+        { deferGrading, providerCallQueue },
+        context,
+      );
     }
 
     const abortController = new AbortController();
