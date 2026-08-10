@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import {
   type CallExpression,
   type Expression,
-  type MemberExpression,
   type Node,
   type Program,
   parseSync,
@@ -568,18 +567,22 @@ function isEnvStringLiteral(node: Node): boolean {
   );
 }
 
-function isProcessEnvExpression(node: Node): node is MemberExpression {
+function isProcessEnvExpression(node: Node): boolean {
+  const expression = node.type === 'ChainExpression' ? node.expression : node;
   return (
-    node.type === 'MemberExpression' &&
-    node.object.type === 'Identifier' &&
-    node.object.name === 'process' &&
-    ((!node.computed && node.property.type === 'Identifier' && node.property.name === 'env') ||
-      (node.computed && isEnvStringLiteral(node.property)))
+    expression.type === 'MemberExpression' &&
+    expression.object.type === 'Identifier' &&
+    expression.object.name === 'process' &&
+    ((!expression.computed &&
+      expression.property.type === 'Identifier' &&
+      expression.property.name === 'env') ||
+      (expression.computed && isEnvStringLiteral(expression.property)))
   );
 }
 
-function isProcessEnvMemberExpression(node: Node): node is MemberExpression {
-  return node.type === 'MemberExpression' && isProcessEnvExpression(node.object);
+function isProcessEnvMemberExpression(node: Node): boolean {
+  const expression = node.type === 'ChainExpression' ? node.expression : node;
+  return expression.type === 'MemberExpression' && isProcessEnvExpression(expression.object);
 }
 
 function containsProcessEnvMutationTarget(node: Node): boolean {
@@ -889,6 +892,19 @@ describe('root test hygiene', () => {
     ]);
   });
 
+  it('preserves test-control source locations after Unicode text', () => {
+    const source = '// 😀 café\n  it.skip("case", () => {});';
+
+    expect(findTestControlUsages('fixture.test.ts', source)).toMatchObject([
+      {
+        column: 3,
+        expression: 'it.skip',
+        fullLineText: '  it.skip("case", () => {});',
+        line: 2,
+      },
+    ]);
+  });
+
   it('ignores test control text inside verifier fixtures and comments', () => {
     const source = [
       '// describe.only("not executable", () => {})',
@@ -985,10 +1001,13 @@ describe('root test hygiene', () => {
     '++process.env["OPENAI_API_KEY"];',
     'delete process.env.OPENAI_API_KEY;',
     'delete process.env["OPENAI_API_KEY"];',
+    'delete process.env?.OPENAI_API_KEY;',
+    'delete process?.env?.OPENAI_API_KEY;',
     'delete process["env"].OPENAI_API_KEY;',
     'delete process.env;',
     'process.env = { ...process.env, OPENAI_API_KEY: "test-key" };',
     'Object.assign(process.env, { OPENAI_API_KEY: "test-key" });',
+    'Object.assign(process?.env, { OPENAI_API_KEY: "test-key" });',
     'Object.assign(process["env"], { OPENAI_API_KEY: "test-key" });',
     'Object.defineProperty(process.env, "OPENAI_API_KEY", { value: "test-key" });',
     'Object.defineProperties(process.env, { OPENAI_API_KEY: { value: "test-key" } });',
@@ -1018,6 +1037,8 @@ describe('root test hygiene', () => {
 
   it.each([
     'const originalEnv = process.env;',
+    'const originalEnv = process?.env;',
+    'const originalEnv = process?.["env"];',
     'const originalEnv = process["env"];',
     'originalEnv = process.env;',
     'const ORIGINAL_ENV = process.env;',
