@@ -623,7 +623,10 @@ describe('package manifests', () => {
     }>('package.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
 
-    expect(parserRange, 'the JSON Schema ref parser must remain a runtime dependency').toBeDefined();
+    expect(
+      parserRange,
+      'the JSON Schema ref parser must remain a runtime dependency',
+    ).toBeDefined();
     expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
     expect(packageJson.overrides?.undici).toBe('$undici');
   });
