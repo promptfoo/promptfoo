@@ -61,9 +61,9 @@ export function viewCommand(program: Command) {
             return;
           }
 
-          if (/%2f/i.test(cmdObj.id)) {
+          if (/%[0-9a-f]{2}/i.test(cmdObj.id)) {
             logger.error(
-              'Eval IDs containing a literal "%2F" sequence cannot be opened with --id because routers may decode it as a path separator.',
+              'Eval IDs containing literal percent-encoded sequences cannot be opened with --id because routers may decode them into different IDs.',
             );
             process.exitCode = 1;
             return;
