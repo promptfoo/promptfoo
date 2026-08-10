@@ -6,9 +6,7 @@ describe('eval route helpers', () => {
     const evalId = 'imported/eval?#1&2';
 
     expect(EVAL_ROUTES.DETAIL(evalId)).toBe('/eval/imported%2Feval%3F%231%262');
-    expect(REDTEAM_ROUTES.REPORT_DETAIL(evalId)).toBe(
-      '/reports?evalId=imported%2Feval%3F%231%262',
-    );
+    expect(REDTEAM_ROUTES.REPORT_DETAIL(evalId)).toBe('/reports?evalId=imported%2Feval%3F%231%262');
   });
 
   it('encodes both eval and result IDs in result rating paths', () => {
