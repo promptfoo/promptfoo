@@ -21,6 +21,9 @@ const config: StorybookConfig = {
     getAbsolutePath('@chromatic-com/storybook'),
   ],
   framework: getAbsolutePath('@storybook/react-vite'),
+  typescript: {
+    reactDocgen: 'react-docgen',
+  },
   viteFinal: async (config) => {
     // Merge custom Vite config
     return {

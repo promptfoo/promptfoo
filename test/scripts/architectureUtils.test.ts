@@ -34,6 +34,22 @@ describe('extractModuleSpecifiers', () => {
       'cjs-resolve',
     ]);
   });
+
+  it('collects TypeScript-specific module specifiers without reading strings or comments', () => {
+    const source = `
+      import legacy = require('legacy-module');
+      type Imported = import('type-module').Imported;
+      export * from 'exported-module';
+      const text = "require('ignored-module')";
+      // import('ignored-comment')
+    `;
+
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'legacy-module',
+      'type-module',
+      'exported-module',
+    ]);
+  });
 });
 
 describe('resolveInternalModule', () => {

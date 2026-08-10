@@ -3,7 +3,8 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 
 import { globSync } from 'glob';
-import ts from 'typescript';
+import { forEachTypeScriptChild, parseTypeScriptSource } from './typescriptAst';
+import type { Node } from 'oxc-parser';
 
 export interface LayerDefinition {
   name: string;
@@ -269,63 +270,54 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
 }
 
 export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const sourceFile = parseTypeScriptSource(filePath, sourceText);
   const specifiers: string[] = [];
 
-  function addStaticCallSpecifier(node: ts.CallExpression): void {
-    if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
-      return;
+  function visit(node: Node): void {
+    switch (node.type) {
+      case 'ImportDeclaration':
+      case 'ExportAllDeclaration':
+        specifiers.push(node.source.value);
+        break;
+      case 'ExportNamedDeclaration':
+        if (node.source) {
+          specifiers.push(node.source.value);
+        }
+        break;
+      case 'ImportExpression':
+        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
+          specifiers.push(node.source.value);
+        }
+        break;
+      case 'TSImportEqualsDeclaration':
+        if (node.moduleReference.type === 'TSExternalModuleReference') {
+          specifiers.push(node.moduleReference.expression.value);
+        }
+        break;
+      case 'TSImportType':
+        specifiers.push(node.source.value);
+        break;
+      case 'CallExpression': {
+        const [argument] = node.arguments;
+        if (
+          node.arguments.length === 1 &&
+          argument.type === 'Literal' &&
+          typeof argument.value === 'string' &&
+          ((node.callee.type === 'Identifier' && node.callee.name === 'require') ||
+            (node.callee.type === 'MemberExpression' &&
+              !node.callee.computed &&
+              node.callee.object.type === 'Identifier' &&
+              node.callee.object.name === 'require' &&
+              node.callee.property.type === 'Identifier' &&
+              node.callee.property.name === 'resolve'))
+        ) {
+          specifiers.push(argument.value);
+        }
+        break;
+      }
     }
 
-    if (
-      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-      (ts.isIdentifier(node.expression) && node.expression.text === 'require') ||
-      (ts.isPropertyAccessExpression(node.expression) &&
-        ts.isIdentifier(node.expression.expression) &&
-        node.expression.expression.text === 'require' &&
-        node.expression.name.text === 'resolve')
-    ) {
-      specifiers.push(node.arguments[0].text);
-    }
-  }
-
-  function visit(node: ts.Node): void {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    }
-
-    if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      node.moduleReference.expression &&
-      ts.isStringLiteralLike(node.moduleReference.expression)
-    ) {
-      specifiers.push(node.moduleReference.expression.text);
-    }
-
-    if (
-      ts.isImportTypeNode(node) &&
-      ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteralLike(node.argument.literal)
-    ) {
-      specifiers.push(node.argument.literal.text);
-    }
-
-    if (ts.isCallExpression(node)) {
-      addStaticCallSpecifier(node);
-    }
-
-    ts.forEachChild(node, visit);
+    forEachTypeScriptChild(node, visit);
   }
 
   visit(sourceFile);

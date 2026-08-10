@@ -3,8 +3,6 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
-
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/'];
@@ -50,30 +48,28 @@ export function getTrackedTypeScriptFiles(): string[] {
 }
 
 export function getRootProjectFiles(): Set<string> {
-  const configPath = ts.findConfigFile(repoRoot, ts.sys.fileExists, 'tsconfig.json');
-  if (!configPath) {
-    throw new Error('Could not find root tsconfig.json');
-  }
-
-  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (configFile.error) {
-    throw new Error(ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n'));
-  }
-
-  const parsedConfig = ts.parseJsonConfigFileContent(
-    configFile.config,
-    ts.sys,
-    path.dirname(configPath),
+  const compilerPath = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
+  const compilerOutput = execFileSync(
+    process.execPath,
+    [compilerPath, '--showConfig', '--project', path.join(repoRoot, 'tsconfig.json')],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    },
   );
-  if (parsedConfig.errors.length > 0) {
-    const message = parsedConfig.errors
-      .map((error) => ts.flattenDiagnosticMessageText(error.messageText, '\n'))
-      .join('\n');
-    throw new Error(message);
+  const config: { files?: unknown } = JSON.parse(compilerOutput);
+  if (
+    !Array.isArray(config.files) ||
+    !config.files.every((filePath): filePath is string => typeof filePath === 'string')
+  ) {
+    throw new Error('The TypeScript compiler did not return the root project file list');
   }
 
   return new Set(
-    parsedConfig.fileNames.map((filePath) => normalizePath(path.relative(repoRoot, filePath))),
+    config.files.map((filePath) =>
+      normalizePath(path.relative(repoRoot, path.resolve(repoRoot, filePath))),
+    ),
   );
 }
 
