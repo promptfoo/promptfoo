@@ -97,6 +97,30 @@ describe('GLEU score calculation', () => {
     }).toThrow('Invalid inputs');
   });
 
+  it.each(['', '   \n\t', '...'])('returns 0 for a tokenless candidate (%j)', (candidate) => {
+    expect(calculateGleuScore(candidate, ['The cat sat on the mat.'])).toBe(0);
+  });
+
+  it.each(['', '   \n\t', '...'])('returns 0 for a tokenless reference (%j)', (reference) => {
+    expect(calculateGleuScore('The cat sat on the mat.', [reference])).toBe(0);
+  });
+
+  it('treats tokenless candidate and reference inputs symmetrically', () => {
+    expect(calculateGleuScore('   ', ['...'])).toBe(0);
+    expect(calculateGleuScore('...', ['   '])).toBe(0);
+    expect(calculateGleuScore('...', ['...'])).toBe(0);
+  });
+
+  it('preserves standalone period tokens in mixed content', () => {
+    expect(calculateGleuScore('a . b', ['a b'])).toBeCloseTo(1 / 3);
+    expect(calculateGleuScore('a b', ['a . b'])).toBeCloseTo(1 / 3);
+  });
+
+  it('keeps tokenless and mixed-period inputs distinct in both directions', () => {
+    expect(calculateGleuScore('...', ['a . b'])).toBe(0);
+    expect(calculateGleuScore('a . b', ['...'])).toBe(0);
+  });
+
   it('should handle multiple references with varying lengths', () => {
     const references = ['The small cat sat.', 'A cat was sitting.', 'The cat is on the mat.'];
     const candidate = 'The small cat sat.';
@@ -209,6 +233,51 @@ describe('GLEU score calculation', () => {
         pass: false,
         score: expect.any(Number),
         reason: expect.stringMatching(/GLEU score \d+\.\d+ is less than threshold 0\.5/),
+        assertion: expect.any(Object),
+      });
+    });
+
+    it('should fail (score 0) on an empty output instead of throwing', () => {
+      const params = {
+        assertion: { type: 'gleu', value: 'The cat sat on the mat.', threshold: 0.5 },
+        renderedValue: 'The cat sat on the mat.',
+        outputString: '',
+        inverse: false,
+      } as AssertionParams;
+      expect(handleGleuScore(params)).toEqual({
+        pass: false,
+        score: 0,
+        reason: expect.stringMatching(/GLEU score 0\.0000 is less than threshold 0\.5/),
+        assertion: expect.any(Object),
+      });
+    });
+
+    it('should pass an inverse assertion on an empty output', () => {
+      const params = {
+        assertion: { type: 'gleu', value: 'The cat sat on the mat.', threshold: 0.5 },
+        renderedValue: 'The cat sat on the mat.',
+        outputString: '',
+        inverse: true,
+      } as AssertionParams;
+      expect(handleGleuScore(params)).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: expect.any(Object),
+      });
+    });
+
+    it('should explain an inverse failure when the empty-output score equals the threshold', () => {
+      const params = {
+        assertion: { type: 'not-gleu', value: 'The cat sat on the mat.', threshold: 0 },
+        renderedValue: 'The cat sat on the mat.',
+        outputString: '',
+        inverse: true,
+      } as AssertionParams;
+      expect(handleGleuScore(params)).toEqual({
+        pass: false,
+        score: 1,
+        reason: 'GLEU score 0.0000 is greater than or equal to threshold 0',
         assertion: expect.any(Object),
       });
     });

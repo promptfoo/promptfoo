@@ -111,15 +111,12 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         logger.error(`Failed to cache response: ${String(err)}`);
       }
     }
-    try {
-      return {
-        output: response.completion,
-        tokenUsage: createEmptyTokenUsage(), // Legacy Completion API doesn't expose token usage in its response type
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
-      };
-    }
+    // No try/catch here: `response.completion` was already dereferenced above by
+    // getCompletionResponseMetadata (outside any try), so a malformed response has
+    // already thrown by this point, and createEmptyTokenUsage cannot throw.
+    return {
+      output: response.completion,
+      tokenUsage: createEmptyTokenUsage(), // Legacy Completion API doesn't expose token usage in its response type
+    };
   }
 }

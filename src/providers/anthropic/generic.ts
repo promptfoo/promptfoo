@@ -15,6 +15,7 @@ import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
+import type { AnthropicBaseOptions } from './types';
 
 /**
  * Parse ANTHROPIC_CUSTOM_HEADERS the same way the Anthropic SDK does
@@ -39,29 +40,6 @@ export function getAnthropicEnvHeaderSuppressions(): Record<string, null> {
     }
   }
   return suppressed;
-}
-
-/**
- * Base options shared by all Anthropic provider implementations.
- */
-interface AnthropicBaseOptions {
-  apiKey?: string;
-  apiBaseUrl?: string;
-  /**
-   * When `false`, skip the upfront API key check and fall back to
-   * authenticating through a local Claude Code session (OAuth token sourced
-   * from the macOS keychain or `$HOME/.claude/.credentials.json`).
-   *
-   * Matches the `apiKeyRequired` option already exposed by the
-   * `anthropic:claude-agent-sdk` provider.
-   *
-   * @default true
-   */
-  apiKeyRequired?: boolean;
-  headers?: Record<string, string>;
-  cost?: number;
-  inputCost?: number;
-  outputCost?: number;
 }
 
 const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';

@@ -63,6 +63,8 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/common/v1/common.proto',
   'dist/src/tracing/proto/opentelemetry/proto/resource/v1/resource.proto',
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
+  'node_modules/@cacheable/utils/package.json',
+  'node_modules/cache-manager/package.json',
 ];
 
 function listFiles(rootDir: string): string[] {
@@ -185,8 +187,8 @@ function assertPackagedFiles(packResult: PackResult): void {
     `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
   );
   assert(
-    packResult.files.every((file) => !file.path.endsWith('.map')),
-    'Source maps should be excluded from the package',
+    packResult.files.every((file) => !file.path.startsWith('dist/') || !file.path.endsWith('.map')),
+    'Application source maps should be excluded from the package',
   );
   assert(
     packResult.files.every((file) => !file.path.startsWith('dist/test/')),
@@ -373,19 +375,6 @@ function writeConsumerScripts(consumerDir: string): void {
       compilerOptions: {
         module: 'NodeNext',
         moduleResolution: 'NodeNext',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
-    }),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.legacy.json'),
-    JSON.stringify({
-      compilerOptions: {
-        ignoreDeprecations: '6.0',
-        module: 'CommonJS',
-        moduleResolution: 'node',
         noEmit: true,
         strict: true,
       },
@@ -632,8 +621,13 @@ async function main(): Promise<void> {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+    // `typescript` is aliased to @typescript/typescript6 for its JS compiler API,
+    // which the TypeScript 7 native port no longer exposes; the compiler binary we
+    // typecheck consumers with is the 7.x one under @typescript/native. Both configs
+    // here must stay resolvable by that binary — TypeScript 7 removed
+    // `moduleResolution: node10`, so do not add a config that needs the 6.x `tsc6`.
+    const tscPath = path.join(ROOT, 'node_modules', '@typescript', 'native', 'bin', 'tsc');
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
