@@ -3,8 +3,7 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 
 import { globSync } from 'glob';
-import { forEachTypeScriptChild, parseTypeScriptSource } from './typescriptAst';
-import type { Node } from 'oxc-parser';
+import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
   name: string;
@@ -269,58 +268,73 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
   return 'unclassified';
 }
 
-export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = parseTypeScriptSource(filePath, sourceText);
-  const specifiers: string[] = [];
-
-  function visit(node: Node): void {
-    switch (node.type) {
-      case 'ImportDeclaration':
-      case 'ExportAllDeclaration':
-        specifiers.push(node.source.value);
-        break;
-      case 'ExportNamedDeclaration':
-        if (node.source) {
-          specifiers.push(node.source.value);
-        }
-        break;
-      case 'ImportExpression':
-        if (node.source.type === 'Literal' && typeof node.source.value === 'string') {
-          specifiers.push(node.source.value);
-        }
-        break;
-      case 'TSImportEqualsDeclaration':
-        if (node.moduleReference.type === 'TSExternalModuleReference') {
-          specifiers.push(node.moduleReference.expression.value);
-        }
-        break;
-      case 'TSImportType':
-        specifiers.push(node.source.value);
-        break;
-      case 'CallExpression': {
-        const [argument] = node.arguments;
-        if (
-          node.arguments.length === 1 &&
-          argument.type === 'Literal' &&
-          typeof argument.value === 'string' &&
-          ((node.callee.type === 'Identifier' && node.callee.name === 'require') ||
-            (node.callee.type === 'MemberExpression' &&
-              !node.callee.computed &&
-              node.callee.object.type === 'Identifier' &&
-              node.callee.object.name === 'require' &&
-              node.callee.property.type === 'Identifier' &&
-              node.callee.property.name === 'resolve'))
-        ) {
-          specifiers.push(argument.value);
-        }
-        break;
-      }
-    }
-
-    forEachTypeScriptChild(node, visit);
+function getStaticModuleSpecifier(node: Node): string | undefined {
+  if (node.type === 'Literal' && typeof node.value === 'string') {
+    return node.value;
   }
 
-  visit(sourceFile);
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? undefined;
+  }
+
+  return undefined;
+}
+
+export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
+  const result = parseSync(filePath, sourceText);
+  if (result.errors.length > 0) {
+    throw new Error(`Could not parse ${filePath}: ${result.errors[0].message}`);
+  }
+
+  const specifiers: string[] = [];
+
+  new Visitor({
+    ImportDeclaration(node) {
+      specifiers.push(node.source.value);
+    },
+    ExportAllDeclaration(node) {
+      specifiers.push(node.source.value);
+    },
+    ExportNamedDeclaration(node) {
+      if (node.source) {
+        specifiers.push(node.source.value);
+      }
+    },
+    ImportExpression(node) {
+      const specifier = getStaticModuleSpecifier(node.source);
+      if (specifier !== undefined) {
+        specifiers.push(specifier);
+      }
+    },
+    TSImportEqualsDeclaration(node) {
+      if (node.moduleReference.type === 'TSExternalModuleReference') {
+        specifiers.push(node.moduleReference.expression.value);
+      }
+    },
+    TSImportType(node) {
+      specifiers.push(node.source.value);
+    },
+    CallExpression(node) {
+      if (node.arguments.length !== 1) {
+        return;
+      }
+
+      const specifier = getStaticModuleSpecifier(node.arguments[0]);
+      if (
+        specifier !== undefined &&
+        ((node.callee.type === 'Identifier' && node.callee.name === 'require') ||
+          (node.callee.type === 'MemberExpression' &&
+            !node.callee.computed &&
+            node.callee.object.type === 'Identifier' &&
+            node.callee.object.name === 'require' &&
+            node.callee.property.type === 'Identifier' &&
+            node.callee.property.name === 'resolve'))
+      ) {
+        specifiers.push(specifier);
+      }
+    },
+  }).visit(result.program);
+
   return specifiers;
 }
 

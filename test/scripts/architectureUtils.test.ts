@@ -40,6 +40,10 @@ describe('extractModuleSpecifiers', () => {
       import legacy = require('legacy-module');
       type Imported = import('type-module').Imported;
       export * from 'exported-module';
+      import(\`./dynamic-template.js\`);
+      require(\`template-package\`);
+      require.resolve(\`resolved-template-package\`);
+      import(\`./\${name}.js\`);
       const text = "require('ignored-module')";
       // import('ignored-comment')
     `;
@@ -48,6 +52,9 @@ describe('extractModuleSpecifiers', () => {
       'legacy-module',
       'type-module',
       'exported-module',
+      './dynamic-template.js',
+      'template-package',
+      'resolved-template-package',
     ]);
   });
 });

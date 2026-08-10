@@ -48,23 +48,14 @@ export function getTrackedTypeScriptFiles(): string[] {
 }
 
 export function getRootProjectFiles(): Set<string> {
-  const compilerPath = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
-  const compilerOutput = execFileSync(
-    process.execPath,
-    [compilerPath, '--showConfig', '--project', path.join(repoRoot, 'tsconfig.json')],
-    {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      maxBuffer: 16 * 1024 * 1024,
-    },
+  const compilerPath = fileURLToPath(
+    new URL('./bin/tsc', import.meta.resolve('typescript/package.json')),
   );
-  const config: { files?: unknown } = JSON.parse(compilerOutput);
-  if (
-    !Array.isArray(config.files) ||
-    !config.files.every((filePath): filePath is string => typeof filePath === 'string')
-  ) {
-    throw new Error('The TypeScript compiler did not return the root project file list');
-  }
+  const compilerOutput = execFileSync(process.execPath, [compilerPath, '--showConfig'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  const config: { files: string[] } = JSON.parse(compilerOutput);
 
   return new Set(
     config.files.map((filePath) =>

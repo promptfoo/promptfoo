@@ -2,16 +2,16 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from 'vitest';
-import { forEachTypeScriptChild, parseTypeScriptSource } from '../scripts/typescriptAst';
-import type {
-  CallExpression,
-  Expression,
-  IdentifierReference,
-  MemberExpression,
-  Node,
-  Program,
+import {
+  type CallExpression,
+  type Expression,
+  type MemberExpression,
+  type Node,
+  type Program,
+  parseSync,
+  visitorKeys,
 } from 'oxc-parser';
+import { describe, expect, it } from 'vitest';
 
 type TestControlKind = 'only' | 'skip' | 'skipIf';
 
@@ -326,10 +326,27 @@ function readTestSource(file: string): string {
 function parseFixture(source: string): Program {
   let sourceFile = parsedFixtureCache.get(source);
   if (!sourceFile) {
-    sourceFile = parseTypeScriptSource('fixture.test.ts', source);
+    sourceFile = parseSync('fixture.test.ts', source).program;
     parsedFixtureCache.set(source, sourceFile);
   }
   return sourceFile;
+}
+
+function forEachTypeScriptChild(node: Node, callback: (child: Node) => void): void {
+  const properties = node as unknown as Record<string, unknown>;
+
+  for (const key of visitorKeys[node.type] ?? []) {
+    const children = properties[key];
+    if (Array.isArray(children)) {
+      for (const child of children) {
+        if (child) {
+          callback(child as Node);
+        }
+      }
+    } else if (children) {
+      callback(children as Node);
+    }
+  }
 }
 
 function toPosixRelativePath(file: string) {
@@ -431,7 +448,8 @@ function hasSleepPromise(source: string) {
     if (executor.params.length === 0 || !executor.body) {
       return false;
     }
-    const first = executor.params[0];
+    const parameter = executor.params[0];
+    const first = parameter.type === 'AssignmentPattern' ? parameter.left : parameter;
     if (first.type !== 'Identifier') {
       return false;
     }
@@ -472,10 +490,10 @@ function hasSleepPromise(source: string) {
   return found;
 }
 
-function findModuleMockFactories(sourceFile: Program): Map<string, Node> {
+function findModuleMockFactories(statements: Node[]): Map<string, Node> {
   const factories = new Map<string, Node>();
 
-  for (const stmt of sourceFile.body) {
+  for (const stmt of statements) {
     if (stmt.type === 'VariableDeclaration') {
       for (const decl of stmt.declarations) {
         if (
@@ -530,12 +548,15 @@ function hasModuleScopePersistentMockWithoutReset(source: string) {
   }
 
   const sourceFile = parseFixture(source);
-  const factories = findModuleMockFactories(sourceFile);
-  return sourceFile.body.some((statement) => hasPersistentModuleScopeSetter(statement, factories));
-}
-
-function isProcessIdentifier(node: Node): node is IdentifierReference {
-  return node.type === 'Identifier' && node.name === 'process';
+  const statements = sourceFile.body.map((statement) =>
+    (statement.type === 'ExportNamedDeclaration' ||
+      statement.type === 'ExportDefaultDeclaration') &&
+    statement.declaration
+      ? statement.declaration
+      : statement,
+  );
+  const factories = findModuleMockFactories(statements);
+  return statements.some((statement) => hasPersistentModuleScopeSetter(statement, factories));
 }
 
 function isEnvStringLiteral(node: Node): boolean {
@@ -550,7 +571,8 @@ function isEnvStringLiteral(node: Node): boolean {
 function isProcessEnvExpression(node: Node): node is MemberExpression {
   return (
     node.type === 'MemberExpression' &&
-    isProcessIdentifier(node.object) &&
+    node.object.type === 'Identifier' &&
+    node.object.name === 'process' &&
     ((!node.computed && node.property.type === 'Identifier' && node.property.name === 'env') ||
       (node.computed && isEnvStringLiteral(node.property)))
   );
@@ -794,7 +816,7 @@ function hasTestApiBase(expression: Expression): boolean {
 }
 
 function findTestControlUsages(file: string, source: string): TestControlUsage[] {
-  const sourceFile = parseTypeScriptSource(file, source);
+  const sourceFile = parseSync(file, source).program;
   const sourceLines = source.split(/\r?\n/);
   const usages: TestControlUsage[] = [];
 
@@ -1106,6 +1128,7 @@ describe('root test hygiene', () => {
     'await new Promise((r) => setTimeout(r, 250));',
     'await new Promise(function (resolve) { setTimeout(resolve, 1000); });',
     'await new Promise((resolve) => { setTimeout(resolve, 50); });',
+    'await new Promise((resolve = fallback) => setTimeout(resolve, 100));',
     'await new Pro\\u006dise((resolve) => setTi\\u006deout(resolve, 100));',
   ])('detects setTimeout-based sleep waits in %s', (source) => {
     expect(hasSleepPromise(source)).toBe(true);
@@ -1162,6 +1185,7 @@ describe('root test hygiene', () => {
       ].join('\n'),
     ],
     ['const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
+    ['export const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
     ['vi.mocked(client).mockResolvedValue({ ok: true });'],
     // Static blocks execute when the class declaration is evaluated (module
     // load), so persistent setters inside them DO leak across tests.
@@ -1185,7 +1209,21 @@ describe('root test hygiene', () => {
     ],
     [
       [
+        "export const factory = () => ({ fn: vi.fn().mockReturnValue('default') });",
+        "vi.mock('foo', factory);",
+      ].join('\n'),
+    ],
+    [
+      [
         'function makeMockModule() {',
+        "  return { fn: vi.fn().mockReturnValue('default') };",
+        '}',
+        "vi.mock('foo', makeMockModule);",
+      ].join('\n'),
+    ],
+    [
+      [
+        'export function makeMockModule() {',
         "  return { fn: vi.fn().mockReturnValue('default') };",
         '}',
         "vi.mock('foo', makeMockModule);",
