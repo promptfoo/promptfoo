@@ -19,6 +19,9 @@ vi.mock('url', async (importOriginal) => {
       if (fileUrl.startsWith('file://./')) {
         return `\\\\.\\${fileUrl.slice('file://'.length).replaceAll('/', '\\\\')}`;
       }
+      if (fileUrl === 'file://fileserver/share/sample.pdf') {
+        return path.join(os.tmpdir(), 'promptfoo-unc-fixture.pdf');
+      }
       return actual.fileURLToPath(value);
     },
   };
@@ -260,7 +263,7 @@ describe('HttpProvider structured multipart requests', () => {
     });
   });
 
-  it('resolves relative file URLs when the platform accepts their host as a Windows path', async () => {
+  it('resolves a relative file URL from the config directory on Windows', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
     fs.mkdirSync(path.join(tempDir, 'fixtures'));
@@ -305,6 +308,41 @@ describe('HttpProvider structured multipart requests', () => {
       });
     } finally {
       cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('preserves host-based file URLs for UNC paths', async () => {
+    const uncFixture = path.join(os.tmpdir(), 'promptfoo-unc-fixture.pdf');
+    fs.writeFileSync(uncFixture, 'UNC fixture contents');
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: 'file://fileserver/share/sample.pdf' },
+              },
+              { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize UNC fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'promptfoo-unc-fixture.pdf',
+        sizeBytes: Buffer.byteLength('UNC fixture contents'),
+      });
+    } finally {
+      fs.rmSync(uncFixture, { force: true });
     }
   });
 
