@@ -267,7 +267,7 @@ describe('HttpProvider structured multipart requests', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
     fs.mkdirSync(path.join(tempDir, 'fixtures'));
-    fs.writeFileSync(path.join(tempDir, 'fixtures', 'sample.pdf'), 'sample pdf contents');
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'my file.pdf'), 'sample pdf contents');
 
     const previousBasePath = cliState.basePath;
     cliState.basePath = tempDir;
@@ -285,7 +285,7 @@ describe('HttpProvider structured multipart requests', () => {
                 name: 'files',
                 source: {
                   type: 'path',
-                  path: 'file://./fixtures/sample.pdf',
+                  path: 'file://./fixtures/my%20file.pdf',
                 },
               },
               {
@@ -302,7 +302,7 @@ describe('HttpProvider structured multipart requests', () => {
       await provider.callApi('Summarize local fixture');
 
       expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
-        filename: 'sample.pdf',
+        filename: 'my file.pdf',
         contentType: 'application/pdf',
         sizeBytes: Buffer.byteLength('sample pdf contents'),
       });

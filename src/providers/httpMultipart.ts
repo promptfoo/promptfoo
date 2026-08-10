@@ -165,7 +165,11 @@ function normalizeFilePath(filePath: string): string {
   // shorthand. On Windows, fileURLToPath treats the first path segment as a
   // UNC host instead, producing paths such as `\\.\\path.ext`.
   if (/^(?:\.{1,2})(?:[\\/]|$)/.test(filePathWithoutScheme)) {
-    return filePathWithoutScheme;
+    try {
+      return decodeURIComponent(filePathWithoutScheme);
+    } catch {
+      return filePathWithoutScheme;
+    }
   }
 
   try {
