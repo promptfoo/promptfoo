@@ -159,11 +159,24 @@ function normalizeFilePath(filePath: string): string {
     return filePath;
   }
 
+  const filePathWithoutScheme = filePath.slice('file://'.length);
+
+  // `file://relative/path.ext` is promptfoo's shorthand for a path relative
+  // to the config directory. On Windows, fileURLToPath treats the first path
+  // segment as a UNC host instead, producing paths such as `\\.\\relative\\path.ext`.
+  if (
+    !filePathWithoutScheme.startsWith('/') &&
+    !/^localhost(?:\/|$)/i.test(filePathWithoutScheme) &&
+    !/^[A-Za-z]:[\\/]/.test(filePathWithoutScheme)
+  ) {
+    return filePathWithoutScheme;
+  }
+
   try {
     return fileURLToPath(filePath);
   } catch {
     // Preserve promptfoo's long-standing shorthand: file://relative/path.ext
-    return filePath.slice('file://'.length);
+    return filePathWithoutScheme;
   }
 }
 

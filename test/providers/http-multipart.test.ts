@@ -5,8 +5,24 @@ import { AddressInfo } from 'net';
 import os from 'os';
 import path from 'path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
+
+vi.mock('url', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('url')>();
+
+  return {
+    ...actual,
+    fileURLToPath: (value: string | URL) => {
+      const fileUrl = String(value);
+      if (fileUrl.startsWith('file://./')) {
+        return `\\\\.\\${fileUrl.slice('file://'.length).replaceAll('/', '\\\\')}`;
+      }
+      return actual.fileURLToPath(value);
+    },
+  };
+});
 
 interface MockFileSummary {
   filename: string;
@@ -242,6 +258,54 @@ describe('HttpProvider structured multipart requests', () => {
       filename: 'report-a.txt',
       contentType: 'text/plain',
     });
+  });
+
+  it('resolves relative file URLs when the platform accepts their host as a Windows path', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'sample.pdf'), 'sample pdf contents');
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: {
+                  type: 'path',
+                  path: 'file://./fixtures/sample.pdf',
+                },
+              },
+              {
+                kind: 'field',
+                name: 'documentQuery',
+                value: '{{prompt}}',
+              },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize local fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'sample.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: Buffer.byteLength('sample pdf contents'),
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
