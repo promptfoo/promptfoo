@@ -513,8 +513,12 @@ function findModuleMockFactories(statements: Node[]): Map<string, Node> {
 
 function hasPersistentModuleScopeSetter(statement: Node, factories: Map<string, Node>): boolean {
   if (statement.type === 'ExpressionStatement') {
-    if (isViMockCall(statement.expression)) {
-      const factory = statement.expression.arguments[1];
+    const expression =
+      statement.expression.type === 'ChainExpression'
+        ? statement.expression.expression
+        : statement.expression;
+    if (isViMockCall(expression)) {
+      const factory = expression.arguments[1];
       if (!factory) {
         return false;
       }
@@ -524,7 +528,7 @@ function hasPersistentModuleScopeSetter(statement: Node, factories: Map<string, 
       return evaluatesPersistentMockSetter(resolvedFactory, { enterRootFunction: true });
     }
 
-    return evaluatesPersistentMockSetter(statement.expression);
+    return evaluatesPersistentMockSetter(expression);
   }
 
   if (statement.type === 'VariableDeclaration') {
@@ -1208,6 +1212,8 @@ describe('root test hygiene', () => {
     ['const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
     ['export const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
     ['vi.mocked(client).mockResolvedValue({ ok: true });'],
+    ["vi?.mock('foo', () => ({ fn: vi.fn().mockReturnValue('default') }));"],
+    ["vi.mock?.('foo', () => ({ fn: vi.fn().mockReturnValue('default') }));"],
     // Static blocks execute when the class declaration is evaluated (module
     // load), so persistent setters inside them DO leak across tests.
     [
