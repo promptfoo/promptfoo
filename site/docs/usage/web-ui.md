@@ -20,8 +20,8 @@ npx promptfoo@latest view --id "eval-pmq-2026-08-07T18:45:13"
 ```
 
 Eval IDs equal to `.` or `..`, or containing a literal `%2F` sequence, cannot be opened with
-`view --id` because browsers and routers may normalize or decode them as path separators. Use the
-eval selector in the web viewer for those uncommon stored IDs.
+`view --id` because browsers and routers may normalize or decode them as path separators. They can
+still be exported with `promptfoo export eval` as described below.
 
 Export a stored eval in another supported format without re-running it:
 
