@@ -22,6 +22,9 @@ vi.mock('url', async (importOriginal) => {
       if (fileUrl === 'file://fileserver/share/sample.pdf') {
         return path.join(os.tmpdir(), 'promptfoo-unc-fixture.pdf');
       }
+      if (fileUrl === 'file://fixtures/fallback.pdf') {
+        throw new TypeError('invalid file URL host');
+      }
       return actual.fileURLToPath(value);
     },
   };
@@ -355,6 +358,50 @@ describe('HttpProvider structured multipart requests', () => {
       expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
         filename: 'literal%file.pdf',
         sizeBytes: Buffer.byteLength('literal percent contents'),
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('falls back to config-relative paths when file URL conversion rejects a host', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'fallback.pdf'), 'fallback contents');
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: {
+                  type: 'path',
+                  path: 'file://fixtures/fallback.pdf',
+                },
+              },
+              { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize fallback fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'fallback.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: Buffer.byteLength('fallback contents'),
       });
     } finally {
       cliState.basePath = previousBasePath;
