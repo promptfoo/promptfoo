@@ -19,9 +19,9 @@ Open a specific stored eval directly:
 npx promptfoo@latest view --id "eval-pmq-2026-08-07T18:45:13"
 ```
 
-Eval IDs equal to `.` or `..`, or containing a literal `%2F` sequence, cannot be opened with
-`view --id` because browsers and routers may normalize or decode them as path separators. They can
-still be exported with `promptfoo export eval` as described below.
+Eval IDs equal to `.` or `..`, or containing a literal percent-encoded sequence such as `%2F` or
+`%3F`, cannot be opened with `view --id` because browsers and routers may normalize or decode them
+into different IDs. They can still be exported with `promptfoo export eval` as described below.
 
 Export a stored eval in another supported format without re-running it:
 
