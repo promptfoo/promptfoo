@@ -116,6 +116,7 @@
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
+    "undici": "$undici",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.1",
@@ -325,7 +326,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.115.0",
-    "@apidevtools/json-schema-ref-parser": "^15.3.1",
+    "@apidevtools/json-schema-ref-parser": "^15.5.1",
     "@hono/node-server": "2.0.12",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",

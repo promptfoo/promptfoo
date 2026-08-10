@@ -616,6 +616,18 @@ describe('package manifests', () => {
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
   });
 
+  it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
+    const packageJson = readPackageJson<{
+      dependencies?: Record<string, string>;
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
+
+    expect(parserRange, 'the JSON Schema ref parser must remain a runtime dependency').toBeDefined();
+    expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.overrides?.undici).toBe('$undici');
+  });
+
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
     // GHSA-4cwx-7wf7-3272 and four sibling advisories were fixed in undici 7.29.0.
     // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
