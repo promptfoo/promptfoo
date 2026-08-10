@@ -16,6 +16,7 @@ const RELEASE_PLEASE_ACTION = 'googleapis/release-please-action';
 
 type ReleasePleaseConfig = {
   'commit-batch-size'?: unknown;
+  'commit-search-depth'?: unknown;
   'last-release-sha'?: unknown;
 };
 
@@ -71,7 +72,15 @@ describe('release-please automation', () => {
     expect(batchSize).toBe(MAX_COMMIT_BATCH_SIZE);
   });
 
+  it('pins the release history search depth', () => {
+    const searchDepth = readReleasePleaseConfig()['commit-search-depth'];
+    assert(typeof searchDepth === 'number', 'commit-search-depth must be a number');
+    expect(searchDepth).toBe(MAX_RELEASE_HISTORY_SEARCH_COMMITS);
+  });
+
   it('keeps the drift guard below the release history search limit', () => {
+    const searchDepth = readReleasePleaseConfig()['commit-search-depth'];
+    assert(typeof searchDepth === 'number', 'commit-search-depth must be a number');
     const workflow = yaml.load(
       readRepoFile('.github/workflows/release-please-sha-drift.yml'),
     ) as ReleaseDriftWorkflow;
@@ -80,9 +89,7 @@ describe('release-please automation', () => {
     );
     assert(driftStep, 'release drift workflow must include the drift-check step');
 
-    expect(Number(driftStep.env?.MAX_DRIFT)).toBe(
-      MAX_RELEASE_HISTORY_SEARCH_COMMITS - MIN_RELEASE_HISTORY_HEADROOM,
-    );
+    expect(Number(driftStep.env?.MAX_DRIFT)).toBe(searchDepth - MIN_RELEASE_HISTORY_HEADROOM);
   });
 
   it('pins the release-please job action to a SHA on the v5+ family', () => {
