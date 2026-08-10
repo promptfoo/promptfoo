@@ -43,19 +43,22 @@ describe('viewCommand ambiguous eval IDs', () => {
     expect(startServer).not.toHaveBeenCalled();
   });
 
-  it.each(['archive%2F2026', 'archive%2f2026', 'archive%3F2026', 'archive%232026', 'archive%252026'])(
-    'reports the ambiguous percent-encoded eval ID %s cleanly',
-    async (evalId) => {
-      viewCommand(program);
-      const viewCmd = program.commands[0];
+  it.each([
+    'archive%2F2026',
+    'archive%2f2026',
+    'archive%3F2026',
+    'archive%232026',
+    'archive%252026',
+  ])('reports the ambiguous percent-encoded eval ID %s cleanly', async (evalId) => {
+    viewCommand(program);
+    const viewCmd = program.commands[0];
 
-      await expect(viewCmd.parseAsync(['node', 'test', '--id', evalId])).resolves.toBeDefined();
+    await expect(viewCmd.parseAsync(['node', 'test', '--id', evalId])).resolves.toBeDefined();
 
-      expect(logger.error).toHaveBeenCalledWith(
-        'Eval IDs containing literal percent-encoded sequences cannot be opened with --id because routers may decode them into different IDs.',
-      );
-      expect(process.exitCode).toBe(1);
-      expect(startServer).not.toHaveBeenCalled();
-    },
-  );
+    expect(logger.error).toHaveBeenCalledWith(
+      'Eval IDs containing literal percent-encoded sequences cannot be opened with --id because routers may decode them into different IDs.',
+    );
+    expect(process.exitCode).toBe(1);
+    expect(startServer).not.toHaveBeenCalled();
+  });
 });
