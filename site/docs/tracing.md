@@ -13,7 +13,7 @@ Use traces to check tool calls and execution paths, give graders more context, g
 
 ## Overview
 
-Promptfoo can receive traces directly from your application or pull them from a tracing service you already use. Either way, those traces become part of the eval, not just something to inspect afterward. The built-in receiver works without additional infrastructure during development and testing.
+Promptfoo can receive traces directly from your application or pull them from a tracing service you already use. Those traces give your evals more context about what your application actually did. The built-in receiver works without additional infrastructure during development and testing.
 
 Tracing provides visibility into:
 
