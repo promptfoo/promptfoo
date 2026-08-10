@@ -116,7 +116,6 @@
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
-    "undici": "$undici",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
     "esbuild": "0.28.1",

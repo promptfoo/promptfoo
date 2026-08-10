@@ -19,6 +19,7 @@ function readPackageJson<T>(relativePath: string): T {
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.3';
+const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
   '@swc/core',
@@ -617,22 +618,26 @@ describe('package manifests', () => {
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
-    const packageJson = readPackageJson<{
-      dependencies?: Record<string, string>;
-      overrides?: Record<string, string | Record<string, string>>;
-    }>('package.json');
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
     const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
+    const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
+    const parserTransportRange = parser?.dependencies?.undici;
 
     expect(
       parserRange,
       'the JSON Schema ref parser must remain a runtime dependency',
     ).toBeDefined();
     expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
-    expect(packageJson.overrides?.undici).toBe('$undici');
+    expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
-    // GHSA-4cwx-7wf7-3272 and four sibling advisories were fixed in undici 7.29.0.
+    // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0, and 8.9.0.
+    // GHSA-4cwx-7wf7-3272 affects only 7.x and 8.x, not the patched 6.x line.
     // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
@@ -681,9 +686,9 @@ describe('package manifests', () => {
           `${lockfile}:${packagePath} must have a version`,
         ).toBeDefined();
         expect(
-          minVersion(installation.version as string)?.compare(PATCHED_UNDICI),
+          satisfies(installation.version as string, PATCHED_UNDICI_RANGE),
           `${lockfile}:${packagePath} resolves vulnerable undici ${installation.version}`,
-        ).toBeGreaterThanOrEqual(0);
+        ).toBe(true);
       }
 
       const resolved = packageLock.packages['node_modules/undici']?.version;

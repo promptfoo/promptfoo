@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 
+import { satisfies } from 'semver';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -233,6 +235,32 @@ function assertInstalledWebApp(installedPackageDir: string): void {
     missingAssets,
     [],
     `Missing packaged web app assets: ${missingAssets.join(', ')}`,
+  );
+}
+
+function assertInstalledRefParserTransport(installedPackageDir: string): void {
+  const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
+  const parserManifestPath = packageRequire.resolve(
+    '@apidevtools/json-schema-ref-parser/package.json',
+  );
+  const parserRequire = createRequire(parserManifestPath);
+  const parserManifest = JSON.parse(fs.readFileSync(parserManifestPath, 'utf8')) as {
+    dependencies?: Record<string, string>;
+  };
+  const transportManifestPath = parserRequire.resolve('undici/package.json');
+  const transportManifest = JSON.parse(fs.readFileSync(transportManifestPath, 'utf8')) as {
+    version: string;
+  };
+  const transportRange = parserManifest.dependencies?.undici;
+
+  assert(transportRange, 'Installed ref parser must declare its HTTP transport');
+  assert(
+    satisfies(transportManifest.version, transportRange),
+    `Installed ref parser resolved incompatible undici ${transportManifest.version}`,
+  );
+  assert(
+    satisfies(transportManifest.version, '^6.28.0 || ^7.29.0 || >=8.9.0'),
+    `Installed ref parser resolved vulnerable undici ${transportManifest.version}`,
   );
 }
 
@@ -617,6 +645,7 @@ async function main(): Promise<void> {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    assertInstalledRefParserTransport(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
