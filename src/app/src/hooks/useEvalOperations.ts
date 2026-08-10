@@ -43,7 +43,7 @@ export function useEvalOperations() {
   );
 
   const fetchTraces = useCallback(async (evalId: string, signal: AbortSignal): Promise<Trace[]> => {
-    const response = await callApi(`/traces/evaluation/${evalId}`, {
+    const response = await callApi(`/traces/evaluation/${encodeURIComponent(evalId)}`, {
       signal,
     });
 
