@@ -311,6 +311,56 @@ describe('HttpProvider structured multipart requests', () => {
     }
   });
 
+  it('preserves relative file URLs with malformed escape sequences', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(
+      path.join(tempDir, 'fixtures', 'literal%file.pdf'),
+      'literal percent contents',
+    );
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: {
+                  type: 'path',
+                  path: 'file://./fixtures/literal%file.pdf',
+                },
+              },
+              {
+                kind: 'field',
+                name: 'documentQuery',
+                value: '{{prompt}}',
+              },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize literal percent fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'literal%file.pdf',
+        sizeBytes: Buffer.byteLength('literal percent contents'),
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
   it('preserves host-based file URLs for UNC paths', async () => {
     const uncFixture = path.join(os.tmpdir(), 'promptfoo-unc-fixture.pdf');
     fs.writeFileSync(uncFixture, 'UNC fixture contents');
