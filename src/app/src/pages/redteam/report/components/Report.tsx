@@ -88,7 +88,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const resp = await callApi(`/results/${id}`, {
+      const resp = await callApi(`/results/${encodeURIComponent(id)}`, {
         cache: 'no-store',
       });
       const body = (await resp.json()) as SharedResults;
