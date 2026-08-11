@@ -38,6 +38,9 @@ type ArtifactEvalOutput = {
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const drizzleDir = path.join(ROOT, 'drizzle');
+// The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
+// with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
+const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
@@ -238,28 +241,24 @@ function assertInstalledWebApp(installedPackageDir: string): void {
   );
 }
 
+/**
+ * The ref parser fetches remote `$ref`s through its own nested undici, and consumers install
+ * from the published tarball rather than this repo's lockfile — so the version they actually
+ * resolve is only observable here. Asserting it against the parser's declared range would be a
+ * tautology (npm cannot install outside it); the patched floor per undici major is the check
+ * that can fail.
+ */
 function assertInstalledRefParserTransport(installedPackageDir: string): void {
   const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
-  const parserManifestPath = packageRequire.resolve(
-    '@apidevtools/json-schema-ref-parser/package.json',
+  const parserRequire = createRequire(
+    packageRequire.resolve('@apidevtools/json-schema-ref-parser/package.json'),
   );
-  const parserRequire = createRequire(parserManifestPath);
-  const parserManifest = JSON.parse(fs.readFileSync(parserManifestPath, 'utf8')) as {
-    dependencies?: Record<string, string>;
-  };
-  const transportManifestPath = parserRequire.resolve('undici/package.json');
-  const transportManifest = JSON.parse(fs.readFileSync(transportManifestPath, 'utf8')) as {
-    version: string;
-  };
-  const transportRange = parserManifest.dependencies?.undici;
+  const transportManifest = JSON.parse(
+    fs.readFileSync(parserRequire.resolve('undici/package.json'), 'utf8'),
+  ) as { version: string };
 
-  assert(transportRange, 'Installed ref parser must declare its HTTP transport');
   assert(
-    satisfies(transportManifest.version, transportRange),
-    `Installed ref parser resolved incompatible undici ${transportManifest.version}`,
-  );
-  assert(
-    satisfies(transportManifest.version, '^6.28.0 || ^7.29.0 || >=8.9.0'),
+    satisfies(transportManifest.version, PATCHED_UNDICI_RANGE),
     `Installed ref parser resolved vulnerable undici ${transportManifest.version}`,
   );
 }

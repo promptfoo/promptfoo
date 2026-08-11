@@ -79,5 +79,36 @@ describe('dereferenceConfig remote references', () => {
     expect(pinnedAddress).toEqual({ address: '93.184.216.34', family: 4 });
     expect(lookup).toHaveBeenCalledOnce();
     expect(destroy).toHaveBeenCalledOnce();
+
+    // The TOCTOU that 15.5.1 closes: the pinned lookup must serve only the hostname that was
+    // validated, so a redirect or rebind to another host cannot reuse the approved connection.
+    await expect(
+      new Promise((resolve, reject) => {
+        pinnedLookup?.('attacker.example.com', { family: 4 }, (error, address, family) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve({ address, family });
+          }
+        });
+      }),
+    ).rejects.toThrow();
+    expect(lookup).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a remote reference whose hostname resolves to a private address', async () => {
+    vi.spyOn(dns, 'lookup').mockResolvedValue([{ address: '169.254.169.254', family: 4 }] as never);
+    syncBuiltinESMExports();
+
+    const fetch = vi.spyOn(parserTransport, 'fetch');
+
+    await expect(
+      dereferenceConfig({
+        prompts: [{ $ref: 'https://metadata.example.com/prompt.json#/prompt' }],
+        providers: ['echo'],
+        tests: [],
+      } as unknown as UnifiedConfig),
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
