@@ -573,16 +573,22 @@ describe('package manifests', () => {
       | Record<string, string>
       | undefined;
     const parserVersion = chevrotainOverride?.['.'];
-    // chevrotain@11.2.0 declares each grammar sub-package at exactly the parser version, so the
-    // overrides have to move as one set. @chevrotain/cst-dts-gen is versioned independently
-    // upstream and is deliberately excluded from the pinned family.
+    // chevrotain@X declares every @chevrotain/* sub-package at exactly X and all six reach npm
+    // within about a minute of each other, so Renovate must not move any of them alone.
+    // @chevrotain/cst-dts-gen is frozen too but is excluded from the version assertion below: it
+    // is currently overridden to 13.1.0 under chevrotain 11.2.0 (#10345) and gets realigned when
+    // the family moves as a set.
     const pinnedGrammarPackages = [
       '@chevrotain/gast',
       '@chevrotain/types',
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
-    const pinnedParserPackages = ['chevrotain', ...pinnedGrammarPackages];
+    const pinnedParserPackages = [
+      'chevrotain',
+      ...pinnedGrammarPackages,
+      '@chevrotain/cst-dts-gen',
+    ];
 
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
@@ -601,14 +607,6 @@ describe('package manifests', () => {
         `Renovate must not independently update the pinned ${packageName} package`,
       ).toBe(true);
     }
-
-    expect(
-      renovateConfig.packageRules?.some(
-        (rule) =>
-          rule.enabled === false && rule.matchPackageNames?.includes('@chevrotain/cst-dts-gen'),
-      ),
-      'The independently versioned Chevrotain CST generator must remain updateable',
-    ).toBe(false);
   });
 
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
