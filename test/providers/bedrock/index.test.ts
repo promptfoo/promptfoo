@@ -821,6 +821,19 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
     });
 
+    it('keeps manual thinking enabled for an unlisted Claude 5 family on Bedrock invokeModel', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+        'hi',
+        undefined,
+        'us.anthropic.claude-haiku-5',
+      );
+      expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+    });
+
     it('keeps disabled thinking unchanged for Claude Opus 4.8 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',

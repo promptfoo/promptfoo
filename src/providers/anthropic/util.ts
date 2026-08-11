@@ -197,9 +197,11 @@ const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
 // forward-compatible fallback for Claude 5+ family names so providers do not send rejected
-// parameters while waiting for a model-specific capability row.
+// parameters while waiting for a model-specific capability row. Limit the generation token to
+// one or two digits so date-stamped deployment aliases (for example, `claude-prod-20260811`) are
+// not mistaken for future Claude generations.
 const CLAUDE_5_OR_LATER_PATTERN =
-  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:[5-9]|[1-9][0-9]+)(?![a-z0-9])/i;
+  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:[5-9]|[1-9][0-9])(?![a-z0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
@@ -211,6 +213,8 @@ interface ClaudeModelFamily {
   warningName?: string;
   /** Rejects `temperature`/`top_p`/`top_k` at the model level (the API returns 400). */
   samplingParamsDeprecated?: boolean;
+  /** Rejects manual budget thinking (`thinking.type: 'enabled'`) in favor of adaptive thinking. */
+  manualThinkingDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
   /**
@@ -240,6 +244,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     alwaysOnAdaptiveThinking: true,
     regionalPremium: true,
   },
@@ -249,6 +254,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_OPUS_5_PATTERN,
     warningName: 'Claude Opus 5',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
@@ -257,6 +263,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -264,12 +271,14 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_OPUS_48_PATTERN,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     regionalPremium: true,
   },
   {
     match: CLAUDE_OPUS_47_PATTERN,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     regionalPremium: true,
   },
   { match: CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN, regionalPremium: true },
@@ -390,6 +399,11 @@ export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean 
   );
 }
 
+/** True when the model rejects manual budget thinking and requires adaptive thinking instead. */
+export function isManualThinkingDeprecatedClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'manualThinkingDeprecated');
+}
+
 /**
  * Normalize a Claude thinking config for models that deprecate manual
  * budget-based thinking: an `enabled` budget converts to adaptive thinking
@@ -407,7 +421,7 @@ export function normalizeClaudeThinkingConfig<
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
-  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+  if (thinking?.type === 'enabled' && isManualThinkingDeprecatedClaudeModel(modelId)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
   if (

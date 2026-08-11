@@ -2050,6 +2050,7 @@ describe('Anthropic utilities', () => {
         'claude-3-5-sonnet-20241022',
         'claude-opus-4-50',
         'claude-sonnet-5x',
+        'claude-prod-20260811',
         'notclaude-opus-5',
       ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
@@ -2198,7 +2199,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('normalizes thinking configs per model family and effort', () => {
-      // Manual budget thinking converts to adaptive on every sampling-deprecated family,
+      // Manual budget thinking converts to adaptive on families known to reject it,
       // preserving `display`.
       expect(
         normalizeClaudeThinkingConfig(
@@ -2207,6 +2208,16 @@ describe('Anthropic utilities', () => {
           undefined,
         ),
       ).toEqual({ type: 'adaptive', display: 'summarized' });
+
+      // The sampling fallback does not imply adaptive-thinking support. Preserve a user's
+      // explicit budget until a new family has a model-specific capability row.
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-haiku-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'enabled', budget_tokens: 8000 });
 
       // Fable/Mythos reject `disabled` outright, at any effort.
       expect(

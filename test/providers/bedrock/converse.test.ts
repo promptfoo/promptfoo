@@ -2433,6 +2433,36 @@ Third line`;
       );
     });
 
+    it('should keep manual thinking enabled for an unlisted Claude 5 family', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-haiku-5', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 12000,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 12000,
+            },
+          },
+        }),
+      );
+    });
+
     it('should pass through disabled thinking unchanged for Claude Opus 4.8', async () => {
       // Only type: 'enabled' is rewritten to adaptive for deprecated Opus
       // models; a disabled thinking block must be forwarded as-is.

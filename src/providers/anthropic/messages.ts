@@ -32,6 +32,7 @@ import {
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
+  isManualThinkingDeprecatedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -583,7 +584,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     requested: Anthropic.Messages.ThinkingConfigParam | undefined,
     effort: ClaudeEffort | undefined,
     flags: {
-      samplingParamsDeprecated: boolean;
+      manualThinkingDeprecated: boolean;
       alwaysOnAdaptiveThinking: boolean;
       modelWarningName: string;
     },
@@ -602,9 +603,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
      */
     thinkingConsumesTokens: boolean;
   } {
-    const { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
+    const { manualThinkingDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
 
-    if (samplingParamsDeprecated && requested?.type === 'enabled') {
+    if (manualThinkingDeprecated && requested?.type === 'enabled') {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
@@ -717,11 +718,12 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
-    // Newer Claude models are adaptive-only — manual budget-based thinking
-    // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
-    // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
-    // controls reasoning depth on these models.
+    // Some newer Claude models are adaptive-only — manual budget-based thinking
+    // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Keep this
+    // capability separate from the forward-looking sampling-parameter fallback:
+    // a new family may reject sampling controls before its thinking behavior is known.
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const manualThinkingDeprecated = isManualThinkingDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     const {
@@ -732,7 +734,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Provider config wins over a thinking block embedded in the prompt.
       config.thinking ?? thinking,
       config.effort,
-      { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
+      { manualThinkingDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
 
     // Validate and warn about thinking-incompatible params. Skip when the model
