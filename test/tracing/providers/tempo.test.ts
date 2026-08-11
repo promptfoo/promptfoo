@@ -171,6 +171,29 @@ describe('TempoProvider', () => {
     expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 3 malformed spans');
   });
 
+  it('skips malformed batches and scopes while preserving valid siblings', async () => {
+    const validBatch = structuredClone(traceResponse.batches[0]);
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          null,
+          { scopeSpans: {} },
+          {
+            ...validBatch,
+            scopeSpans: [null, { spans: {} }, ...validBatch.scopeSpans],
+          },
+        ],
+      }),
+    );
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+    expect(result?.services).toEqual(['target-service']);
+    expect(logger.warn).toHaveBeenCalledWith('[TempoProvider] Skipped 4 malformed spans');
+  });
+
   it('forwards bearer authentication, tenant headers, and cancellation', async () => {
     const controller = new AbortController();
     const provider = new TempoProvider({
@@ -239,6 +262,21 @@ describe('TempoProvider', () => {
       new Response('{}', { headers: { 'content-length': '10485761' } }),
     );
     await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+  });
+
+  it('cancels oversized streamed responses before buffering their contents', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(10 * 1024 * 1024 + 1));
+      },
+      cancel,
+    });
+    mockedFetch.mockResolvedValueOnce(new Response(body, { headers: { 'content-length': '1' } }));
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('checks readiness through the proxy-aware client without following redirects', async () => {

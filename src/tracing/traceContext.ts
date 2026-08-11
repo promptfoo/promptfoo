@@ -311,7 +311,7 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
   while (pendingValues.length > 0) {
     const { original, sanitized } = pendingValues.pop()!;
     if (typeof original !== 'object') {
-      if (original !== undefined && original !== null && sanitized === '[REDACTED]') {
+      if (original !== undefined && sanitized === '[REDACTED]') {
         const value = String(original);
         if (value.length > 0) {
           redactedValues.add(value);

@@ -235,6 +235,31 @@ async function releaseResponse(response: Response): Promise<void> {
   }
 }
 
+async function readLimitedResponse(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return '';
+  }
+
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let body = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return body + decoder.decode();
+    }
+
+    byteLength += value.byteLength;
+    if (byteLength > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+    body += decoder.decode(value, { stream: true });
+  }
+}
+
 export class TempoProvider implements TraceProvider {
   readonly id = 'tempo';
   private readonly baseUrl: string;
@@ -310,9 +335,17 @@ export class TempoProvider implements TraceProvider {
     let malformedSpans = 0;
 
     for (const batch of data.batches ?? []) {
+      if (!batch || !Array.isArray(batch.scopeSpans)) {
+        malformedSpans++;
+        continue;
+      }
       const resourceAttributes = attributesToRecord(batch.resource?.attributes);
-      for (const scopeSpan of batch.scopeSpans ?? []) {
-        for (const span of scopeSpan.spans ?? []) {
+      for (const scopeSpan of batch.scopeSpans) {
+        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+          malformedSpans++;
+          continue;
+        }
+        for (const span of scopeSpan.spans) {
           if (spans.length >= MAX_SPANS) {
             return spans;
           }
@@ -376,18 +409,16 @@ export class TempoProvider implements TraceProvider {
       await releaseResponse(response);
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
-    const body = await response.text();
-    if (Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES) {
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
-    }
+    const body = await readLimitedResponse(response);
     const data = JSON.parse(body) as TempoTraceResponse;
     if (!Array.isArray(data.batches)) {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
+    const spans = this.transformSpans(data, traceId);
     const services = new Set<string>();
-    for (const batch of data.batches) {
-      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+    for (const span of spans) {
+      const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
       }
@@ -395,7 +426,7 @@ export class TempoProvider implements TraceProvider {
 
     return {
       traceId,
-      spans: this.transformSpans(data, traceId),
+      spans,
       services: [...services],
       fetchedAt: Date.now(),
     };
