@@ -97,6 +97,27 @@ assert:
       };
 ```
 
+## Timeouts
+
+Set `evaluateOptions.timeoutMs` to bound configured JavaScript assertions. Inline string
+assertions and `file://` or `package:` assertion modules run in an isolated worker when a
+timeout is configured, so promptfoo can interrupt synchronous code that would otherwise block
+the eval.
+
+```yaml
+evaluateOptions:
+  timeoutMs: 5000
+
+tests:
+  - assert:
+      - type: javascript
+        value: file://assertions/check-output.js
+```
+
+When using promptfoo through the Node API, function-valued assertions keep access to their
+surrounding JavaScript closures and run in-process. Use an inline string, `file://`, or
+`package:` assertion when its execution must be interruptible by `timeoutMs`.
+
 ## Using test context
 
 The `context` variable contains information about the test case and execution environment:
