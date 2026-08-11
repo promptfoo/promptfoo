@@ -24,7 +24,7 @@ import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../ut
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
-import { isBasicRefusal } from '../../util';
+import { isBacktrackableRefusal } from '../../util';
 import {
   externalizeResponseForRedteamHistory,
   getTargetResponse,
@@ -582,8 +582,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           responseTranscript: responseText,
         });
 
-        // Check if response is a refusal
-        if (isBasicRefusal(responseText)) {
+        if (isBacktrackableRefusal(responseText)) {
           logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
           if (backtrackCount < this.maxBacktracks) {
             backtrackCount++;
