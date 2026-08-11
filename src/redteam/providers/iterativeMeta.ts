@@ -448,7 +448,7 @@ export async function runMetaAgentRedteam({
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
     let computedTraceSummary: string | undefined;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 

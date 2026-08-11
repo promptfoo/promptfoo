@@ -602,7 +602,7 @@ export default class GoatProvider implements ApiProvider {
 
         let traceContext: TraceContextData | null = null;
         let computedTraceSummary: string | undefined;
-        if (shouldFetchTrace) {
+        if (shouldFetchTrace && !targetResponse.cached) {
           const traceparent = context?.traceparent ?? undefined;
           const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
