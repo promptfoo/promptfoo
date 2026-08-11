@@ -388,6 +388,33 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it('treats an empty usage object as unreported rather than zero', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+        // A completed, billed generation that reports no counts. Object truthiness would
+        // turn this into 0 tokens and $0 -- a paid video reported as free.
+        usage: {},
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('Animate the reference');
+
+    expect(result.tokenUsage?.prompt).toBeUndefined();
+    expect(result.tokenUsage?.completion).toBeUndefined();
+    expect(result.cost).toBeUndefined();
+  });
+
   it('returns only the latest Omni turn and stores authenticated URI-delivered video', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {

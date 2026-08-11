@@ -729,13 +729,23 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
 
     const usage = data.usage;
-    const promptTokens = usage
-      ? (usage.total_input_tokens ?? 0) + (usage.total_tool_use_tokens ?? 0)
-      : undefined;
-    const outputTokens = usage ? (usage.total_output_tokens ?? 0) : undefined;
-    const thoughtTokens = usage
-      ? (usage.total_reasoning_tokens ?? usage.total_thought_tokens ?? 0)
-      : undefined;
+    // Presence is per field, not per object: an empty or partial `usage` is not a report of
+    // zero. Treating `{}` as truthy turned a billed video generation into 0 tokens and $0.
+    const promptTokens =
+      usage?.total_input_tokens !== undefined || usage?.total_tool_use_tokens !== undefined
+        ? (usage.total_input_tokens ?? 0) + (usage.total_tool_use_tokens ?? 0)
+        : undefined;
+    const outputTokens = usage?.total_output_tokens;
+    const thoughtTokens =
+      usage?.total_reasoning_tokens !== undefined || usage?.total_thought_tokens !== undefined
+        ? (usage.total_reasoning_tokens ?? usage.total_thought_tokens ?? 0)
+        : undefined;
+    const hasReportedUsage =
+      promptTokens !== undefined ||
+      outputTokens !== undefined ||
+      thoughtTokens !== undefined ||
+      usage?.total_tokens !== undefined ||
+      usage?.total_cached_tokens !== undefined;
     const audioInputTokens =
       getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
       getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
@@ -776,14 +786,14 @@ export class GoogleInteractionsProvider implements ApiProvider {
     return {
       output: text || `[Video: ${sanitizedPrompt}](${videoUrl})`,
       cached,
-      tokenUsage: usage
+      tokenUsage: hasReportedUsage
         ? {
             prompt: promptTokens,
             completion: outputTokens,
             total:
-              usage.total_tokens ??
+              usage?.total_tokens ??
               (promptTokens ?? 0) + (outputTokens ?? 0) + (thoughtTokens ?? 0),
-            cached: usage.total_cached_tokens ?? 0,
+            cached: usage?.total_cached_tokens ?? 0,
             numRequests: 1,
             ...((thoughtTokens ?? 0) > 0
               ? { completionDetails: { reasoning: thoughtTokens } }
@@ -791,7 +801,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           }
         : { numRequests: 1 },
       cost:
-        cached || !usage
+        cached || !hasReportedUsage
           ? undefined
           : calculateGoogleCost(
               this.modelName,
