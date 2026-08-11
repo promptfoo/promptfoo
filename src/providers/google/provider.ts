@@ -362,6 +362,11 @@ export class GoogleProvider extends GoogleGenericProvider {
       service_tier: passthroughServiceTier,
       serviceTier: camelCasePassthroughServiceTier,
       tools: passthroughTools,
+      // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
+      // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
+      // carry mode ANY with the declarations already stripped.
+      toolConfig: _passthroughToolConfig,
+      tool_config: _passthroughToolConfigSnakeCase,
       ...passthrough
     } = config.passthrough || {};
     const serviceTier = normalizeGoogleServiceTier(

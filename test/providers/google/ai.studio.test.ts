@@ -1973,6 +1973,44 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toEqual([{ codeExecution: {} }]);
     });
 
+    it('does not let a passthrough toolConfig override a resolved NONE mode', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ functionDeclarations: [{ name: 'get_weather' }] }],
+          // A conflicting passthrough mode. promptfoo has already stripped the function
+          // declarations for NONE, so shipping ANY would ask Gemini to call a function it
+          // can no longer see.
+          passthrough: { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
+        } as any,
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    });
+
     it('merges a single-object passthrough tool with config tools instead of dropping them', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return { renderString: vi.fn((str) => str) } as any;

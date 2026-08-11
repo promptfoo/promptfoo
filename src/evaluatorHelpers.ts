@@ -347,7 +347,7 @@ export async function renderPrompt(
             }
 
             vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else if (fileType === 'audio' && fileExtension === 'm4a') {
+          } else if (fileType === 'audio' && fileExtension?.toLowerCase() === 'm4a') {
             // Generic ISO-BMFF brands such as `isom` and `mp42` do not reveal
             // whether a file contains audio or video. Preserve the known M4A
             // provenance so providers receive the correct modality.
