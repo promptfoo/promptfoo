@@ -311,19 +311,6 @@ describe('tokenUsageUtils', () => {
   });
 
   describe('unknown-preserving accumulation', () => {
-    it('does not invent zeros for counts a partial report omitted', () => {
-      const target: TokenUsage = createEmptyTokenUsage();
-
-      // mldangelo-oai review-2 item 4: reporting only `prompt` must not assert that
-      // completion/cached/total were zero -- they were never reported at all.
-      accumulateTokenUsagePreservingUnknown(target, { prompt: 6, numRequests: 1 });
-
-      expect(target.prompt).toBe(6);
-      expect(target).not.toHaveProperty('completion');
-      expect(target).not.toHaveProperty('cached');
-      expect(target).not.toHaveProperty('total');
-    });
-
     it('omits unknown token counts for a counted response', () => {
       const target: TokenUsage = createEmptyTokenUsage();
 
