@@ -337,10 +337,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const apiHost = this.getApiHost();
-    const normalizedApiHost = apiHost.toLowerCase();
-    const allowGenerationFallback =
-      normalizedApiHost === 'aiplatform.googleapis.com' ||
-      normalizedApiHost.endsWith('-aiplatform.googleapis.com');
+    const apiHostUrl = `https://${apiHost}`;
+    const normalizedApiHostname = URL.canParse(apiHostUrl) ? new URL(apiHostUrl).hostname : '';
+    const allowGenerationFallback = /^(?:[a-z0-9-]+-)?aiplatform\.googleapis\.com$/i.test(
+      normalizedApiHostname,
+    );
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
       allowGenerationFallback,
     });

@@ -2585,6 +2585,11 @@ describe('VertexChatProvider.callClaudeApi', () => {
       apiHost: undefined,
       env: { VERTEX_API_HOST: 'gateway.example.com' },
     },
+    {
+      source: 'Google API hostname lookalike',
+      apiHost: 'aiplatform.googleapis.com.evil.example',
+      env: undefined,
+    },
   ])('preserves numbered Claude aliases behind custom Vertex $source', async ({ apiHost, env }) => {
     const model = 'claude-prod-5';
     provider = new VertexChatProvider(model, {
@@ -2613,7 +2618,7 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
     expect(mockRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        url: expect.stringContaining('https://gateway.example.com/'),
+        url: expect.stringContaining(`https://${apiHost ?? env?.VERTEX_API_HOST}/`),
         data: expect.objectContaining({
           temperature: 0.5,
           top_p: 0.9,
@@ -2624,17 +2629,40 @@ describe('VertexChatProvider.callClaudeApi', () => {
     );
   });
 
-  it.each(['us-central1', 'global'])(
-    'detects future Claude generations on official %s Vertex endpoints',
-    async (region) => {
+  it.each([
+    { name: 'regional', region: 'us-central1', apiHost: undefined, env: undefined },
+    { name: 'global', region: 'global', apiHost: undefined, env: undefined },
+    {
+      name: 'regional with an explicit port',
+      region: 'us-central1',
+      apiHost: 'us-central1-aiplatform.googleapis.com:443',
+      env: undefined,
+    },
+    {
+      name: 'global with an explicit port',
+      region: 'global',
+      apiHost: 'aiplatform.googleapis.com:443',
+      env: undefined,
+    },
+    {
+      name: 'regional with an environment-configured port',
+      region: 'us-central1',
+      apiHost: undefined,
+      env: { VERTEX_API_HOST: 'us-central1-aiplatform.googleapis.com:443' },
+    },
+  ])(
+    'detects future Claude generations on official $name Vertex endpoints',
+    async ({ region, apiHost, env }) => {
       const model = 'claude-haiku-5';
       provider = new VertexChatProvider(model, {
         config: {
           region,
+          ...(apiHost ? { apiHost } : {}),
           max_tokens: 10000,
           temperature: 0.5,
           thinking: { type: 'enabled', budget_tokens: 5000 },
         },
+        env,
       });
       const mockRequest = mockVertexRequest({
         id: 'test-id',
