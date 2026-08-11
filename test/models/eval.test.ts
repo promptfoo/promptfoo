@@ -1278,6 +1278,31 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('drops malformed trace-provider headers when exporting older evaluations', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            headers: {
+              'X-Null': null,
+              'X-Number': 42,
+              'X-Object': { malformed: true },
+              'X-Array': ['malformed'],
+              Authorization: 'Bearer legacy-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            } as unknown as Record<string, string>,
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(JSON.stringify(results.config)).not.toContain('legacy-secret');
+    });
+
     it('removes trace-provider credentials from exported results without mutating live config', async () => {
       const evaluation = new Eval({
         tracing: {

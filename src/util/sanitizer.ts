@@ -366,6 +366,9 @@ export function sanitizeTracingConfigForPersistence(
   const sanitizedHeaders = provider.headers
     ? Object.fromEntries(
         Object.entries(provider.headers).flatMap(([name, value]) => {
+          if (typeof value !== 'string') {
+            return [];
+          }
           if (isSafeTracingCredentialTemplate(value) || !isTracingCredentialHeader(name, value)) {
             return [[name, value]];
           }
