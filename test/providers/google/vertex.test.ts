@@ -920,80 +920,80 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response.cost).toBeCloseTo(expectedCost, 12);
   });
 
-  it.each([
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite',
-  ])('should omit deprecated Vertex sampling parameters for %s', async (modelId) => {
-    const geminiProvider = new VertexChatProvider(modelId, {
-      config: {
-        region: 'global',
-        temperature: 0.2,
-        topP: 0.3,
-        topK: 10,
-        generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
-        passthrough: {
-          generationConfig: {
-            temperature: 0.6,
-            topP: 0.7,
-            topK: 30,
-            top_p: 0.8,
-            top_k: 40,
-            candidateCount: 2,
-            candidate_count: 3,
-            presencePenalty: 0.5,
-            presence_penalty: 0.5,
-            frequencyPenalty: 0.5,
-            frequency_penalty: 0.5,
-            maxOutputTokens: 200,
+  it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+    'should omit deprecated Vertex sampling parameters for %s',
+    async (modelId) => {
+      const geminiProvider = new VertexChatProvider(modelId, {
+        config: {
+          region: 'global',
+          temperature: 0.2,
+          topP: 0.3,
+          topK: 10,
+          generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+          passthrough: {
+            generationConfig: {
+              temperature: 0.6,
+              topP: 0.7,
+              topK: 30,
+              top_p: 0.8,
+              top_k: 40,
+              candidateCount: 2,
+              candidate_count: 3,
+              presencePenalty: 0.5,
+              presence_penalty: 0.5,
+              frequencyPenalty: 0.5,
+              frequency_penalty: 0.5,
+              maxOutputTokens: 200,
+            },
           },
         },
-      },
-    });
-    const mockRequest = mockVertexRequest([
-      {
-        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 },
-      },
-    ]);
-
-    await geminiProvider.callGeminiApi('test prompt');
-
-    expect(mockRequest.mock.calls[0]?.[0]?.data.generationConfig).toEqual({
-      maxOutputTokens: 200,
-    });
-  });
-
-  it.each([
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite',
-  ])('should forward Maps retrieval config for %s', async (modelId) => {
-    const geminiProvider = new VertexChatProvider(modelId, {
-      config: {
-        region: 'global',
-        tools: [{ googleMaps: { enableWidget: true } }],
-        toolConfig: {
-          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
-          includeServerSideToolInvocations: true,
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 },
         },
-      },
-    });
-    const mockRequest = mockVertexRequest([
-      {
-        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-      },
-    ]);
+      ]);
 
-    await geminiProvider.callGeminiApi('test prompt');
+      await geminiProvider.callGeminiApi('test prompt');
 
-    expect(mockRequest.mock.calls[0]?.[0]?.data.tools).toEqual([
-      { googleMaps: { enableWidget: true } },
-    ]);
-    expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
-      retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
-      includeServerSideToolInvocations: true,
-    });
-  });
+      expect(mockRequest.mock.calls[0]?.[0]?.data.generationConfig).toEqual({
+        maxOutputTokens: 200,
+      });
+    },
+  );
+
+  it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+    'should forward Maps retrieval config for %s',
+    async (modelId) => {
+      const geminiProvider = new VertexChatProvider(modelId, {
+        config: {
+          region: 'global',
+          tools: [{ googleMaps: { enableWidget: true } }],
+          toolConfig: {
+            retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+            includeServerSideToolInvocations: true,
+          },
+        },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+      ]);
+
+      await geminiProvider.callGeminiApi('test prompt');
+
+      expect(mockRequest.mock.calls[0]?.[0]?.data.tools).toEqual([
+        { googleMaps: { enableWidget: true } },
+      ]);
+      expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
+        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+        includeServerSideToolInvocations: true,
+      });
+    },
+  );
 
   it('should execute callbacks from a fresh Gemini function-call response', async () => {
     const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
@@ -1060,79 +1060,79 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
   });
 
-  it.each([
-    'gemini-3.6-flash',
-    'gemini-3.5-flash-lite',
-  ])('should assemble streamed function-call arguments for %s before executing a callback', async (modelId) => {
-    const callback = vi.fn().mockResolvedValue('ticket found');
-    const geminiProvider = new VertexChatProvider(modelId, {
-      config: {
-        region: 'global',
-        streaming: true,
-        tool_choice: { type: 'function', function: { name: 'lookup_status' } },
-        toolConfig: {
-          functionCallingConfig: { streamFunctionCallArguments: true },
-        },
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'lookup_status',
-                parameters: {
-                  type: 'OBJECT',
-                  properties: { ticket: { type: 'STRING' }, region: { type: 'STRING' } },
-                  required: ['ticket', 'region'],
+  it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+    'should assemble streamed function-call arguments for %s before executing a callback',
+    async (modelId) => {
+      const callback = vi.fn().mockResolvedValue('ticket found');
+      const geminiProvider = new VertexChatProvider(modelId, {
+        config: {
+          region: 'global',
+          streaming: true,
+          tool_choice: { type: 'function', function: { name: 'lookup_status' } },
+          toolConfig: {
+            functionCallingConfig: { streamFunctionCallArguments: true },
+          },
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'lookup_status',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { ticket: { type: 'STRING' }, region: { type: 'STRING' } },
+                    required: ['ticket', 'region'],
+                  },
                 },
-              },
-            ],
-          },
-        ],
-        functionToolCallbacks: { lookup_status: callback },
-      },
-    });
-    const functionCalls = [
-      { name: 'lookup_status', willContinue: true },
-      {
-        partialArgs: [{ jsonPath: '$.region', stringValue: 'Seattle' }],
-        willContinue: true,
-      },
-      {
-        partialArgs: [{ jsonPath: '$.ticket', stringValue: 'PF-36', willContinue: true }],
-        willContinue: true,
-      },
-      {
-        partialArgs: [{ jsonPath: '$.ticket', stringValue: '21' }],
-        willContinue: true,
-      },
-      {},
-    ];
-    const mockRequest = mockVertexRequest([
-      { promptFeedback: { safetyRatings: [] } },
-      ...functionCalls.map((functionCall, index) => ({
-        candidates: [
-          {
-            content: { parts: [{ functionCall }] },
-            ...(index === functionCalls.length - 1 ? { finishReason: 'STOP' } : {}),
-          },
-        ],
-      })),
-      { usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 } },
-    ]);
+              ],
+            },
+          ],
+          functionToolCallbacks: { lookup_status: callback },
+        },
+      });
+      const functionCalls = [
+        { name: 'lookup_status', willContinue: true },
+        {
+          partialArgs: [{ jsonPath: '$.region', stringValue: 'Seattle' }],
+          willContinue: true,
+        },
+        {
+          partialArgs: [{ jsonPath: '$.ticket', stringValue: 'PF-36', willContinue: true }],
+          willContinue: true,
+        },
+        {
+          partialArgs: [{ jsonPath: '$.ticket', stringValue: '21' }],
+          willContinue: true,
+        },
+        {},
+      ];
+      const mockRequest = mockVertexRequest([
+        { promptFeedback: { safetyRatings: [] } },
+        ...functionCalls.map((functionCall, index) => ({
+          candidates: [
+            {
+              content: { parts: [{ functionCall }] },
+              ...(index === functionCalls.length - 1 ? { finishReason: 'STOP' } : {}),
+            },
+          ],
+        })),
+        { usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 } },
+      ]);
 
-    const response = await geminiProvider.callGeminiApi('test prompt');
+      const response = await geminiProvider.callGeminiApi('test prompt');
 
-    expect(mockRequest.mock.calls[0]?.[0]?.url).toContain(':streamGenerateContent');
-    expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
-      functionCallingConfig: {
-        mode: 'ANY',
-        allowedFunctionNames: ['lookup_status'],
-        streamFunctionCallArguments: true,
-      },
-    });
-    expect(callback).toHaveBeenCalledOnce();
-    expect(callback).toHaveBeenCalledWith('{"region":"Seattle","ticket":"PF-3621"}');
-    expect(response.output).toBe('ticket found');
-  });
+      expect(mockRequest.mock.calls[0]?.[0]?.url).toContain(':streamGenerateContent');
+      expect(mockRequest.mock.calls[0]?.[0]?.data.toolConfig).toEqual({
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: ['lookup_status'],
+          streamFunctionCallArguments: true,
+        },
+      });
+      expect(callback).toHaveBeenCalledOnce();
+      expect(callback).toHaveBeenCalledWith('{"region":"Seattle","ticket":"PF-3621"}');
+      expect(response.output).toBe('ticket found');
+    },
+  );
 
   it('should normalize Gemini priority service tier for Vertex requests', async () => {
     const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
@@ -1176,27 +1176,30 @@ describe('VertexChatProvider.callGeminiApi', () => {
       'SERVICE_TIER_FLEX',
       0.000275,
     ],
-  ] as const)('normalizes the %s tier for Vertex requests', async (_label, config, expectedTier, cost) => {
-    const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
-      config: { region: 'global', ...config },
-    });
-    const mockRequest = mockVertexRequest([
-      {
-        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        usageMetadata: {
-          promptTokenCount: 1_000,
-          candidatesTokenCount: 100,
-          totalTokenCount: 1_100,
+  ] as const)(
+    'normalizes the %s tier for Vertex requests',
+    async (_label, config, expectedTier, cost) => {
+      const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: { region: 'global', ...config },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
         },
-      },
-    ]);
+      ]);
 
-    const response = await geminiProvider.callGeminiApi('test prompt');
+      const response = await geminiProvider.callGeminiApi('test prompt');
 
-    expect(mockRequest.mock.calls[0]?.[0]?.data.serviceTier).toBe(expectedTier);
-    expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
-    expect(response.cost).toBeCloseTo(cost, 12);
-  });
+      expect(mockRequest.mock.calls[0]?.[0]?.data.serviceTier).toBe(expectedTier);
+      expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
+      expect(response.cost).toBeCloseTo(cost, 12);
+    },
+  );
 
   it('prices downgraded Vertex priority responses at the actual standard tier', async () => {
     const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
@@ -2092,64 +2095,61 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
     });
 
-    it.each([
-      'PROHIBITED_CONTENT',
-      'RECITATION',
-      'BLOCKLIST',
-      'SPII',
-      'IMAGE_SAFETY',
-    ])('should handle %s finishReason with guardrails response', async (finishReason) => {
-      const provider = new VertexChatProvider('gemini-pro', {
-        config: {},
-      });
+    it.each(['PROHIBITED_CONTENT', 'RECITATION', 'BLOCKLIST', 'SPII', 'IMAGE_SAFETY'])(
+      'should handle %s finishReason with guardrails response',
+      async (finishReason) => {
+        const provider = new VertexChatProvider('gemini-pro', {
+          config: {},
+        });
 
-      const mockResponse = {
-        data: [
-          {
-            candidates: [
-              {
-                content: { parts: [{ text: 'partial response' }] },
-                finishReason,
+        const mockResponse = {
+          data: [
+            {
+              candidates: [
+                {
+                  content: { parts: [{ text: 'partial response' }] },
+                  finishReason,
+                },
+              ],
+              usageMetadata: {
+                totalTokenCount: 10,
+                promptTokenCount: 5,
+                candidatesTokenCount: 5,
               },
-            ],
-            usageMetadata: {
-              totalTokenCount: 10,
-              promptTokenCount: 5,
-              candidatesTokenCount: 5,
             },
-          },
-        ],
-      };
+          ],
+        };
 
-      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+        const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
-        client: {
-          request: mockRequest,
-        } as unknown as JSONClient,
-        projectId: 'test-project-id',
-      });
+        vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+          client: {
+            request: mockRequest,
+          } as unknown as JSONClient,
+          projectId: 'test-project-id',
+        });
 
-      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
-        if (typeof creds === 'object') {
-          return JSON.stringify(creds);
-        }
-        return creds;
-      });
-      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+        vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+          if (typeof creds === 'object') {
+            return JSON.stringify(creds);
+          }
+          return creds;
+        });
+        vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
-      const response = await provider.callGeminiApi('test prompt');
+        const response = await provider.callGeminiApi('test prompt');
 
-      expect(response.error).toBe(
-        `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
-      );
-      expect(response.guardrails).toEqual({
-        flagged: true,
-        flaggedInput: false,
-        flaggedOutput: true,
-        reason: `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
-      });
-    });
+        expect(response.error).toBe(
+          `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
+        );
+        expect(response.guardrails).toEqual({
+          flagged: true,
+          flaggedInput: false,
+          flaggedOutput: true,
+          reason: `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
+        });
+      },
+    );
 
     it('should handle MAX_TOKENS finishReason with truncated output', async () => {
       const provider = new VertexChatProvider('gemini-pro', {
@@ -2258,27 +2258,30 @@ describe('VertexChatProvider.callGeminiApi', () => {
     it.each([
       { finishReason: 'MAX_TOKENS' },
       { content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' },
-    ])('reports an error when thinking consumes the token budget before producing output', async (candidate) => {
-      const provider = new VertexChatProvider('gemini-3.6-flash', {
-        config: { region: 'global' },
-      });
-      const responseData = [
-        {
-          candidates: [candidate],
-          usageMetadata: {
-            promptTokenCount: 7,
-            totalTokenCount: 19,
-            thoughtsTokenCount: 12,
+    ])(
+      'reports an error when thinking consumes the token budget before producing output',
+      async (candidate) => {
+        const provider = new VertexChatProvider('gemini-3.6-flash', {
+          config: { region: 'global' },
+        });
+        const responseData = [
+          {
+            candidates: [candidate],
+            usageMetadata: {
+              promptTokenCount: 7,
+              totalTokenCount: 19,
+              thoughtsTokenCount: 12,
+            },
           },
-        },
-      ];
-      mockVertexRequest(responseData);
+        ];
+        mockVertexRequest(responseData);
 
-      const response = await provider.callGeminiApi('test prompt');
+        const response = await provider.callGeminiApi('test prompt');
 
-      expect(response.error).toBe(`No output found in response: ${JSON.stringify(responseData)}`);
-      expect(response.output).toBeUndefined();
-    });
+        expect(response.error).toBe(`No output found in response: ${JSON.stringify(responseData)}`);
+        expect(response.output).toBeUndefined();
+      },
+    );
   });
 });
 
@@ -3207,39 +3210,42 @@ describe('VertexChatProvider.callClaudeApi', () => {
       pricingOverrides: { inputCost: 2 / 1e6, outputCost: 7 / 1e6 },
       expectedCost: 0.74,
     },
-  ])('prices Vertex Sonnet 4.5 $name', async ({
-    region,
-    inputTokens,
-    outputTokens,
-    cacheReadTokens,
-    cacheCreationTokens,
-    pricingOverrides,
-    expectedCost,
-  }) => {
-    const model = 'claude-sonnet-4-5@20250929';
-    provider = new VertexChatProvider(model, {
-      config: { region, max_tokens: 32, ...pricingOverrides },
-    });
-    mockVertexRequest({
-      id: 'test-id',
-      type: 'message',
-      role: 'assistant',
-      model,
-      content: [{ type: 'text', text: 'ok' }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: {
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        cache_read_input_tokens: cacheReadTokens,
-        cache_creation_input_tokens: cacheCreationTokens,
-      },
-    });
+  ])(
+    'prices Vertex Sonnet 4.5 $name',
+    async ({
+      region,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      pricingOverrides,
+      expectedCost,
+    }) => {
+      const model = 'claude-sonnet-4-5@20250929';
+      provider = new VertexChatProvider(model, {
+        config: { region, max_tokens: 32, ...pricingOverrides },
+      });
+      mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cache_read_input_tokens: cacheReadTokens,
+          cache_creation_input_tokens: cacheCreationTokens,
+        },
+      });
 
-    const result = await provider.callClaudeApi('test prompt');
+      const result = await provider.callClaudeApi('test prompt');
 
-    expect(result.cost).toBeCloseTo(expectedCost, 6);
-  });
+      expect(result.cost).toBeCloseTo(expectedCost, 6);
+    },
+  );
 
   it('supports Claude Fable 5 with adaptive-safe parameters and regional pricing', async () => {
     const model = 'claude-fable-5';

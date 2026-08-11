@@ -323,22 +323,21 @@ redteam:
       });
     });
 
-    it.each([
-      'vertex:gemini-3.1-pro-preview',
-      'vertex:gemini-2.5-pro',
-    ])('should preserve legacy Vertex target ID %s when loading a YAML config', async (targetId) => {
-      const user = userEvent.setup();
+    it.each(['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'])(
+      'should preserve legacy Vertex target ID %s when loading a YAML config',
+      async (targetId) => {
+        const user = userEvent.setup();
 
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
 
-      const loadButton = screen.getByRole('button', { name: /Load Config/i });
-      await user.click(loadButton);
+        const loadButton = screen.getByRole('button', { name: /Load Config/i });
+        await user.click(loadButton);
 
-      const yamlContent = `
+        const yamlContent = `
 description: Legacy Vertex target config
 targets:
   - ${targetId}
@@ -349,18 +348,19 @@ redteam:
   plugins:
     - shell-injection
 `;
-      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+        const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      expect(fileInput).toBeTruthy();
-      await user.upload(fileInput, file);
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeTruthy();
+        await user.upload(fileInput, file);
 
-      await waitFor(() => {
-        const { config, providerType } = useRedTeamConfig.getState();
-        expect(config.target.id).toBe(targetId);
-        expect(config.target.label).toBe(targetId);
-        expect(providerType).toBe('vertex');
-      });
-    });
+        await waitFor(() => {
+          const { config, providerType } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(targetId);
+          expect(config.target.label).toBe(targetId);
+          expect(providerType).toBe('vertex');
+        });
+      },
+    );
   });
 });

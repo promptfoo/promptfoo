@@ -1035,92 +1035,92 @@ describe('GoogleProvider', () => {
       expect(result.metadata).toMatchObject({ serviceTier: 'standard' });
     });
 
-    it.each([
-      'gemini-3.6-flash',
-      'gemini-3.5-flash-lite',
-    ])('should omit deprecated sampling parameters for %s', async (modelId) => {
-      const provider = new GoogleProvider(modelId, {
-        config: {
-          apiKey: 'test-key',
-          temperature: 0.2,
-          topP: 0.3,
-          topK: 10,
-          generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
-          passthrough: {
-            generationConfig: {
-              temperature: 0.6,
-              topP: 0.7,
-              topK: 30,
-              top_p: 0.8,
-              top_k: 40,
-              candidateCount: 2,
-              candidate_count: 3,
-              presencePenalty: 0.5,
-              presence_penalty: 0.5,
-              frequencyPenalty: 0.5,
-              frequency_penalty: 0.5,
-              maxOutputTokens: 200,
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should omit deprecated sampling parameters for %s',
+      async (modelId) => {
+        const provider = new GoogleProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.2,
+            topP: 0.3,
+            topK: 10,
+            generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+            passthrough: {
+              generationConfig: {
+                temperature: 0.6,
+                topP: 0.7,
+                topK: 30,
+                top_p: 0.8,
+                top_k: 40,
+                candidateCount: 2,
+                candidate_count: 3,
+                presencePenalty: 0.5,
+                presence_penalty: 0.5,
+                frequencyPenalty: 0.5,
+                frequency_penalty: 0.5,
+                maxOutputTokens: 200,
+              },
             },
           },
-        },
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: {
-            promptTokenCount: 10,
-            candidatesTokenCount: 10,
-            totalTokenCount: 20,
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 10,
+              totalTokenCount: 20,
+            },
           },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      await provider.callApi('test prompt');
+        await provider.callApi('test prompt');
 
-      const requestBody = JSON.parse(
-        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
-      );
-      expect(requestBody.generationConfig).toEqual({ maxOutputTokens: 200 });
-    });
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.generationConfig).toEqual({ maxOutputTokens: 200 });
+      },
+    );
 
-    it.each([
-      'gemini-3.6-flash',
-      'gemini-3.5-flash-lite',
-    ])('should forward Maps retrieval config for %s', async (modelId) => {
-      const provider = new GoogleProvider(modelId, {
-        config: {
-          apiKey: 'test-key',
-          tools: [{ googleMaps: { enableWidget: true } }],
-          toolConfig: {
-            retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
-            includeServerSideToolInvocations: true,
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should forward Maps retrieval config for %s',
+      async (modelId) => {
+        const provider = new GoogleProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            tools: [{ googleMaps: { enableWidget: true } }],
+            toolConfig: {
+              retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+              includeServerSideToolInvocations: true,
+            },
           },
-        },
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
 
-      await provider.callApi('test prompt');
+        await provider.callApi('test prompt');
 
-      const body = JSON.parse(
-        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
-      );
-      expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
-      expect(body.toolConfig).toEqual({
-        retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
-        includeServerSideToolInvocations: true,
-      });
-    });
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
+        expect(body.toolConfig).toEqual({
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        });
+      },
+    );
 
     it('should execute callbacks from a fresh Gemini function-call response', async () => {
       const callback = vi.fn().mockResolvedValue('Sunny, 25°C');

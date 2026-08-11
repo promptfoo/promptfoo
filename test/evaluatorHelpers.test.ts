@@ -1812,76 +1812,61 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toContain('data:image/png;base64,');
     });
 
-    it.each([
-      'mp4',
-      'mpeg',
-      'mpg',
-      'mov',
-      'avi',
-      'flv',
-      'webm',
-      'wmv',
-      '3gp',
-      '3gpp',
-    ])('should load %s video files as raw base64', async (extension) => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-video-content');
-      });
+    it.each(['mp4', 'mpeg', 'mpg', 'mov', 'avi', 'flv', 'webm', 'wmv', '3gp', '3gpp'])(
+      'should load %s video files as raw base64',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-video-content');
+        });
 
-      const prompt = toPrompt('Test prompt with video: {{video}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        video: `file://test-video.${extension}`,
-      });
+        const prompt = toPrompt('Test prompt with video: {{video}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          video: `file://test-video.${extension}`,
+        });
 
-      // Should NOT have data: prefix for videos
-      expect(renderedPrompt).not.toContain('data:video');
-      expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
-    });
+        // Should NOT have data: prefix for videos
+        expect(renderedPrompt).not.toContain('data:video');
+        expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
+      },
+    );
 
-    it.each([
-      'mp3',
-      'wav',
-      'aif',
-      'aiff',
-      'aifc',
-      'aac',
-      'ogg',
-      'flac',
-    ])('should load %s audio files as raw base64', async (extension) => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-audio-content');
-      });
+    it.each(['mp3', 'wav', 'aif', 'aiff', 'aifc', 'aac', 'ogg', 'flac'])(
+      'should load %s audio files as raw base64',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
 
-      const prompt = toPrompt('Test prompt with audio: {{audio}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        audio: `file://test-audio.${extension}`,
-      });
+        const prompt = toPrompt('Test prompt with audio: {{audio}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
 
-      // Should NOT have data: prefix for audio
-      expect(renderedPrompt).not.toContain('data:audio');
-      expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
-    });
+        // Should NOT have data: prefix for audio
+        expect(renderedPrompt).not.toContain('data:audio');
+        expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+      },
+    );
 
     // Extensions are whatever the user typed. isAudioFile() lowercases before matching, so an
     // uppercase name still classifies as audio and must take the same branch -- otherwise it
     // falls through to ISO-BMFF sniffing, which labels a generic `mp42`/`isom` brand as
     // video/mp4 and Gemini rejects the request with HTTP 400.
-    it.each([
-      'm4a',
-      'M4A',
-      'M4a',
-    ])('should preserve M4A audio MIME type in a data URL for .%s', async (extension) => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-audio-content');
-      });
+    it.each(['m4a', 'M4A', 'M4a'])(
+      'should preserve M4A audio MIME type in a data URL for .%s',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
 
-      const prompt = toPrompt('Test prompt with audio: {{audio}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        audio: `file://test-audio.${extension}`,
-      });
+        const prompt = toPrompt('Test prompt with audio: {{audio}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
 
-      expect(renderedPrompt).toContain('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
-    });
+        expect(renderedPrompt).toContain('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
+      },
+    );
 
     it('should handle Azure Vision prompt structure correctly', async () => {
       const azureVisionPrompt = toPrompt(`[
