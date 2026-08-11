@@ -214,11 +214,11 @@
       ".": "0.4.4",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.109.0",
-    "dompurify": "3.4.12",
+    "webpack": "5.109.2",
+    "dompurify": "3.4.13",
     "monaco-editor": {
       ".": "0.56.0",
-      "dompurify": "3.4.12"
+      "dompurify": "3.4.13"
     }
   },
   "devDependencies": {
@@ -382,7 +382,7 @@
     "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
-    "openai": "^6.37.0",
+    "openai": "^7.1.0",
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
