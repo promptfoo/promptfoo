@@ -68,8 +68,6 @@ const requiredPackagedPaths = [
   'dist/src/tracing/proto/opentelemetry/proto/common/v1/common.proto',
   'dist/src/tracing/proto/opentelemetry/proto/resource/v1/resource.proto',
   'dist/src/tracing/proto/opentelemetry/proto/trace/v1/trace.proto',
-  'node_modules/@cacheable/utils/package.json',
-  'node_modules/cache-manager/package.json',
 ];
 
 function listFiles(rootDir: string): string[] {
@@ -192,8 +190,8 @@ function assertPackagedFiles(packResult: PackResult): void {
     `Missing packaged web app files: ${missingWebAppFiles.join(', ')}`,
   );
   assert(
-    packResult.files.every((file) => !file.path.startsWith('dist/') || !file.path.endsWith('.map')),
-    'Application source maps should be excluded from the package',
+    packResult.files.every((file) => !file.path.endsWith('.map')),
+    'Source maps should be excluded from the package',
   );
   assert(
     packResult.files.every((file) => !file.path.startsWith('dist/test/')),

@@ -52,9 +52,6 @@
     "promptfoo": "dist/src/entrypoint.js",
     "pf": "dist/src/entrypoint.js"
   },
-  "bundleDependencies": [
-    "cache-manager"
-  ],
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "architecture:baseline": "tsx scripts/regenerateEdgeBaseline.ts",
@@ -161,7 +158,7 @@
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^7.1.4",
     "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.3.1",
+    "ip-address": "10.4.0",
     "mongoose": {
       "gcp-metadata": "^8.1.2"
     },
@@ -260,7 +257,7 @@
     "knip": "^6.0.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.137.0",
+    "oxc-parser": "^0.142.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -308,7 +305,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.46",
     "@swc/core-linux-x64-musl": "^1.15.46",
     "@swc/core-win32-x64-msvc": "^1.15.46",
-    "google-auth-library": "^10.9.1",
+    "google-auth-library": "^11.0.0",
     "hono": "^4.12.34",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
