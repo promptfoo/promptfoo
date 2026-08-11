@@ -4199,6 +4199,107 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(payload.componentResults[0].assertion.type).toBe('contains');
   });
 
+  it('excludes fallback diagnostics when recomputing a cleared human rating', async () => {
+    const user = userEvent.setup();
+    // Flattened chain: a passing `contains` fallback (terminal) followed by the
+    // failed `equals` primary retained only as a `fallbackIntermediate`
+    // diagnostic, plus a human override.
+    const mockTable = {
+      body: [
+        {
+          outputs: [
+            {
+              id: 'test-output-1',
+              pass: true,
+              score: 1,
+              text: 'test output',
+              latencyMs: 100,
+              cost: 0.01,
+              failureReason: 0,
+              namedScores: {},
+              gradingResult: {
+                pass: true,
+                score: 1,
+                reason: 'Manual result (overrides all other grading results)',
+                comment: 'User comment',
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'Expected output to contain "test"',
+                    assertion: { type: 'contains' as const, value: 'test' },
+                  },
+                  {
+                    pass: false,
+                    score: 0,
+                    reason: 'Expected output to equal "nope"',
+                    assertion: { type: 'equals' as const, value: 'nope' },
+                    metadata: { fallbackIntermediate: true as const },
+                  },
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'Manual result (overrides all other grading results)',
+                    comment: 'User comment',
+                    assertion: { type: 'human' as const },
+                  },
+                ],
+              },
+            },
+          ],
+          test: {},
+          vars: [],
+          testIdx: 0,
+        },
+      ],
+      head: {
+        prompts: [{ metrics: { testPassCount: 1, testFailCount: 0 }, provider: 'test-provider' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/eval/123/results/test-output-1/rating',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    const [, request] = mockCallApi.mock.calls[0];
+    const payload = JSON.parse(request.body);
+
+    // The diagnostic `equals` failure must NOT drag the recomputed automated
+    // result down: only the passing `contains` counts.
+    expect(payload.pass).toBe(true);
+    expect(payload.score).toBe(1);
+    // The diagnostic component is still retained for traceability.
+    expect(payload.componentResults).toHaveLength(2);
+    expect(
+      payload.componentResults.some(
+        (component: { metadata?: { fallbackIntermediate?: boolean } }) =>
+          component.metadata?.fallbackIntermediate === true,
+      ),
+    ).toBe(true);
+  });
+
   it('should recalculate pass as true when all remaining assertions pass', () => {
     const mockTable = {
       body: [
