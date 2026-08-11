@@ -189,11 +189,22 @@ export function extractTraceIdFromTraceparent(traceparent: string): string | nul
     return null;
   }
 
-  const match = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i.exec(traceparent);
-  if (!match || /^0+$/.test(match[1]) || /^0+$/.test(match[2])) {
+  const parts = traceparent.split('-');
+  const [version, traceId, parentSpanId, flags] = parts;
+  const validPartCount = version?.toLowerCase() === '00' ? parts.length === 4 : parts.length >= 4;
+  if (
+    !/^[0-9a-f]{2}$/i.test(version) ||
+    version.toLowerCase() === 'ff' ||
+    !validPartCount ||
+    !/^[0-9a-f]{32}$/i.test(traceId) ||
+    /^0+$/.test(traceId) ||
+    !/^[0-9a-f]{16}$/i.test(parentSpanId) ||
+    /^0+$/.test(parentSpanId) ||
+    !/^[0-9a-f]{2}$/i.test(flags)
+  ) {
     return null;
   }
-  return match[1].toLowerCase();
+  return traceId.toLowerCase();
 }
 
 /**
@@ -240,6 +251,19 @@ function computeSpanDepth(
   }
 
   return depth;
+}
+
+function matchesExternalSpanFilter(spanName: string, filters: string[]): boolean {
+  return filters.some((filter) => {
+    if (!filter.includes('*') && !filter.includes('?')) {
+      return spanName.toLowerCase().includes(filter.toLowerCase());
+    }
+
+    const escapedFilter = filter.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+    const globPattern = escapedFilter.replace(/\*/g, '.*').replace(/\\\?/g, '.');
+
+    return new RegExp(`^${globPattern}$`, 'i').test(spanName);
+  });
 }
 
 /**
@@ -297,12 +321,9 @@ function postProcessExternalSpans(
       }
     }
 
-    // Filter by span name (substring match, case-insensitive - matches local store behavior)
+    // Preserve substring matching while supporting documented wildcard filters.
     if (spanFilter && spanFilter.length > 0) {
-      const matchesFilter = spanFilter.some((filterName) =>
-        span.name.toLowerCase().includes(filterName.toLowerCase()),
-      );
-      if (!matchesFilter) {
+      if (!matchesExternalSpanFilter(span.name, spanFilter)) {
         return false;
       }
     }

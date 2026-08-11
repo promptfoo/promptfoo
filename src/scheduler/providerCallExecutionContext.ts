@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { RateLimitRegistryRef } from '../types/index';
+import type { RateLimitRegistryRef, TestSuite } from '../types/index';
 import type { ProviderCallQueue } from './providerCallQueue';
 
 /**
@@ -14,6 +14,8 @@ export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
+  /** Request-scoped tracing settings, kept out of the provider-visible call context. */
+  tracingConfig?: TestSuite['tracing'];
 }
 
 const providerCallExecutionContext = new AsyncLocalStorage<ProviderCallExecutionContext>();

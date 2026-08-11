@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
@@ -475,6 +476,41 @@ describe('evaluator trace integration', () => {
       );
       expect(mockFetchTraceContext.mock.invocationCallOrder[0]).toBeLessThan(
         mockTraceStore.getTrace.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('makes request-scoped tracing configuration available without exposing it in provider context', async () => {
+      const requestProviderConfig = {
+        ...providerConfig,
+        auth: { token: 'request-scoped-secret' },
+      };
+      const capturedTracingOptions = vi.fn();
+      const provider = createMockProvider({
+        async callApi(_prompt, context) {
+          capturedTracingOptions(
+            resolveTracingOptions({ strategyId: 'jailbreak', test: context?.test }),
+          );
+          expect(context).not.toHaveProperty('tracingConfig');
+          return { output: 'Target output' };
+        },
+      });
+
+      const [result] = await runEval(
+        createRunOptions(provider, {
+          testSuite: {
+            ...tracingSuite,
+            tracing: { ...tracingSuite.tracing!, provider: requestProviderConfig },
+          },
+        }),
+      );
+
+      expect(result.success).toBe(true);
+      expect(capturedTracingOptions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: requestProviderConfig,
+          queryDelay: 750,
+          redactAttributes: ['secret'],
+        }),
       );
     });
 

@@ -37,7 +37,10 @@ import {
   createRateLimitRegistry,
   type RateLimitRegistry,
 } from './scheduler';
-import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  withProviderCallExecutionContext,
+} from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -907,6 +910,7 @@ async function callProviderForRunEval({
         renderedPrompt,
         repeatIndex,
         test,
+        testSuite,
         traceContext,
         vars,
       });
@@ -1015,11 +1019,12 @@ async function callActiveProvider({
   renderedPrompt,
   repeatIndex,
   test,
+  testSuite,
   traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
+  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1049,7 +1054,13 @@ async function callActiveProvider({
 
   const callApi = () => {
     onProviderInvoked();
-    return activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+    const invoke = () => activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+    return testSuite?.tracing
+      ? withProviderCallExecutionContext(
+          { ...getProviderCallExecutionContext(), tracingConfig: testSuite.tracing },
+          invoke,
+        )
+      : invoke();
   };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())

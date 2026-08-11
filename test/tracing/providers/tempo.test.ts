@@ -78,6 +78,8 @@ describe('TempoProvider', () => {
     { id: 'tempo', endpoint: 'not-a-url' },
     { id: 'tempo', endpoint: 'file:///tmp/traces' },
     { id: 'tempo', endpoint: 'https://user:secret@example.com' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo?tenant=example' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo#section' },
     { id: 'tempo', endpoint: 'https://example.com', timeout: -1 },
   ] as const)('rejects unsafe provider configuration: %o', (config) => {
     expect(() => new TempoProvider(config)).toThrow();
@@ -143,6 +145,44 @@ describe('TempoProvider', () => {
   });
 
   it.each([
+    ['uppercase hexadecimal', TRACE_ID.toUpperCase()],
+    ['standard base64', Buffer.from(TRACE_ID, 'hex').toString('base64')],
+    ['unpadded base64', Buffer.from(TRACE_ID, 'hex').toString('base64').replace(/=+$/, '')],
+  ])('accepts matching %s trace identifiers', async (_encoding, encodedTraceId) => {
+    const encodedResponse = structuredClone(traceResponse);
+    for (const span of encodedResponse.batches[0].scopeSpans[0].spans) {
+      span.traceId = encodedTraceId;
+    }
+    mockedFetch.mockResolvedValueOnce(response(encodedResponse));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+  });
+
+  it.each([
+    ['a different trace', 'fedcba9876543210fedcba9876543210'],
+    ['a malformed trace ID', 'not-a-trace-id'],
+    ['a missing trace ID', undefined],
+  ])('discards spans belonging to %s while preserving matching spans', async (_reason, traceId) => {
+    const mixedResponse = structuredClone(traceResponse);
+    const spans = mixedResponse.batches[0].scopeSpans[0].spans;
+    spans.unshift({
+      ...spans[0],
+      spanId: '2123456789abcdef',
+      name: 'unrelated.span',
+      traceId: traceId as string,
+    });
+    mockedFetch.mockResolvedValueOnce(response(mixedResponse));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+  });
+
+  it.each([
     ['empty', ''],
     ['malformed base64', '!!!'],
     ['short hexadecimal', 'abc123'],
@@ -176,6 +216,44 @@ describe('TempoProvider', () => {
       expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
     },
   );
+
+  it.each([undefined, null, 42, '', '   '])(
+    'discards spans with invalid operation names: %o',
+    async (name) => {
+      const malformedResponse = structuredClone(traceResponse);
+      const spans = malformedResponse.batches[0].scopeSpans[0].spans;
+      spans.unshift({ ...spans[0], spanId: '2123456789abcdef', name: name as string });
+      mockedFetch.mockResolvedValueOnce(response(malformedResponse));
+
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      const result = await provider.fetchTrace(TRACE_ID);
+
+      expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+    },
+  );
+
+  it.each([
+    ['attributes without values', [{ key: 'service.name' }]],
+    ['a non-array attribute collection', { key: 'service.name' }],
+  ])('isolates batches with %s while preserving valid batches', async (_reason, attributes) => {
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: { attributes },
+            scopeSpans: traceResponse.batches[0].scopeSpans,
+          },
+          traceResponse.batches[0],
+        ],
+      }),
+    );
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.services).toEqual(['target-service']);
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+  });
 
   it('applies earliest timestamps, safe wildcard filters, and span limits', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
@@ -235,6 +313,27 @@ describe('TempoProvider', () => {
     );
   });
 
+  it('preserves its required JSON Accept header despite case-insensitive custom overrides', async () => {
+    const provider = new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+      headers: {
+        Accept: 'application/protobuf',
+        aCcEpT: 'text/plain',
+        'X-Scope-OrgID': 'tenant-a',
+      },
+    });
+
+    await provider.fetchTrace(TRACE_ID);
+
+    const headers = mockedFetch.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers.Accept).toBe('application/json');
+    expect(Object.keys(headers).filter((header) => header.toLowerCase() === 'accept')).toEqual([
+      'Accept',
+    ]);
+    expect(headers['X-Scope-OrgID']).toBe('tenant-a');
+  });
+
   it('returns null for missing traces and distinguishes retryable HTTP failures', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     mockedFetch.mockResolvedValueOnce(response({}, 404));
@@ -262,6 +361,31 @@ describe('TempoProvider', () => {
       new Response('{}', { headers: { 'content-length': '10485761' } }),
     );
     await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+  });
+
+  it('cancels oversized streamed responses without buffering the remaining body', async () => {
+    const cancel = vi.fn();
+    let chunksRead = 0;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          chunksRead += 1;
+          controller.enqueue(new Uint8Array(6 * 1024 * 1024));
+          if (chunksRead === 3) {
+            controller.close();
+          }
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    );
+    mockedFetch.mockResolvedValueOnce(new Response(stream));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(chunksRead).toBeLessThan(3);
   });
 
   it('checks Tempo readiness through the proxy-aware fetch client', async () => {

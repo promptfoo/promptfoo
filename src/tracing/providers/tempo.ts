@@ -45,6 +45,7 @@ interface TempoTraceResponse {
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
+const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 
@@ -115,6 +116,31 @@ function decodeSpanId(id: string | undefined): string | undefined {
   return /^0+$/.test(spanId) ? undefined : spanId;
 }
 
+function decodeTraceId(id: string | undefined): string | undefined {
+  if (!id) {
+    return undefined;
+  }
+
+  if (TRACE_ID_PATTERN.test(id)) {
+    return /^0+$/.test(id) ? undefined : id.toLowerCase();
+  }
+
+  if (!BASE64_TRACE_ID_PATTERN.test(id)) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(id, 'base64');
+  if (
+    decoded.length !== 16 ||
+    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
+  ) {
+    return undefined;
+  }
+
+  const traceId = decoded.toString('hex');
+  return /^0+$/.test(traceId) ? undefined : traceId;
+}
+
 function normalizeStatusCode(code: number | string | undefined): number | undefined {
   if (typeof code === 'number') {
     return code;
@@ -150,10 +176,15 @@ function matchesSpanFilter(name: string, patterns: string[]): boolean {
 
 function transformSpan(
   span: TempoSpan,
+  traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
   options?: FetchTraceOptions,
 ): SpanData | null {
+  if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
+    throw new Error('Span trace ID must match the requested trace');
+  }
+
   const spanId = decodeSpanId(span.spanId);
   if (!spanId) {
     throw new Error('Span ID must be a valid nonzero eight-byte identifier');
@@ -162,6 +193,10 @@ function transformSpan(
   const parentSpanId = decodeSpanId(span.parentSpanId);
   if (span.parentSpanId && !parentSpanId) {
     throw new Error('Parent span ID must be a valid nonzero eight-byte identifier');
+  }
+
+  if (typeof span.name !== 'string' || span.name.trim().length === 0) {
+    throw new Error('Span name must be a nonempty string');
   }
 
   const startTime = nanoToMs(span.startTimeUnixNano);
@@ -192,6 +227,32 @@ function transformSpan(
   };
 }
 
+async function readLimitedResponse(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return '';
+  }
+
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let body = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return body + decoder.decode();
+    }
+
+    byteLength += value.byteLength;
+    if (byteLength > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+
+    body += decoder.decode(value, { stream: true });
+  }
+}
+
 export class TempoProvider implements TraceProvider {
   readonly id = 'tempo';
   private readonly baseUrl: string;
@@ -210,9 +271,13 @@ export class TempoProvider implements TraceProvider {
     if (
       !['http:', 'https:'].includes(endpoint.protocol) ||
       endpoint.username ||
-      endpoint.password
+      endpoint.password ||
+      endpoint.search ||
+      endpoint.hash
     ) {
-      throw new Error('Tempo provider endpoint must be an HTTP or HTTPS URL without credentials');
+      throw new Error(
+        'Tempo provider endpoint must be an HTTP or HTTPS URL without credentials, query parameters, or fragments',
+      );
     }
     if (
       config.timeout !== undefined &&
@@ -224,10 +289,13 @@ export class TempoProvider implements TraceProvider {
   }
 
   private buildHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...this.config.headers,
-    };
+    const headers: Record<string, string> = { ...this.config.headers };
+    for (const header of Object.keys(headers)) {
+      if (header.toLowerCase() === 'accept') {
+        delete headers[header];
+      }
+    }
+    headers.Accept = 'application/json';
     if (this.config.auth?.token) {
       headers.Authorization = `Bearer ${this.config.auth.token}`;
     } else if (this.config.auth?.username && this.config.auth?.password) {
@@ -239,12 +307,22 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(data: TempoTraceResponse, options?: FetchTraceOptions): SpanData[] {
+  private transformSpans(
+    data: TempoTraceResponse,
+    traceId: string,
+    options?: FetchTraceOptions,
+  ): SpanData[] {
     const spans: SpanData[] = [];
     const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
 
     for (const batch of data.batches ?? []) {
-      const resourceAttributes = attributesToRecord(batch.resource?.attributes);
+      let resourceAttributes: Record<string, unknown>;
+      try {
+        resourceAttributes = attributesToRecord(batch.resource?.attributes);
+      } catch (error) {
+        logger.warn(`[TempoProvider] Skipping batch with malformed resource attributes: ${error}`);
+        continue;
+      }
       for (const scopeSpan of batch.scopeSpans ?? []) {
         for (const span of scopeSpan.spans ?? []) {
           if (spans.length >= limit) {
@@ -253,6 +331,7 @@ export class TempoProvider implements TraceProvider {
           try {
             const normalizedSpan = transformSpan(
               span,
+              traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
               options,
@@ -298,10 +377,7 @@ export class TempoProvider implements TraceProvider {
     if (contentLength > MAX_RESPONSE_BYTES) {
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
-    }
+    const body = await readLimitedResponse(response);
     const data = JSON.parse(body) as TempoTraceResponse;
     if (!Array.isArray(data.batches)) {
       throw new TraceProviderError('Tempo returned an invalid trace response');
@@ -309,15 +385,19 @@ export class TempoProvider implements TraceProvider {
 
     const services = new Set<string>();
     for (const batch of data.batches) {
-      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
+      try {
+        const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+        if (typeof service === 'string') {
+          services.add(service);
+        }
+      } catch {
+        // Malformed batches are skipped and logged during span conversion.
       }
     }
 
     return {
       traceId,
-      spans: this.transformSpans(data, options),
+      spans: this.transformSpans(data, traceId, options),
       services: [...services],
       fetchedAt: Date.now(),
     };

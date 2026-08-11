@@ -208,6 +208,31 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map(({ name }) => name)).toEqual(['target.first']);
   });
 
+  it('matches wildcard span filters without changing plain substring filters', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 123,
+      traceId: 'trace-wildcards',
+      spans: [
+        { spanId: 'chat-span', name: 'chat gpt-4.1-mini', startTime: 1 },
+        { spanId: 'tool-span', name: 'execute_tool search', startTime: 2 },
+        { spanId: 'other-span', name: 'POST /chat', startTime: 3 },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-wildcards', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      spanFilter: ['CHAT*', '*tool*'],
+    });
+
+    expect(result?.spans.map(({ name }) => name)).toEqual([
+      'chat gpt-4.1-mini',
+      'execute_tool search',
+    ]);
+  });
+
   it.each([
     {
       name: 'self-referential parents without a depth limit',
@@ -492,6 +517,9 @@ describe('fetchTraceContext', () => {
     'oops-../../admin-nothex-01',
     '00-00000000000000000000000000000000-0123456789abcdef-01',
     '00-0123456789abcdef0123456789abcdef-0000000000000000-01',
+    '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01-extra',
+    'ff-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+    '01-0123456789abcdef0123456789abcdef-0123456789abcdef-0g-extra',
   ])('rejects malformed or all-zero traceparent values: %s', (traceparent) => {
     expect(extractTraceIdFromTraceparent(traceparent)).toBeNull();
   });
@@ -499,6 +527,14 @@ describe('fetchTraceContext', () => {
   it('extracts and normalizes valid W3C trace IDs', () => {
     expect(
       extractTraceIdFromTraceparent('00-0123456789ABCDEF0123456789ABCDEF-0123456789abcdef-01'),
+    ).toBe('0123456789abcdef0123456789abcdef');
+  });
+
+  it('accepts future W3C traceparent versions with additional fields', () => {
+    expect(
+      extractTraceIdFromTraceparent(
+        '01-0123456789abcdef0123456789abcdef-0123456789abcdef-01-extra-field',
+      ),
     ).toBe('0123456789abcdef0123456789abcdef');
   });
 });
