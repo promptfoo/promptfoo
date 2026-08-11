@@ -120,7 +120,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   protected isSamplingParamsDeprecatedClaudeModel(): boolean {
     return (
       Boolean(this.config.isClaudeOpus47OrLater) ||
-      isSamplingParamsDeprecatedClaudeModel(this.deploymentName)
+      isSamplingParamsDeprecatedClaudeModel(this.deploymentName, {
+        allowGenerationFallback: false,
+      })
     );
   }
 

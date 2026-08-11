@@ -703,18 +703,26 @@ describe('AwsBedrockGenericProvider', () => {
       }
     });
 
-    it('preserves sampling and manual thinking for date-stamped Claude inference profiles', async () => {
-      const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
-      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        { region: 'us-east-1', temperature: 0.5, thinking },
-        'hi',
-        undefined,
-        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
-      );
+    it.each([
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+    ])(
+      'preserves sampling and manual thinking for Claude inference profile %s',
+      async (modelName) => {
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5, thinking },
+          'hi',
+          undefined,
+          modelName,
+        );
 
-      expect(params.temperature).toBe(0.5);
-      expect(params.thinking).toEqual(thinking);
-    });
+        expect(params.temperature).toBe(0.5);
+        expect(params.thinking).toEqual(thinking);
+      },
+    );
 
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no

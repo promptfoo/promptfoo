@@ -2038,6 +2038,7 @@ describe('Anthropic utilities', () => {
         'claude-haiku-5',
         'anthropic:messages:claude-haiku-5-20260801',
         'us.anthropic.claude-research-preview-5',
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-haiku-5',
         'vertex:claude-sonnet-6',
         'global.anthropic.claude-opus-10',
         'claude-haiku-99',
@@ -2054,10 +2055,30 @@ describe('Anthropic utilities', () => {
         'notclaude-opus-5',
         'claude-prod-20260811',
         'claude-release-2026',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
         'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
       ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
+    });
+
+    it('disables generation fallback for alias-based Claude providers', () => {
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-5', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-25', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-team-blue-12', {
+          allowGenerationFallback: false,
+        }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-opus-5', { allowGenerationFallback: false }),
+      ).toBe(true);
     });
 
     it('detects Claude Sonnet 5 across provider naming schemes', () => {

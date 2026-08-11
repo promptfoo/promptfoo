@@ -383,11 +383,20 @@ export function normalizeAnthropicModelName(modelName: string): string {
  * promptfoo's built-in `temperature` default of 0). Shared by the Anthropic, Bedrock, Vertex,
  * and Azure providers. Known families use the capability table above; the generation fallback
  * keeps newly released Claude 5+ family names safe before their model-specific rows land.
+ * Arbitrary deployment and inference-profile aliases cannot safely use the fallback.
  */
-export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
+export function isSamplingParamsDeprecatedClaudeModel(
+  modelId: string,
+  options: { allowGenerationFallback?: boolean } = {},
+): boolean {
+  const isApplicationInferenceProfileArn =
+    modelId.startsWith('arn:') && modelId.includes(':application-inference-profile/');
+
   return (
     hasClaudeCapability(modelId, 'samplingParamsDeprecated') ||
-    CLAUDE_5_OR_LATER_PATTERN.test(modelId)
+    (options.allowGenerationFallback !== false &&
+      !isApplicationInferenceProfileArn &&
+      CLAUDE_5_OR_LATER_PATTERN.test(modelId))
   );
 }
 
