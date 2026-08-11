@@ -90,6 +90,7 @@ import {
   sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
+import { tagRepeatPassRateResult } from './util/repeatPassRateMetadata';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -1431,6 +1432,7 @@ async function runEvalInternal({
   testIdx: testIndex,
   promptIdx: promptIndex,
   repeatIndex,
+  repeatGroupTestIdx,
   conversations,
   registers,
   isRedteam,
@@ -1532,20 +1534,23 @@ async function runEvalInternal({
     // with the provider call context.
     const persistedVars = omitEvalRuntimeVars(state.vars);
 
-    const ret = createEvaluateResult({
-      fileMetadata: state.fileMetadata,
-      latencyMs,
-      prompt,
-      promptIdx: promptIndex,
-      rendered,
-      response,
-      setup,
-      test,
-      testIdx: testIndex,
-      traceContext,
-      evalId,
-      vars: persistedVars,
-    });
+    const ret = tagRepeatPassRateResult(
+      createEvaluateResult({
+        fileMetadata: state.fileMetadata,
+        latencyMs,
+        prompt,
+        promptIdx: promptIndex,
+        rendered,
+        response,
+        setup,
+        test,
+        testIdx: testIndex,
+        traceContext,
+        evalId,
+        vars: persistedVars,
+      }),
+      repeatGroupTestIdx,
+    );
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
@@ -1597,23 +1602,26 @@ async function runEvalInternal({
     }
 
     return [
-      {
-        ...setup,
-        // Exclude the __eval* runtime vars from the persisted error result.
-        vars: omitEvalRuntimeVars(setup.vars),
-        error: errorWithStack,
-        success: false,
-        failureReason: ResultFailureReason.ERROR,
-        score: 0,
-        namedScores: {},
-        latencyMs,
-        promptIdx: promptIndex,
-        testIdx: testIndex,
-        testCase: test,
-        promptId: prompt.id || '',
-        metadata,
-        ...getTraceLinkage(traceContext, evalId),
-      },
+      tagRepeatPassRateResult(
+        {
+          ...setup,
+          // Exclude the __eval* runtime vars from the persisted error result.
+          vars: omitEvalRuntimeVars(setup.vars),
+          error: errorWithStack,
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+          score: 0,
+          namedScores: {},
+          latencyMs,
+          promptIdx: promptIndex,
+          testIdx: testIndex,
+          testCase: test,
+          promptId: prompt.id || '',
+          metadata,
+          ...getTraceLinkage(traceContext, evalId),
+        },
+        repeatGroupTestIdx,
+      ),
     ];
   }
 }
@@ -2428,15 +2436,16 @@ function appendRunEvalOptionsForTestCase({
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
-
+  const firstRepeatTestIdx = nextTestIdx;
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
+  const isRepeated = testRepeat > 1;
   const effectiveOptions = {
     ...options,
     repeat: testRepeat,
   };
   for (let repeatIndex = 0; repeatIndex < testRepeat; repeatIndex++) {
-    for (const vars of varCombinations) {
+    for (const [varIndex, vars] of varCombinations.entries()) {
       appendRunEvalOptionsForVars({
         concurrency,
         conversations,
@@ -2449,6 +2458,7 @@ function appendRunEvalOptionsForTestCase({
         rateLimitRegistry,
         registers,
         repeatIndex,
+        repeatGroupTestIdx: isRepeated ? firstRepeatTestIdx + varIndex : undefined,
         runEvalOptions,
         testCase,
         testIdx: nextTestIdx,
@@ -2474,6 +2484,7 @@ function appendRunEvalOptionsForVars({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatGroupTestIdx,
   runEvalOptions,
   testCase,
   testIdx,
@@ -2491,6 +2502,7 @@ function appendRunEvalOptionsForVars({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatGroupTestIdx?: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2514,6 +2526,7 @@ function appendRunEvalOptionsForVars({
       rateLimitRegistry,
       registers,
       repeatIndex,
+      repeatGroupTestIdx,
       runEvalOptions,
       testCase,
       testIdx,
@@ -2536,6 +2549,7 @@ function appendRunEvalOptionsForProvider({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatGroupTestIdx,
   runEvalOptions,
   testCase,
   testIdx,
@@ -2554,6 +2568,7 @@ function appendRunEvalOptionsForProvider({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatGroupTestIdx?: number;
   runEvalOptions: RunEvalOptions[];
   testCase: AtomicTestCase;
   testIdx: number;
@@ -2580,6 +2595,7 @@ function appendRunEvalOptionsForProvider({
         rateLimitRegistry,
         registers,
         repeatIndex,
+        repeatGroupTestIdx,
         testCase,
         testIdx,
         testSuite,
@@ -2603,6 +2619,7 @@ function createRunEvalOption({
   rateLimitRegistry,
   registers,
   repeatIndex,
+  repeatGroupTestIdx,
   testCase,
   testIdx,
   testSuite,
@@ -2621,6 +2638,7 @@ function createRunEvalOption({
   rateLimitRegistry?: RateLimitRegistryRef;
   registers: EvalRegisters;
   repeatIndex: number;
+  repeatGroupTestIdx?: number;
   testCase: AtomicTestCase;
   testIdx: number;
   testSuite: TestSuite;
@@ -2640,6 +2658,7 @@ function createRunEvalOption({
     testIdx,
     promptIdx,
     repeatIndex,
+    repeatGroupTestIdx,
     evaluateOptions: options,
     conversations,
     registers,
@@ -2673,7 +2692,7 @@ function createRunEvalTest(
   return {
     ...baseTest,
     metadata: {
-      ...testCase.metadata,
+      ...baseTest.metadata,
       tracingEnabled: true,
       evaluationId: evalId,
     },
@@ -2934,29 +2953,32 @@ function createEvalStepTimeoutResult(
   timeoutMs: number,
   error: unknown,
 ): EvaluateResult {
-  return {
-    provider: {
-      id: evalStep.provider.id(),
-      label: evalStep.provider.label,
-      config: evalStep.provider.config,
-    } as EvaluateResult['provider'],
-    prompt: {
-      raw: evalStep.prompt.raw,
-      label: evalStep.prompt.label,
-      config: evalStep.prompt.config,
+  return tagRepeatPassRateResult(
+    {
+      provider: {
+        id: evalStep.provider.id(),
+        label: evalStep.provider.label,
+        config: evalStep.provider.config,
+      } as EvaluateResult['provider'],
+      prompt: {
+        raw: evalStep.prompt.raw,
+        label: evalStep.prompt.label,
+        config: evalStep.prompt.config,
+      },
+      vars: evalStep.test.vars || {},
+      error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: timeoutMs,
+      promptIdx: evalStep.promptIdx,
+      testIdx: evalStep.testIdx,
+      testCase: sanitizedTestCase,
+      promptId: evalStep.prompt.id || '',
     },
-    vars: evalStep.test.vars || {},
-    error: `Evaluation timed out after ${timeoutMs}ms: ${String(error)}`,
-    success: false,
-    failureReason: ResultFailureReason.ERROR,
-    score: 0,
-    namedScores: {},
-    latencyMs: timeoutMs,
-    promptIdx: evalStep.promptIdx,
-    testIdx: evalStep.testIdx,
-    testCase: sanitizedTestCase,
-    promptId: evalStep.prompt.id || '',
-  };
+    evalStep.repeatGroupTestIdx,
+  );
 }
 
 function createTimeoutMetrics(timeoutMs: number): PromptMetrics {
@@ -3029,29 +3051,32 @@ function createMaxDurationTimeoutResult(
   maxEvalTimeMs: number,
   startTime: number,
 ): EvaluateResult {
-  return {
-    provider: {
-      id: evalStep.provider.id(),
-      label: evalStep.provider.label,
-      config: evalStep.provider.config,
-    } as EvaluateResult['provider'],
-    prompt: {
-      raw: evalStep.prompt.raw,
-      label: evalStep.prompt.label,
-      config: evalStep.prompt.config,
+  return tagRepeatPassRateResult(
+    {
+      provider: {
+        id: evalStep.provider.id(),
+        label: evalStep.provider.label,
+        config: evalStep.provider.config,
+      } as EvaluateResult['provider'],
+      prompt: {
+        raw: evalStep.prompt.raw,
+        label: evalStep.prompt.label,
+        config: evalStep.prompt.config,
+      },
+      vars: evalStep.test.vars || {},
+      error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: Date.now() - startTime,
+      promptIdx: evalStep.promptIdx,
+      testIdx: evalStep.testIdx,
+      testCase: evalStep.test,
+      promptId: evalStep.prompt.id || '',
     },
-    vars: evalStep.test.vars || {},
-    error: `Evaluation exceeded max duration of ${maxEvalTimeMs}ms`,
-    success: false,
-    failureReason: ResultFailureReason.ERROR,
-    score: 0,
-    namedScores: {},
-    latencyMs: Date.now() - startTime,
-    promptIdx: evalStep.promptIdx,
-    testIdx: evalStep.testIdx,
-    testCase: evalStep.test,
-    promptId: evalStep.prompt.id || '',
-  };
+    evalStep.repeatGroupTestIdx,
+  );
 }
 
 function getAssertionTelemetryStats(prompts: CompletedPrompt[], assertionTypes: Set<string>) {
