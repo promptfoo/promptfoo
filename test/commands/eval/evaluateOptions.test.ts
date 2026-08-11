@@ -683,6 +683,51 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
+    it('resolves nested persisted environment references before resuming trace retrieval', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_TEST_TEMPO_SOURCE_SECRET: 'nested-tempo-runtime-secret',
+      });
+      const resumeEval = new Eval(
+        {
+          providers: [{ id: 'echo', label: 'traced-target' }],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          env: {
+            PROMPTFOO_TEST_TEMPO_READER: '{{ env.PROMPTFOO_TEST_TEMPO_SOURCE_SECRET }}',
+          },
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.PROMPTFOO_TEST_TEMPO_READER }}' },
+              headers: {
+                'X-Tempo-Reader': '{{ env.PROMPTFOO_TEST_TEMPO_READER }}',
+              },
+            },
+          },
+        },
+        { id: 'eval-resume-nested-tempo-credentials', persisted: true },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tracing?.provider?.auth?.token).toBe('nested-tempo-runtime-secret');
+        expect(resumedSuite.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe(
+          'nested-tempo-runtime-secret',
+        );
+        expect(resumeEval.config.env).toEqual({
+          PROMPTFOO_TEST_TEMPO_READER: '{{ env.PROMPTFOO_TEST_TEMPO_SOURCE_SECRET }}',
+        });
+      } finally {
+        findByIdSpy.mockRestore();
+        restoreEnv();
+      }
+    });
+
     it('should not treat evaluateOptions.providerFilter as a provider selection', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-ignored-provider-filter.yaml', {
         evaluateOptions: {

@@ -36,6 +36,7 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
+  renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
 import {
@@ -55,8 +56,6 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
-import { renderEnvOnlyInObject } from '../util/render';
-import { preserveTracingCredentialReferences } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -123,9 +122,12 @@ async function resolveReplayConfigs(
 
   let replayConfig = evalRecord.config;
   if (replayConfig.tracing?.provider) {
-    const renderedTracing = renderEnvOnlyInObject(replayConfig.tracing, replayConfig.env);
-    replayConfig = { ...replayConfig, tracing: renderedTracing };
-    preserveTracingCredentialReferences(evalRecord.config, replayConfig);
+    const renderedReplayConfig = renderConfigEnvTemplates(replayConfig);
+    replayConfig = {
+      ...replayConfig,
+      ...(renderedReplayConfig.env && { env: renderedReplayConfig.env }),
+      tracing: renderedReplayConfig.tracing,
+    };
   }
 
   const configs = await resolveConfigs(providerFilterOptions, replayConfig);

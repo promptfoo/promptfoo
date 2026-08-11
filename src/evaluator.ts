@@ -5018,7 +5018,11 @@ export function evaluate<
 ): Promise<TEvaluation> {
   const resolvedRuntime =
     runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+  const runtimeTestSuite =
+    resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+    nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+    testSuite;
   const store = resolvedRuntime.createEvaluationStore(evalRecord);
-  const ev = new Evaluator(testSuite, store, options, resolvedRuntime);
+  const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
   return ev.evaluate();
 }

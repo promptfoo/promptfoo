@@ -479,6 +479,38 @@ describe('evaluator trace integration', () => {
       );
     });
 
+    it('renders trace-provider credentials and suite environment overrides for programmatic evals', async () => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const programmaticSuite: TestSuite = {
+        ...tracingSuite,
+        env: { TEMPO_READER_TOKEN: 'programmatic-tempo-secret' } as TestSuite['env'],
+        providers: [provider],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+        tracing: {
+          ...tracingSuite.tracing!,
+          provider: {
+            ...providerConfig,
+            auth: { token: '{{ env.TEMPO_READER_TOKEN }}' },
+            headers: { 'X-Tempo-Reader': '{{ env.TEMPO_READER_TOKEN }}' },
+          },
+        },
+      };
+
+      await evaluate(programmaticSuite, mockEval, { maxConcurrency: 1 });
+
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        traceId,
+        expect.objectContaining({
+          providerConfig: expect.objectContaining({
+            auth: { token: 'programmatic-tempo-secret' },
+            headers: { 'X-Tempo-Reader': 'programmatic-tempo-secret' },
+          }),
+        }),
+      );
+      expect(programmaticSuite.tracing?.provider?.auth?.token).toBe('{{ env.TEMPO_READER_TOKEN }}');
+    });
+
     it('makes request-scoped tracing configuration available without exposing it in provider context', async () => {
       const requestProviderConfig = {
         ...providerConfig,

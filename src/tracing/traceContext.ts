@@ -103,26 +103,14 @@ function mapStatusCode(span: SpanData): 'unset' | 'ok' | 'error' {
 
 function buildSpanTree(spans: SpanData[]): Map<string, number> {
   const depthMap = new Map<string, number>();
-
   const spansById = new Map(spans.map((span) => [span.spanId, span]));
-
-  const computeDepth = (span: SpanData): number => {
-    if (depthMap.has(span.spanId)) {
-      return depthMap.get(span.spanId)!;
+  const depthCache = new Map<string, number | null>();
+  for (const span of spans) {
+    const depth = computeSpanDepth(span, spansById, depthCache);
+    if (depth !== null) {
+      depthMap.set(span.spanId, depth);
     }
-
-    if (!span.parentSpanId || !spansById.has(span.parentSpanId)) {
-      depthMap.set(span.spanId, 0);
-      return 0;
-    }
-
-    const parentDepth = computeDepth(spansById.get(span.parentSpanId)!);
-    const depth = parentDepth + 1;
-    depthMap.set(span.spanId, depth);
-    return depth;
-  };
-
-  spans.forEach((span) => computeDepth(span));
+  }
 
   return depthMap;
 }

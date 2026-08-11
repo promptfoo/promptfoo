@@ -256,6 +256,35 @@ describe('fetchTraceContext', () => {
     });
   });
 
+  it('computes depths iteratively when deeply nested spans sort before their ancestors', async () => {
+    const spans = Array.from({ length: 10_000 }, (_, index) => ({
+      spanId: `span-${String(9_999 - index).padStart(4, '0')}`,
+      ...(index > 0 && {
+        parentSpanId: `span-${String(10_000 - index).padStart(4, '0')}`,
+      }),
+      name: `target.level.${index}`,
+      startTime: 1,
+    }));
+    mocks.createTraceProvider.mockReturnValue({
+      fetchTrace: vi.fn().mockResolvedValue({
+        fetchedAt: 123,
+        spans,
+        traceId: 'trace-deep-tree',
+      }),
+      id: 'tempo',
+    });
+
+    const result = await fetchTraceContext('trace-deep-tree', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(result?.spans).toHaveLength(10_000);
+    expect(result?.spans[0]).toMatchObject({ spanId: 'span-0000', depth: 9_999 });
+    expect(result?.spans.at(-1)).toMatchObject({ spanId: 'span-9999', depth: 0 });
+  });
+
   it('stops batching when the trace does not exist in the local store', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: `span-${index}`,
