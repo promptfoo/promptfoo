@@ -1350,6 +1350,7 @@ export const useStore = create<EvalConfigState>()(
           providers: config.providers,
           scenarios: config.scenarios,
           tests: config.tests || [], // This is what was 'testCases' before
+          tracing: config.tracing,
           evaluateOptions: config.evaluateOptions,
           defaultTest: config.defaultTest,
           derivedMetrics: config.derivedMetrics,

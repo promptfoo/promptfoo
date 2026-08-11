@@ -2174,5 +2174,25 @@ describe('evalConfig store', () => {
       const testSuite = useStore.getState().getTestSuite();
       expect(testSuite.derivedMetrics).toEqual(derivedMetrics);
     });
+
+    it('includes runtime trace-provider configuration without persisting its credentials', () => {
+      const tracing = {
+        enabled: true,
+        queryDelay: 3000,
+        provider: {
+          id: 'tempo' as const,
+          endpoint: 'https://tempo.example.com/team-west',
+          auth: { token: 'browser-runtime-secret' },
+          headers: { 'X-Scope-OrgID': 'tenant-a' },
+        },
+      };
+      useStore.getState().updateConfig({ tracing });
+
+      expect(useStore.getState().getTestSuite().tracing).toEqual(tracing);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(JSON.stringify(persisted.tracing)).not.toContain('browser-runtime-secret');
+      expect(persisted.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+    });
   });
 });

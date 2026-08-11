@@ -393,7 +393,7 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
   while (pendingValues.length > 0) {
     const { original, sanitized } = pendingValues.pop()!;
     if (typeof original === 'string') {
-      if (sanitized === '[REDACTED]') {
+      if (original.length > 0 && sanitized === '[REDACTED]') {
         redactedValues.add(original);
       }
       continue;
@@ -418,18 +418,29 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
       });
     }
   }
+  const orderedRedactedValues = [...redactedValues].sort(
+    (left, right) => right.length - left.length,
+  );
   const scrubEcho = <T extends string | undefined>(value: T): T => {
     if (typeof value !== 'string') {
       return value;
     }
-    if (
-      redactedValues.has(value) ||
-      (value.endsWith('…') &&
-        [...redactedValues].some((redactedValue) => redactedValue.startsWith(value.slice(0, -1))))
-    ) {
-      return '[REDACTED]' as T;
+
+    let sanitizedValue: string = value;
+    for (const redactedValue of orderedRedactedValues) {
+      sanitizedValue = sanitizedValue.split(redactedValue).join('[REDACTED]');
+      if (!sanitizedValue.endsWith('…')) {
+        continue;
+      }
+
+      const prefix = redactedValue.slice(0, Math.min(8, redactedValue.length));
+      const prefixIndex = sanitizedValue.lastIndexOf(prefix);
+      if (prefixIndex !== -1 && redactedValue.startsWith(sanitizedValue.slice(prefixIndex, -1))) {
+        sanitizedValue = `${sanitizedValue.slice(0, prefixIndex)}[REDACTED]`;
+      }
     }
-    return value;
+
+    return sanitizedValue as T;
   };
 
   return {

@@ -774,6 +774,85 @@ describe('fetchTraceContext', () => {
     expect(JSON.stringify(result)).not.toContain('private-credential');
   });
 
+  it('redacts credential values embedded in longer span names and status messages', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-embedded-redacted-echo',
+      spans: [
+        {
+          spanId: 'embedded-redacted-echo',
+          name: 'request with secret-token and secret-token',
+          statusMessage: 'request failed for nested-secret',
+          startTime: 1,
+          attributes: {
+            authorization: 'secret-token',
+            nested: { authorization: 'nested-secret' },
+            empty: { authorization: '' },
+          },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-embedded-redacted-echo', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      redactAttributes: ['authorization'],
+    });
+
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-embedded-redacted-echo',
+      [
+        expect.objectContaining({
+          name: 'request with [REDACTED] and [REDACTED]',
+          statusMessage: 'request failed for [REDACTED]',
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+    expect(JSON.stringify(result)).not.toContain('secret-token');
+    expect(JSON.stringify(result)).not.toContain('nested-secret');
+  });
+
+  it('redacts credential prefixes embedded in truncated span fields', async () => {
+    const secret = `private-credential-${'x'.repeat(1100)}`;
+    const truncatedMessage = `request failed for ${secret.slice(0, 1000)}…`;
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-embedded-truncated-redacted-echo',
+      spans: [
+        {
+          spanId: 'embedded-truncated-redacted-echo',
+          name: truncatedMessage,
+          statusMessage: truncatedMessage,
+          startTime: 1,
+          attributes: { authorization: secret },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-embedded-truncated-redacted-echo', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      redactAttributes: ['authorization'],
+    });
+
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-embedded-truncated-redacted-echo',
+      [
+        expect.objectContaining({
+          name: 'request failed for [REDACTED]',
+          statusMessage: 'request failed for [REDACTED]',
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+    expect(JSON.stringify(result)).not.toContain('private-credential');
+  });
+
   it('redacts span fields that echo nested or array-backed redacted attribute values', async () => {
     const fetchTrace = vi.fn().mockResolvedValue({
       fetchedAt: 1,
