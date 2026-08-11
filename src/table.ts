@@ -27,8 +27,17 @@ export function generateTable(
   for (const row of evaluateTable.body.slice(0, maxRows)) {
     table.push([
       ...row.vars.map((v) => ellipsize(v, tableCellMaxLength)),
-      ...row.outputs.map(({ pass, text, failureReason: failureType }) => {
-        text = ellipsize(text, tableCellMaxLength);
+      // Index by prompt headers rather than mapping row.outputs directly:
+      // deleting a single result can leave row.outputs shorter (or sparse)
+      // than head.prompts, and cli-table3 mis-aligns rows with fewer cells
+      // than columns. Missing cells render empty.
+      ...head.prompts.map((_, promptIdx) => {
+        const output = row.outputs[promptIdx];
+        if (!output) {
+          return '';
+        }
+        const { pass, failureReason: failureType } = output;
+        const text = ellipsize(output.text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
         }

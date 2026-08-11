@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -85,6 +85,19 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+const EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE = 500;
+
+export function chunkEvalSummaryIds(
+  evalIds: string[],
+  batchSize = EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE,
+): string[][] {
+  const chunks: string[][] = [];
+  for (let start = 0; start < evalIds.length; start += batchSize) {
+    chunks.push(evalIds.slice(start, start + batchSize));
+  }
+  return chunks;
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -1759,6 +1772,25 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
+  const distinctTestCountsByEvalId = new Map<string, number>();
+  if (results.length > 0) {
+    for (const evalIdBatch of chunkEvalSummaryIds(results.map((result) => result.evalId))) {
+      const rows = await db
+        .select({
+          evalId: evalResultsTable.evalId,
+          testCount: sql<number>`count(distinct ${evalResultsTable.testIdx})`,
+        })
+        .from(evalResultsTable)
+        .where(inArray(evalResultsTable.evalId, evalIdBatch))
+        .groupBy(evalResultsTable.evalId)
+        .all();
+
+      for (const row of rows) {
+        distinctTestCountsByEvalId.set(row.evalId, Number(row.testCount));
+      }
+    }
+  }
+
   /**
    * Deserialize the evals. A few things to note:
    *
@@ -1785,11 +1817,12 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    // Derive the number of tests from the first prompt.
-    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
-
-    // Test count * prompt count
-    const testRunCount = testCount * (result.prompts?.length ?? 0);
+    const metricDerivedTestCount = testCounts.length > 0 ? Math.max(...testCounts) : 0;
+    const testCount = Math.max(
+      distinctTestCountsByEvalId.get(result.evalId) ?? 0,
+      metricDerivedTestCount,
+    );
+    const testRunCount = testCounts.reduce((sum, count) => sum + count, 0);
 
     // Construct an array of providers
     const deserializedProviders = [];

@@ -178,7 +178,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     // Find the failed tests
     const failedTests = table.body
-      .filter((row) => row.outputs.some((output) => !output?.pass))
+      .filter((row) => row.outputs.some((output) => output != null && !output.pass))
       .map((row) => row.test);
 
     if (failedTests.length === 0) {
@@ -257,25 +257,24 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     const humanEvalCases = table.body
       .filter((row) => row.outputs.some((output) => output != null))
-      .map((row) => ({
-        vars: {
-          ...row.test.vars,
-          output: row.outputs[0]?.text.includes('---')
-            ? row.outputs[0]!.text.split('---\n')[1]
-            : (row.outputs[0]?.text ?? ''),
-          redteamFinalPrompt: row.outputs[0]?.metadata?.redteamFinalPrompt,
-          ...(row.outputs[0]?.gradingResult?.comment
-            ? { comment: row.outputs[0]!.gradingResult!.comment }
-            : {}),
-        },
-        assert: [
-          {
-            type: 'javascript',
-            value: `${row.outputs[0]?.pass ? '' : '!'}JSON.parse(output).pass`,
+      .map((row) => {
+        const output = row.outputs.find((candidate) => candidate != null)!;
+        return {
+          vars: {
+            ...row.test.vars,
+            output: output.text.includes('---') ? output.text.split('---\n')[1] : output.text,
+            redteamFinalPrompt: output.metadata?.redteamFinalPrompt,
+            ...(output.gradingResult?.comment ? { comment: output.gradingResult.comment } : {}),
           },
-        ],
-        metadata: row.test.metadata,
-      }));
+          assert: [
+            {
+              type: 'javascript',
+              value: `${output.pass ? '' : '!'}JSON.parse(output).pass`,
+            },
+          ],
+          metadata: row.test.metadata,
+        };
+      });
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
@@ -361,7 +360,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     disabled={
                       !table ||
                       !table.body ||
-                      table.body.every((row) => row.outputs.every((output) => output?.pass))
+                      table.body.every((row) =>
+                        row.outputs.every((output) => output == null || output.pass),
+                      )
                     }
                   >
                     <Download className="size-4 mr-2" />

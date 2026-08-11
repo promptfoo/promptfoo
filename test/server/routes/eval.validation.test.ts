@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
 
+import { runDbMigrations } from '../../../src/migrate';
 import Eval, { EvalQueries } from '../../../src/models/eval';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
@@ -24,6 +25,10 @@ describe('Eval Routes - Zod Validation', () => {
   let mockGetMetadataValuesFromEval: ReturnType<typeof vi.fn>;
 
   beforeAll(async () => {
+    // The DELETE /:evalId/results/:id 404 case calls the real storage layer
+    // (the route is not mocked) and would crash on a missing schema otherwise.
+    // `runDbMigrations` is idempotent against the shared in-memory test DB.
+    await runDbMigrations();
     await new Promise<void>((resolve, reject) => {
       server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
         error ? reject(error) : resolve(),
@@ -300,6 +305,20 @@ describe('Eval Routes - Zod Validation', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
+    });
+  });
+
+  describe('DELETE /api/eval/:evalId/results/:id', () => {
+    // Express splits "/api/eval//results/foo" so an empty :evalId never reaches
+    // the route handler, and the same applies to a missing :id. The Zod
+    // params schema is therefore the layer guarding against the cases that DO
+    // hit the handler — e.g. a 404 from the storage layer for an unknown row.
+    it('should return 404 when the result does not exist', async () => {
+      const response = await api.delete('/api/eval/missing-eval/results/missing-result');
+
+      // Storage layer throws EvalResultNotFoundError → route returns 404 JSON.
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Eval result not found' });
     });
   });
 

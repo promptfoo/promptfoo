@@ -65,6 +65,40 @@ function addNumbers(a: number | undefined, b: number | undefined): number {
   return (a ?? 0) + (b ?? 0);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Helper to subtract numeric values; ignores malformed imported deltas. */
+function subtractNumbers(a: number | undefined, b: unknown): number {
+  return isFiniteNumber(b) ? (a ?? 0) - b : (a ?? 0);
+}
+
+/** Inverse of {@link accumulateCompletionDetails} — mirrors the field-by-field structure
+ * so a deletion debits exactly what the matching accumulation credited. */
+function subtractCompletionDetails(
+  target: CompletionTokenDetails | undefined,
+  update: CompletionTokenDetails | undefined,
+): CompletionTokenDetails | undefined {
+  if (!update || !target) {
+    return target;
+  }
+
+  return {
+    reasoning: subtractNumbers(target?.reasoning, update.reasoning),
+    acceptedPrediction: subtractNumbers(target?.acceptedPrediction, update.acceptedPrediction),
+    rejectedPrediction: subtractNumbers(target?.rejectedPrediction, update.rejectedPrediction),
+    cacheReadInputTokens: subtractNumbers(
+      target?.cacheReadInputTokens,
+      update.cacheReadInputTokens,
+    ),
+    cacheCreationInputTokens: subtractNumbers(
+      target?.cacheCreationInputTokens,
+      update.cacheCreationInputTokens,
+    ),
+  };
+}
+
 /**
  * Helper to accumulate completion details
  */
@@ -158,6 +192,91 @@ export function accumulateTokenUsage(
 }
 
 /**
+ * Inverse of {@link accumulateTokenUsage}: subtracts the same delta `accumulateTokenUsage`
+ * would add for the same `update`. Mirrors the forward function's structure exactly so a
+ * deleted row's contribution can be debited from a running aggregate without drifting.
+ * Notes:
+ * - `incrementRequests` is intentionally absent: forward only auto-increments when
+ *   `update.numRequests` is missing, and we don't want a debit to silently change
+ *   `numRequests` based on an unrelated heuristic at delete time.
+ * - Mutates {@code target}.
+ */
+export function subtractTokenUsage(
+  target: TokenUsage,
+  update: Partial<TokenUsage> | undefined,
+): void {
+  if (!update) {
+    return;
+  }
+
+  if (target.prompt !== undefined) {
+    target.prompt = subtractNumbers(target.prompt, update.prompt);
+  }
+  if (target.completion !== undefined) {
+    target.completion = subtractNumbers(target.completion, update.completion);
+  }
+  if (target.cached !== undefined) {
+    target.cached = subtractNumbers(target.cached, update.cached);
+  }
+  if (target.total !== undefined) {
+    target.total = subtractNumbers(target.total, update.total);
+  }
+
+  if (update.numRequests !== undefined && target.numRequests !== undefined) {
+    // Request counts are never negative; clamp so an under-credited imported
+    // aggregate can't turn into an impossible `-N` on delete.
+    target.numRequests = Math.max(0, subtractNumbers(target.numRequests, update.numRequests));
+  }
+
+  if (update.completionDetails) {
+    target.completionDetails = subtractCompletionDetails(
+      target.completionDetails,
+      update.completionDetails,
+    );
+  }
+
+  if (update.assertions && target.assertions) {
+    if (target.assertions.total !== undefined) {
+      target.assertions.total = subtractNumbers(target.assertions.total, update.assertions.total);
+    }
+    if (target.assertions.prompt !== undefined) {
+      target.assertions.prompt = subtractNumbers(
+        target.assertions.prompt,
+        update.assertions.prompt,
+      );
+    }
+    if (target.assertions.completion !== undefined) {
+      target.assertions.completion = subtractNumbers(
+        target.assertions.completion,
+        update.assertions.completion,
+      );
+    }
+    if (target.assertions.cached !== undefined) {
+      target.assertions.cached = subtractNumbers(
+        target.assertions.cached,
+        update.assertions.cached,
+      );
+    }
+    if (target.assertions.numRequests !== undefined) {
+      // Same rationale as the top-level bucket: request counts are never
+      // negative, and imported V4 usage can carry an under-credited nested
+      // `assertions.numRequests`, so clamp the debit at zero.
+      target.assertions.numRequests = Math.max(
+        0,
+        subtractNumbers(target.assertions.numRequests, update.assertions.numRequests),
+      );
+    }
+
+    if (update.assertions.completionDetails) {
+      target.assertions.completionDetails = subtractCompletionDetails(
+        target.assertions.completionDetails,
+        update.assertions.completionDetails,
+      );
+    }
+  }
+}
+
+/**
  * Accumulate token usage specifically for assertions.
  * This function operates directly on an assertions object rather than a full TokenUsage object.
  * @param target Assertions object to update
@@ -188,6 +307,36 @@ export function accumulateAssertionTokenUsage(
   }
 }
 
+/** Inverse of {@link accumulateAssertionTokenUsage}; mirrors its field set. Mutates {@code target}. */
+export function subtractAssertionTokenUsage(
+  target: NonNullable<TokenUsage['assertions']>,
+  update: Partial<TokenUsage> | undefined,
+): void {
+  if (!update) {
+    return;
+  }
+
+  if (target.total !== undefined) {
+    target.total = subtractNumbers(target.total, update.total);
+  }
+  if (target.prompt !== undefined) {
+    target.prompt = subtractNumbers(target.prompt, update.prompt);
+  }
+  if (target.completion !== undefined) {
+    target.completion = subtractNumbers(target.completion, update.completion);
+  }
+  if (target.cached !== undefined) {
+    target.cached = subtractNumbers(target.cached, update.cached);
+  }
+
+  if (update.completionDetails) {
+    target.completionDetails = subtractCompletionDetails(
+      target.completionDetails,
+      update.completionDetails,
+    );
+  }
+}
+
 /**
  * Account for a single grading (assertion) request: every grading call counts as one
  * assertion request, and its token usage is folded in when the grader reported any.
@@ -201,6 +350,25 @@ export function accumulateGradingRequest(
   assertions.numRequests = (assertions.numRequests ?? 0) + 1;
   if (tokensUsed) {
     accumulateAssertionTokenUsage(assertions, tokensUsed);
+  }
+}
+
+/**
+ * Inverse of {@link accumulateGradingRequest}: debit a single grading request
+ * and its token contribution. `numRequests` is only decremented when the
+ * aggregate was previously tracked (mirrors {@link subtractTokenUsage}'s
+ * treatment of `numRequests`), and clamps at 0 to avoid negative counts if
+ * an aggregate was under-credited. Mutates {@code assertions}.
+ */
+export function subtractGradingRequest(
+  assertions: NonNullable<TokenUsage['assertions']>,
+  tokensUsed: Partial<TokenUsage> | undefined,
+): void {
+  if (assertions.numRequests !== undefined) {
+    assertions.numRequests = Math.max(0, assertions.numRequests - 1);
+  }
+  if (tokensUsed) {
+    subtractAssertionTokenUsage(assertions, tokensUsed);
   }
 }
 
@@ -235,6 +403,36 @@ export function accumulateResponseTokenUsage(
   } else if (response && countAsRequest) {
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
+  }
+}
+
+/**
+ * Inverse of {@link accumulateResponseTokenUsage}; mirrors the same branching so a row
+ * that was credited with `accumulateResponseTokenUsage(target, row.response)` can be
+ * debited with `subtractResponseTokenUsage(target, row.response)`. Mutates {@code target}.
+ */
+export function subtractResponseTokenUsage(
+  target: TokenUsage,
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean },
+): void {
+  const countAsRequest = options?.countAsRequest ?? true;
+
+  if (response?.tokenUsage) {
+    if (countAsRequest) {
+      subtractTokenUsage(target, response.tokenUsage);
+      if (response.tokenUsage.numRequests === undefined && target.numRequests !== undefined) {
+        target.numRequests = Math.max(0, target.numRequests - 1);
+      }
+    } else {
+      const tokenUsageWithoutRequests: Partial<TokenUsage> = {
+        ...response.tokenUsage,
+        numRequests: undefined,
+      };
+      subtractTokenUsage(target, tokenUsageWithoutRequests);
+    }
+  } else if (response && countAsRequest && target.numRequests !== undefined) {
+    target.numRequests = Math.max(0, target.numRequests - 1);
   }
 }
 
