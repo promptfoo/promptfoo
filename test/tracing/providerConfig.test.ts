@@ -29,6 +29,16 @@ describe.each(schemas)('$name tracing provider configuration', ({ schema }) => {
     ).toBe(true);
   });
 
+  it('accepts ordinary reverse-proxy path prefixes', () => {
+    expect(
+      schema.safeParse(
+        config({
+          provider: { id: 'tempo', endpoint: 'https://tempo.example.com/team-west/tempo' },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
   it.each([
     { id: 'jaeger', endpoint: 'https://jaeger.example.com' },
     { id: 'tempo' },
@@ -37,6 +47,8 @@ describe.each(schemas)('$name tracing provider configuration', ({ schema }) => {
     { id: 'tempo', endpoint: 'https://tempo.example.com/tempo?token=secret' },
     { id: 'tempo', endpoint: 'https://tempo.example.com/tempo?opaque=secret' },
     { id: 'tempo', endpoint: 'https://tempo.example.com/tempo#token=secret' },
+    { id: 'tempo', endpoint: 'https://tempo.example.com/tempo/token-privateTenantCredential123' },
+    { id: 'tempo', endpoint: 'https://tempo.example.com/tempo/%74oken-privateTenantCredential123' },
     { id: 'tempo', endpoint: 'https://tempo.example.com', timeout: -1 },
     { id: 'tempo', endpoint: 'https://tempo.example.com', timeout: 1.5 },
     { id: 'tempo', endpoint: 'https://tempo.example.com', auth: { username: 'user' } },

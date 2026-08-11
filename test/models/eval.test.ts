@@ -657,6 +657,38 @@ describe('evaluator', () => {
       expect(JSON.stringify(exportedEvaluation.config)).not.toContain('endpoint-secret');
     });
 
+    it.each([
+      'token-privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])(
+      'redacts credential-like endpoint path segments before persistence: %s',
+      async (credential) => {
+        const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+        const evaluation = await Eval.create(
+          {
+            tracing: {
+              enabled: true,
+              provider: { id: 'tempo', endpoint },
+            },
+          },
+          [],
+        );
+        const persistedEvaluation = await Eval.findById(evaluation.id);
+        const exportedEvaluation = await evaluation.toResultsFile();
+
+        expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+        expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(JSON.stringify(persistedEvaluation?.config)).not.toContain(credential);
+        expect(JSON.stringify(exportedEvaluation.config)).not.toContain(credential);
+      },
+    );
+
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
       // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.

@@ -400,6 +400,10 @@ export function sanitizeTracingConfigForPersistence(
       endpoint.hash = '';
       sanitizedEndpoint = endpoint.toString();
     }
+    const safeEndpoint = sanitizeUrlForLogging(endpoint.toString());
+    if (safeEndpoint !== endpoint.toString()) {
+      sanitizedEndpoint = safeEndpoint;
+    }
   } catch {
     sanitizedEndpoint = sanitizeUrl(provider.endpoint);
   }

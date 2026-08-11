@@ -80,6 +80,8 @@ describe('TempoProvider', () => {
     { id: 'tempo', endpoint: 'https://user:secret@example.com' },
     { id: 'tempo', endpoint: 'https://example.com/tempo?tenant=example' },
     { id: 'tempo', endpoint: 'https://example.com/tempo#section' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo/token-privateTenantCredential123' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo/%74oken-privateTenantCredential123' },
     { id: 'tempo', endpoint: 'https://example.com', timeout: -1 },
   ] as const)('rejects unsafe provider configuration: %o', (config) => {
     expect(() => new TempoProvider(config)).toThrow();

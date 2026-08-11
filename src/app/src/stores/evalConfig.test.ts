@@ -1134,6 +1134,27 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('endpoint-secret');
     });
 
+    it.each([
+      'token-privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])('redacts credential-like endpoint path segments in browser storage: %s', (credential) => {
+      const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          provider: { id: 'tempo', endpoint },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(useStore.getState().config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persisted.tracing.provider.endpoint).toBe(
+        'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+      );
+      expect(JSON.stringify(persisted)).not.toContain(credential);
+    });
+
     it('redacts trace forwarding and provider credentials independently', () => {
       useStore.getState().setConfig({
         tracing: {

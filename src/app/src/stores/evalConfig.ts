@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { looksLikeSecret, redactAzureBlobSasTokens } from '../../../util/sanitizer';
+import {
+  looksLikeSecret,
+  redactAzureBlobSasTokens,
+  sanitizeUrlForLogging,
+} from '../../../util/sanitizer';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -994,6 +998,10 @@ const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): 
         endpoint.search = '';
         endpoint.hash = '';
         sanitizedProvider.endpoint = endpoint.toString();
+      }
+      const safeEndpoint = sanitizeUrlForLogging(endpoint.toString());
+      if (safeEndpoint !== endpoint.toString()) {
+        sanitizedProvider.endpoint = safeEndpoint;
       }
     } catch {
       sanitizedProvider.endpoint = scrubProviderUrl(providerEndpoint, templatePaths);

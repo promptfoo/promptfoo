@@ -310,12 +310,22 @@ export class TempoProvider implements TraceProvider {
     } catch {
       throw new Error('Tempo provider endpoint must be a valid HTTP or HTTPS URL');
     }
+    const hasCredentialPath = endpoint.pathname.split('/').some((segment) => {
+      try {
+        return /^(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}$/i.test(
+          decodeURIComponent(segment),
+        );
+      } catch {
+        return true;
+      }
+    });
     if (
       !['http:', 'https:'].includes(endpoint.protocol) ||
       endpoint.username ||
       endpoint.password ||
       endpoint.search ||
-      endpoint.hash
+      endpoint.hash ||
+      hasCredentialPath
     ) {
       throw new Error(
         'Tempo provider endpoint must be an HTTP or HTTPS URL without credentials, query parameters, or fragments',

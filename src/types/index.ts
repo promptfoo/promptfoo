@@ -1037,12 +1037,22 @@ const TraceProviderConfigSchema = z.object({
   id: z.literal('tempo'),
   endpoint: z.url().refine((endpoint) => {
     const url = new URL(endpoint);
+    const hasCredentialPath = url.pathname.split('/').some((segment) => {
+      try {
+        return /^(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}$/i.test(
+          decodeURIComponent(segment),
+        );
+      } catch {
+        return true;
+      }
+    });
     return (
       (url.protocol === 'http:' || url.protocol === 'https:') &&
       !url.username &&
       !url.password &&
       !url.search &&
-      !url.hash
+      !url.hash &&
+      !hasCredentialPath
     );
   }, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments'),
   auth: z
