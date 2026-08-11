@@ -595,6 +595,34 @@ describe('package manifests', () => {
     expect(validRange(parse5Range as string)).not.toBeNull();
   });
 
+  it('keeps the streaming OpenAI example aligned with supported Node versions', () => {
+    const rootManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'package.json',
+    );
+    const exampleManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'examples/config-websockets/streaming/server/package.json',
+    );
+    const lockfile = readPackageJson<{
+      packages: Record<string, { engines?: { node?: string } }>;
+    }>('package-lock.json');
+    const readme = fs.readFileSync(
+      path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
+      'utf8',
+    );
+    const exampleNodeMinimum = minVersion(exampleManifest.engines?.node ?? '');
+    const rootNodeMinimum = minVersion(rootManifest.engines?.node ?? '');
+    const openAiNodeMinimum = minVersion(
+      lockfile.packages['node_modules/openai']?.engines?.node ?? '',
+    );
+
+    expect(exampleNodeMinimum).not.toBeNull();
+    expect(rootNodeMinimum).not.toBeNull();
+    expect(openAiNodeMinimum).not.toBeNull();
+    expect(exampleNodeMinimum?.compare(rootNodeMinimum!)).toBeGreaterThanOrEqual(0);
+    expect(exampleNodeMinimum?.compare(openAiNodeMinimum!)).toBeGreaterThanOrEqual(0);
+    expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
+  });
+
   it('requires patched WebSocket fragment limits in published and example manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const lockfile = readPackageJson<{
