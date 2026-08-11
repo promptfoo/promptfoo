@@ -1,9 +1,9 @@
+import { execFile } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
-import { createClient } from '@libsql/client/node';
 import { eq } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -12,6 +12,8 @@ import { runDbMigrations } from '../../src/migrate';
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
+
+const execFileAsync = promisify(execFile);
 
 describe('TraceStore span persistence', () => {
   beforeAll(async () => {
@@ -85,33 +87,66 @@ describe('TraceStore span persistence', () => {
 describe('span uniqueness migration', () => {
   it('removes existing duplicate spans before adding the unique index', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-span-migration-'));
-    const client = createClient({ url: pathToFileURL(join(directory, 'promptfoo.db')).href });
 
     try {
-      await client.execute(
-        'CREATE TABLE spans (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, span_id TEXT NOT NULL)',
-      );
-      await client.batch([
-        "INSERT INTO spans VALUES ('first', 'trace-1', 'span-1')",
-        "INSERT INTO spans VALUES ('duplicate', 'trace-1', 'span-1')",
-        "INSERT INTO spans VALUES ('other-trace', 'trace-2', 'span-1')",
-      ]);
-
       const migration = await readFile(
         new URL('../../drizzle/0025_broken_emma_frost.sql', import.meta.url),
         'utf8',
       );
-      for (const statement of migration.split('--> statement-breakpoint')) {
-        await client.execute(statement);
-      }
+      const migrationProbe = `
+        import { pathToFileURL } from 'node:url';
+        import { createClient } from '@libsql/client/node';
 
-      const persistedSpans = await client.execute('SELECT id FROM spans ORDER BY rowid');
-      expect(persistedSpans.rows.map(({ id }) => id)).toEqual(['first', 'other-trace']);
-      await expect(
-        client.execute("INSERT INTO spans VALUES ('second-duplicate', 'trace-1', 'span-1')"),
-      ).rejects.toThrow(/unique/i);
+        const [databasePath, migration] = process.argv.slice(1);
+        const client = createClient({ url: pathToFileURL(databasePath).href });
+
+        try {
+          await client.execute(
+            'CREATE TABLE spans (id TEXT PRIMARY KEY, trace_id TEXT NOT NULL, span_id TEXT NOT NULL)',
+          );
+          await client.batch([
+            "INSERT INTO spans VALUES ('first', 'trace-1', 'span-1')",
+            "INSERT INTO spans VALUES ('duplicate', 'trace-1', 'span-1')",
+            "INSERT INTO spans VALUES ('other-trace', 'trace-2', 'span-1')",
+          ]);
+
+          for (const statement of migration.split('--> statement-breakpoint')) {
+            await client.execute(statement);
+          }
+
+          const persistedSpans = await client.execute('SELECT id FROM spans ORDER BY rowid');
+          let duplicateError;
+          try {
+            await client.execute(
+              "INSERT INTO spans VALUES ('second-duplicate', 'trace-1', 'span-1')",
+            );
+          } catch (error) {
+            duplicateError = String(error);
+          }
+
+          process.stdout.write(JSON.stringify({
+            spanIds: persistedSpans.rows.map(({ id }) => id),
+            duplicateError,
+          }));
+        } finally {
+          client.close();
+        }
+      `;
+
+      // libSQL can retain native handles after close on Windows; process exit
+      // guarantees the file-backed database is released before cleanup.
+      const { stdout } = await execFileAsync(process.execPath, [
+        '--input-type=module',
+        '--eval',
+        migrationProbe,
+        join(directory, 'promptfoo.db'),
+        migration,
+      ]);
+      const result = JSON.parse(stdout) as { spanIds: string[]; duplicateError?: string };
+
+      expect(result.spanIds).toEqual(['first', 'other-trace']);
+      expect(result.duplicateError).toMatch(/unique/i);
     } finally {
-      client.close();
       removeTempDir(directory);
     }
   });
