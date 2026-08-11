@@ -118,6 +118,65 @@ describe('TempoProvider', () => {
     );
   });
 
+  it.each([
+    ['standard base64', (id: string) => Buffer.from(id, 'hex').toString('base64')],
+    [
+      'unpadded base64',
+      (id: string) => Buffer.from(id, 'hex').toString('base64').replace(/=+$/, ''),
+    ],
+    ['uppercase hexadecimal', (id: string) => id.toUpperCase()],
+  ])('normalizes %s span and parent identifiers', async (_encoding, encodeId) => {
+    const encodedResponse = structuredClone(traceResponse);
+    const spans = encodedResponse.batches[0].scopeSpans[0].spans;
+    spans[0].spanId = encodeId(spans[0].spanId);
+    spans[1].spanId = encodeId(spans[1].spanId);
+    spans[1].parentSpanId = encodeId(spans[1].parentSpanId!);
+    mockedFetch.mockResolvedValueOnce(response(encodedResponse));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans).toMatchObject([
+      { spanId: '0123456789abcdef' },
+      { spanId: '1123456789abcdef', parentSpanId: '0123456789abcdef' },
+    ]);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['malformed base64', '!!!'],
+    ['short hexadecimal', 'abc123'],
+    ['all-zero hexadecimal', '0000000000000000'],
+    ['all-zero base64', 'AAAAAAAAAAA='],
+    ['short base64', 'YWJjZA=='],
+    ['overlong base64', 'MDEyMzQ1Njc4'],
+    ['non-canonical base64', 'ASNFZ4mrze9='],
+  ])('discards spans with %s span identifiers while retaining valid spans', async (_reason, id) => {
+    const malformedResponse = structuredClone(traceResponse);
+    const spans = malformedResponse.batches[0].scopeSpans[0].spans;
+    spans.unshift({ ...spans[0], name: 'malformed.span', spanId: id });
+    mockedFetch.mockResolvedValueOnce(response(malformedResponse));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+  });
+
+  it.each(['!!!', 'abc123', '0000000000000000', 'AAAAAAAAAAA='])(
+    'discards spans with an invalid parent identifier: %s',
+    async (parentSpanId) => {
+      const malformedResponse = structuredClone(traceResponse);
+      malformedResponse.batches[0].scopeSpans[0].spans[1].parentSpanId = parentSpanId;
+      mockedFetch.mockResolvedValueOnce(response(malformedResponse));
+
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      const result = await provider.fetchTrace(TRACE_ID);
+
+      expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
+    },
+  );
+
   it('applies earliest timestamps, safe wildcard filters, and span limits', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
 

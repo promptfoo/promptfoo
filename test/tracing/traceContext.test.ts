@@ -104,6 +104,81 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-2', { earliestStartTime: 100 });
   });
 
+  it.each([
+    {
+      name: 'self-referential parents without a depth limit',
+      cyclicSpans: [{ spanId: 'cycle-1', parentSpanId: 'cycle-1' }],
+      maxDepth: undefined,
+    },
+    {
+      name: 'two-span parent cycles',
+      cyclicSpans: [
+        { spanId: 'cycle-1', parentSpanId: 'cycle-2' },
+        { spanId: 'cycle-2', parentSpanId: 'cycle-1' },
+      ],
+      maxDepth: 10,
+    },
+    {
+      name: 'longer parent cycles',
+      cyclicSpans: [
+        { spanId: 'cycle-1', parentSpanId: 'cycle-2' },
+        { spanId: 'cycle-2', parentSpanId: 'cycle-3' },
+        { spanId: 'cycle-3', parentSpanId: 'cycle-1' },
+      ],
+      maxDepth: 10,
+    },
+  ])('discards $name while retaining unrelated valid spans', async ({ cyclicSpans, maxDepth }) => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 123,
+      traceId: 'trace-cycle',
+      spans: [
+        ...cyclicSpans.map((span, index) => ({
+          ...span,
+          name: `malformed.${index}`,
+          startTime: index,
+        })),
+        {
+          spanId: 'cycle-descendant',
+          parentSpanId: 'cycle-1',
+          name: 'malformed.descendant',
+          startTime: 10,
+        },
+        { spanId: 'valid-root', name: 'target.call', startTime: 20 },
+        {
+          spanId: 'valid-child',
+          parentSpanId: 'valid-root',
+          name: 'tool.execute',
+          startTime: 30,
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-cycle', {
+      maxDepth,
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      sanitizeAttributes: false,
+    });
+
+    expect(result?.spans.map(({ name, depth }) => ({ name, depth }))).toEqual([
+      { name: 'target.call', depth: 0 },
+      { name: 'tool.execute', depth: 1 },
+    ]);
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-cycle',
+      [
+        expect.objectContaining({ spanId: 'valid-root' }),
+        expect.objectContaining({ spanId: 'valid-child' }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      `[TraceContext] Skipping ${cyclicSpans.length + 1} spans with cyclic parent relationships`,
+    );
+  });
+
   it('returns null when an external provider cannot be initialized', async () => {
     mocks.createTraceProvider.mockImplementation(() => {
       throw new Error('Unknown trace provider id: jaeger');

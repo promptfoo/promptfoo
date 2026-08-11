@@ -45,6 +45,8 @@ interface TempoTraceResponse {
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
+const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
+const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 
 function nanoToMs(value: string): number {
   const milliseconds = BigInt(value) / 1_000_000n;
@@ -88,14 +90,29 @@ function attributesToRecord(
   );
 }
 
-function decodeId(id: string | undefined): string | undefined {
+function decodeSpanId(id: string | undefined): string | undefined {
   if (!id) {
     return undefined;
   }
-  if (/^[0-9a-f]+$/i.test(id)) {
-    return id.toLowerCase();
+
+  if (SPAN_ID_PATTERN.test(id)) {
+    return /^0+$/.test(id) ? undefined : id.toLowerCase();
   }
-  return Buffer.from(id, 'base64').toString('hex').toLowerCase();
+
+  if (!BASE64_SPAN_ID_PATTERN.test(id)) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(id, 'base64');
+  if (
+    decoded.length !== 8 ||
+    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
+  ) {
+    return undefined;
+  }
+
+  const spanId = decoded.toString('hex');
+  return /^0+$/.test(spanId) ? undefined : spanId;
 }
 
 function normalizeStatusCode(code: number | string | undefined): number | undefined {
@@ -137,6 +154,16 @@ function transformSpan(
   scopeName: string | undefined,
   options?: FetchTraceOptions,
 ): SpanData | null {
+  const spanId = decodeSpanId(span.spanId);
+  if (!spanId) {
+    throw new Error('Span ID must be a valid nonzero eight-byte identifier');
+  }
+
+  const parentSpanId = decodeSpanId(span.parentSpanId);
+  if (span.parentSpanId && !parentSpanId) {
+    throw new Error('Parent span ID must be a valid nonzero eight-byte identifier');
+  }
+
   const startTime = nanoToMs(span.startTimeUnixNano);
   if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
     return null;
@@ -146,8 +173,8 @@ function transformSpan(
   }
 
   return {
-    spanId: decodeId(span.spanId) ?? span.spanId,
-    parentSpanId: decodeId(span.parentSpanId),
+    spanId,
+    parentSpanId,
     name: span.name,
     startTime,
     endTime: span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined,

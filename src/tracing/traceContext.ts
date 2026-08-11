@@ -197,26 +197,49 @@ export function extractTraceIdFromTraceparent(traceparent: string): string | nul
 }
 
 /**
- * Compute the depth of a span in the span tree
+ * Compute the depth of a span in the span tree, rejecting cyclic parent chains.
  */
 function computeSpanDepth(
   span: SpanData,
   spanMap: Map<string, SpanData>,
-  depthCache: Map<string, number>,
-): number {
-  if (depthCache.has(span.spanId)) {
-    return depthCache.get(span.spanId)!;
+  depthCache: Map<string, number | null>,
+): number | null {
+  const ancestors: SpanData[] = [];
+  const visited = new Set<string>();
+  let current: SpanData | undefined = span;
+  let depth = -1;
+
+  while (current) {
+    const cachedDepth = depthCache.get(current.spanId);
+    if (cachedDepth !== undefined) {
+      if (cachedDepth === null) {
+        for (const ancestor of ancestors) {
+          depthCache.set(ancestor.spanId, null);
+        }
+        return null;
+      }
+      depth = cachedDepth;
+      break;
+    }
+
+    if (visited.has(current.spanId)) {
+      for (const ancestor of ancestors) {
+        depthCache.set(ancestor.spanId, null);
+      }
+      return null;
+    }
+
+    visited.add(current.spanId);
+    ancestors.push(current);
+    current = current.parentSpanId ? spanMap.get(current.parentSpanId) : undefined;
   }
 
-  if (!span.parentSpanId || !spanMap.has(span.parentSpanId)) {
-    depthCache.set(span.spanId, 0);
-    return 0;
+  for (let index = ancestors.length - 1; index >= 0; index--) {
+    depth += 1;
+    depthCache.set(ancestors[index].spanId, depth);
   }
 
-  const parentDepth = computeSpanDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache);
-  const currentDepth = parentDepth + 1;
-  depthCache.set(span.spanId, currentDepth);
-  return currentDepth;
+  return depth;
 }
 
 /**
@@ -241,9 +264,16 @@ function postProcessExternalSpans(
   for (const span of spans) {
     spanMap.set(span.spanId, span);
   }
-  const depthCache = new Map<string, number>();
+  const depthCache = new Map<string, number | null>();
+  const cyclicSpanIds = new Set<string>();
 
   let filtered = spans.filter((span) => {
+    const depth = computeSpanDepth(span, spanMap, depthCache);
+    if (depth === null) {
+      cyclicSpanIds.add(span.spanId);
+      return false;
+    }
+
     // Filter by internal spans
     if (!includeInternalSpans) {
       const kind = resolveSpanKind(span);
@@ -263,15 +293,18 @@ function postProcessExternalSpans(
     }
 
     // Filter by depth
-    if (maxDepth !== undefined) {
-      const depth = computeSpanDepth(span, spanMap, depthCache);
-      if (depth >= maxDepth) {
-        return false;
-      }
+    if (maxDepth !== undefined && depth >= maxDepth) {
+      return false;
     }
 
     return true;
   });
+
+  if (cyclicSpanIds.size > 0) {
+    logger.warn(
+      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
+    );
+  }
 
   // Apply maxSpans limit
   if (maxSpans !== undefined && filtered.length > maxSpans) {
