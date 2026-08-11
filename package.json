@@ -193,11 +193,11 @@
     "langium": {
       ".": "4.3.1",
       "@chevrotain/regexp-to-ast": "11.2.0",
-      "chevrotain": "11.2.0",
+      "chevrotain": "13.1.0",
       "chevrotain-allstar": "0.4.4"
     },
     "chevrotain": {
-      ".": "11.2.0",
+      ".": "13.1.0",
       "@chevrotain/cst-dts-gen": "13.1.0",
       "@chevrotain/gast": "11.2.0",
       "@chevrotain/regexp-to-ast": "11.2.0",
@@ -211,7 +211,7 @@
     },
     "chevrotain-allstar": {
       ".": "0.4.4",
-      "chevrotain": "11.2.0"
+      "chevrotain": "13.1.0"
     },
     "webpack": "5.109.2",
     "dompurify": "3.4.13",
