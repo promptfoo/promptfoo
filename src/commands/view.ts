@@ -52,7 +52,13 @@ export function viewCommand(program: Command) {
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
 
-        if (cmdObj.id) {
+        if (cmdObj.id !== undefined) {
+          if (cmdObj.id === '') {
+            logger.error('Eval ID cannot be empty when using --id.');
+            process.exitCode = 1;
+            return;
+          }
+
           if (cmdObj.id === '.' || cmdObj.id === '..') {
             logger.error(
               'Eval IDs "." and ".." cannot be opened with --id because browsers normalize dot-segment URL paths.',
