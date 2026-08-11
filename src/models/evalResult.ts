@@ -1,9 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { z } from 'zod';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
-import { evalResultsTable } from '../database/tables';
+import { evalResultsTable, evalsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -13,13 +14,17 @@ import {
   type AtomicTestCase,
   type EvaluateResult,
   type GradingResult,
+  getNonstandardScoringBaseline,
   isResultFailureReason,
   type Prompt,
+  type PromptMetrics,
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
-} from '../types/index';
+  setNonstandardScoringBaseline,
+} from '../types/internal';
 import { isApiProvider, isProviderOptions } from '../types/providers';
+import { sha256 } from '../util/createHash';
 import { safeJsonStringify } from '../util/json';
 import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
@@ -28,8 +33,11 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { invalidateEvaluationCache } from './evalMutation';
+import { invalidateEvaluationCache, notifyEvaluationChanged } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
+
+type SubmitRatingAction = 'rate' | 'clear' | 'update';
+type SubmitRatingUpdate = 'score' | 'comment';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -405,12 +413,15 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
-// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
-// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
-// log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
-// `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
+// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data.
+// User-supplied non-object values under this key are overwritten — log so the rare collision
+// is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` / `getMetadataValuesFromEval`,
+// which hide the namespace from the metadata-discovery API.
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
+// Rating provenance lives in eval_results.manual_rating_state. Strip this reserved path so
+// historical or externally supplied metadata can never be mistaken for authoritative state.
+const MANUAL_RATING_METADATA_KEY = 'manualRating';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -423,11 +434,12 @@ export function persistTraceMetadata(
   traceId: EvaluateResult['traceId'],
   evaluationId: EvaluateResult['evaluationId'],
 ): EvaluateResult['metadata'] {
+  const publicMetadata = stripManualRatingStateFromMetadata(metadata);
   if (!traceId && !evaluationId) {
-    return stripTraceLinkageFromMetadata(metadata);
+    return stripTraceLinkageFromMetadata(publicMetadata);
   }
 
-  const metadataRecord = metadata ?? {};
+  const metadataRecord = publicMetadata ?? {};
   const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
   if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
     logger.warn(
@@ -483,19 +495,950 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   const evaluationId =
     typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
 
-  // Strip the reserved namespace whenever a `traceLinkage` entry exists — even if the
-  // stored ids are malformed (non-string), the internal namespace must never surface to
-  // users. Gate on presence of the key, not on whether the ids read back as valid strings.
-  const hasTraceLinkage = promptfooMetadata != null && TRACE_LINKAGE_KEY in promptfooMetadata;
-  if (!hasTraceLinkage) {
-    return { traceId, evaluationId, metadata: metadataRecord };
-  }
+  // Internal linkage and rating provenance must never surface in public result metadata,
+  // including when their stored values are malformed.
+  const publicMetadata = stripManualRatingStateFromMetadata(
+    stripTraceLinkageFromMetadata(metadataRecord),
+  );
 
   return {
     traceId,
     evaluationId,
-    metadata: stripTraceLinkageFromMetadata(metadataRecord),
+    metadata: publicMetadata ?? {},
   };
+}
+
+type ResultMetricCategory = 'pass' | 'fail' | 'error';
+type PersistedEvalResult = typeof evalResultsTable.$inferSelect;
+type RatingEvalResult = Pick<
+  PersistedEvalResult,
+  | 'error'
+  | 'failureReason'
+  | 'gradingResult'
+  | 'manualRatingState'
+  | 'metadata'
+  | 'promptIdx'
+  | 'response'
+  | 'score'
+  | 'success'
+  | 'testCase'
+>;
+
+const HUMAN_ASSERTION_TYPE = 'human';
+const MANUAL_RATING_REASON = 'Manual result (overrides all other grading results)';
+
+const ManualRatingStateSchema = z.object({
+  version: z.literal(1),
+  status: z.enum(['baseline', 'active', 'legacy-active', 'cleared']),
+  original: z.object({
+    success: z.boolean(),
+    score: z.number(),
+    failureReason: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    gradingResult: z
+      .object({
+        pass: z.boolean(),
+        score: z.number(),
+        reason: z.unknown().optional(),
+        assertion: z.unknown().optional(),
+        hadReason: z.boolean(),
+        hadAssertion: z.boolean(),
+        hadComponentResults: z.boolean(),
+      })
+      .nullable(),
+  }),
+  clearRequestHash: z.string().optional(),
+  lastLegacyUpdateHash: z.string().optional(),
+});
+
+type ManualRatingState = z.infer<typeof ManualRatingStateSchema>;
+
+function normalizeFailureReason(value: number): ResultFailureReason {
+  return isResultFailureReason(value) ? value : ResultFailureReason.NONE;
+}
+
+function isHumanAssertion(assertion: unknown): boolean {
+  return asRecord(assertion)?.type === HUMAN_ASSERTION_TYPE;
+}
+
+function isHumanGradingResult(value: unknown): value is GradingResult {
+  return Boolean(asRecord(value) && isHumanAssertion(asRecord(value)?.assertion));
+}
+
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function getLegacyClearRequestHash(gradingResult: GradingResult): string | undefined {
+  if (
+    !Array.isArray(gradingResult.componentResults) ||
+    gradingResult.componentResults.some(isHumanGradingResult) ||
+    isHumanAssertion(gradingResult.assertion)
+  ) {
+    return undefined;
+  }
+  return sha256(
+    JSON.stringify([
+      gradingResult.pass,
+      gradingResult.score,
+      hasOwn(gradingResult, 'comment'),
+      gradingResult.comment,
+    ]),
+  );
+}
+
+function parseManualRatingState(value: unknown): ManualRatingState | undefined {
+  const parsed = ManualRatingStateSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
+
+function stripManualRatingStateFromMetadata<T extends Record<string, unknown> | null | undefined>(
+  metadata: T,
+): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(MANUAL_RATING_METADATA_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [MANUAL_RATING_METADATA_KEY]: _manualRating, ...remainingPromptfooMetadata } =
+    promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+  return strippedMetadata as T;
+}
+
+function captureManualRatingState(
+  result: Pick<RatingEvalResult, 'failureReason' | 'gradingResult' | 'score' | 'success'>,
+): ManualRatingState {
+  const gradingResult = result.gradingResult;
+  return {
+    version: 1,
+    status: 'active',
+    original: {
+      success: result.success,
+      score: result.score,
+      failureReason: normalizeFailureReason(result.failureReason),
+      gradingResult: gradingResult
+        ? {
+            pass: gradingResult.pass,
+            score: gradingResult.score,
+            reason: gradingResult.reason,
+            assertion: gradingResult.assertion,
+            hadReason: hasOwn(gradingResult, 'reason'),
+            hadAssertion: hasOwn(gradingResult, 'assertion'),
+            hadComponentResults: hasOwn(gradingResult, 'componentResults'),
+          }
+        : null,
+    },
+  };
+}
+
+function captureNonstandardScoringState(
+  gradingResult: GradingResult | null,
+  baseline: { pass: boolean; score: number },
+  failureReason: number,
+): ManualRatingState {
+  return {
+    ...captureManualRatingState({
+      failureReason,
+      gradingResult,
+      score: baseline.score,
+      success: baseline.pass,
+    }),
+    status: 'baseline',
+  };
+}
+
+function restoreOriginalGradingResult(
+  gradingResult: GradingResult,
+  state: ManualRatingState,
+): GradingResult | null {
+  const original = state.original.gradingResult;
+  if (!original) {
+    return null;
+  }
+  const restored = { ...gradingResult } as GradingResult;
+  const restoredRecord = restored as unknown as Record<string, unknown>;
+  if (Array.isArray(restored.componentResults)) {
+    restored.componentResults = restored.componentResults.filter(
+      (componentResult) => !isHumanGradingResult(componentResult),
+    );
+  }
+
+  restored.pass = original.pass;
+  restored.score = original.score;
+  if (original.hadReason) {
+    restoredRecord.reason = original.reason;
+  } else {
+    delete restoredRecord.reason;
+  }
+  if (original.hadAssertion) {
+    restoredRecord.assertion = original.assertion;
+  } else {
+    delete restored.assertion;
+  }
+  if (!original.hadComponentResults) {
+    delete restored.componentResults;
+  }
+
+  return restored;
+}
+
+function hasManualRating(gradingResult: GradingResult | null | undefined): boolean {
+  return Boolean(
+    isHumanAssertion(gradingResult?.assertion) ||
+      (Array.isArray(gradingResult?.componentResults) &&
+        gradingResult.componentResults.some(isHumanGradingResult)),
+  );
+}
+
+function getExplicitHumanRating(
+  submittedComponents: GradingResult[],
+  submittedAssertion: unknown,
+  ratingAction?: SubmitRatingAction,
+) {
+  if (ratingAction === 'clear') {
+    return { component: undefined, topLevel: false };
+  }
+  return {
+    component: submittedComponents.find(isHumanGradingResult),
+    topLevel: isHumanAssertion(submittedAssertion),
+  };
+}
+
+function applyExplicitRatingUpdate(
+  previous: GradingResult | null,
+  submitted: GradingResult,
+  previousSuccess: boolean,
+  previousScore: number,
+  ratingUpdate: SubmitRatingUpdate,
+): GradingResult {
+  const updated = {
+    ...(previous ?? { pass: previousSuccess, score: previousScore }),
+  } as GradingResult;
+  updated.pass = previousSuccess;
+  updated.score = ratingUpdate === 'score' ? submitted.score : previousScore;
+  if (ratingUpdate === 'comment') {
+    if (hasOwn(submitted, 'comment')) {
+      updated.comment = submitted.comment;
+    } else {
+      delete updated.comment;
+    }
+  }
+  return updated;
+}
+
+function applyLegacyClearedRatingUpdate(
+  previous: GradingResult | null,
+  submitted: GradingResult,
+  previousSuccess: boolean,
+  previousScore: number,
+): GradingResult {
+  // Old clients submit the entire grading result without an intent field. Once a clear
+  // tombstone exists, accept only the score or comment they could have edited and keep every
+  // other field server-owned so a modified delayed clear cannot restore stale grading data.
+  const previousHasComment = previous ? hasOwn(previous, 'comment') : false;
+  const submittedHasComment = hasOwn(submitted, 'comment');
+  const commentChanged =
+    previousHasComment !== submittedHasComment || previous?.comment !== submitted.comment;
+  return applyExplicitRatingUpdate(
+    previous,
+    submitted,
+    previousSuccess,
+    previousScore,
+    commentChanged ? 'comment' : 'score',
+  );
+}
+
+function normalizeRatingSubmission(
+  previous: GradingResult | null,
+  submitted: GradingResult,
+  previousSuccess: boolean,
+  previousScore: number,
+  ratingAction?: SubmitRatingAction,
+): {
+  gradingResult: GradingResult;
+  clearingManualRating: boolean;
+  hasManualRating: boolean;
+} {
+  const previousComponents = Array.isArray(previous?.componentResults)
+    ? previous.componentResults
+    : [];
+  const previousAutomatedComponents = previousComponents.filter(
+    (componentResult) => !isHumanGradingResult(componentResult),
+  );
+  const submittedHasComponents = Array.isArray(submitted.componentResults);
+  const submittedComponents = Array.isArray(submitted.componentResults)
+    ? submitted.componentResults
+    : previousComponents;
+  const { component: explicitHumanComponent, topLevel: explicitTopLevelHuman } =
+    getExplicitHumanRating(submittedComponents, submitted.assertion, ratingAction);
+  const previousHasManualRating = hasManualRating(previous);
+  const clearingManualRating =
+    previousHasManualRating &&
+    (ratingAction === 'clear' ||
+      (ratingAction === undefined &&
+        submittedHasComponents &&
+        !explicitHumanComponent &&
+        !explicitTopLevelHuman));
+  const outcomeChanged = previousSuccess !== submitted.pass;
+  const submittedKeys = Object.keys(submitted);
+  const exactMinimalNoopRating =
+    submittedKeys.length === 2 &&
+    submittedKeys.includes('pass') &&
+    submittedKeys.includes('score') &&
+    submitted.pass === previousSuccess &&
+    submitted.score === previousScore;
+  const shouldHaveManualRating =
+    ratingAction !== 'clear' &&
+    !clearingManualRating &&
+    (ratingAction === 'rate' ||
+      Boolean(explicitHumanComponent) ||
+      explicitTopLevelHuman ||
+      previousHasManualRating ||
+      outcomeChanged ||
+      (ratingAction === undefined && exactMinimalNoopRating));
+  const gradingResult = { ...(previous ?? {}), ...submitted } as GradingResult;
+
+  if (!shouldHaveManualRating) {
+    if (previous && (submittedHasComponents || ratingAction === 'clear')) {
+      gradingResult.componentResults = previousAutomatedComponents;
+    }
+    if (clearingManualRating || ratingAction === 'clear') {
+      if (isHumanAssertion(gradingResult.assertion)) {
+        delete gradingResult.assertion;
+      }
+    }
+    return { gradingResult, clearingManualRating, hasManualRating: false };
+  }
+
+  const previousHumanComponent = previousComponents.find(isHumanGradingResult);
+  const humanSource =
+    explicitHumanComponent ?? (explicitTopLevelHuman ? submitted : previousHumanComponent);
+  const manualReason = hasOwn(submitted, 'reason')
+    ? submitted.reason
+    : (humanSource?.reason ?? MANUAL_RATING_REASON);
+  const humanRating = {
+    ...(humanSource ?? {}),
+    pass: submitted.pass,
+    score: submitted.score,
+    reason: manualReason,
+    assertion: {
+      ...(asRecord(humanSource?.assertion) ?? {}),
+      type: HUMAN_ASSERTION_TYPE,
+    },
+  } as GradingResult;
+
+  if (hasOwn(submitted, 'comment')) {
+    humanRating.comment = submitted.comment;
+  }
+  gradingResult.pass = submitted.pass;
+  gradingResult.score = submitted.score;
+  gradingResult.reason = manualReason;
+  gradingResult.componentResults = [
+    // Non-human components are evaluation output, not rating input. A result without a
+    // server baseline must not let a rating request invent assertions that alter metrics.
+    ...previousAutomatedComponents,
+    humanRating,
+  ];
+  if (isHumanAssertion(gradingResult.assertion)) {
+    delete gradingResult.assertion;
+  }
+
+  return { gradingResult, clearingManualRating: false, hasManualRating: true };
+}
+
+function getRestorableManualRatingState(
+  previousHasManualRating: boolean,
+  existingState: ManualRatingState | undefined,
+  ratingAction: SubmitRatingAction | undefined,
+): ManualRatingState | undefined {
+  return !previousHasManualRating && existingState?.status === 'active' && ratingAction === 'clear'
+    ? existingState
+    : undefined;
+}
+
+function matchesLegacyRepeatedClear(
+  submittedGradingResult: GradingResult,
+  existingState: ManualRatingState | undefined,
+  legacyClearRequestHash: string | undefined,
+  ratingAction: SubmitRatingAction | undefined,
+): boolean {
+  const storedRequestHashes = [
+    existingState?.clearRequestHash,
+    existingState?.lastLegacyUpdateHash,
+  ].filter((value): value is string => value !== undefined);
+  return (
+    ratingAction === undefined &&
+    legacyClearRequestHash !== undefined &&
+    (storedRequestHashes.length === 0
+      ? existingState !== undefined &&
+        submittedGradingResult.pass === existingState.original.success &&
+        submittedGradingResult.score === existingState.original.score
+      : storedRequestHashes.includes(legacyClearRequestHash))
+  );
+}
+
+function shouldRefreshClearedManualRatingState(
+  previousHasManualRating: boolean,
+  existingState: ManualRatingState | undefined,
+  nextHasManualRating: boolean,
+): existingState is ManualRatingState & { status: 'cleared' } {
+  return !previousHasManualRating && existingState?.status === 'cleared' && !nextHasManualRating;
+}
+
+function getManualRatingFailureReason(
+  hasManualRating: boolean,
+  success: boolean,
+  previousFailureReason: number,
+): ResultFailureReason {
+  if (!hasManualRating) {
+    return normalizeFailureReason(previousFailureReason);
+  }
+  return success ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
+}
+
+function hasExecutionError(result: RatingEvalResult, hasAutomatedComponents: boolean): boolean {
+  const failureReason = normalizeFailureReason(result.failureReason);
+  if (failureReason === ResultFailureReason.ERROR) {
+    return true;
+  }
+  if (failureReason === ResultFailureReason.ASSERT) {
+    return false;
+  }
+  const responseError = asRecord(result.response)?.error;
+  return (
+    (!hasAutomatedComponents && typeof result.error === 'string' && result.error.length > 0) ||
+    (typeof responseError === 'string' && responseError.length > 0)
+  );
+}
+
+function getEditedManualRatingState(
+  result: RatingEvalResult,
+  existingState: ManualRatingState | undefined,
+): ManualRatingState | undefined {
+  if (!existingState) {
+    return { ...captureManualRatingState(result), status: 'legacy-active' };
+  }
+  return existingState.status === 'cleared' ? undefined : existingState;
+}
+
+type AutomatedClearComponent = {
+  pass: boolean;
+  score: number;
+  weight: number;
+  failedContentSafetyCheck: boolean;
+  nonstandardScoring: boolean;
+};
+
+function getFlattenedChildCount(
+  component: Record<string, unknown>,
+  rawComponents: unknown[],
+  parentIndex: number,
+): number {
+  if (!Array.isArray(component.componentResults)) {
+    return 0;
+  }
+  const flattenedChildren = component.componentResults.map((child) => {
+    const childRecord = asRecord(child);
+    return childRecord
+      ? { ...childRecord, assertion: childRecord.assertion ?? component.assertion }
+      : child;
+  });
+  return flattenedChildren.every((child, childIndex) =>
+    isDeepStrictEqual(rawComponents[parentIndex + childIndex + 1], child),
+  )
+    ? flattenedChildren.length
+    : 0;
+}
+
+function getAutomatedClearComponents(componentResults: unknown): AutomatedClearComponent[] {
+  const rawComponents = Array.isArray(componentResults) ? componentResults : [];
+  const automatedComponents: AutomatedClearComponent[] = [];
+  for (let index = 0; index < rawComponents.length; index++) {
+    const component = asRecord(rawComponents[index]);
+    if (!component || isHumanAssertion(component.assertion)) {
+      continue;
+    }
+    const assertion = asRecord(component.assertion);
+    const assertionSet = asRecord(asRecord(component.metadata)?.assertionSet);
+    const rawWeight = assertionSet?.weight ?? assertion?.weight ?? 1;
+    if (
+      typeof component.pass === 'boolean' &&
+      typeof component.score === 'number' &&
+      Number.isFinite(component.score)
+    ) {
+      automatedComponents.push({
+        pass: component.pass,
+        score: component.score,
+        weight: typeof rawWeight === 'number' && Number.isFinite(rawWeight) ? rawWeight : 1,
+        failedContentSafetyCheck:
+          component.pass === false &&
+          assertion?.type === 'guardrails' &&
+          asRecord(assertion.config)?.purpose === 'redteam',
+        nonstandardScoring:
+          assertion?.type === 'max-score' ||
+          (typeof assertion?.type === 'string' && assertion.type.startsWith('select-')),
+      });
+    }
+    // Assertion-set children are flattened after their aggregate parent for display. The
+    // evaluator weights only the parent, so skip the duplicated children here too.
+    index += getFlattenedChildCount(component, rawComponents, index);
+  }
+  return automatedComponents;
+}
+
+function buildServerOwnedClearGradingResult(
+  result: RatingEvalResult,
+  current: GradingResult,
+  normalized: GradingResult,
+): GradingResult {
+  const automatedComponents = getAutomatedClearComponents(normalized.componentResults);
+  const executionError = hasExecutionError(result, automatedComponents.length > 0);
+  const totalWeight = automatedComponents.reduce((sum, component) => sum + component.weight, 0);
+  const automatedScore =
+    totalWeight > 0
+      ? automatedComponents.reduce(
+          (sum, component) => sum + component.score * component.weight,
+          0,
+        ) / totalWeight
+      : 0;
+  const testCase = asRecord(result.testCase);
+  const threshold = testCase?.threshold;
+  let automatedPass =
+    typeof threshold === 'number' && Number.isFinite(threshold)
+      ? automatedScore >= threshold
+      : automatedComponents.every((component) => component.pass);
+  if (automatedComponents.some((component) => component.failedContentSafetyCheck)) {
+    automatedPass = true;
+  }
+  if (executionError) {
+    automatedPass = false;
+  }
+  const hasUnreconstructableRetainedFailure =
+    !executionError && automatedPass && typeof result.error === 'string' && result.error.length > 0;
+  const fallbackPass =
+    !executionError && normalizeFailureReason(result.failureReason) === ResultFailureReason.NONE;
+  const hasNonstandardScoring =
+    hasOwn(testCase ?? {}, 'assertScoringFunction') ||
+    automatedComponents.some((component) => component.nonstandardScoring);
+  const canReconstructAutomatedOutcome = automatedComponents.length > 0 && !hasNonstandardScoring;
+  const cleared = {
+    ...current,
+    // A legacy clear submits the whole grading result. Recompute from the server-owned
+    // automated components using the evaluator's weighting/threshold rules. Component-less or
+    // nonstandard-scored legacy rows have no recoverable standard score, so use the failure
+    // category's canonical baseline rather than accepting caller-controlled aggregate fields.
+    // A historical/imported manual pass can retain a top-level assertion failure after the
+    // custom scorer itself has been stripped. If ordinary components all pass, they cannot
+    // explain that failure; fail closed instead of fabricating a pass from incomplete evidence.
+    pass: hasUnreconstructableRetainedFailure
+      ? false
+      : canReconstructAutomatedOutcome
+        ? automatedPass
+        : fallbackPass,
+    score: hasUnreconstructableRetainedFailure
+      ? 0
+      : canReconstructAutomatedOutcome
+        ? automatedScore
+        : fallbackPass
+          ? 1
+          : 0,
+  } as GradingResult;
+  cleared.reason = current.reason;
+  if (hasOwn(normalized, 'componentResults')) {
+    cleared.componentResults = normalized.componentResults;
+  } else {
+    delete cleared.componentResults;
+  }
+  if (isHumanAssertion(cleared.assertion)) {
+    delete cleared.assertion;
+  }
+  return cleared;
+}
+
+function resolveClearingManualRating(
+  result: RatingEvalResult,
+  existingState: ManualRatingState | undefined,
+  clearRestoreBase: GradingResult,
+  clearedGradingResult: GradingResult,
+  legacyClearRequestHash: string | undefined,
+) {
+  if (existingState?.status === 'active') {
+    return {
+      gradingResult: restoreOriginalGradingResult(clearRestoreBase, existingState),
+      success: existingState.original.success,
+      score: existingState.original.score,
+      failureReason: existingState.original.failureReason,
+      nextState: {
+        ...existingState,
+        status: 'cleared' as const,
+        clearRequestHash: legacyClearRequestHash,
+      },
+    };
+  }
+  const success = clearedGradingResult.pass;
+  const score = clearedGradingResult.score;
+  const preservedLegacyError =
+    existingState?.status === 'legacy-active' &&
+    existingState.original.failureReason === ResultFailureReason.ERROR;
+  const failureReason =
+    preservedLegacyError ||
+    hasExecutionError(
+      result,
+      getAutomatedClearComponents(clearedGradingResult.componentResults).length > 0,
+    )
+      ? ResultFailureReason.ERROR
+      : success
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT;
+  return {
+    gradingResult: clearedGradingResult,
+    success,
+    score,
+    failureReason,
+    nextState:
+      existingState?.status === 'legacy-active'
+        ? {
+            ...existingState,
+            status: 'cleared' as const,
+            clearRequestHash: legacyClearRequestHash,
+          }
+        : {
+            ...captureManualRatingState({
+              ...result,
+              failureReason,
+              gradingResult: clearedGradingResult,
+              score,
+              success,
+            }),
+            status: 'cleared' as const,
+            clearRequestHash: legacyClearRequestHash,
+          },
+  };
+}
+
+function resolveRatingTransition(
+  result: RatingEvalResult,
+  submittedGradingResult: GradingResult,
+  ratingAction?: SubmitRatingAction,
+  ratingUpdate?: SubmitRatingUpdate,
+): {
+  gradingResult: GradingResult | null;
+  success: boolean;
+  score: number;
+  failureReason: ResultFailureReason;
+  manualRatingState: ManualRatingState | null;
+  metadata: PersistedEvalResult['metadata'];
+} {
+  const previousHasManualRating = hasManualRating(result.gradingResult);
+  const existingState = parseManualRatingState(result.manualRatingState);
+  const legacyClearRequestHash = getLegacyClearRequestHash(submittedGradingResult);
+  const isLegacyRepeatedClear = matchesLegacyRepeatedClear(
+    submittedGradingResult,
+    existingState,
+    legacyClearRequestHash,
+    ratingAction,
+  );
+  const isLegacyClearedUpdate =
+    ratingAction === undefined &&
+    !previousHasManualRating &&
+    existingState?.status === 'cleared' &&
+    legacyClearRequestHash !== undefined &&
+    !isLegacyRepeatedClear &&
+    submittedGradingResult.pass === result.success;
+  const effectiveSubmission =
+    ratingAction === 'update'
+      ? applyExplicitRatingUpdate(
+          result.gradingResult,
+          submittedGradingResult,
+          result.success,
+          result.score,
+          ratingUpdate ?? 'comment',
+        )
+      : isLegacyClearedUpdate
+        ? applyLegacyClearedRatingUpdate(
+            result.gradingResult,
+            submittedGradingResult,
+            result.success,
+            result.score,
+          )
+        : submittedGradingResult;
+  const normalized = normalizeRatingSubmission(
+    result.gradingResult,
+    effectiveSubmission,
+    result.success,
+    result.score,
+    ratingAction,
+  );
+  const stateToRestore = getRestorableManualRatingState(
+    previousHasManualRating,
+    existingState,
+    ratingAction,
+  );
+  const isRepeatedClear =
+    !previousHasManualRating &&
+    existingState?.status === 'cleared' &&
+    (ratingAction === 'clear' || isLegacyRepeatedClear);
+  let nextState: ManualRatingState | undefined;
+  let gradingResult: GradingResult | null = normalized.gradingResult;
+  let success = gradingResult.pass;
+  let score = gradingResult.score;
+  let failureReason = getManualRatingFailureReason(
+    normalized.hasManualRating,
+    success,
+    result.failureReason,
+  );
+  const isClearingManualRating = ratingAction === 'clear' || normalized.clearingManualRating;
+  const clearRestoreBase =
+    result.gradingResult && isClearingManualRating
+      ? result.gradingResult
+      : normalized.gradingResult;
+  const serverOwnedClearGradingResult =
+    result.gradingResult && isClearingManualRating
+      ? buildServerOwnedClearGradingResult(result, result.gradingResult, normalized.gradingResult)
+      : normalized.gradingResult;
+
+  if (isRepeatedClear) {
+    // The rating is already absent. Keep the authoritative current baseline rather than
+    // rebuilding it from a stale retry payload, which may contain obsolete comments.
+    gradingResult = result.gradingResult;
+    success = result.success;
+    score = result.score;
+    failureReason = normalizeFailureReason(result.failureReason);
+    nextState = existingState;
+  } else if (stateToRestore) {
+    gradingResult = restoreOriginalGradingResult(clearRestoreBase, stateToRestore);
+    success = stateToRestore.original.success;
+    score = stateToRestore.original.score;
+    failureReason = stateToRestore.original.failureReason;
+    nextState = {
+      ...stateToRestore,
+      status: 'cleared',
+      clearRequestHash: legacyClearRequestHash ?? stateToRestore.clearRequestHash,
+    };
+  } else if (!previousHasManualRating && ratingAction === 'clear') {
+    // Deleting a missing rating is idempotent. Never apply caller-supplied outcome fields.
+    gradingResult = result.gradingResult;
+    success = result.success;
+    score = result.score;
+    failureReason = normalizeFailureReason(result.failureReason);
+    nextState = existingState;
+  } else if (
+    shouldRefreshClearedManualRatingState(
+      previousHasManualRating,
+      existingState,
+      normalized.hasManualRating,
+    )
+  ) {
+    // A score/comment edit changes the restored automated baseline, but the tombstone must
+    // survive so a delayed retry of the old clear cannot be reinterpreted as a new rating.
+    nextState = {
+      ...captureManualRatingState({
+        ...result,
+        failureReason,
+        gradingResult,
+        score,
+        success,
+      }),
+      status: 'cleared',
+      clearRequestHash: existingState.clearRequestHash,
+      lastLegacyUpdateHash: isLegacyClearedUpdate
+        ? legacyClearRequestHash
+        : existingState.lastLegacyUpdateHash,
+    };
+  } else if (!previousHasManualRating && normalized.hasManualRating) {
+    nextState = captureManualRatingState(result);
+  } else if (previousHasManualRating && normalized.hasManualRating) {
+    nextState = getEditedManualRatingState(result, existingState);
+  } else if (normalized.clearingManualRating) {
+    const cleared = resolveClearingManualRating(
+      result,
+      existingState,
+      clearRestoreBase,
+      serverOwnedClearGradingResult,
+      legacyClearRequestHash,
+    );
+    ({ gradingResult, success, score, failureReason, nextState } = cleared);
+  }
+
+  if (gradingResult) {
+    gradingResult.pass = success;
+    gradingResult.score = score;
+  }
+  return {
+    gradingResult,
+    success,
+    score,
+    failureReason,
+    manualRatingState: nextState ?? null,
+    metadata: result.metadata,
+  };
+}
+
+function countGradingAssertions(gradingResult: GradingResult | null | undefined): {
+  pass: number;
+  fail: number;
+} {
+  const componentResults = Array.isArray(gradingResult?.componentResults)
+    ? gradingResult.componentResults
+    : [];
+  const counts = componentResults.reduce(
+    (counts, componentResult: unknown) => {
+      if (!componentResult || typeof componentResult !== 'object') {
+        return counts;
+      }
+      const { pass } = componentResult as { pass?: unknown };
+      if (pass === true) {
+        counts.pass += 1;
+      } else if (pass === false) {
+        counts.fail += 1;
+      }
+      return counts;
+    },
+    { pass: 0, fail: 0 },
+  );
+  if (isHumanAssertion(gradingResult?.assertion) && !componentResults.some(isHumanGradingResult)) {
+    counts[gradingResult?.pass ? 'pass' : 'fail'] += 1;
+  }
+  return counts;
+}
+
+function getResultMetricCategory(
+  success: boolean,
+  failureReason: ResultFailureReason | number | undefined,
+): ResultMetricCategory {
+  if (success) {
+    return 'pass';
+  }
+  return failureReason === ResultFailureReason.ERROR ? 'error' : 'fail';
+}
+
+function applyResultMetricDelta(
+  metrics: PromptMetrics,
+  previousCategory: ResultMetricCategory,
+  nextCategory: ResultMetricCategory,
+): void {
+  if (previousCategory === nextCategory) {
+    return;
+  }
+
+  const updateCategory = (category: ResultMetricCategory, delta: number) => {
+    if (category === 'pass') {
+      metrics.testPassCount += delta;
+    } else if (category === 'error') {
+      metrics.testErrorCount = (metrics.testErrorCount ?? (delta < 0 ? 1 : 0)) + delta;
+    } else {
+      metrics.testFailCount += delta;
+    }
+  };
+  updateCategory(previousCategory, -1);
+  updateCategory(nextCategory, 1);
+}
+
+async function submitEvalResultRating(
+  evalId: string,
+  id: string,
+  submittedGradingResult: GradingResult,
+  ratingAction?: SubmitRatingAction,
+  ratingUpdate?: SubmitRatingUpdate,
+) {
+  const db = await getDb();
+  const transactionResult = await db.transaction(async (tx) => {
+    const result = await tx
+      .select()
+      .from(evalResultsTable)
+      .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
+      .get();
+    if (!result) {
+      return { status: 'result-not-found' as const };
+    }
+
+    const evalRow = await tx
+      .select({ prompts: evalsTable.prompts })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evalId))
+      .get();
+    if (!evalRow) {
+      return { status: 'eval-not-found' as const };
+    }
+
+    const transition = resolveRatingTransition(
+      result,
+      submittedGradingResult,
+      ratingAction,
+      ratingUpdate,
+    );
+    const transitionChanged =
+      result.success !== transition.success ||
+      result.score !== transition.score ||
+      normalizeFailureReason(result.failureReason) !== transition.failureReason ||
+      !isDeepStrictEqual(result.gradingResult, transition.gradingResult) ||
+      !isDeepStrictEqual(result.manualRatingState, transition.manualRatingState) ||
+      !isDeepStrictEqual(result.metadata, transition.metadata);
+    if (!transitionChanged) {
+      return { status: 'unchanged' as const, result };
+    }
+
+    const prompts = evalRow.prompts ?? [];
+    const prompt = prompts[result.promptIdx];
+    if (!prompt) {
+      throw new Error('Prompt not found');
+    }
+    if (!prompt.metrics) {
+      logger.error(
+        `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+      );
+      return { status: 'prompt-metrics-not-found' as const };
+    }
+
+    const previousCategory = getResultMetricCategory(result.success, result.failureReason);
+    const previousAssertions = countGradingAssertions(result.gradingResult);
+    const nextAssertions = countGradingAssertions(transition.gradingResult);
+    const nextCategory = getResultMetricCategory(transition.success, transition.failureReason);
+
+    prompt.metrics.score += transition.score - result.score;
+    applyResultMetricDelta(prompt.metrics, previousCategory, nextCategory);
+    prompt.metrics.assertPassCount += nextAssertions.pass - previousAssertions.pass;
+    prompt.metrics.assertFailCount += nextAssertions.fail - previousAssertions.fail;
+
+    const persistedResult = await tx
+      .update(evalResultsTable)
+      .set({
+        gradingResult: transition.gradingResult,
+        success: transition.success,
+        score: transition.score,
+        failureReason: transition.failureReason,
+        manualRatingState: transition.manualRatingState,
+        metadata: transition.metadata,
+        updatedAt: getCurrentTimestamp(),
+      })
+      .where(and(eq(evalResultsTable.id, id), eq(evalResultsTable.evalId, evalId)))
+      .returning()
+      .get();
+    if (!persistedResult) {
+      throw new Error('Result disappeared while submitting rating');
+    }
+
+    const evalUpdate = await tx
+      .update(evalsTable)
+      .set({ prompts })
+      .where(eq(evalsTable.id, evalId))
+      .run();
+    if (evalUpdate.rowsAffected !== 1) {
+      throw new Error('Eval disappeared while submitting rating');
+    }
+
+    return { status: 'updated' as const, result: persistedResult };
+  });
+
+  if (transactionResult.status === 'updated') {
+    notifyEvaluationChanged(evalId);
+  }
+  return transactionResult;
 }
 
 // Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
@@ -650,6 +1593,13 @@ export default class EvalResult {
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
+    const nonstandardScoringBaseline = getNonstandardScoringBaseline(gradingResult);
+    const sanitizedGradingResult = sanitizeForDb(gradingResult || null);
+    if (nonstandardScoringBaseline && sanitizedGradingResult) {
+      // `sanitizeForDb` returns a serializable clone. Reattach the private in-memory marker so
+      // an unpersisted EvalResult can retain it until a later `save()` call.
+      setNonstandardScoringBaseline(sanitizedGradingResult, nonstandardScoringBaseline);
+    }
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -670,12 +1620,19 @@ export default class EvalResult {
       success,
       score: score == null ? 0 : score,
       response: sanitizeForDb(processedResponse || null),
-      gradingResult: sanitizeForDb(gradingResult || null),
+      gradingResult: sanitizedGradingResult,
       namedScores: sanitizeForDb(namedScores),
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
       metadata: sanitizeForDb(persistedMetadata),
+      manualRatingState: nonstandardScoringBaseline
+        ? captureNonstandardScoringState(
+            sanitizedGradingResult,
+            nonstandardScoringBaseline,
+            failureReason,
+          )
+        : null,
       failureReason,
     };
     if (persist) {
@@ -689,6 +1646,15 @@ export default class EvalResult {
       args.response = redacted.response;
       args.gradingResult = redacted.gradingResult;
       args.metadata = redacted.metadata;
+      if (nonstandardScoringBaseline) {
+        // Private provenance must be derived from the same redacted grading result that is
+        // written to the database; otherwise it could become a side channel around redaction.
+        args.manualRatingState = captureNonstandardScoringState(
+          args.gradingResult,
+          nonstandardScoringBaseline,
+          failureReason,
+        );
+      }
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
@@ -718,7 +1684,12 @@ export default class EvalResult {
         // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
         // via `persistTraceMetadata`; strip the top-level fields so the DB write
         // only carries known-schema columns.
-        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
+        const {
+          traceId: _traceId,
+          evaluationId: _evaluationId,
+          manualRatingState: _manualRatingState,
+          ...rest
+        } = result as EvaluateResult & { manualRatingState?: unknown };
         const sanitizedResult = {
           ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
@@ -732,6 +1703,7 @@ export default class EvalResult {
           }),
           namedScores: sanitizeForDb(result.namedScores),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
+          manualRatingState: null,
         };
         const dbResult = await tx
           .insert(evalResultsTable)
@@ -749,6 +1721,25 @@ export default class EvalResult {
     const db = await getDb();
     const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
+  }
+
+  static async submitRating(
+    evalId: string,
+    id: string,
+    gradingResult: GradingResult,
+    ratingAction?: SubmitRatingAction,
+    ratingUpdate?: SubmitRatingUpdate,
+  ) {
+    const result = await submitEvalResultRating(
+      evalId,
+      id,
+      gradingResult,
+      ratingAction,
+      ratingUpdate,
+    );
+    return result.status === 'updated' || result.status === 'unchanged'
+      ? { ...result, result: new EvalResult({ ...result.result, persisted: true }) }
+      : result;
   }
 
   static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
@@ -885,6 +1876,7 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
+  #manualRatingState?: ManualRatingState;
 
   constructor(opts: {
     id: string;
@@ -905,6 +1897,7 @@ export default class EvalResult {
     cost?: number | null;
     // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
     metadata?: Record<string, any> | null;
+    manualRatingState?: unknown;
     failureReason: ResultFailureReason | number;
     persisted?: boolean;
   }) {
@@ -930,6 +1923,8 @@ export default class EvalResult {
       traceId: this.traceId,
       evaluationId: this.evaluationId,
     } = surfaceTraceMetadata(opts.metadata));
+    this.#manualRatingState =
+      opts.persisted === true ? parseManualRatingState(opts.manualRatingState) : undefined;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -939,6 +1934,14 @@ export default class EvalResult {
 
   async save() {
     const db = await getDb();
+    const nonstandardScoringBaseline = getNonstandardScoringBaseline(this.gradingResult);
+    if (nonstandardScoringBaseline && this.gradingResult && !hasManualRating(this.gradingResult)) {
+      this.#manualRatingState = captureNonstandardScoringState(
+        this.gradingResult,
+        nonstandardScoringBaseline,
+        this.failureReason,
+      );
+    }
     // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
     // testCase metadata in the constructor, and trace linkage travels inside the metadata
     // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
@@ -947,6 +1950,7 @@ export default class EvalResult {
     const persistedValues = {
       ...rest,
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+      manualRatingState: this.#manualRatingState ?? null,
     };
     //check if this exists in the db
     if (this.persisted) {
