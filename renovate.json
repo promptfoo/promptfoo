@@ -219,17 +219,20 @@
       "groupName": "socket.io"
     },
     {
-      "description": "Keep jsdom in sync across all workspaces",
+      "description": "Keep jsdom in sync across all workspaces, and hold it below 30. jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0, but this package publishes engines.node >=22.22.0 and .npmrc sets engine-strict=true, so `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that exist precisely to test that floor (see the closed #10311). jsdom is a dev-only Vitest environment, so raising the published runtime floor for it would make promptfoo refuse to start on Node 22.22.0/22.22.1 for no user-facing gain. Lift this cap when engines.node moves past 22.22.2 for an independent reason.",
       "matchPackageNames": ["jsdom"],
+      "allowedVersions": "<30",
       "groupName": "jsdom"
     },
     {
-      "description": "Chevrotain's sub-packages are pinned to the parser version, not to whatever is newest. chevrotain@11.2.0 declares each of @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast and @chevrotain/utils at exactly 11.2.0, and test/package-manifests.test.ts asserts the overrides keep them equal to the pinned parser so a single shared instance is used. Renovate bumping them individually yields an incoherent tree (see the closed #10293 and #10294). Only @chevrotain/cst-dts-gen floats ahead, so it is deliberately not listed here. Re-enable if the pinned chevrotain parser itself moves.",
+      "description": "Chevrotain ships as one lockstep release train: chevrotain@X declares @chevrotain/gast, @chevrotain/types, @chevrotain/regexp-to-ast, @chevrotain/utils and @chevrotain/cst-dts-gen at exactly X, and all six reach npm within about a minute of each other. Renovate bumps one of them at a time and rewrites package.json overrides without regenerating package-lock.json, so the resulting PRs fail at `npm ci` with EUSAGE (see the closed #10293, #10294 and #10297) or leave a mixed tree (#10345 pulled @chevrotain/cst-dts-gen to 13.1.0 under chevrotain 11.2.0, which asks for 11.2.0 exactly). The family stays frozen until langium, chevrotain-allstar and every @chevrotain/* pin move together in one PR that also regenerates the lockfile; langium@4.3.1 declares chevrotain ~12.0.0, so 12.x is the next coherent target, not 13.x. test/package-manifests.test.ts asserts this rule keeps the whole family disabled and that the grammar pins equal the pinned parser version.",
       "matchPackageNames": [
+        "chevrotain",
         "@chevrotain/gast",
         "@chevrotain/types",
         "@chevrotain/regexp-to-ast",
-        "@chevrotain/utils"
+        "@chevrotain/utils",
+        "@chevrotain/cst-dts-gen"
       ],
       "enabled": false
     },
