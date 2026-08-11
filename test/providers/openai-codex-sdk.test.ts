@@ -2874,24 +2874,40 @@ describe('OpenAICodexSDKProvider', () => {
         },
       );
 
-      it('should omit gpt-5.6 cost when Codex does not report cache-write tokens', async () => {
-        mockRun.mockResolvedValue(
-          createMockResponse('Response', {
-            input_tokens: 2000,
-            cached_input_tokens: 500,
-            output_tokens: 1000,
-          }),
-        );
+      it.each([
+        ['gpt-5.6-sol', 5, 0.5, 30],
+        ['gpt-5.6-terra', 2, 0.2, 12],
+        ['gpt-5.6-luna', 0.2, 0.02, 1.2],
+        ['openai.gpt-5.6-sol', 5.5, 0.55, 33],
+        ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
+        ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
+      ])(
+        'should calculate %s cost without cache-write tokens',
+        async (model, input, cachedInput, output) => {
+          mockRun.mockResolvedValue(
+            createMockResponse('Response', {
+              input_tokens: 2000,
+              cached_input_tokens: 500,
+              output_tokens: 1000,
+            }),
+          );
 
-        const provider = new OpenAICodexSDKProvider({
-          config: { model: 'gpt-5.6-sol' },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              model,
+              ...(model.startsWith('openai.') ? { model_provider: 'amazon-bedrock' } : {}),
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
 
-        const result = await provider.callApi('Test prompt');
+          const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBeUndefined();
-      });
+          expect(result.cost).toBeCloseTo(
+            (1500 * input + 500 * cachedInput + 1000 * output) / 1e6,
+            10,
+          );
+        },
+      );
 
       it('should recognize gpt-5.5 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({

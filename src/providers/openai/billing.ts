@@ -62,8 +62,8 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.5) },
-  { models: ['gpt-5.6-terra'], rates: perMillion(0.25) },
-  { models: ['gpt-5.6-luna'], rates: perMillion(0.1) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.02) },
   { models: ['chat-latest'], rates: perMillion(0.5) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.25) },
@@ -185,8 +185,8 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
-  { models: ['gpt-5.6-terra'], rates: perMillion(0.5) },
-  { models: ['gpt-5.6-luna'], rates: perMillion(0.2) },
+  { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
+  { models: ['gpt-5.6-luna'], rates: perMillion(0.04) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
 ]);
@@ -242,19 +242,19 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6-terra'],
     rates: {
-      input: perMillion(5),
-      cachedInput: perMillion(0.5),
-      cacheWriteInput: perMillion(6.25),
-      output: perMillion(30),
+      input: perMillion(4),
+      cachedInput: perMillion(0.4),
+      cacheWriteInput: perMillion(5),
+      output: perMillion(24),
     },
   },
   {
     models: ['gpt-5.6-luna'],
     rates: {
-      input: perMillion(2),
-      cachedInput: perMillion(0.2),
-      cacheWriteInput: perMillion(2.5),
-      output: perMillion(12),
+      input: perMillion(0.4),
+      cachedInput: perMillion(0.04),
+      cacheWriteInput: perMillion(0.5),
+      output: perMillion(2.4),
     },
   },
   {
@@ -520,7 +520,10 @@ function usesOpenAIRegionalProcessing(
   const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(endpoint) ? endpoint : `https://${endpoint}`;
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return OPENAI_REGIONAL_PROCESSING_HOSTNAMES.has(hostname);
+    return (
+      OPENAI_REGIONAL_PROCESSING_HOSTNAMES.has(hostname) ||
+      /^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)
+    );
   } catch {
     return false;
   }
@@ -581,13 +584,11 @@ export function calculateOpenAIUsageCostFromTokenUsage(
     return undefined;
   }
 
+  const billingModelName = modelName.replace(/^openai\./, '');
   const cacheWriteTokens = tokenUsage.completionDetails?.cacheCreationInputTokens;
-  if (GPT_5_6_MODELS.has(modelName) && cacheWriteTokens === undefined) {
-    return undefined;
-  }
 
-  return calculateOpenAIUsageCost(
-    modelName,
+  const cost = calculateOpenAIUsageCost(
+    billingModelName,
     {},
     {
       prompt_tokens: tokenUsage.prompt,
@@ -598,10 +599,16 @@ export function calculateOpenAIUsageCostFromTokenUsage(
       },
     },
   );
+
+  return cost !== undefined && modelName.startsWith('openai.')
+    ? cost * OPENAI_REGIONAL_PROCESSING_MULTIPLIER
+    : cost;
 }
 
 function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIProcessingTier {
   switch (serviceTier) {
+    case 'fast':
+      return 'priority';
     case 'batch':
     case 'flex':
     case 'priority':
@@ -662,6 +669,26 @@ function getFineTunedModelRates(
   };
 }
 
+function getPriorityTextRates(
+  modelName: string,
+  totalInputTokens: number,
+): OpenAITextRates | undefined {
+  const rates = PRIORITY_TEXT_RATES[modelName];
+  const longContext = TEXT_MODELS_BY_ID.get(modelName)?.cost?.longContext;
+  if (!longContext || totalInputTokens <= longContext.threshold) {
+    return rates;
+  }
+
+  if (!GPT_5_6_MODELS.has(modelName)) {
+    return undefined;
+  }
+
+  return {
+    ...applyRateMultiplier(rates, 2),
+    ...(rates.output === undefined ? {} : { output: rates.output * 1.5 }),
+  };
+}
+
 function getModelRates(
   modelName: string,
   tier: OpenAIProcessingTier,
@@ -705,11 +732,8 @@ function getModelRates(
 
   const model = TEXT_MODELS_BY_ID.get(modelName);
   if (tier === 'priority' && PRIORITY_TEXT_RATES[modelName]) {
-    const longContext = model?.cost?.longContext;
-    if (longContext && totalInputTokens > longContext.threshold) {
-      return undefined;
-    }
-    return { text: PRIORITY_TEXT_RATES[modelName] };
+    const text = getPriorityTextRates(modelName, totalInputTokens);
+    return text ? { text } : undefined;
   }
 
   const text = getBaseTextRates(modelName, totalInputTokens);
@@ -910,6 +934,7 @@ export function calculateOpenAIUsageCost(
     serviceTier?: string | null;
     cachedResponse?: boolean;
     apiUrl?: string;
+    regionalProcessing?: boolean;
   } = {},
 ): number | undefined {
   if (!rawUsage) {
@@ -926,7 +951,7 @@ export function calculateOpenAIUsageCost(
 
   const rates =
     OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) &&
-    usesOpenAIRegionalProcessing(config, options.apiUrl)
+    (options.regionalProcessing || usesOpenAIRegionalProcessing(config, options.apiUrl))
       ? {
           ...modelRates,
           text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
@@ -935,16 +960,6 @@ export function calculateOpenAIUsageCost(
 
   if (options.cachedResponse) {
     return 0;
-  }
-
-  const textInputCost = config.inputCost ?? config.cost ?? rates.text.input;
-  const cacheWriteInputCost =
-    config.inputCost ?? config.cost ?? rates.text.cacheWriteInput ?? textInputCost;
-  if (
-    cacheWriteInputCost !== textInputCost &&
-    getOpenAICacheWriteInputTokens(usageParts.usage) === undefined
-  ) {
-    return undefined;
   }
 
   const { hasOutputBreakdown } = usageParts;
