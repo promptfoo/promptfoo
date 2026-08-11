@@ -341,6 +341,11 @@ async function fetchFromExternalProvider(
     return null;
   }
 
+  if (queryDelay > 0) {
+    logger.debug(`[TraceContext] Waiting ${queryDelay}ms for spans to arrive at external backend`);
+    await waitForRetry(queryDelay, fetchOptions.abortSignal);
+  }
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (fetchOptions.abortSignal?.aborted) {
       throw new Error('cancelled by user');
@@ -364,11 +369,10 @@ async function fetchFromExternalProvider(
           );
           return null;
         }
-        const delay = attempt === 0 ? queryDelay : retryDelayMs;
         logger.debug(
-          `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
+          `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
         );
-        await waitForRetry(delay, fetchOptions.abortSignal);
+        await waitForRetry(retryDelayMs, fetchOptions.abortSignal);
         continue;
       }
 
@@ -407,7 +411,7 @@ async function fetchFromExternalProvider(
       if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
         return null;
       }
-      await waitForRetry(attempt === 0 ? queryDelay : retryDelayMs, fetchOptions.abortSignal);
+      await waitForRetry(retryDelayMs, fetchOptions.abortSignal);
     }
   }
 

@@ -428,7 +428,7 @@ Use the `tempo` trace provider to pull traces from Grafana Tempo:
 ```yaml
 tracing:
   enabled: true
-  queryDelay: 3000 # Wait before checking again if the trace is not ready
+  queryDelay: 3000 # Allow spans to reach Tempo before looking up the trace
   provider:
     id: tempo
     endpoint: 'http://tempo:3200'
@@ -439,7 +439,7 @@ tracing:
     timeout: 10000
 ```
 
-Promptfoo checks for the trace as soon as your application responds. If the trace is not ready yet, `queryDelay` controls how long to wait before trying again. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
+After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Common secrets and any attributes you list in `tracing.otlp.http.redactAttributes` are redacted before traces are saved.
 

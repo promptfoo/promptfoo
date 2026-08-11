@@ -143,6 +143,7 @@ describe('fetchTraceContext', () => {
       includeInternalSpans: false,
       maxRetries: 0,
       providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
       redactAttributes: ['email'],
     });
 
@@ -157,7 +158,7 @@ describe('fetchTraceContext', () => {
     });
   });
 
-  it('fetches immediately and uses query delay only when a retry is necessary', async () => {
+  it('waits before the first fetch and uses the retry delay for later attempts', async () => {
     vi.useFakeTimers();
     try {
       const fetchTrace = vi
@@ -174,16 +175,40 @@ describe('fetchTraceContext', () => {
         maxRetries: 1,
         providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
         queryDelay: 3000,
+        retryDelayMs: 500,
       });
 
       await vi.advanceTimersByTimeAsync(0);
+      expect(fetchTrace).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(fetchTrace).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
       expect(fetchTrace).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(499);
+      expect(fetchTrace).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
       expect(await resultPromise).not.toBeNull();
       expect(fetchTrace).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('cancels the initial query delay before fetching', async () => {
+    const controller = new AbortController();
+    const fetchTrace = vi.fn();
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const resultPromise = fetchTraceContext('trace-6-initial', {
+      abortSignal: controller.signal,
+      maxRetries: 1,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 60_000,
+    });
+    controller.abort();
+
+    await expect(resultPromise).rejects.toThrow('cancelled by user');
+    expect(fetchTrace).not.toHaveBeenCalled();
   });
 
   it('stops retrying immediately when the evaluation is cancelled', async () => {
@@ -195,7 +220,8 @@ describe('fetchTraceContext', () => {
       abortSignal: controller.signal,
       maxRetries: 1,
       providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
-      queryDelay: 60_000,
+      queryDelay: 0,
+      retryDelayMs: 60_000,
     });
     await vi.waitFor(() => expect(fetchTrace).toHaveBeenCalledTimes(1));
     controller.abort();
@@ -213,8 +239,8 @@ describe('fetchTraceContext', () => {
     const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
 
     await Promise.all([
-      fetchTraceContext('trace-7', { maxRetries: 0, providerConfig }),
-      fetchTraceContext('trace-7', { maxRetries: 0, providerConfig }),
+      fetchTraceContext('trace-7', { maxRetries: 0, providerConfig, queryDelay: 0 }),
+      fetchTraceContext('trace-7', { maxRetries: 0, providerConfig, queryDelay: 0 }),
     ]);
 
     expect(fetchTrace).toHaveBeenCalledTimes(1);
