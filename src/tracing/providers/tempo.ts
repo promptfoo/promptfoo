@@ -47,10 +47,19 @@ type TempoScopeSpan = NonNullable<TempoBatch['scopeSpans']>[number];
 
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
+const MAX_SPAN_TEXT_LENGTH = 1024;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
+const TRACE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
+
+function truncateSpanText(value: string): string {
+  return value.length > MAX_SPAN_TEXT_LENGTH
+    ? `${value.slice(0, MAX_SPAN_TEXT_LENGTH - 1)}…`
+    : value;
+}
 
 function nanoToMs(value: string): number {
   const milliseconds = BigInt(value) / 1_000_000n;
@@ -221,7 +230,7 @@ function transformSpan(
   return {
     spanId,
     parentSpanId,
-    name: span.name,
+    name: truncateSpanText(span.name),
     startTime,
     endTime,
     attributes: {
@@ -234,7 +243,8 @@ function transformSpan(
       }),
     },
     statusCode: normalizeStatusCode(span.status?.code),
-    statusMessage: span.status?.message,
+    statusMessage:
+      typeof span.status?.message === 'string' ? truncateSpanText(span.status.message) : undefined,
   };
 }
 
@@ -312,9 +322,7 @@ export class TempoProvider implements TraceProvider {
     }
     const hasCredentialPath = endpoint.pathname.split('/').some((segment) => {
       try {
-        return /^(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}$/i.test(
-          decodeURIComponent(segment),
-        );
+        return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
       } catch {
         return true;
       }
@@ -435,7 +443,7 @@ export class TempoProvider implements TraceProvider {
     if (!response.ok) {
       throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
         statusCode: response.status,
-        retryable: response.status === 429 || response.status >= 500,
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
       });
     }
 

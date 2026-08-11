@@ -82,6 +82,9 @@ describe('TempoProvider', () => {
     { id: 'tempo', endpoint: 'https://example.com/tempo#section' },
     { id: 'tempo', endpoint: 'https://example.com/tempo/token-privateTenantCredential123' },
     { id: 'tempo', endpoint: 'https://example.com/tempo/%74oken-privateTenantCredential123' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo/2e163f4d-28e2-4f84-b6d2-05e13058d6aa' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo/2e163f4d28e24f84b6d205e13058d6aa' },
+    { id: 'tempo', endpoint: 'https://example.com/tempo/eyJheader.payload.signature' },
     { id: 'tempo', endpoint: 'https://example.com', timeout: -1 },
   ] as const)('rejects unsafe provider configuration: %o', (config) => {
     expect(() => new TempoProvider(config)).toThrow();
@@ -298,6 +301,25 @@ describe('TempoProvider', () => {
       expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
     },
   );
+
+  it('bounds oversized span names and error messages before returning trace feedback', async () => {
+    const oversizedResponse = structuredClone(traceResponse);
+    const span = oversizedResponse.batches[0].scopeSpans[0].spans[0];
+    const longName = 'operation'.repeat(500);
+    const longMessage = 'detailed failure '.repeat(500);
+    span.name = longName;
+    span.status = Object.assign({ code: 'STATUS_CODE_ERROR' }, { message: longMessage });
+    mockedFetch.mockResolvedValueOnce(response(oversizedResponse));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+    const normalizedSpan = result?.spans[0];
+
+    expect(normalizedSpan?.name).toHaveLength(1024);
+    expect(normalizedSpan?.name).toBe(`${longName.slice(0, 1023)}…`);
+    expect(normalizedSpan?.statusMessage).toHaveLength(1024);
+    expect(normalizedSpan?.statusMessage).toBe(`${longMessage.slice(0, 1023)}…`);
+  });
 
   it('discards spans that finish before they start while retaining valid siblings', async () => {
     const malformedResponse = structuredClone(traceResponse);
@@ -593,6 +615,18 @@ describe('TempoProvider', () => {
     await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
       statusCode: 401,
       retryable: false,
+    });
+
+    mockedFetch.mockResolvedValueOnce(response({}, 408));
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      statusCode: 408,
+      retryable: true,
+    });
+
+    mockedFetch.mockResolvedValueOnce(response({}, 429));
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      statusCode: 429,
+      retryable: true,
     });
 
     mockedFetch.mockResolvedValueOnce(response({}, 503));

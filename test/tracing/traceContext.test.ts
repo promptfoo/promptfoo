@@ -192,6 +192,34 @@ describe('fetchTraceContext', () => {
     expect(mocks.addSpans.mock.calls[1][1]).toEqual([firstTurnSpan, secondTurnSpan]);
   });
 
+  it('evicts the least recently used completed trace when turn tracking reaches its bound', async () => {
+    const fetchTrace = vi.fn(async (traceId: string) => ({
+      fetchedAt: 1,
+      traceId,
+      spans: [{ spanId: `${traceId}-span`, name: 'target.call', startTime: 1 }],
+    }));
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+    const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+    const fetchOptions = {
+      earliestStartTime: 1,
+      maxRetries: 0,
+      providerConfig,
+      queryDelay: 0,
+    };
+
+    for (let index = 0; index < 64; index++) {
+      await fetchTraceContext(`trace-${index}`, fetchOptions);
+    }
+
+    expect(await fetchTraceContext('trace-0', fetchOptions)).toBeNull();
+    await fetchTraceContext('trace-64', fetchOptions);
+
+    expect(await fetchTraceContext('trace-0', fetchOptions)).toBeNull();
+    expect(await fetchTraceContext('trace-1', fetchOptions)).toMatchObject({
+      spans: [expect.objectContaining({ spanId: 'trace-1-span' })],
+    });
+  });
+
   it('waits for a new turn span when the backend initially returns only earlier turns', async () => {
     const firstTurnSpan = { spanId: 'turn-1', name: 'tool.first-turn', startTime: 1 };
     const secondTurnSpan = { spanId: 'turn-2', name: 'tool.second-turn', startTime: 2 };
@@ -704,6 +732,45 @@ describe('fetchTraceContext', () => {
     );
     expect(JSON.stringify(result)).not.toContain('echoed-secret');
     expect(JSON.stringify(result)).not.toContain('another-secret');
+  });
+
+  it('redacts truncated span fields that echo explicitly redacted attribute values', async () => {
+    const fullSecret = `Bearer ${'private-credential-'.repeat(100)}`;
+    const truncatedSecret = `${fullSecret.slice(0, 1023)}…`;
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-truncated-redacted-echo',
+      spans: [
+        {
+          spanId: 'truncated-redacted-echo',
+          name: truncatedSecret,
+          statusMessage: truncatedSecret,
+          startTime: 1,
+          attributes: { authorization: fullSecret },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-truncated-redacted-echo', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      redactAttributes: ['authorization'],
+    });
+
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-truncated-redacted-echo',
+      [
+        expect.objectContaining({
+          name: '[REDACTED]',
+          statusMessage: '[REDACTED]',
+          attributes: { authorization: '[REDACTED]' },
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+    expect(JSON.stringify(result)).not.toContain('private-credential');
   });
 
   it('persists unsanitized span attributes when no explicit storage redactions are configured', async () => {

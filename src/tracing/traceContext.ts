@@ -56,6 +56,7 @@ const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_QUERY_DELAY_MS = 3000;
 const EXTERNAL_SPAN_BATCH_SIZE = 500;
 const EXTERNAL_CLOCK_SKEW_ALLOWANCE_MS = 60_000;
+const MAX_TRACKED_EXTERNAL_TRACES = 64;
 const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
@@ -392,8 +393,19 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
       )
       .map(([, value]) => value as string),
   );
-  const scrubEcho = <T extends string | undefined>(value: T): T =>
-    typeof value === 'string' && redactedValues.has(value) ? ('[REDACTED]' as T) : value;
+  const scrubEcho = <T extends string | undefined>(value: T): T => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    if (
+      redactedValues.has(value) ||
+      (value.endsWith('…') &&
+        [...redactedValues].some((redactedValue) => redactedValue.startsWith(value.slice(0, -1))))
+    ) {
+      return '[REDACTED]' as T;
+    }
+    return value;
+  };
 
   return {
     ...span,
@@ -419,10 +431,18 @@ function getPreviouslyFetchedExternalTurnSpanIds(
   }
 
   let spanIds = providerTraces.get(traceId);
-  if (!spanIds) {
+  if (spanIds) {
+    providerTraces.delete(traceId);
+  } else {
+    if (providerTraces.size >= MAX_TRACKED_EXTERNAL_TRACES) {
+      const leastRecentlyUsedTraceId = providerTraces.keys().next().value;
+      if (leastRecentlyUsedTraceId !== undefined) {
+        providerTraces.delete(leastRecentlyUsedTraceId);
+      }
+    }
     spanIds = new Set();
-    providerTraces.set(traceId, spanIds);
   }
+  providerTraces.set(traceId, spanIds);
   return spanIds;
 }
 
