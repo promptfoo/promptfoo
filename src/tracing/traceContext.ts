@@ -609,11 +609,17 @@ async function fetchFromExternalProvider(
       if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
         return null;
       }
-      await waitForRetry(retryDelayMs, fetchOptions.abortSignal);
+      await waitForRetry(getTraceRetryDelay(error, retryDelayMs), fetchOptions.abortSignal);
     }
   }
 
   return null;
+}
+
+function getTraceRetryDelay(error: unknown, fallbackDelayMs: number): number {
+  return error instanceof TraceProviderError
+    ? Math.max(fallbackDelayMs, error.retryAfterMs ?? 0)
+    : fallbackDelayMs;
 }
 
 function createTraceAbortError(signal?: AbortSignal): Error {

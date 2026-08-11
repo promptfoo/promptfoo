@@ -1,3 +1,4 @@
+import { getEnvBool } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
@@ -25,6 +26,11 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
       return testSuite;
     }
 
+    const processEnvironmentDisabled = getEnvBool(
+      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+    );
+    const processEnvironment = processEnvironmentDisabled ? {} : process.env;
     let renderedEnv = testSuite.env;
     if (renderedEnv) {
       const maxPasses = Object.keys(renderedEnv).length;
@@ -32,7 +38,8 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
         const previousEnv: NonNullable<typeof testSuite.env> = renderedEnv;
         const nextEnv: NonNullable<typeof testSuite.env> = renderEnvOnlyInObject(
           previousEnv,
-          previousEnv,
+          { ...processEnvironment, ...previousEnv },
+          true,
         );
         if (
           Object.entries(nextEnv).every(
@@ -48,7 +55,11 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
     const runtimeTestSuite = {
       ...testSuite,
       ...(renderedEnv && { env: renderedEnv }),
-      tracing: renderEnvOnlyInObject(testSuite.tracing, renderedEnv),
+      tracing: renderEnvOnlyInObject(
+        testSuite.tracing,
+        { ...processEnvironment, ...renderedEnv },
+        true,
+      ),
     };
     preserveTracingCredentialReferences(
       {

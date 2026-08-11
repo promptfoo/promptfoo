@@ -27,6 +27,7 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
   getTraceStore: mocks.getTraceStore,
 }));
 
+import { TraceProviderError } from '../../src/tracing/providers/types';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
 describe('fetchTraceContext', () => {
@@ -915,6 +916,45 @@ describe('fetchTraceContext', () => {
       cause: controller.signal.reason,
     });
     expect(fetchTrace).not.toHaveBeenCalled();
+  });
+
+  it('waits for the provider Retry-After delay before retrying rate-limited requests', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchTrace = vi
+        .fn()
+        .mockRejectedValueOnce(
+          new TraceProviderError('Tempo returned HTTP 429', {
+            statusCode: 429,
+            retryable: true,
+            retryAfterMs: 3000,
+          }),
+        )
+        .mockResolvedValueOnce({
+          fetchedAt: 1,
+          spans: [{ spanId: 'a', name: 'target.call', startTime: 1 }],
+          traceId: 'trace-rate-limited',
+        });
+      mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+      const resultPromise = fetchTraceContext('trace-rate-limited', {
+        maxRetries: 1,
+        providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+        queryDelay: 0,
+        retryDelayMs: 500,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchTrace).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(fetchTrace).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await resultPromise).not.toBeNull();
+      expect(fetchTrace).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stops retrying immediately when the evaluation is cancelled', async () => {

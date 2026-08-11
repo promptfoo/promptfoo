@@ -48,6 +48,7 @@ type TempoScopeSpan = NonNullable<TempoBatch['scopeSpans']>[number];
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const MAX_SPAN_TEXT_LENGTH = 1024;
+const MAX_RETRY_AFTER_MS = 60_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
@@ -305,6 +306,34 @@ async function readLimitedResponse(response: Response): Promise<string> {
   }
 }
 
+async function releaseResponse(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch (error) {
+    logger.debug(`[TempoProvider] Failed to release response body: ${error}`);
+  }
+}
+
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  if (/^\d+$/.test(value.trim())) {
+    const seconds = Number(value.trim());
+    return Number.isFinite(seconds) ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS) : undefined;
+  }
+
+  if (!/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s/i.test(value.trim())) {
+    return undefined;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp)
+    ? undefined
+    : Math.min(Math.max(0, timestamp - Date.now()), MAX_RETRY_AFTER_MS);
+}
+
 export class TempoProvider implements TraceProvider {
   readonly id = 'tempo';
   private readonly baseUrl: string;
@@ -438,17 +467,22 @@ export class TempoProvider implements TraceProvider {
     });
 
     if (response.status === 404) {
+      await releaseResponse(response);
       return null;
     }
     if (!response.ok) {
+      const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+      await releaseResponse(response);
       throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
         statusCode: response.status,
         retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+        ...(retryAfterMs !== undefined && { retryAfterMs }),
       });
     }
 
     const contentLength = Number(response.headers.get('content-length'));
     if (contentLength > MAX_RESPONSE_BYTES) {
+      await releaseResponse(response);
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
     const body = await readLimitedResponse(response);
@@ -484,6 +518,7 @@ export class TempoProvider implements TraceProvider {
         redirect: 'error',
         signal: AbortSignal.timeout(5_000),
       });
+      await releaseResponse(response);
       return response.ok;
     } catch {
       return false;

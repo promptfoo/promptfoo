@@ -636,6 +636,63 @@ describe('TempoProvider', () => {
     });
   });
 
+  it.each([404, 401, 408, 429, 503])(
+    'releases response bodies before returning or throwing for HTTP %s',
+    async (status) => {
+      const cancel = vi.fn();
+      mockedFetch.mockResolvedValueOnce(new Response(new ReadableStream({ cancel }), { status }));
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+      if (status === 404) {
+        expect(await provider.fetchTrace(TRACE_ID)).toBeNull();
+      } else {
+        await expect(provider.fetchTrace(TRACE_ID)).rejects.toBeInstanceOf(TraceProviderError);
+      }
+
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    { header: '3', expected: 3000 },
+    { header: '3600', expected: 60_000 },
+    { header: 'invalid', expected: undefined },
+    { header: '-3', expected: undefined },
+  ])('parses and bounds Retry-After header $header', async ({ header, expected }) => {
+    mockedFetch.mockResolvedValueOnce(
+      new Response('{}', { status: 429, headers: { 'retry-after': header } }),
+    );
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      statusCode: 429,
+      retryable: true,
+      retryAfterMs: expected,
+    });
+  });
+
+  it('accepts HTTP-date Retry-After values', async () => {
+    const now = new Date('2026-08-11T22:00:00.000Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    try {
+      mockedFetch.mockResolvedValueOnce(
+        new Response('{}', {
+          status: 503,
+          headers: { 'retry-after': new Date(now.getTime() + 5000).toUTCString() },
+        }),
+      );
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+      await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        statusCode: 503,
+        retryAfterMs: 5000,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects malformed or oversized responses', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     mockedFetch.mockResolvedValueOnce(response({ unexpected: [] }));
@@ -681,5 +738,14 @@ describe('TempoProvider', () => {
     );
     mockedFetch.mockRejectedValueOnce(new Error('offline'));
     expect(await provider.healthCheck()).toBe(false);
+  });
+
+  it.each([200, 503])('releases readiness response bodies for HTTP %s', async (status) => {
+    const cancel = vi.fn();
+    mockedFetch.mockResolvedValueOnce(new Response(new ReadableStream({ cancel }), { status }));
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    expect(await provider.healthCheck()).toBe(status === 200);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 });
