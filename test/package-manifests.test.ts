@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { minVersion, satisfies, validRange } from 'semver';
+import { minVersion, satisfies, subset, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -755,11 +755,8 @@ describe('package manifests', () => {
         validRange(declaredVersion as string),
         `${manifestPath} must declare a valid js-yaml semver range`,
       ).not.toBeNull();
-
-      const minimumVersion = minVersion(declaredVersion as string);
-      expect(minimumVersion, `${manifestPath} must have a minimum js-yaml version`).not.toBeNull();
       expect(
-        minimumVersion !== null && satisfies(minimumVersion, PATCHED_JS_YAML_RANGE),
+        subset(declaredVersion as string, PATCHED_JS_YAML_RANGE),
         `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
       ).toBe(true);
       directVersions.push(declaredVersion as string);
