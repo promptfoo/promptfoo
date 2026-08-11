@@ -55,17 +55,20 @@
         "writeLatestResults": {
           "$ref": "#/definitions/__schema39"
         },
-        "tracing": {
+        "defaultColumnVisibility": {
           "$ref": "#/definitions/__schema40"
         },
-        "evaluateOptions": {
+        "tracing": {
           "$ref": "#/definitions/__schema41"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema42"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema44"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema45"
         }
       },
       "required": ["prompts"],
@@ -3090,6 +3093,32 @@
     "__schema40": {
       "type": "object",
       "properties": {
+        "variables": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "prompts": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "hideColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "showColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema41": {
+      "type": "object",
+      "properties": {
         "enabled": {
           "type": "boolean"
         },
@@ -3190,7 +3219,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema41": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3233,15 +3262,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema43"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema43": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema44": {
       "type": "object",
       "properties": {
         "description": {
@@ -3369,7 +3398,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema43"
             }
           ]
         },
@@ -3443,7 +3472,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema45": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

@@ -132,6 +132,25 @@ sharing:
 
 Or set via **API Settings** in the top-right menu. See [sharing docs](/docs/usage/sharing) for auth and CI/CD.
 
+## Column Visibility
+
+Use **Columns** in the toolbar to hide variables, prompts, or individual table columns. Variable choices are saved by the eval's variable schema, so evals with the same variable names share visibility preferences.
+
+Config authors can set viewer defaults for everyone who opens an eval:
+
+```yaml
+defaultColumnVisibility:
+  variables: hidden
+  prompts: visible
+  showColumns:
+    - question
+  hideColumns:
+    - context
+    - system_prompt
+```
+
+Omitted `variables` or `prompts` settings default to visible; `showColumns` overrides `hideColumns` for a specifically named column. Use variable names such as `context` for variable columns, and display IDs such as `Prompt 1` or `description` for non-variable columns. Saved browser preferences take priority over config defaults. Use **Show All** to make every variable column visible for the current variable schema.
+
 ## URL Parameters
 
 Viewer state syncs to the URL—bookmark or share filtered views:

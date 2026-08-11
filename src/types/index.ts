@@ -1161,6 +1161,16 @@ export const TestSuiteSchema = z.object({
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
 
 // TestSuiteConfig = Test Suite, but before everything is parsed and resolved.  Providers are just strings, prompts are filepaths, tests can be filepath or inline.
+export const DefaultColumnVisibilitySchema = z.object({
+  // Omitted groups remain visible in the viewer.
+  variables: z.enum(['visible', 'hidden']).optional(),
+  prompts: z.enum(['visible', 'hidden']).optional(),
+  hideColumns: z.array(z.string()).optional(),
+  showColumns: z.array(z.string()).optional(),
+});
+
+export type DefaultColumnVisibility = z.infer<typeof DefaultColumnVisibilitySchema>;
+
 export const TestSuiteConfigSchema = z.object({
   // Optional tags to describe the test suite
   tags: z.record(z.string(), z.string()).optional(),
@@ -1256,6 +1266,10 @@ export const TestSuiteConfigSchema = z.object({
 
   // Write results to disk so they can be viewed in web viewer
   writeLatestResults: z.boolean().optional(),
+
+  // Default column visibility settings for the web viewer
+  // Controls which columns are shown/hidden by default when viewing eval results
+  defaultColumnVisibility: DefaultColumnVisibilitySchema.optional(),
 
   // Tracing configuration
   tracing: z

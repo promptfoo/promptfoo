@@ -212,6 +212,20 @@ describe('config-schema.json', () => {
     });
   });
 
+  describe('column visibility defaults', () => {
+    it('accepts a partial defaultColumnVisibility config', () => {
+      const validate = ajv.compile(schema);
+
+      expect(
+        validate({
+          prompts: ['hello'],
+          providers: ['echo'],
+          defaultColumnVisibility: { hideColumns: ['context'] },
+        }),
+      ).toBe(true);
+    });
+  });
+
   describe('performance', () => {
     it('should not be excessively large', () => {
       const schemaSize = JSON.stringify(schema).length;
