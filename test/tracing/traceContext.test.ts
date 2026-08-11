@@ -40,7 +40,7 @@ describe('fetchTraceContext', () => {
     mocks.isExternalTraceProvider.mockReturnValue(true);
   });
 
-  it('fetches external traces before applying local filters and limits', async () => {
+  it('persists complete external traces before applying reader-specific filters and limits', async () => {
     const fetchTrace = vi.fn().mockResolvedValue({
       fetchedAt: 123,
       spans: [
@@ -56,6 +56,19 @@ describe('fetchTraceContext', () => {
           startTime: 2,
           attributes: { 'otel.span.kind': 'client' },
         },
+        {
+          spanId: 'another-target-span',
+          name: 'target.another',
+          startTime: 3,
+          attributes: { 'otel.span.kind': 'client' },
+        },
+        {
+          spanId: 'nested-target-span',
+          parentSpanId: 'target-span',
+          name: 'target.nested',
+          startTime: 4,
+          attributes: { 'otel.span.kind': 'client' },
+        },
       ],
       traceId: 'trace-1',
     });
@@ -64,17 +77,24 @@ describe('fetchTraceContext', () => {
     const result = await fetchTraceContext('trace-1', {
       includeInternalSpans: false,
       maxRetries: 0,
+      maxDepth: 1,
       maxSpans: 1,
       providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
       queryDelay: 0,
       sanitizeAttributes: false,
+      spanFilter: ['target'],
     });
 
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
     expect(mocks.addSpans).toHaveBeenCalledWith(
       'trace-1',
-      [expect.objectContaining({ name: 'target.call' })],
+      [
+        expect.objectContaining({ name: 'internal.setup' }),
+        expect.objectContaining({ name: 'target.call' }),
+        expect.objectContaining({ name: 'target.another' }),
+        expect.objectContaining({ name: 'target.nested' }),
+      ],
       { warnIfMissingTrace: false },
     );
   });
@@ -102,6 +122,69 @@ describe('fetchTraceContext', () => {
     });
 
     expect(fetchTrace).toHaveBeenCalledWith('trace-2', { earliestStartTime: 100 });
+  });
+
+  it('orders external spans by start time before applying the reader span limit', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 123,
+      traceId: 'trace-unsorted',
+      spans: [
+        { spanId: 'late-span', name: 'target.late', startTime: 30 },
+        { spanId: 'early-span', name: 'target.early', startTime: 10 },
+        { spanId: 'middle-span', name: 'target.middle', startTime: 20 },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-unsorted', {
+      maxRetries: 0,
+      maxSpans: 2,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(result?.spans.map(({ name }) => name)).toEqual(['target.early', 'target.middle']);
+    expect(mocks.addSpans.mock.calls[0][1].map(({ name }: { name: string }) => name)).toEqual([
+      'target.late',
+      'target.early',
+      'target.middle',
+    ]);
+  });
+
+  it('calculates span depth after excluded ancestors are removed', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 123,
+      traceId: 'trace-filtered-depth',
+      spans: [
+        {
+          spanId: 'internal-parent',
+          name: 'internal.setup',
+          startTime: 1,
+          attributes: { 'otel.span.kind': 'internal' },
+        },
+        {
+          spanId: 'target-child',
+          parentSpanId: 'internal-parent',
+          name: 'target.call',
+          startTime: 2,
+          attributes: { 'otel.span.kind': 'client' },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-filtered-depth', {
+      includeInternalSpans: false,
+      maxDepth: 1,
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(result?.spans.map(({ name, depth }) => ({ name, depth }))).toEqual([
+      { name: 'target.call', depth: 0 },
+    ]);
+    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(2);
   });
 
   it.each([
@@ -195,6 +278,7 @@ describe('fetchTraceContext', () => {
   });
 
   it('recognizes numeric client span kinds and uses the shared redaction policy', async () => {
+    const longToolArguments = 'argument-value '.repeat(40);
     const fetchTrace = vi.fn().mockResolvedValue({
       fetchedAt: 1,
       traceId: 'trace-4',
@@ -208,6 +292,7 @@ describe('fetchTraceContext', () => {
             'gen_ai.usage.total_tokens': 12,
             'X-API-Key': 'secret',
             customer_email: 'private@example.com',
+            'gen_ai.tool.call.arguments': longToolArguments,
           },
         },
       ],
@@ -229,8 +314,67 @@ describe('fetchTraceContext', () => {
         'gen_ai.usage.total_tokens': 12,
         'X-API-Key': '<redacted>',
         customer_email: '[REDACTED]',
+        'gen_ai.tool.call.arguments': `${longToolArguments.slice(0, 400)}…`,
       },
     });
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-4',
+      [
+        expect.objectContaining({
+          attributes: {
+            'otel.span.kind_code': 3,
+            'gen_ai.usage.total_tokens': 12,
+            'X-API-Key': 'secret',
+            customer_email: '[REDACTED]',
+            'gen_ai.tool.call.arguments': longToolArguments,
+          },
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+  });
+
+  it('persists unsanitized span attributes when no explicit storage redactions are configured', async () => {
+    const longToolArguments = 'argument-value '.repeat(40);
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-raw',
+      spans: [
+        {
+          spanId: 'tool-span',
+          name: 'execute_tool search',
+          startTime: 1,
+          attributes: {
+            authorization: 'Bearer private-token',
+            'gen_ai.tool.call.arguments': longToolArguments,
+          },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-raw', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(result?.spans[0].attributes).toEqual({
+      authorization: '<redacted>',
+      'gen_ai.tool.call.arguments': `${longToolArguments.slice(0, 400)}…`,
+    });
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-raw',
+      [
+        expect.objectContaining({
+          attributes: {
+            authorization: 'Bearer private-token',
+            'gen_ai.tool.call.arguments': longToolArguments,
+          },
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
   });
 
   it('waits before the first fetch and uses the retry delay for later attempts', async () => {

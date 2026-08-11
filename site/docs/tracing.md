@@ -329,13 +329,13 @@ secrets in test variables when traces are retained.
 :::warning Scope of `redactAttributes`
 
 `redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
-`/v1/traces` and `/v1/logs`. Spans emitted by Promptfoo's **built-in provider
-instrumentation** are exported in-process (not over HTTP) and are **not** filtered by
-`redactAttributes`; values like `promptfoo.request.body` and request headers can therefore
-be stored in the local trace DB. A built-in sanitizer still masks common credential-shaped
-keys (`authorization`, `api_key`, `token`, `password`, `cookie`, …) when traces are read,
-but custom keys you add to `redactAttributes` are only enforced on the HTTP ingest path.
-Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
+`/v1/traces` and `/v1/logs`, and to traces fetched through a configured **trace provider**
+before they are saved. Spans emitted by Promptfoo's **built-in provider instrumentation**
+are exported in-process and are **not** filtered by `redactAttributes`; values like
+`promptfoo.request.body` and request headers can therefore be stored in the local trace DB.
+A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_key`,
+`token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
+from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
 :::
 
@@ -441,7 +441,7 @@ tracing:
 
 After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
 
-Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Common secrets and any attributes you list in `tracing.otlp.http.redactAttributes` are redacted before traces are saved.
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
 ## Provider Implementation Guide
 

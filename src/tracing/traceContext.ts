@@ -243,8 +243,34 @@ function computeSpanDepth(
 }
 
 /**
- * Post-process spans from external providers to apply filtering and sanitization.
- * This ensures consistent behavior with the local TraceStore.
+ * Drop malformed parent cycles before persisting or processing external spans.
+ */
+function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
+  const spanMap = new Map(spans.map((span) => [span.spanId, span]));
+  const depthCache = new Map<string, number | null>();
+  const cyclicSpanIds = new Set<string>();
+
+  const validSpans = spans.filter((span) => {
+    const depth = computeSpanDepth(span, spanMap, depthCache);
+    if (depth === null) {
+      cyclicSpanIds.add(span.spanId);
+      return false;
+    }
+
+    return true;
+  });
+
+  if (cyclicSpanIds.size > 0) {
+    logger.warn(
+      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
+    );
+  }
+
+  return validSpans;
+}
+
+/**
+ * Apply reader-specific filtering and sanitization after the complete trace is persisted.
  */
 function postProcessExternalSpans(
   spans: SpanData[],
@@ -258,22 +284,9 @@ function postProcessExternalSpans(
   },
 ): SpanData[] {
   const { includeInternalSpans, sanitizeAttributes, maxDepth, maxSpans, spanFilter } = options;
+  let filtered = [...spans].sort((left, right) => left.startTime - right.startTime);
 
-  // Build span map for depth calculation
-  const spanMap = new Map<string, SpanData>();
-  for (const span of spans) {
-    spanMap.set(span.spanId, span);
-  }
-  const depthCache = new Map<string, number | null>();
-  const cyclicSpanIds = new Set<string>();
-
-  let filtered = spans.filter((span) => {
-    const depth = computeSpanDepth(span, spanMap, depthCache);
-    if (depth === null) {
-      cyclicSpanIds.add(span.spanId);
-      return false;
-    }
-
+  filtered = filtered.filter((span) => {
     // Filter by internal spans
     if (!includeInternalSpans) {
       const kind = resolveSpanKind(span);
@@ -292,18 +305,17 @@ function postProcessExternalSpans(
       }
     }
 
-    // Filter by depth
-    if (maxDepth !== undefined && depth >= maxDepth) {
-      return false;
-    }
-
     return true;
   });
 
-  if (cyclicSpanIds.size > 0) {
-    logger.warn(
-      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
-    );
+  if (maxDepth !== undefined) {
+    const spanMap = new Map(filtered.map((span) => [span.spanId, span]));
+    const depthCache = new Map<string, number | null>();
+
+    filtered = filtered.filter((span) => {
+      const depth = computeSpanDepth(span, spanMap, depthCache);
+      return depth !== null && depth < maxDepth;
+    });
   }
 
   // Apply maxSpans limit
@@ -409,8 +421,22 @@ async function fetchFromExternalProvider(
         continue;
       }
 
-      // Apply post-processing to match local TraceStore behavior
-      const processedSpans = postProcessExternalSpans(result.spans, {
+      const validSpans = discardCyclicExternalSpans(result.spans);
+      const storedSpans = fetchOptions.redactAttributes?.length
+        ? validSpans.map((span) => ({
+            ...span,
+            attributes: sanitizeTraceAttributes(span.attributes, {
+              redactAttributes: fetchOptions.redactAttributes,
+              sanitizeSensitiveAttributes: false,
+              truncateValues: false,
+            }),
+          }))
+        : validSpans;
+
+      // Persist the complete trace before applying filters intended only for this reader.
+      await storeExternalSpans(traceId, storedSpans);
+
+      const processedSpans = postProcessExternalSpans(storedSpans, {
         includeInternalSpans: fetchOptions.includeInternalSpans,
         sanitizeAttributes: fetchOptions.sanitizeAttributes,
         maxDepth: fetchOptions.maxDepth,
@@ -418,9 +444,6 @@ async function fetchFromExternalProvider(
         spanFilter: fetchOptions.spanFilter,
         redactAttributes: fetchOptions.redactAttributes,
       });
-
-      // Store fetched spans in local database for persistence and UI display
-      await storeExternalSpans(traceId, processedSpans);
 
       // Transform to TraceContextData format
       const traceSpans = createTraceSpans(processedSpans);

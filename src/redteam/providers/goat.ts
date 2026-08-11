@@ -608,6 +608,7 @@ export default class GoatProvider implements ApiProvider {
 
           if (traceId) {
             traceContext = await fetchTraceContext(traceId, {
+              abortSignal: options?.abortSignal,
               earliestStartTime: iterationStart,
               includeInternalSpans: tracingOptions.includeInternalSpans,
               maxSpans: tracingOptions.maxSpans,

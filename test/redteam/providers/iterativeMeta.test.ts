@@ -1064,6 +1064,7 @@ describe('RedteamIterativeMetaProvider', () => {
         fetchedAt: Date.now(),
       });
 
+      const abortController = new AbortController();
       const result = await runMetaAgentRedteam({
         context: {
           vars: { query: 'test' },
@@ -1074,7 +1075,7 @@ describe('RedteamIterativeMetaProvider', () => {
         filters: undefined,
         injectVar: 'query',
         numIterations: 1,
-        options: undefined,
+        options: { abortSignal: abortController.signal },
         prompt: { raw: 'test', label: 'test' },
         agentProvider: mockAgentProvider,
         gradingProvider: mockGradingProvider,
@@ -1084,7 +1085,10 @@ describe('RedteamIterativeMetaProvider', () => {
       });
 
       // Should call fetchTraceContext
-      expect(mockFetchTraceContext).toHaveBeenCalled();
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        'test-trace-id',
+        expect.objectContaining({ abortSignal: abortController.signal }),
+      );
 
       // Metadata should have trace data
       expect(result.metadata.traceSnapshots).toBeDefined();

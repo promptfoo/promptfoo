@@ -2197,10 +2197,14 @@ describe('HydraProvider', () => {
         traceparent: '00-trace123-span456-01',
       };
 
-      const result = await provider.callApi('', context);
+      const abortController = new AbortController();
+      const result = await provider.callApi('', context, { abortSignal: abortController.signal });
 
       // Should call fetchTraceContext
-      expect(mockFetchTraceContext).toHaveBeenCalled();
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        'test-trace-id',
+        expect.objectContaining({ abortSignal: abortController.signal }),
+      );
 
       // Metadata should have trace snapshots
       expect(result.metadata?.traceSnapshots).toBeDefined();
