@@ -37,10 +37,14 @@ ENV VITE_IS_HOSTED=1 \
 COPY package.json package-lock.json ./
 COPY src/app/package.json ./src/app/package.json
 COPY site/package.json ./site/package.json
-# Build only the native packages needed by the application.
+# Block dependency lifecycle scripts during install, then rebuild only the two native
+# packages the build needs. The specs must be exact directories: `npm rebuild esbuild`
+# matches every folder of that name anywhere in the tree, so a nested dependency aliased
+# to `esbuild` would get its install script run and defeat --ignore-scripts.
+# Leverage BuildKit cache
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --install-links --include=peer --ignore-scripts && \
-    npm rebuild esbuild @swc/core
+    npm rebuild ./node_modules/esbuild ./node_modules/@swc/core
 
 # Copy the rest of the application code
 COPY . .

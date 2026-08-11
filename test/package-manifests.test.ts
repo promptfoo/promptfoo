@@ -252,6 +252,32 @@ describe('package manifests', () => {
     }
   });
 
+  it('blocks dependency install scripts in the Docker build', () => {
+    const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+
+    expect(dockerfile).toMatch(/npm ci[^\n]*--ignore-scripts/);
+
+    // `npm rebuild <name>` matches every folder of that name anywhere in the tree, so a
+    // nested dependency aliased to `esbuild` would run its install script and defeat
+    // --ignore-scripts. Only exact directory specs for the trusted packages are allowed.
+    // Comments are stripped first so the Dockerfile can explain the rule using the very
+    // command shape this asserts against.
+    const instructions = dockerfile
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    const rebuildArgs = instructions.match(/npm rebuild ([^\n]*)/)?.[1];
+
+    expect(rebuildArgs, 'the Docker build must rebuild its native packages').toBeDefined();
+    expect(
+      rebuildArgs!
+        .replace(/\\$/, '')
+        .trim()
+        .split(/\s+/)
+        .filter((arg) => arg !== '&&' && !arg.startsWith('-')),
+    ).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
+  });
+
   it('keeps sharp out of the root install path', () => {
     const packageJson = readPackageJson<{
       devDependencies?: Record<string, string>;
