@@ -1197,31 +1197,31 @@ describe('GoogleInteractionsProvider', () => {
     expect(body).not.toHaveProperty('safety_settings');
   });
 
-  it.each([{ tools: [] }, { passthrough: { tools: [] } }])(
-    'allows an empty Omni tools list: %j',
-    async (toolConfig) => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [
-            {
-              type: 'model_output',
-              content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
-            },
-          ],
-        },
-        cached: false,
-      } as any);
-      const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-        config: { apiKey: 'test-key', ...toolConfig },
-      });
+  it.each([
+    { tools: [] },
+    { passthrough: { tools: [] } },
+  ])('allows an empty Omni tools list: %j', async (toolConfig) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'dmlkZW8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', ...toolConfig },
+    });
 
-      const result = await provider.callApi('A city at dusk');
+    const result = await provider.callApi('A city at dusk');
 
-      expect(result.error).toBeUndefined();
-      expect(mockFetchWithCache).toHaveBeenCalledOnce();
-    },
-  );
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledOnce();
+  });
 
   it('downloads Vertex Omni gs:// video output using OAuth headers', async () => {
     const video = { type: 'video', mime_type: 'video/mp4', uri: 'gs://video-bucket/out/a.mp4' };
@@ -1498,37 +1498,34 @@ describe('GoogleInteractionsProvider', () => {
       { GOOGLE_API_HOST: 'wrong.example' },
       'http://127.0.0.1:15500/proxy/v1beta/interactions',
     ],
-  ])(
-    'prefers explicit interaction endpoints and preserves HTTP schemes',
-    async (config, env, endpoint) => {
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [
-            {
-              type: 'model_output',
-              content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/4' }],
-            },
-          ],
-        },
-        cached: false,
-      } as any);
-      const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-        config: { ...config, apiKey: 'test-key' },
-        env,
-      });
+  ])('prefers explicit interaction endpoints and preserves HTTP schemes', async (config, env, endpoint) => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', uri: 'https://video.example/4' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { ...config, apiKey: 'test-key' },
+      env,
+    });
 
-      await provider.callApi('A city at dusk');
+    await provider.callApi('A city at dusk');
 
-      expect(mockFetchWithCache).toHaveBeenCalledWith(
-        endpoint,
-        expect.any(Object),
-        expect.any(Number),
-        'json',
-        true,
-      );
-    },
-  );
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
 
   it('returns a timeout error when polling exceeds the configured deadline', async () => {
     mockFetchWithCache.mockResolvedValue({
