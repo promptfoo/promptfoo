@@ -1140,7 +1140,7 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds
-- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+- `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile). Must be a number from 0 to 100 inclusive; out-of-range values cause an assertion error. Use the 0-100 scale, not 0-1 — `0.95` is accepted as the 0.95th percentile (effectively the fastest span), not p95
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1351,6 +1351,8 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - Records all n-grams (1-4 word sequences) from both texts
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
+
+Output that is empty after GLEU normalization (including empty, whitespace-only, or period-only text) contains no n-grams and receives a score of `0` rather than causing the evaluation to error. Tokenless reference strings likewise score `0`.
 
 **When to use GLEU:**
 

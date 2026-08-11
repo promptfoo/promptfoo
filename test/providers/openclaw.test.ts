@@ -829,7 +829,7 @@ describe('OpenClaw Provider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
-    it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
+    it('should estimate GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
           choices: [{ message: { content: 'priced' } }],
@@ -850,7 +850,7 @@ describe('OpenClaw Provider', () => {
 
       const result = await provider.callApi('price me');
 
-      expect(result.cost).toBeUndefined();
+      expect(result.cost).toBeCloseTo((10 * 2 + 5 * 12) / 1e6, 10);
     });
   });
 
@@ -1010,7 +1010,7 @@ describe('OpenClaw Provider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
-    it('should omit GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
+    it('should estimate GPT-5.6 cost when OpenClaw hides cache-write usage', async () => {
       mockFetchWithCache.mockResolvedValue({
         data: {
           output: [
@@ -1037,7 +1037,7 @@ describe('OpenClaw Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(result).not.toHaveProperty('cost');
+      expect(result.cost).toBeCloseTo((10 * 2 + 5 * 12) / 1e6, 10);
     });
 
     it('should infer hidden cached input from OpenClaw Responses totals', async () => {
