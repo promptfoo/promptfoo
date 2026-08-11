@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import { resolveTracingOptions } from '../../../src/redteam/providers/tracingOptions';
-import { withProviderCallExecutionContext } from '../../../src/scheduler/providerCallExecutionContext';
 
 import type { UnifiedConfig } from '../../../src/types/index';
 
@@ -28,9 +27,8 @@ describe('resolveTracingOptions', () => {
       otlp: { http: { enabled: true, port: 4318, redactAttributes: ['customer_email'] } },
     };
 
-    const options = await withProviderCallExecutionContext(
-      { tracingConfig: requestTracingConfig },
-      async () => resolveTracingOptions({ strategyId: 'jailbreak' }),
+    const options = await cliState.withRequestTracingConfig(requestTracingConfig, async () =>
+      resolveTracingOptions({ strategyId: 'jailbreak' }),
     );
 
     expect(options).toMatchObject({
@@ -59,11 +57,11 @@ describe('resolveTracingOptions', () => {
     };
 
     const [first, second] = await Promise.all([
-      withProviderCallExecutionContext({ tracingConfig: firstTracingConfig }, async () => {
+      cliState.withRequestTracingConfig(firstTracingConfig, async () => {
         await Promise.resolve();
         return resolveTracingOptions({ strategyId: 'jailbreak' });
       }),
-      withProviderCallExecutionContext({ tracingConfig: secondTracingConfig }, async () => {
+      cliState.withRequestTracingConfig(secondTracingConfig, async () => {
         await Promise.resolve();
         return resolveTracingOptions({ strategyId: 'jailbreak' });
       }),

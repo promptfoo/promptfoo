@@ -37,10 +37,7 @@ import {
   createRateLimitRegistry,
   type RateLimitRegistry,
 } from './scheduler';
-import {
-  getProviderCallExecutionContext,
-  withProviderCallExecutionContext,
-} from './scheduler/providerCallExecutionContext';
+import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -1056,10 +1053,7 @@ async function callActiveProvider({
     onProviderInvoked();
     const invoke = () => activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
     return testSuite?.tracing
-      ? withProviderCallExecutionContext(
-          { ...getProviderCallExecutionContext(), tracingConfig: testSuite.tracing },
-          invoke,
-        )
+      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();
   };
   const response = rateLimitRegistry
