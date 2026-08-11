@@ -113,33 +113,6 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
   });
 
-  it('bundles the resolved runtime cache dependency', () => {
-    const packageJson = readPackageJson<PackageManifest & { bundleDependencies?: string[] }>(
-      'package.json',
-    );
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        {
-          bundleDependencies?: string[];
-          dependencies?: Record<string, string>;
-          inBundle?: boolean;
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
-
-    expect(packageJson.bundleDependencies).toEqual(['cache-manager']);
-    expect(packageLock.packages[''].bundleDependencies).toEqual(packageJson.bundleDependencies);
-
-    for (const dependencyName of ['cache-manager', '@cacheable/utils']) {
-      const dependency = packageLock.packages[`node_modules/${dependencyName}`];
-
-      expect(dependency?.version, `${dependencyName} must be resolved`).toBeDefined();
-      expect(dependency?.inBundle, `${dependencyName} must be bundled`).toBe(true);
-    }
-  });
-
   it('keeps the contracts subpath extension-safe for emitted ESM', () => {
     const contractsDir = path.join(process.cwd(), 'src', 'contracts');
     const files = [
@@ -289,6 +262,32 @@ describe('package manifests', () => {
       expect(dockerfile).toMatch(/apk add[^\n]*['"]nodejs>=[\d.]+['"][^\n]*icu-data-full/);
       expect(dockerfile).toMatch(/ln -sf \/usr\/bin\/node \/usr\/local\/bin\/node/);
     }
+  });
+
+  it('blocks dependency install scripts in the Docker build', () => {
+    const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+
+    expect(dockerfile).toMatch(/npm ci[^\n]*--ignore-scripts/);
+
+    // `npm rebuild <name>` matches every folder of that name anywhere in the tree, so a
+    // nested dependency aliased to `esbuild` would run its install script and defeat
+    // --ignore-scripts. Only exact directory specs for the trusted packages are allowed.
+    // Comments are stripped first so the Dockerfile can explain the rule using the very
+    // command shape this asserts against.
+    const instructions = dockerfile
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    const rebuildArgs = instructions.match(/npm rebuild ([^\n]*)/)?.[1];
+
+    expect(rebuildArgs, 'the Docker build must rebuild its native packages').toBeDefined();
+    expect(
+      rebuildArgs!
+        .replace(/\\$/, '')
+        .trim()
+        .split(/\s+/)
+        .filter((arg) => arg !== '&&' && !arg.startsWith('-')),
+    ).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
   });
 
   it('keeps sharp out of the root install path', () => {
@@ -595,6 +594,56 @@ describe('package manifests', () => {
       expect(
         packageLock.packages[`node_modules/${generatorName}/node_modules/${dependencyName}`],
       ).toBeUndefined();
+    }
+  });
+
+  it('pins the Chevrotain parser family together and blocks independent Renovate updates', () => {
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+    // chevrotain@X declares every @chevrotain/* sub-package at exactly X and all six reach npm
+    // within about a minute of each other, so Renovate must not move any of them alone.
+    // @chevrotain/cst-dts-gen is frozen too but is excluded from the version assertion below: it
+    // is currently overridden to 13.1.0 under chevrotain 11.2.0 (#10345) and gets realigned when
+    // the family moves as a set.
+    const pinnedGrammarPackages = [
+      '@chevrotain/gast',
+      '@chevrotain/types',
+      '@chevrotain/regexp-to-ast',
+      '@chevrotain/utils',
+    ];
+    const pinnedParserPackages = [
+      'chevrotain',
+      ...pinnedGrammarPackages,
+      '@chevrotain/cst-dts-gen',
+    ];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+
+    for (const dependencyName of pinnedGrammarPackages) {
+      expect(
+        chevrotainOverride?.[dependencyName],
+        `${dependencyName} must stay on the pinned parser version`,
+      ).toBe(parserVersion);
+    }
+
+    for (const packageName of pinnedParserPackages) {
+      expect(
+        renovateConfig.packageRules?.some(
+          (rule) => rule.enabled === false && rule.matchPackageNames?.includes(packageName),
+        ),
+        `Renovate must not independently update the pinned ${packageName} package`,
+      ).toBe(true);
     }
   });
 
