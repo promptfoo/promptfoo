@@ -402,11 +402,26 @@ export class MCPClient {
     // Close existing connection
     const existingTransport = this.transports.get(serverKey);
     const existingClient = this.clients.get(serverKey);
-    if (existingTransport) {
-      await existingTransport.close().catch(() => {});
-    }
     if (existingClient) {
-      await existingClient.close().catch(() => {});
+      try {
+        await existingClient.close();
+      } catch {
+        let transportFallback: 'failed' | 'succeeded' | 'unavailable' = 'unavailable';
+        if (existingTransport) {
+          try {
+            await existingTransport.close();
+            transportFallback = 'succeeded';
+          } catch {
+            transportFallback = 'failed';
+          }
+        }
+        logger.debug('[MCP] Failed to close existing client during OAuth refresh', {
+          operation: 'oauth-refresh',
+          resource: 'client',
+          transportFallback,
+          nextAction: 'reconnect',
+        });
+      }
     }
 
     // Remove old entries (keep tools and oauthConfig)
