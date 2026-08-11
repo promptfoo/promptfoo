@@ -2,6 +2,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
 
 import type { TraceData } from '../types/tracing';
 
@@ -44,83 +45,6 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
-const SENSITIVE_ATTRIBUTE_KEYS = [
-  'authorization',
-  'cookie',
-  'set-cookie',
-  'token',
-  'api_key',
-  'apikey',
-  'secret',
-  'password',
-  'passphrase',
-];
-
-const NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS = SENSITIVE_ATTRIBUTE_KEYS.map((key) =>
-  key.replace(/[^a-z0-9]/g, ''),
-);
-
-const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
-  'gen_ai.request.max_tokens',
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  'gen_ai.usage.cached_tokens',
-  'gen_ai.usage.reasoning_tokens',
-  'gen_ai.usage.accepted_prediction_tokens',
-  'gen_ai.usage.rejected_prediction_tokens',
-  'gen_ai.usage.cache_read_input_tokens',
-  'gen_ai.usage.cache_creation_input_tokens',
-]);
-
-function isSensitiveAttributeKey(key: string): boolean {
-  const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
-    return false;
-  }
-
-  const normalizedKey = lowerKey.replace(/[^a-z0-9]/g, '');
-
-  return SENSITIVE_ATTRIBUTE_KEYS.some((sensitiveKey, index) => {
-    return (
-      lowerKey.includes(sensitiveKey) ||
-      normalizedKey.includes(NORMALIZED_SENSITIVE_ATTRIBUTE_KEYS[index])
-    );
-  });
-}
-
-function sanitizeAttributes(
-  attributes: Record<string, any> | null | undefined,
-): Record<string, any> {
-  if (!attributes) {
-    return {};
-  }
-
-  const sanitizeValue = (value: any): any => {
-    if (typeof value === 'string') {
-      return value.length > 400 ? `${value.slice(0, 400)}…` : value;
-    }
-    if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
-    }
-    if (value && typeof value === 'object') {
-      return sanitizeAttributes(value as Record<string, any>);
-    }
-    return value;
-  };
-
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(attributes)) {
-    if (isSensitiveAttributeKey(key)) {
-      sanitized[key] = '<redacted>';
-      continue;
-    }
-    sanitized[key] = sanitizeValue(value);
-  }
-
-  return sanitized;
-}
-
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
@@ -135,7 +59,7 @@ function serializeSpan(
     endTime: span.endTime ?? undefined,
     attributes: rawAttributes
       ? shouldSanitizeAttributes
-        ? sanitizeAttributes(rawAttributes)
+        ? sanitizeTraceAttributes(rawAttributes)
         : rawAttributes
       : undefined,
     statusCode: span.statusCode ?? undefined,
@@ -270,7 +194,6 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      // Insert spans
       const spanRecords = spans.map((span) => {
         logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
         return {
@@ -291,8 +214,14 @@ export class TraceStore {
         return { stored: true };
       }
 
-      await db.insert(spansTable).values(spanRecords).run();
-      logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
+      await db
+        .insert(spansTable)
+        .values(spanRecords)
+        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+        .run();
+      logger.debug(
+        `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
+      );
       return { stored: true };
     } catch (error) {
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
@@ -467,7 +396,7 @@ export class TraceStore {
           name: row.name,
           startTime: row.startTime,
           endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeAttributes(rawAttributes) : rawAttributes,
+          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
         };
