@@ -439,7 +439,7 @@ tracing:
     timeout: 10000
 ```
 
-After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
+After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. When Promptfoo and your application run on different machines, trace lookups allow up to one minute of clock difference. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
 
 Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
 

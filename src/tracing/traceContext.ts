@@ -54,6 +54,8 @@ export interface FetchTraceContextOptions
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_QUERY_DELAY_MS = 3000;
+const EXTERNAL_SPAN_BATCH_SIZE = 500;
+const EXTERNAL_CLOCK_SKEW_ALLOWANCE_MS = 60_000;
 const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
@@ -367,12 +369,20 @@ function postProcessExternalSpans(
 async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<void> {
   try {
     const traceStore = getTraceStore();
-    const result = await traceStore.addSpans(traceId, spans, {
-      warnIfMissingTrace: false,
-    });
-    if (result.stored) {
-      logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
+    for (let index = 0; index < spans.length; index += EXTERNAL_SPAN_BATCH_SIZE) {
+      const result = await traceStore.addSpans(
+        traceId,
+        spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
+        {
+          warnIfMissingTrace: false,
+          ...(index > 0 && { skipTraceCheck: true }),
+        },
+      );
+      if (!result.stored) {
+        return;
+      }
     }
+    logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
   } catch (error) {
     // Non-fatal - continue with in-memory data
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
@@ -446,7 +456,10 @@ async function fetchFromExternalProvider(
     try {
       const providerOptions = {
         ...(fetchOptions.earliestStartTime !== undefined && {
-          earliestStartTime: fetchOptions.earliestStartTime,
+          earliestStartTime: Math.max(
+            0,
+            fetchOptions.earliestStartTime - EXTERNAL_CLOCK_SKEW_ALLOWANCE_MS,
+          ),
         }),
         ...(fetchOptions.abortSignal && { abortSignal: fetchOptions.abortSignal }),
       };

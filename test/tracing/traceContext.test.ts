@@ -99,14 +99,15 @@ describe('fetchTraceContext', () => {
     );
   });
 
-  it('passes earliestStartTime to the external provider', async () => {
+  it('allows evaluator and target clocks to differ when filtering external spans', async () => {
+    const iterationStart = 1_700_000_000_000;
     const fetchTrace = vi.fn().mockResolvedValue({
       fetchedAt: 456,
       spans: [
         {
           spanId: 'span-1',
           name: 'target.call',
-          startTime: 100,
+          startTime: iterationStart - 30_000,
           attributes: { 'otel.span.kind': 'client' },
         },
       ],
@@ -115,13 +116,92 @@ describe('fetchTraceContext', () => {
     mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
 
     await fetchTraceContext('trace-2', {
+      earliestStartTime: iterationStart,
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledWith('trace-2', {
+      earliestStartTime: iterationStart - 60_000,
+    });
+  });
+
+  it('does not pass negative timestamp bounds to an external provider', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 456,
+      spans: [{ spanId: 'span-1', name: 'target.call', startTime: 10 }],
+      traceId: 'trace-early-timestamp',
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    await fetchTraceContext('trace-early-timestamp', {
       earliestStartTime: 100,
       maxRetries: 0,
       providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
       queryDelay: 0,
     });
 
-    expect(fetchTrace).toHaveBeenCalledWith('trace-2', { earliestStartTime: 100 });
+    expect(fetchTrace).toHaveBeenCalledWith('trace-early-timestamp', {
+      earliestStartTime: 0,
+    });
+  });
+
+  it('persists large external traces in bounded batches', async () => {
+    const spans = Array.from({ length: 1_201 }, (_, index) => ({
+      spanId: `span-${index}`,
+      name: `target.call.${index}`,
+      startTime: index,
+    }));
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 123,
+      spans,
+      traceId: 'trace-large',
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-large', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(result?.spans).toHaveLength(1_201);
+    expect(mocks.addSpans).toHaveBeenCalledTimes(3);
+    expect(mocks.addSpans.mock.calls.map(([, batch]) => batch.length)).toEqual([500, 500, 201]);
+    expect(mocks.addSpans).toHaveBeenNthCalledWith(
+      1,
+      'trace-large',
+      spans.slice(0, 500),
+      { warnIfMissingTrace: false },
+    );
+    expect(mocks.addSpans).toHaveBeenNthCalledWith(
+      2,
+      'trace-large',
+      spans.slice(500, 1_000),
+      { warnIfMissingTrace: false, skipTraceCheck: true },
+    );
+  });
+
+  it('stops batching when the trace does not exist in the local store', async () => {
+    const spans = Array.from({ length: 501 }, (_, index) => ({
+      spanId: `span-${index}`,
+      name: `target.call.${index}`,
+      startTime: index,
+    }));
+    mocks.addSpans.mockResolvedValue({ stored: false, reason: 'Trace not found' });
+    mocks.createTraceProvider.mockReturnValue({
+      fetchTrace: vi.fn().mockResolvedValue({ fetchedAt: 123, spans, traceId: 'trace-missing' }),
+      id: 'tempo',
+    });
+
+    await fetchTraceContext('trace-missing', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(mocks.addSpans).toHaveBeenCalledOnce();
   });
 
   it('orders external spans by start time before applying the reader span limit', async () => {
