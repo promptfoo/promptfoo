@@ -619,12 +619,7 @@ async function main(): Promise<void> {
     writeConsumerScripts(consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
-    // `typescript` is aliased to @typescript/typescript6 for its JS compiler API,
-    // which the TypeScript 7 native port no longer exposes; the compiler binary we
-    // typecheck consumers with is the 7.x one under @typescript/native. Both configs
-    // here must stay resolvable by that binary — TypeScript 7 removed
-    // `moduleResolution: node10`, so do not add a config that needs the 6.x `tsc6`.
-    const tscPath = path.join(ROOT, 'node_modules', '@typescript', 'native', 'bin', 'tsc');
+    const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
