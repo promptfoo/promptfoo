@@ -259,6 +259,102 @@ describe('TempoProvider', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
   });
 
+  it('isolates malformed scope collections while preserving valid batches and scopes', async () => {
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: { attributes: [] },
+            scopeSpans: { spans: traceResponse.batches[0].scopeSpans[0].spans },
+          },
+          {
+            resource: traceResponse.batches[0].resource,
+            scopeSpans: [
+              null,
+              { spans: { invalid: true } },
+              traceResponse.batches[0].scopeSpans[0],
+            ],
+          },
+        ],
+      }),
+    );
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+  });
+
+  it('keeps the first occurrence of duplicate normalized span IDs without consuming the span limit', async () => {
+    const originalSpan = traceResponse.batches[0].scopeSpans[0].spans[0];
+    const duplicateSpan = {
+      ...originalSpan,
+      spanId: Buffer.from(originalSpan.spanId, 'hex').toString('base64'),
+      name: 'duplicate.operation',
+    };
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: traceResponse.batches[0].resource,
+            scopeSpans: [{ spans: [originalSpan, duplicateSpan] }],
+          },
+          {
+            resource: traceResponse.batches[0].resource,
+            scopeSpans: [{ spans: [traceResponse.batches[0].scopeSpans[0].spans[1]] }],
+          },
+        ],
+      }),
+    );
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID, { maxSpans: 2 });
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+    expect(result?.spans.map((span) => span.spanId)).toEqual([
+      '0123456789abcdef',
+      '1123456789abcdef',
+    ]);
+  });
+
+  it('rejects compact responses that expand past the normalized attribute budget', async () => {
+    const originalSpan = traceResponse.batches[0].scopeSpans[0].spans[0];
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: {
+              attributes: [
+                { key: 'resource.payload', value: { stringValue: 'x'.repeat(1024 * 1024) } },
+              ],
+            },
+            scopeSpans: [
+              {
+                spans: Array.from({ length: 11 }, (_, index) => ({
+                  ...originalSpan,
+                  spanId: (index + 1).toString(16).padStart(16, '0'),
+                })),
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+
+    const result = await provider.fetchTrace(TRACE_ID).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(result).toBeInstanceOf(TraceProviderError);
+    expect(result).toHaveProperty(
+      'message',
+      'Tempo trace exceeds the maximum normalized attribute size',
+    );
+  });
+
   it('applies earliest timestamps, safe wildcard filters, and span limits', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
 

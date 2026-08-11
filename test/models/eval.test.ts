@@ -382,17 +382,31 @@ describe('evaluator', () => {
           table: { head: { prompts: [], vars: [] }, body: [] },
           stats: { successes: 0, failures: 0 },
         } as any,
-        { redteam: {} as any },
+        {
+          redteam: {} as any,
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'legacy-runtime-secret' },
+              headers: { Authorization: 'Bearer legacy-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
       );
 
       const db = await getDb();
       const stored = await db
-        .select({ isRedteam: evalsTable.isRedteam })
+        .select({ isRedteam: evalsTable.isRedteam, config: evalsTable.config })
         .from(evalsTable)
         .where(eq(evalsTable.id, evalId))
         .get();
 
       expect(stored?.isRedteam).toBe(true);
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-runtime-secret');
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-secret');
+      expect(stored?.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
     });
 
     it.each([
@@ -540,6 +554,78 @@ describe('evaluator', () => {
   });
 
   describe('create', () => {
+    it('keeps trace-provider credentials in memory while removing them from persisted evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com/traces',
+            timeout: 5_000,
+            auth: {
+              username: 'trace-reader',
+              password: 'literal-password',
+              token: 'literal-token',
+            },
+            headers: {
+              Authorization: 'Bearer literal-authorization',
+              'X-Api-Key': 'literal-api-key',
+              'X-Honeycomb-Team': 'literal-honeycomb-key',
+              'X-Tenant-Credential': 'literal-custom-credential',
+              'X-Trace-Access': 'Bearer short-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(evaluation.config.tracing?.provider).toEqual(config.tracing.provider);
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual({
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com/traces',
+        timeout: 5_000,
+        auth: { username: 'trace-reader' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      });
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('literal-');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-secret');
+
+      evaluation.config.tracing!.provider!.auth!.token = 'updated-runtime-token';
+      await evaluation.save();
+
+      const savedEvaluation = await Eval.findById(evaluation.id);
+      expect(JSON.stringify(savedEvaluation?.config)).not.toContain('updated-runtime-token');
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('updated-runtime-token');
+    });
+
+    it('preserves safe trace-provider environment references for resumed evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com',
+            auth: {
+              token: '{{ env.TEMPO_TOKEN }}',
+              password: '{{ env.TEMPO_PASSWORD | trim }}',
+            },
+            headers: {
+              Authorization: 'Bearer {{ env.TEMPO_HEADER_TOKEN }}',
+              'X-Api-Key': '{{ env["TEMPO_API_KEY"] }}',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual(config.tracing.provider);
+    });
+
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
       // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.
@@ -671,6 +757,32 @@ describe('evaluator', () => {
   });
 
   describe('copy', () => {
+    it('removes trace-provider credentials when copying a live evaluation', async () => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'copy-runtime-secret' },
+              headers: { Authorization: 'Bearer copied-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
+        [],
+      );
+
+      const copiedEvaluation = await evaluation.copy();
+      const persistedCopy = await Eval.findById(copiedEvaluation.id);
+
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copy-runtime-secret');
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copied-secret');
+      expect(persistedCopy?.config.tracing?.provider?.headers).toEqual({
+        'X-Scope-OrgID': 'tenant-a',
+      });
+    });
+
     it('drops trace linkage from copied results without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       await EvalResult.createFromEvaluateResult(
@@ -1166,6 +1278,27 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('removes trace-provider credentials from exported results without mutating live config', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: 'export-runtime-secret' },
+            headers: { Authorization: 'Bearer exported-secret', 'X-Scope-OrgID': 'tenant-a' },
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(JSON.stringify(results.config)).not.toContain('export-runtime-secret');
+      expect(JSON.stringify(results.config)).not.toContain('exported-secret');
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('export-runtime-secret');
+    });
+
     it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
       const results = await eval1.toResultsFile();

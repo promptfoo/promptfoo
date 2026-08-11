@@ -4,7 +4,7 @@
  */
 import safeStringify from 'fast-safe-stringify';
 
-import type { EvalRuntimeOptions } from '../types';
+import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
@@ -262,6 +262,68 @@ export function looksLikeSecret(value: string): boolean {
   }
 
   return false;
+}
+
+const SAFE_TRACING_CREDENTIAL_TEMPLATE =
+  /^(?:(?:bearer|basic|token|api[-_]?key)\s+)?\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])+\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}$/i;
+
+function isSafeTracingCredentialTemplate(value: unknown): value is string {
+  return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
+}
+
+function isTracingCredentialHeader(name: string, value: string): boolean {
+  const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  return (
+    isSecretField(name) ||
+    /(?:^|[-_\s])(?:api[-_\s]?key|access[-_\s]?key|auth(?:orization)?|token|password|passwd|secret|credentials?|cookie)(?:$|[-_\s])/i.test(
+      normalizedName,
+    ) ||
+    normalizedName.replace(/[-_]/g, '') === 'xhoneycombteam' ||
+    /^(?:bearer|basic|token|api[-_]?key)\s+\S+/i.test(value.trim()) ||
+    looksLikeSecret(value.trim())
+  );
+}
+
+/**
+ * Keeps runtime trace-provider credentials out of persisted and exported eval configs.
+ * Safe environment references remain intact so resumed evaluations can resolve them again.
+ */
+export function sanitizeTracingConfigForPersistence(
+  config: Partial<UnifiedConfig>,
+): Partial<UnifiedConfig> {
+  const provider = config.tracing?.provider;
+  if (!provider) {
+    return config;
+  }
+
+  const sanitizedAuth = provider.auth
+    ? Object.fromEntries(
+        Object.entries(provider.auth).filter(
+          ([key, value]) =>
+            (key !== 'token' && key !== 'password') || isSafeTracingCredentialTemplate(value),
+        ),
+      )
+    : undefined;
+  const sanitizedHeaders = provider.headers
+    ? Object.fromEntries(
+        Object.entries(provider.headers).filter(
+          ([name, value]) =>
+            isSafeTracingCredentialTemplate(value) || !isTracingCredentialHeader(name, value),
+        ),
+      )
+    : undefined;
+
+  return {
+    ...config,
+    tracing: {
+      ...config.tracing!,
+      provider: {
+        ...provider,
+        ...(provider.auth && { auth: sanitizedAuth }),
+        ...(provider.headers && { headers: sanitizedHeaders }),
+      },
+    },
+  };
 }
 
 /**

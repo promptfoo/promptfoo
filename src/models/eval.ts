@@ -41,7 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -499,7 +499,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config,
+          config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -665,7 +665,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -1503,7 +1503,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
@@ -1569,7 +1569,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
+          config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,

@@ -42,6 +42,9 @@ interface TempoTraceResponse {
   }>;
 }
 
+type TempoBatch = NonNullable<TempoTraceResponse['batches']>[number];
+type TempoScopeSpan = NonNullable<TempoBatch['scopeSpans']>[number];
+
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
@@ -227,6 +230,37 @@ function transformSpan(
   };
 }
 
+function* getValidResourceScopes(data: TempoTraceResponse): Generator<{
+  resourceAttributes: Record<string, unknown>;
+  scopeSpan: TempoScopeSpan;
+}> {
+  for (const batch of data.batches ?? []) {
+    let resourceAttributes: Record<string, unknown>;
+    try {
+      resourceAttributes = attributesToRecord(batch.resource?.attributes);
+    } catch (error) {
+      logger.warn(`[TempoProvider] Skipping batch with malformed resource attributes: ${error}`);
+      continue;
+    }
+    if (batch.scopeSpans !== undefined && !Array.isArray(batch.scopeSpans)) {
+      logger.warn('[TempoProvider] Skipping batch with a malformed scope collection');
+      continue;
+    }
+
+    for (const scopeSpan of batch.scopeSpans ?? []) {
+      if (
+        !scopeSpan ||
+        typeof scopeSpan !== 'object' ||
+        (scopeSpan.spans !== undefined && !Array.isArray(scopeSpan.spans))
+      ) {
+        logger.warn('[TempoProvider] Skipping scope with a malformed span collection');
+        continue;
+      }
+      yield { resourceAttributes, scopeSpan };
+    }
+  }
+}
+
 async function readLimitedResponse(response: Response): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) {
@@ -320,36 +354,41 @@ export class TempoProvider implements TraceProvider {
     options?: FetchTraceOptions,
   ): SpanData[] {
     const spans: SpanData[] = [];
+    const seenSpanIds = new Set<string>();
     const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+    let normalizedAttributeBytes = 0;
 
-    for (const batch of data.batches ?? []) {
-      let resourceAttributes: Record<string, unknown>;
-      try {
-        resourceAttributes = attributesToRecord(batch.resource?.attributes);
-      } catch (error) {
-        logger.warn(`[TempoProvider] Skipping batch with malformed resource attributes: ${error}`);
-        continue;
-      }
-      for (const scopeSpan of batch.scopeSpans ?? []) {
-        for (const span of scopeSpan.spans ?? []) {
-          if (spans.length >= limit) {
-            return spans;
-          }
-          try {
-            const normalizedSpan = transformSpan(
-              span,
-              traceId,
-              resourceAttributes,
-              scopeSpan.scope?.name,
-              options,
-            );
-            if (normalizedSpan) {
-              spans.push(normalizedSpan);
-            }
-          } catch (error) {
-            logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
-          }
+    for (const { resourceAttributes, scopeSpan } of getValidResourceScopes(data)) {
+      for (const span of scopeSpan.spans ?? []) {
+        if (spans.length >= limit) {
+          return spans;
         }
+        let normalizedSpan: SpanData | null;
+        try {
+          normalizedSpan = transformSpan(
+            span,
+            traceId,
+            resourceAttributes,
+            scopeSpan.scope?.name,
+            options,
+          );
+        } catch (error) {
+          logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
+          continue;
+        }
+        if (!normalizedSpan || seenSpanIds.has(normalizedSpan.spanId)) {
+          continue;
+        }
+
+        normalizedAttributeBytes += Buffer.byteLength(
+          JSON.stringify(normalizedSpan.attributes ?? {}),
+          'utf8',
+        );
+        if (normalizedAttributeBytes > MAX_RESPONSE_BYTES) {
+          throw new TraceProviderError('Tempo trace exceeds the maximum normalized attribute size');
+        }
+        seenSpanIds.add(normalizedSpan.spanId);
+        spans.push(normalizedSpan);
       }
     }
     return spans;
