@@ -2985,9 +2985,10 @@ describe('util', () => {
       expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
     });
 
+    // Alias entries are excluded: gemini-flash-latest resolves to gemini-3.6-flash, which
+    // has no separate audio rate. Alias-to-model pricing is asserted separately below.
     it.each([
       'gemini-3.5-flash',
-      'gemini-flash-latest',
     ])('should apply cached, audio, and priority pricing for %s', (modelId) => {
       const cost = calculateGoogleCost(
         modelId,
@@ -3180,7 +3181,6 @@ describe('util', () => {
 
     it.each([
       'gemini-3.1-flash-lite',
-      'gemini-flash-lite-latest',
     ])('should preserve the %s audio-input rate at priority tier', (modelId) => {
       const cost = calculateGoogleCost(
         modelId,
@@ -3204,7 +3204,6 @@ describe('util', () => {
 
     it.each([
       'gemini-3.1-flash-lite',
-      'gemini-flash-lite-latest',
     ])('should apply %s flex pricing with passthrough precedence', (modelId) => {
       const flexCost = calculateGoogleCost(
         modelId,
@@ -3228,8 +3227,8 @@ describe('util', () => {
     });
 
     it.each([
-      ['gemini-flash-latest', 1.5, 0.15, 0.15, 1, 9],
-      ['gemini-flash-lite-latest', 0.25, 0.025, 0.05, 0.5, 1.5],
+      ['gemini-3.5-flash', 1.5, 0.15, 0.15, 1, 9],
+      ['gemini-3.1-flash-lite', 0.25, 0.025, 0.05, 0.5, 1.5],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
     ])('uses AI Studio cached and audio rates for %s', (id, input, cached, cachedAudio, audioInput, output) => {
       expect(
@@ -3467,13 +3466,35 @@ describe('util', () => {
     });
 
     it('should calculate resolved-model cost for gemini-flash-latest', () => {
+      // gemini-flash-latest serves gemini-3.6-flash: input=1.5/1M, output=7.5/1M
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.006, 10);
+      expect(cost).toBeCloseTo(0.00525, 10);
     });
 
     it('should calculate resolved-model cost for gemini-flash-lite-latest', () => {
+      // gemini-flash-lite-latest serves gemini-3.5-flash-lite: input=0.3/1M, output=2.5/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.001, 10);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    // Google repoints these aliases as new models ship, and nothing in the response is
+    // consulted at pricing time -- the cost table is keyed purely on the configured string.
+    // So each alias has to be priced identically to whatever `modelVersion` it actually
+    // reports. Re-verify with:
+    //   curl -s -X POST ".../v1beta/models/<alias>:generateContent?key=$KEY" \
+    //     -H 'Content-Type: application/json' -d '{"contents":[{"parts":[{"text":"hi"}]}]}' \
+    //     | jq -r .modelVersion
+    it.each([
+      ['gemini-flash-latest', 'gemini-3.6-flash'],
+      ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite'],
+      ['gemini-pro-latest', 'gemini-3.1-pro-preview'],
+    ])('should price the %s alias exactly like %s', (alias, resolvedModel) => {
+      const aliasEntry = GOOGLE_MODELS.find((model) => model.id === alias);
+      const resolvedEntry = GOOGLE_MODELS.find((model) => model.id === resolvedModel);
+
+      expect(aliasEntry, `${alias} must be in the catalog`).toBeDefined();
+      expect(resolvedEntry, `${resolvedModel} must be in the catalog`).toBeDefined();
+      expect({ ...aliasEntry, id: resolvedModel }).toEqual(resolvedEntry);
     });
 
     it('should return undefined for shutdown models', () => {
