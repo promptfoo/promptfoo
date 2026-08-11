@@ -3,6 +3,7 @@ import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 
 import type { TraceData } from '../types/tracing';
 
@@ -37,6 +38,7 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
   maxSpans?: number;
   maxDepth?: number;
   includeInternalSpans?: boolean;
+  semanticOnly?: boolean;
   spanFilter?: string[];
 }
 
@@ -366,6 +368,7 @@ export class TraceStore {
       maxSpans,
       maxDepth,
       includeInternalSpans = true,
+      semanticOnly = false,
       spanFilter,
       sanitizeAttributes: shouldSanitize = true,
     } = options;
@@ -405,18 +408,22 @@ export class TraceStore {
           ...spanData,
           attributes: rawAttributes,
         });
+        const relevant = isRelevantSpan({
+          attributes: rawAttributes,
+          statusCode: spanData.statusCode,
+        });
+        const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (!includeInternalSpans && spanKind === 'internal') {
+        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
           continue;
         }
 
-        if (spanFilter && spanFilter.length > 0) {
-          const matchesFilter = spanFilter.some((filterName) =>
-            spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-          );
-          if (!matchesFilter) {
-            continue;
-          }
+        if (!includeInternalSpans && spanKind === 'internal' && !relevant && !hasExplicitFilter) {
+          continue;
+        }
+
+        if (semanticOnly && !relevant && !hasExplicitFilter) {
+          continue;
         }
 
         spanMap.set(spanData.spanId, spanData);

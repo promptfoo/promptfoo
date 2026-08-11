@@ -82,6 +82,154 @@ describe('TraceStore span persistence', () => {
     await expect(firstTraceStore.getSpans('first-trace')).resolves.toHaveLength(1);
     await expect(secondTraceStore.getSpans('second-trace')).resolves.toHaveLength(1);
   });
+
+  it('keeps meaningful internal model, tool, guardrail, and error spans in red-team context', async () => {
+    const traceStore = await createTrace('semantic-selection');
+    const spans = [
+      {
+        spanId: 'http',
+        name: 'POST /chat',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'server', 'http.request.method': 'POST' },
+      },
+      {
+        spanId: 'handler',
+        name: 'request handler - /chat',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'internal' },
+      },
+      {
+        spanId: 'model',
+        parentSpanId: 'handler',
+        name: 'chat gpt-4.1-mini',
+        startTime: 3,
+        attributes: {
+          'otel.span.kind': 'internal',
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': 'gpt-4.1-mini',
+        },
+      },
+      {
+        spanId: 'tool',
+        parentSpanId: 'model',
+        name: 'execute_tool search_knowledge_base',
+        startTime: 4,
+        attributes: {
+          'otel.span.kind': 'internal',
+          'gen_ai.operation.name': 'execute_tool',
+          'gen_ai.tool.name': 'search_knowledge_base',
+        },
+      },
+      {
+        spanId: 'guardrail',
+        parentSpanId: 'model',
+        name: 'policy check',
+        startTime: 5,
+        attributes: { 'otel.span.kind': 'internal', 'guardrails.decision': 'blocked' },
+      },
+      {
+        spanId: 'error',
+        name: 'POST /remote-api',
+        startTime: 6,
+        statusCode: 2,
+        statusMessage: 'rate limited',
+        attributes: { 'otel.span.kind': 'client' },
+      },
+    ];
+    await traceStore.addSpans('semantic-selection', spans);
+
+    const selected = await traceStore.getSpans('semantic-selection', {
+      includeInternalSpans: false,
+      semanticOnly: true,
+    });
+
+    expect(selected.map((span) => span.name)).toEqual([
+      'chat gpt-4.1-mini',
+      'execute_tool search_knowledge_base',
+      'policy check',
+      'POST /remote-api',
+    ]);
+    await expect(traceStore.getSpans('semantic-selection')).resolves.toHaveLength(spans.length);
+  });
+
+  it('applies semantic filtering before the red-team span limit', async () => {
+    const traceStore = await createTrace('semantic-limit');
+    await traceStore.addSpans('semantic-limit', [
+      {
+        spanId: 'http-1',
+        name: 'POST',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'client' },
+      },
+      {
+        spanId: 'http-2',
+        name: 'GET',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'client' },
+      },
+      {
+        spanId: 'model',
+        name: 'chat gpt-4.1-mini',
+        startTime: 3,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 4,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
+      },
+    ]);
+
+    const spans = await traceStore.getSpans('semantic-limit', {
+      includeInternalSpans: false,
+      maxSpans: 2,
+      semanticOnly: true,
+    });
+
+    expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
+  });
+
+  it('supports wildcard span-name filters and preserves explicit nonsemantic selections', async () => {
+    const traceStore = await createTrace('wildcard-selection');
+    await traceStore.addSpans('wildcard-selection', [
+      {
+        spanId: 'model',
+        name: 'chat gpt-4.1-mini',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
+      },
+      {
+        spanId: 'http',
+        name: 'POST /chat',
+        startTime: 3,
+        attributes: { 'otel.span.kind': 'server' },
+      },
+    ]);
+
+    const modelAndTool = await traceStore.getSpans('wildcard-selection', {
+      includeInternalSpans: false,
+      semanticOnly: true,
+      spanFilter: ['chat*', '*tool*'],
+    });
+    expect(modelAndTool.map((span) => span.name)).toEqual([
+      'chat gpt-4.1-mini',
+      'execute_tool search',
+    ]);
+
+    const explicitHttp = await traceStore.getSpans('wildcard-selection', {
+      includeInternalSpans: false,
+      semanticOnly: true,
+      spanFilter: ['POST*'],
+    });
+    expect(explicitHttp.map((span) => span.name)).toEqual(['POST /chat']);
+  });
 });
 
 describe('span uniqueness migration', () => {
