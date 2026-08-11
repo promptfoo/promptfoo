@@ -221,6 +221,7 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(true);
     expect(OPENAI_CODEX_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo((1000 * 0.5 + 500 * 2) / 1e6, 6);
   });
 
   it('does not classify the Codex-surface-only Spark model as an API model', () => {
@@ -808,7 +809,7 @@ describe('calculateOpenAICost', () => {
   });
 
   it('should use custom audioCost from config when provided', () => {
-    const audioCost = 0.05; // per 1M tokens
+    const audioCost = 0.05; // per token
 
     const promptTokens = 1000;
     const completionTokens = 500;
@@ -834,7 +835,7 @@ describe('calculateOpenAICost', () => {
     const audioOutputCostCustom = audioCost * audioCompletionTokens;
 
     const expectedTotalCost =
-      (baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom) / 1;
+      baseInputCost + baseOutputCost + audioInputCostCustom + audioOutputCostCustom;
 
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',
