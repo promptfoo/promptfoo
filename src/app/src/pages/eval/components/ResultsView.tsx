@@ -23,7 +23,7 @@ import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import { BarChart, Copy, Edit, Eye, Play, Settings, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
@@ -40,7 +40,9 @@ import { HiddenColumnChips } from './HiddenColumnChips';
 import ResultsCharts from './ResultsCharts';
 import FiltersForm from './ResultsFilters/FiltersForm';
 import ResultsTable from './ResultsTable';
+import ShareMenuItem from './ShareMenuItem';
 import ShareModal from './ShareModal';
+import { isRetryableShareStatus, parseShareUrl, ShareRequestError } from './shareApi';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
@@ -368,8 +370,8 @@ export default function ResultsView({
     setFailureFilter(newFailureFilter);
   };
 
-  const [shareModalOpen, setShareModalOpen] = React.useState(false);
-  const [shareLoading, setShareLoading] = React.useState(false);
+  const [shareModalEvalId, setShareModalEvalId] = React.useState<string | null>(null);
+  const [sharingEvalId, setSharingEvalId] = React.useState<string | null>(null);
 
   // State for compare eval dialog
   const [compareDialogOpen, setCompareDialogOpen] = React.useState(false);
@@ -379,47 +381,60 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
+  const shareModalOpen = shareModalEvalId === currentEvalId;
   const currentDatasetId = recentEvals.find(
     (recentEval) => recentEval.evalId === currentEvalId,
   )?.datasetId;
 
-  const handleShareButtonClick = async () => {
-    if (IS_RUNNING_LOCALLY) {
-      setShareLoading(true);
-      setShareModalOpen(true);
-    } else {
-      // For non-local instances, just show the modal
-      setShareModalOpen(true);
+  React.useEffect(() => {
+    if (shareModalEvalId !== null && shareModalEvalId !== currentEvalId) {
+      setShareModalEvalId(null);
     }
+  }, [currentEvalId, shareModalEvalId]);
+
+  const handleShareButtonClick = () => {
+    setShareModalEvalId(currentEvalId);
   };
 
-  const handleShare = async (id: string): Promise<string> => {
-    try {
+  const handleShare = React.useCallback(
+    async (id: string, signal: AbortSignal): Promise<string> => {
       if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, include base path in the URL
         const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
+        return `${window.location.origin}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
       }
 
-      const response = await callApi('/results/share', {
-        method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!response.ok) {
-        throw new Error('Failed to generate share URL');
+      setSharingEvalId(id);
+      try {
+        const response = await callApi('/results/share', {
+          method: 'POST',
+          signal,
+          body: JSON.stringify({ id }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        const data: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const message =
+            data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
+              ? data.error
+              : `Failed to generate share URL (HTTP ${response.status})`;
+          throw new ShareRequestError(message, isRetryableShareStatus(response.status));
+        }
+        const shareUrl =
+          data !== null && typeof data === 'object' && 'url' in data
+            ? parseShareUrl(data.url)
+            : null;
+        if (!shareUrl) {
+          throw new ShareRequestError('The server did not return a valid share URL.', true);
+        }
+        return shareUrl;
+      } finally {
+        setSharingEvalId((activeEvalId) => (activeEvalId === id ? null : activeEvalId));
       }
-      const { url } = await response.json();
-      return url;
-    } catch (error) {
-      console.error('Failed to generate share URL:', error);
-      throw error;
-    } finally {
-      setShareLoading(false);
-    }
-  };
+    },
+    [],
+  );
 
   const handleComparisonEvalSelected = async (compareEvalId: string) => {
     // Prevent self-comparison
@@ -799,10 +814,11 @@ export default function ResultsView({
         <Copy className="size-4 mr-2" />
         Copy
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-        {shareLoading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
-        Share
-      </DropdownMenuItem>
+      <ShareMenuItem
+        evalId={currentEvalId}
+        onClick={handleShareButtonClick}
+        loading={sharingEvalId === currentEvalId}
+      />
       <DropdownMenuItem onClick={handleDeleteEvalClick} className="text-destructive">
         <Trash2 className="size-4 mr-2" />
         Delete
@@ -988,10 +1004,14 @@ export default function ResultsView({
       </div>
       <ConfigModal open={configModalOpen} onClose={() => setConfigModalOpen(false)} />
       <ShareModal
+        key={currentEvalId}
         open={shareModalOpen}
-        onClose={() => setShareModalOpen(false)}
+        onClose={() => {
+          setShareModalEvalId(null);
+        }}
         evalId={currentEvalId}
         onShare={handleShare}
+        requiresAvailabilityCheck={IS_RUNNING_LOCALLY}
       />
       <EvalSelectorDialog
         open={compareDialogOpen}

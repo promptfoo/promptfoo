@@ -9,12 +9,46 @@ import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
+interface ShareModalMockProps {
+  open: boolean;
+  onClose: () => void;
+  evalId: string;
+  onShare: (id: string, signal: AbortSignal) => Promise<string>;
+  requiresAvailabilityCheck?: boolean;
+}
+
+interface ShareMenuMockProps {
+  evalId: string;
+  onClick: () => void;
+  loading?: boolean;
+}
+
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
+const {
+  mockShowToast,
+  mockNavigate,
+  mockUpdateConfig,
+  mockShareModalRender,
+  mockShareMenuRender,
+  mockRuntime,
+} = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
   mockNavigate: vi.fn(),
   mockUpdateConfig: vi.fn(),
+  mockShareModalRender: vi.fn(),
+  mockShareMenuRender: vi.fn(),
+  mockRuntime: { isRunningLocally: true },
 }));
+
+vi.mock('@app/constants', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@app/constants')>();
+  return {
+    ...actual,
+    get IS_RUNNING_LOCALLY() {
+      return mockRuntime.isRunningLocally;
+    },
+  };
+});
 
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
@@ -57,7 +91,10 @@ vi.mock('./store', () => {
 });
 
 vi.mock('./ShareModal', () => ({
-  default: vi.fn(({ open }) => (open ? <div data-testid="share-modal">Share Modal</div> : null)),
+  default: (props: ShareModalMockProps) => {
+    mockShareModalRender(props);
+    return props.open ? <div data-testid="share-modal">Share Modal</div> : null;
+  },
 }));
 
 vi.mock('./ResultsTable', () => ({
@@ -115,6 +152,17 @@ vi.mock('./DownloadMenu', () => ({
     <button onClick={onClick}>Download</button>
   ),
   DownloadDialog: () => <div>Download Dialog</div>,
+}));
+
+vi.mock('./ShareMenuItem', () => ({
+  default: (props: ShareMenuMockProps) => {
+    mockShareMenuRender(props);
+    return (
+      <button onClick={props.onClick} data-loading={props.loading ? 'true' : 'false'}>
+        Share
+      </button>
+    );
+  },
 }));
 
 vi.mock('./CompareEvalMenuItem', () => ({
@@ -238,7 +286,26 @@ function createCopyEvalResponse(): Response {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function latestShareModalProps(): ShareModalMockProps {
+  const calls = mockShareModalRender.mock.calls;
+  return calls[calls.length - 1][0] as ShareModalMockProps;
+}
+
+function latestShareMenuProps(): ShareMenuMockProps {
+  const calls = mockShareMenuRender.mock.calls;
+  return calls[calls.length - 1][0] as ShareMenuMockProps;
+}
+
 beforeEach(() => {
+  mockRuntime.isRunningLocally = true;
   mockNavigate.mockReset();
   mockUpdateConfig.mockReset();
   mockUseFilterMode.mockReturnValue({
@@ -364,6 +431,190 @@ describe('ResultsView Share Button', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('share-modal')).toBeInTheDocument();
+    });
+    expect(latestShareMenuProps().loading).toBe(false);
+  });
+
+  it('wires hosted sharing directly to a complete URL without API preflight', async () => {
+    mockRuntime.isRunningLocally = false;
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+    vi.mocked(callApi).mockClear();
+
+    expect(latestShareModalProps().requiresAvailabilityCheck).toBe(false);
+    await expect(
+      latestShareModalProps().onShare('test-eval-id', new AbortController().signal),
+    ).resolves.toBe(`${window.location.origin}/eval/test-eval-id`);
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
+  it('keeps the share modal closed after an active-eval round trip', async () => {
+    const props = {
+      recentEvals: mockRecentEvals,
+      onRecentEvalSelected: mockOnRecentEvalSelected,
+      defaultEvalId: 'test-eval-id',
+    };
+    const view = renderWithRouter(<ResultsView {...props} />);
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Share'));
+    expect(await screen.findByTestId('share-modal')).toBeInTheDocument();
+
+    const currentStore = vi.mocked(useTableStore).mock.results[0].value;
+    vi.mocked(useTableStore).mockReturnValue({ ...currentStore, evalId: 'next-eval-id' });
+    view.rerender(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
+
+    expect(latestShareModalProps()).toMatchObject({ evalId: 'next-eval-id', open: false });
+    expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
+
+    vi.mocked(useTableStore).mockReturnValue({ ...currentStore, evalId: 'test-eval-id' });
+    view.rerender(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
+
+    expect(latestShareModalProps()).toMatchObject({ evalId: 'test-eval-id', open: false });
+    expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
+  });
+
+  it('keeps the parent share guard active until its onShare promise settles', async () => {
+    const shareResponse = deferred<Response>();
+    vi.mocked(callApi).mockReturnValue(shareResponse.promise);
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Share'));
+    expect(latestShareMenuProps().loading).toBe(false);
+
+    let sharePromise!: Promise<string>;
+    const signal = new AbortController().signal;
+    act(() => {
+      sharePromise = latestShareModalProps().onShare('test-eval-id', signal);
+    });
+    await waitFor(() => expect(latestShareMenuProps().loading).toBe(true));
+    expect(vi.mocked(callApi).mock.calls[0][1]?.signal).toBe(signal);
+
+    act(() => latestShareModalProps().onClose());
+    expect(screen.queryByTestId('share-modal')).not.toBeInTheDocument();
+    expect(latestShareMenuProps().loading).toBe(true);
+
+    await act(async () => {
+      shareResponse.resolve(Response.json({ url: 'https://promptfoo.app/eval/shared' }));
+      await expect(sharePromise).resolves.toBe('https://promptfoo.app/eval/shared');
+    });
+    await waitFor(() => expect(latestShareMenuProps().loading).toBe(false));
+  });
+
+  it('does not block a newly selected eval while the previous eval share is pending', async () => {
+    const shareResponse = deferred<Response>();
+    vi.mocked(callApi).mockReturnValue(shareResponse.promise);
+    const props = {
+      recentEvals: mockRecentEvals,
+      onRecentEvalSelected: mockOnRecentEvalSelected,
+      defaultEvalId: 'test-eval-id',
+    };
+    const view = renderWithRouter(<ResultsView {...props} />);
+    await userEvent.click(screen.getByText('Eval actions'));
+
+    let sharePromise!: Promise<string>;
+    act(() => {
+      sharePromise = latestShareModalProps().onShare('test-eval-id', new AbortController().signal);
+    });
+    await waitFor(() => expect(latestShareMenuProps().loading).toBe(true));
+
+    const currentStore = vi.mocked(useTableStore).mock.results[0].value;
+    vi.mocked(useTableStore).mockReturnValue({ ...currentStore, evalId: 'next-eval-id' });
+    view.rerender(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
+
+    expect(latestShareMenuProps().evalId).toBe('next-eval-id');
+    expect(latestShareMenuProps().loading).toBe(false);
+
+    await act(async () => {
+      shareResponse.resolve(Response.json({ url: 'https://promptfoo.app/eval/shared' }));
+      await expect(sharePromise).resolves.toBe('https://promptfoo.app/eval/shared');
+    });
+  });
+
+  it('rejects malformed successful share responses', async () => {
+    vi.mocked(callApi).mockResolvedValue(Response.json({}));
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await expect(
+      latestShareModalProps().onShare('test-eval-id', new AbortController().signal),
+    ).rejects.toMatchObject({
+      message: 'The server did not return a valid share URL.',
+      retryable: true,
+    });
+  });
+
+  it.each(['not a URL', 'javascript:alert(1)'])('rejects a non-HTTP share URL: %s', async (url) => {
+    vi.mocked(callApi).mockResolvedValue(Response.json({ url }));
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await expect(
+      latestShareModalProps().onShare('test-eval-id', new AbortController().signal),
+    ).rejects.toMatchObject({
+      message: 'The server did not return a valid share URL.',
+      retryable: true,
+    });
+  });
+
+  it('surfaces the server safe error for failed shares', async () => {
+    vi.mocked(callApi).mockResolvedValue(
+      Response.json(
+        { error: 'Cloud permissions do not allow sharing this evaluation' },
+        { status: 403 },
+      ),
+    );
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    await expect(
+      latestShareModalProps().onShare('test-eval-id', new AbortController().signal),
+    ).rejects.toMatchObject({
+      message: 'Cloud permissions do not allow sharing this evaluation',
+      retryable: false,
     });
   });
 

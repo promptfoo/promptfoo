@@ -69,13 +69,18 @@ describe('share-time blob upload', () => {
     expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
     expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval-123');
     expect(uploadBlobRemote).toHaveBeenCalledOnce();
-    expect(uploadBlobRemote).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'remote-eval-123',
-      kind: 'image',
-      location: 'share',
-      promptIdx: 2,
-      testIdx: 1,
-    });
+    expect(uploadBlobRemote).toHaveBeenCalledWith(
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval-123',
+        kind: 'image',
+        location: 'share',
+        promptIdx: 2,
+        testIdx: 1,
+      },
+      undefined,
+    );
   });
 
   it('uploads the same blob again when it appears in a different result row', async () => {
@@ -99,20 +104,32 @@ describe('share-time blob upload', () => {
     expect(getShareAuthorizedBlob).toHaveBeenNthCalledWith(1, hash, 'local-eval-123');
     expect(getShareAuthorizedBlob).toHaveBeenNthCalledWith(2, hash, 'local-eval-123');
     expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
-    expect(uploadBlobRemote).toHaveBeenNthCalledWith(1, Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'remote-eval-123',
-      kind: 'image',
-      location: 'share',
-      promptIdx: 2,
-      testIdx: 1,
-    });
-    expect(uploadBlobRemote).toHaveBeenNthCalledWith(2, Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'remote-eval-123',
-      kind: 'image',
-      location: 'share',
-      promptIdx: 4,
-      testIdx: 3,
-    });
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(
+      1,
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval-123',
+        kind: 'image',
+        location: 'share',
+        promptIdx: 2,
+        testIdx: 1,
+      },
+      undefined,
+    );
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(
+      2,
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval-123',
+        kind: 'image',
+        location: 'share',
+        promptIdx: 4,
+        testIdx: 3,
+      },
+      undefined,
+    );
   });
 
   it('keeps a zero-index result row distinct from a coordinate-less reference', async () => {
@@ -136,20 +153,32 @@ describe('share-time blob upload', () => {
 
     expect(getShareAuthorizedBlob).toHaveBeenCalledTimes(2);
     expect(uploadBlobRemote).toHaveBeenCalledTimes(2);
-    expect(uploadBlobRemote).toHaveBeenNthCalledWith(1, Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'remote-eval-zero',
-      kind: 'image',
-      location: 'share',
-      promptIdx: 0,
-      testIdx: 0,
-    });
-    expect(uploadBlobRemote).toHaveBeenNthCalledWith(2, Buffer.from('image-bytes'), 'image/png', {
-      evalId: 'remote-eval-zero',
-      kind: 'image',
-      location: 'share',
-      promptIdx: undefined,
-      testIdx: undefined,
-    });
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(
+      1,
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval-zero',
+        kind: 'image',
+        location: 'share',
+        promptIdx: 0,
+        testIdx: 0,
+      },
+      undefined,
+    );
+    expect(uploadBlobRemote).toHaveBeenNthCalledWith(
+      2,
+      Buffer.from('image-bytes'),
+      'image/png',
+      {
+        evalId: 'remote-eval-zero',
+        kind: 'image',
+        location: 'share',
+        promptIdx: undefined,
+        testIdx: undefined,
+      },
+      undefined,
+    );
   });
 
   it('does not upload a copied blob URI that is not share-authorized for the eval', async () => {
@@ -204,6 +233,42 @@ describe('share-time blob upload', () => {
         hash,
       },
     );
+  });
+
+  it.each([
+    'AbortError',
+    'AbortException',
+  ])('propagates %s cancellation from an in-flight remote blob upload', async (errorName) => {
+    const hash = '8'.repeat(64);
+    const controller = new AbortController();
+    const cancellation = new Error('cancelled');
+    cancellation.name = errorName;
+    vi.mocked(uploadBlobRemote).mockImplementation(
+      (_buffer, _mimeType, _context, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
+
+    const upload = uploadBlobRefsForShare(
+      `promptfoo://blob/${hash}`,
+      createRemoteBlobUploadCache(),
+      { localEvalId: 'local-eval-abort', remoteEvalId: 'remote-eval-abort' },
+      controller.signal,
+    );
+    const rejection = expect(upload).rejects.toBe(cancellation);
+    await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledOnce());
+
+    controller.abort(cancellation);
+
+    await rejection;
+    expect(uploadBlobRemote).toHaveBeenCalledWith(
+      Buffer.from('image-bytes'),
+      'image/png',
+      expect.objectContaining({ evalId: 'remote-eval-abort' }),
+      controller.signal,
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('checks authorization only once for repeated unauthorized references', async () => {
