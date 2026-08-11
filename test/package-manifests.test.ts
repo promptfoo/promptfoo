@@ -19,6 +19,7 @@ function readPackageJson<T>(relativePath: string): T {
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.3';
+const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
@@ -731,6 +732,47 @@ describe('package manifests', () => {
     }
 
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
+  });
+
+  it('keeps every direct and transitive js-yaml installation patched', () => {
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const workspaceManifests = [
+      { path: 'package.json', lockPath: '', field: 'dependencies' },
+      { path: 'site/package.json', lockPath: 'site', field: 'dependencies' },
+      { path: 'src/app/package.json', lockPath: 'src/app', field: 'devDependencies' },
+    ] as const;
+    const directVersions: string[] = [];
+
+    for (const { path: manifestPath, lockPath, field } of workspaceManifests) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      const declaredVersion = manifest[field]?.['js-yaml'];
+
+      expect(declaredVersion, `${manifestPath} must declare js-yaml`).toBeDefined();
+      expect(packageLock.packages[lockPath]?.[field]?.['js-yaml']).toBe(declaredVersion);
+      expect(
+        satisfies(minVersion(declaredVersion as string)!, PATCHED_JS_YAML_RANGE),
+        `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
+      ).toBe(true);
+      directVersions.push(declaredVersion as string);
+    }
+
+    expect(new Set(directVersions).size, 'direct js-yaml versions must stay aligned').toBe(1);
+
+    const installations = Object.entries(packageLock.packages).filter(
+      ([packagePath]) =>
+        packagePath === 'node_modules/js-yaml' || packagePath.endsWith('/node_modules/js-yaml'),
+    );
+
+    expect(installations, 'the root lockfile must resolve js-yaml').not.toHaveLength(0);
+    for (const [packagePath, installation] of installations) {
+      expect(installation.version, `${packagePath} must have a version`).toBeDefined();
+      expect(
+        satisfies(installation.version as string, PATCHED_JS_YAML_RANGE),
+        `${packagePath} resolves vulnerable js-yaml ${installation.version}`,
+      ).toBe(true);
+    }
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
