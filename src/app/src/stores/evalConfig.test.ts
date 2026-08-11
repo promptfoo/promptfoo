@@ -1115,6 +1115,25 @@ describe('evalConfig store', () => {
       expect(JSON.stringify(persisted)).not.toContain('"tiny"');
     });
 
+    it.each([
+      'https://tempo.example.com/tempo?token=endpoint-secret',
+      'https://tempo.example.com/tempo?opaque=endpoint-secret',
+      'https://tempo.example.com/tempo#token=endpoint-secret',
+      'https://reader:endpoint-secret@tempo.example.com/tempo',
+    ])('removes trace endpoint credentials before browser persistence: %s', (endpoint) => {
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          provider: { id: 'tempo', endpoint },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(useStore.getState().config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persisted.tracing.provider.endpoint).toBe('https://tempo.example.com/tempo');
+      expect(JSON.stringify(persisted)).not.toContain('endpoint-secret');
+    });
+
     it('redacts trace forwarding and provider credentials independently', () => {
       useStore.getState().setConfig({
         tracing: {

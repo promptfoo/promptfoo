@@ -390,6 +390,20 @@ export function sanitizeTracingConfigForPersistence(
     return config;
   }
 
+  let sanitizedEndpoint = provider.endpoint;
+  try {
+    const endpoint = new URL(provider.endpoint);
+    if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+      endpoint.username = '';
+      endpoint.password = '';
+      endpoint.search = '';
+      endpoint.hash = '';
+      sanitizedEndpoint = endpoint.toString();
+    }
+  } catch {
+    sanitizedEndpoint = sanitizeUrl(provider.endpoint);
+  }
+
   const references = tracingCredentialReferences.get(provider);
   const sanitizedAuth = provider.auth
     ? Object.fromEntries(
@@ -458,6 +472,7 @@ export function sanitizeTracingConfigForPersistence(
       ...config.tracing!,
       provider: {
         ...provider,
+        endpoint: sanitizedEndpoint,
         ...(provider.auth && { auth: sanitizedAuth }),
         ...(provider.headers && { headers: sanitizedHeaders }),
       },

@@ -628,6 +628,35 @@ describe('evaluator', () => {
       expect(persistedEvaluation?.config.tracing?.provider).toEqual(config.tracing.provider);
     });
 
+    it.each([
+      'https://tempo.example.com/tempo?token=endpoint-secret',
+      'https://tempo.example.com/tempo?opaque=endpoint-secret',
+      'https://tempo.example.com/tempo#token=endpoint-secret',
+      'https://reader:endpoint-secret@tempo.example.com/tempo',
+    ])('removes trace endpoint credentials before saving or exporting: %s', async (endpoint) => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: { id: 'tempo', endpoint },
+          },
+        },
+        [],
+      );
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+      const exportedEvaluation = await evaluation.toResultsFile();
+
+      expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('endpoint-secret');
+      expect(JSON.stringify(exportedEvaluation.config)).not.toContain('endpoint-secret');
+    });
+
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
       // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.

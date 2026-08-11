@@ -1038,9 +1038,13 @@ const TraceProviderConfigSchema = z.object({
   endpoint: z.url().refine((endpoint) => {
     const url = new URL(endpoint);
     return (
-      (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
     );
-  }, 'Trace provider endpoint must use HTTP or HTTPS without embedded credentials'),
+  }, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments'),
   auth: z
     .object({
       token: z.string().min(1).optional(),

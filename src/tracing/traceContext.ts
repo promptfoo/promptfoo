@@ -527,6 +527,20 @@ async function fetchFromExternalProvider(
         redactAttributes: fetchOptions.redactAttributes,
       });
 
+      if (processedSpans.length === 0) {
+        if (attempt === maxRetries) {
+          logger.debug(
+            `[TraceContext] No matching spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
+          );
+          return null;
+        }
+        logger.debug(
+          `[TraceContext] No matching spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+        );
+        await waitForRetry(retryDelayMs, fetchOptions.abortSignal);
+        continue;
+      }
+
       // Transform to TraceContextData format
       const traceSpans = createTraceSpans(processedSpans);
       const insights = deriveInsights(traceSpans);

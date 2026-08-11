@@ -225,6 +225,96 @@ describe('fetchTraceContext', () => {
     expect(secondTurn?.spans.map(({ name }) => name)).toEqual(['tool.second-turn']);
   });
 
+  it.each([
+    {
+      name: 'internal spans are excluded',
+      options: { includeInternalSpans: false },
+      ineligibleSpan: {
+        spanId: 'internal-span',
+        name: 'internal.setup',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'internal' },
+      },
+    },
+    {
+      name: 'span names do not match the requested filter',
+      options: { spanFilter: ['tool.*'] },
+      ineligibleSpan: {
+        spanId: 'http-span',
+        name: 'POST /chat',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'server' },
+      },
+    },
+  ])('retries when only $name have arrived', async ({ options, ineligibleSpan }) => {
+    const toolSpan = {
+      spanId: 'tool-span',
+      name: 'tool.search',
+      startTime: 2,
+      attributes: { 'otel.span.kind': 'client' },
+    };
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({
+        fetchedAt: 1,
+        spans: [ineligibleSpan],
+        traceId: 'trace-filtered-retry',
+      })
+      .mockResolvedValueOnce({
+        fetchedAt: 2,
+        spans: [ineligibleSpan, toolSpan],
+        traceId: 'trace-filtered-retry',
+      });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-filtered-retry', {
+      ...options,
+      maxRetries: 1,
+      retryDelayMs: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(2);
+    expect(result?.spans.map(({ name }) => name)).toEqual(['tool.search']);
+    expect(mocks.addSpans).toHaveBeenNthCalledWith(1, 'trace-filtered-retry', [ineligibleSpan], {
+      warnIfMissingTrace: false,
+    });
+    expect(mocks.addSpans).toHaveBeenNthCalledWith(
+      2,
+      'trace-filtered-retry',
+      [ineligibleSpan, toolSpan],
+      { warnIfMissingTrace: false },
+    );
+  });
+
+  it('persists filtered spans even when no eligible span arrives before retries end', async () => {
+    const internalSpan = {
+      spanId: 'internal-span',
+      name: 'internal.setup',
+      startTime: 1,
+      attributes: { 'otel.span.kind': 'internal' },
+    };
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      spans: [internalSpan],
+      traceId: 'trace-filtered-exhausted',
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-filtered-exhausted', {
+      includeInternalSpans: false,
+      maxRetries: 1,
+      retryDelayMs: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(2);
+    expect(result).toBeNull();
+    expect(mocks.addSpans).toHaveBeenCalledTimes(2);
+  });
+
   it('persists large external traces in bounded batches', async () => {
     const spans = Array.from({ length: 1_201 }, (_, index) => ({
       spanId: `span-${index}`,

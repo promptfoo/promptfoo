@@ -984,6 +984,21 @@ const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): 
         unknown
       >)
     : undefined;
+  if (sanitizedProvider && typeof sanitizedProvider.endpoint === 'string') {
+    const providerEndpoint = sanitizedProvider.endpoint;
+    try {
+      const endpoint = new URL(providerEndpoint);
+      if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
+        endpoint.username = '';
+        endpoint.password = '';
+        endpoint.search = '';
+        endpoint.hash = '';
+        sanitizedProvider.endpoint = endpoint.toString();
+      }
+    } catch {
+      sanitizedProvider.endpoint = scrubProviderUrl(providerEndpoint, templatePaths);
+    }
+  }
   if (sanitizedProvider && isRecord(sanitizedProvider.headers)) {
     sanitizedProvider.headers = Object.fromEntries(
       Object.entries(sanitizedProvider.headers).filter(([name, value]) => {
