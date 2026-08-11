@@ -2033,6 +2033,29 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('future-proofs sampling deprecation for unlisted Claude 5+ model families', () => {
+      for (const id of [
+        'claude-haiku-5',
+        'anthropic:messages:claude-haiku-5-20260801',
+        'us.anthropic.claude-research-preview-5',
+        'vertex:claude-sonnet-6',
+        'global.anthropic.claude-opus-10',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('does not mistake legacy or lookalike model IDs for Claude 5+', () => {
+      for (const id of [
+        'claude-3-5-sonnet-20241022',
+        'claude-opus-4-50',
+        'claude-sonnet-5x',
+        'notclaude-opus-5',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
+    });
+
     it('detects Claude Sonnet 5 across provider naming schemes', () => {
       for (const id of [
         'claude-sonnet-5',
