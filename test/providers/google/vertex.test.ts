@@ -2590,6 +2590,11 @@ describe('VertexChatProvider.callClaudeApi', () => {
       apiHost: 'aiplatform.googleapis.com.evil.example',
       env: undefined,
     },
+    {
+      source: 'Google mTLS hostname lookalike',
+      apiHost: 'aiplatform.mtls.googleapis.com.evil.example',
+      env: undefined,
+    },
   ])('preserves numbered Claude aliases behind custom Vertex $source', async ({ apiHost, env }) => {
     const model = 'claude-prod-5';
     provider = new VertexChatProvider(model, {
@@ -2649,6 +2654,24 @@ describe('VertexChatProvider.callClaudeApi', () => {
       region: 'us-central1',
       apiHost: undefined,
       env: { VERTEX_API_HOST: 'us-central1-aiplatform.googleapis.com:443' },
+    },
+    {
+      name: 'global mTLS',
+      region: 'global',
+      apiHost: 'aiplatform.mtls.googleapis.com:443',
+      env: undefined,
+    },
+    {
+      name: 'regional mTLS',
+      region: 'us-central1',
+      apiHost: 'us-central1-aiplatform.mtls.googleapis.com',
+      env: undefined,
+    },
+    {
+      name: 'environment-configured regional mTLS',
+      region: 'us-central1',
+      apiHost: undefined,
+      env: { VERTEX_API_HOST: 'us-central1-aiplatform.mtls.googleapis.com' },
     },
   ])(
     'detects future Claude generations on official $name Vertex endpoints',
