@@ -477,6 +477,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return 'anthropic';
   }
 
+  // Compatible gateways can assign arbitrary model aliases. Dedicated passthrough providers
+  // may override this when they guarantee requests reach Anthropic without alias translation.
+  protected allowsClaudeGenerationFallback(): boolean {
+    return (
+      URL.canParse(this.anthropic.baseURL) &&
+      new URL(this.anthropic.baseURL).hostname.toLowerCase() === 'api.anthropic.com'
+    );
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if it's in progress
     if (this.initializationPromise != null) {
@@ -721,13 +730,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
     // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
     // controls reasoning depth on these models.
-    // Compatible gateways may assign arbitrary aliases, so only infer new Claude generations
-    // when the request actually targets Anthropic's own API.
-    const allowGenerationFallback =
-      URL.canParse(this.anthropic.baseURL) &&
-      new URL(this.anthropic.baseURL).hostname.toLowerCase() === 'api.anthropic.com';
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
-      allowGenerationFallback,
+      allowGenerationFallback: this.allowsClaudeGenerationFallback(),
     });
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
