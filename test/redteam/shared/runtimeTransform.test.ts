@@ -232,6 +232,42 @@ describe('runtimeTransform', () => {
       expect(capturedTestCase?.metadata?.pluginId).toBe('runtime-transform');
     });
 
+    it('should propagate only fixed degraded-operation diagnostics', async () => {
+      const diagnosticStrategy: Strategy = {
+        id: 'diagnostic',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((testCase) => ({
+            ...testCase,
+            metadata: {
+              ...testCase.metadata,
+              runtimeTransformDiagnostics: [
+                {
+                  component: 'indirect-web-pwn',
+                  stage: 'create-page',
+                  outcome: 'degraded',
+                  secret: 'must not propagate',
+                },
+                { component: 'hostile', stage: 'unknown', outcome: 'degraded' },
+              ],
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['diagnostic'],
+        [diagnosticStrategy],
+      );
+
+      expect(result.diagnostics).toEqual([
+        { component: 'indirect-web-pwn', stage: 'create-page', outcome: 'degraded' },
+      ]);
+      expect(JSON.stringify(result.diagnostics)).not.toContain('secret');
+      expect(JSON.stringify(result.diagnostics)).not.toContain('hostile');
+    });
+
     it('should handle different inject variable names', async () => {
       await applyRuntimeTransforms('test', 'query', ['base64'], mockStrategies);
 
