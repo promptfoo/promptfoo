@@ -49,6 +49,8 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { isExternalTraceProvider } from './tracing/providers';
+import { fetchTraceContext } from './tracing/traceContext';
 import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
@@ -1140,6 +1142,7 @@ async function applyRunEvalResponseOutcome({
   ret,
   test,
   testIdx,
+  testSuite,
   traceContext,
   vars,
 }: {
@@ -1158,6 +1161,7 @@ async function applyRunEvalResponseOutcome({
   ret: EvaluateResult;
   test: AtomicTestCase;
   testIdx: number;
+  testSuite?: TestSuite;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
@@ -1188,6 +1192,7 @@ async function applyRunEvalResponseOutcome({
     ret,
     test,
     testIdx,
+    testSuite,
     traceContext,
     vars,
   });
@@ -1218,6 +1223,7 @@ async function gradeRunEvalResponse({
   ret,
   test,
   testIdx,
+  testSuite,
   traceContext,
   vars,
 }: {
@@ -1235,6 +1241,7 @@ async function gradeRunEvalResponse({
   ret: EvaluateResult;
   test: AtomicTestCase;
   testIdx: number;
+  testSuite?: TestSuite;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }) {
@@ -1251,6 +1258,28 @@ async function gradeRunEvalResponse({
   const traceId = getTraceId(traceContext);
   if (traceId && hasTraceAwareAssertions(test.assert)) {
     await flushOtel();
+  }
+  const tracingConfig = testSuite?.tracing;
+  if (traceId && isExternalTraceProvider(tracingConfig?.provider)) {
+    try {
+      logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
+      await fetchTraceContext(traceId, {
+        providerConfig: tracingConfig?.provider,
+        queryDelay: tracingConfig?.queryDelay,
+        maxRetries: hasTraceAwareAssertions(test.assert) ? 5 : 0,
+        retryDelayMs: 1000,
+        includeInternalSpans: true,
+        sanitizeAttributes: true,
+        redactAttributes: tracingConfig?.otlp?.http?.redactAttributes,
+        abortSignal,
+      });
+      logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        throw error;
+      }
+      logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
+    }
   }
 
   const assertionProviderResponse = {
@@ -1566,6 +1595,7 @@ async function runEvalInternal({
       ret,
       test,
       testIdx: testIndex,
+      testSuite,
       traceContext,
       vars: persistedVars,
     });

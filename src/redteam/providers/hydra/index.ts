@@ -657,6 +657,7 @@ export class HydraProvider implements ApiProvider {
       const targetContext = context
         ? {
             ...context,
+            iteration: turn,
             vars: {
               ...vars,
               ...(this.sessionId ? { sessionId: this.sessionId } : {}),
@@ -691,6 +692,9 @@ export class HydraProvider implements ApiProvider {
             retryDelayMs: tracingOptions.retryDelayMs,
             spanFilter: tracingOptions.spanFilter,
             sanitizeAttributes: tracingOptions.sanitizeAttributes,
+            providerConfig: tracingOptions.provider,
+            queryDelay: tracingOptions.queryDelay,
+            redactAttributes: tracingOptions.redactAttributes,
           });
 
           if (traceContext) {
@@ -918,7 +922,9 @@ export class HydraProvider implements ApiProvider {
             getGraderAssertionValue(assertToUse),
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
-            gradingContext,
+            gradingContext
+              ? { ...gradingContext, iteration: turn, traceparent: context?.traceparent }
+              : { iteration: turn, traceparent: context?.traceparent },
           );
           graderResult = grade;
           storedGraderResult = {

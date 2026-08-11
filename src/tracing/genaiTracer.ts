@@ -64,6 +64,7 @@ export const PromptfooAttributes = {
   EVAL_ID: 'promptfoo.eval.id',
   TEST_INDEX: 'promptfoo.test.index',
   PROMPT_LABEL: 'promptfoo.prompt.label',
+  ITERATION: 'promptfoo.iteration',
   CACHE_HIT: 'promptfoo.cache_hit',
   REQUEST_BODY: 'promptfoo.request.body',
   RESPONSE_BODY: 'promptfoo.response.body',
@@ -138,6 +139,8 @@ export interface GenAISpanContext {
   evalId?: string;
   testIndex?: number;
   promptLabel?: string;
+  /** Iteration/turn number (1-indexed) for multi-turn evaluations */
+  iteration?: number;
 
   // W3C Trace Context - for propagating trace context from evaluation
   traceparent?: string;
@@ -222,7 +225,9 @@ export async function withGenAISpan<T>(
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
   let parentContext = context.active();
-  if (ctx.traceparent) {
+  const activeSpan = trace.getSpan(parentContext);
+  const explicitTraceId = ctx.traceparent?.split('-')[1]?.toLowerCase();
+  if (ctx.traceparent && activeSpan?.spanContext().traceId.toLowerCase() !== explicitTraceId) {
     const carrier = { traceparent: ctx.traceparent };
     parentContext = propagation.extract(ROOT_CONTEXT, carrier);
   }
@@ -323,6 +328,9 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
   }
   if (ctx.promptLabel) {
     attrs[PromptfooAttributes.PROMPT_LABEL] = ctx.promptLabel;
+  }
+  if (ctx.iteration !== undefined) {
+    attrs[PromptfooAttributes.ITERATION] = ctx.iteration;
   }
 
   // Request body (truncated, optionally sanitized)

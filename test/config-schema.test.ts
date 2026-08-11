@@ -184,6 +184,18 @@ describe('config-schema.json', () => {
       expect(redteamConfig.properties).toHaveProperty('strategies');
     });
 
+    it('documents only supported external trace backends and their required endpoint', () => {
+      const tracingConfig = resolveRef(
+        schema.definitions?.PromptfooConfigSchema?.properties?.tracing,
+      );
+      const provider = resolveRef(tracingConfig.properties.provider);
+
+      expect(provider.properties.id.const).toBe('tempo');
+      expect(provider.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
+      expect(provider.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(tracingConfig.properties.queryDelay.minimum).toBe(0);
+    });
+
     it('should validate that plugin patterns are properly escaped', () => {
       const findPatterns = (obj: any): string[] => {
         const patterns: string[] = [];

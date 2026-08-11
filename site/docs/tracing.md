@@ -403,6 +403,28 @@ tracing:
       'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
 ```
 
+### Fetching Traces From Grafana Tempo
+
+Promptfoo can also retrieve spans that your application has already sent to Grafana Tempo. This is separate from forwarding: Promptfoo passes its `traceparent` header to the target, then queries Tempo for the matching trace after the target responds.
+
+```yaml
+tracing:
+  enabled: true
+  queryDelay: 3000 # Wait before retrying when spans are not indexed yet
+  provider:
+    id: tempo
+    endpoint: 'http://tempo:3200'
+    auth:
+      token: '{{ env.TEMPO_API_TOKEN }}'
+    headers:
+      X-Scope-OrgID: '{{ env.TEMPO_TENANT_ID }}'
+    timeout: 10000
+```
+
+`queryDelay` and `timeout` are measured in milliseconds. Promptfoo queries Tempo immediately and waits for `queryDelay` only if the first request does not find the trace. Bearer tokens and username/password authentication are supported. The target must propagate the supplied W3C `traceparent` header into its own OpenTelemetry spans so Promptfoo and Tempo use the same trace ID.
+
+Fetched spans follow the same redaction policy as received spans: credential-like attributes are removed automatically, and names configured in `tracing.otlp.http.redactAttributes` are redacted before the spans are stored.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript
