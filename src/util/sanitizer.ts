@@ -362,20 +362,67 @@ export function preserveTracingCredentialReferences(
       .filter(([name, reference]) => !isNonSensitiveTracingHeader(name, reference.renderedValue))
       .map(([, reference]) => reference),
   ];
+  const sourceEnv = sourceConfig.env as Record<string, unknown> | undefined;
+  const renderedEnv = renderedConfig.env as Record<string, unknown> | undefined;
+  const visitedEnvironmentVariables = new Set<string>();
   for (const { template } of credentialTemplates) {
-    const name = getTracingTemplateEnvironmentVariable(template);
-    const sourceEnv = sourceConfig.env as Record<string, unknown> | undefined;
-    const renderedEnv = renderedConfig.env as Record<string, unknown> | undefined;
-    const sourceValue = name ? sourceEnv?.[name] : undefined;
-    const renderedValue = name ? renderedEnv?.[name] : undefined;
-    if (name && isSafeTracingCredentialTemplate(sourceValue) && typeof renderedValue === 'string') {
+    let name = getTracingTemplateEnvironmentVariable(template);
+    while (name && !visitedEnvironmentVariables.has(name)) {
+      visitedEnvironmentVariables.add(name);
+      const sourceValue = sourceEnv?.[name];
+      const renderedValue = renderedEnv?.[name];
+      if (!isSafeTracingCredentialTemplate(sourceValue) || typeof renderedValue !== 'string') {
+        break;
+      }
       references.env.set(name, { template: sourceValue, renderedValue });
+      name = getTracingTemplateEnvironmentVariable(sourceValue);
     }
   }
 
   if (references.auth.size > 0 || references.headers.size > 0) {
     tracingCredentialReferences.set(renderedProvider, references);
   }
+}
+
+function getReferencedTracingCredentialEnvironmentVariables(
+  auth: Record<string, unknown> | undefined,
+  headers: Record<string, string> | undefined,
+  env: Record<string, unknown> | undefined,
+  references: TracingCredentialReferences | undefined,
+): Set<string> {
+  const variables = new Set<string>();
+  for (const [name, value] of Object.entries(auth ?? {})) {
+    if ((name === 'token' || name === 'password') && typeof value === 'string') {
+      const variable = getTracingTemplateEnvironmentVariable(value);
+      if (variable) {
+        variables.add(variable);
+      }
+    }
+  }
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (!isNonSensitiveTracingHeader(name, value)) {
+      const variable = getTracingTemplateEnvironmentVariable(value);
+      if (variable) {
+        variables.add(variable);
+      }
+    }
+  }
+
+  for (const name of variables) {
+    const value = env?.[name];
+    const reference = references?.env.get(name);
+    const template = isSafeTracingCredentialTemplate(value)
+      ? value
+      : reference && reference.renderedValue === value
+        ? reference.template
+        : undefined;
+    const variable = template ? getTracingTemplateEnvironmentVariable(template) : undefined;
+    if (variable) {
+      variables.add(variable);
+    }
+  }
+
+  return variables;
 }
 
 /**
@@ -437,23 +484,13 @@ export function sanitizeTracingConfigForPersistence(
         }),
       )
     : undefined;
-  const referencedCredentialEnvironmentVariables = new Set<string>();
-  for (const [name, value] of Object.entries(sanitizedAuth ?? {})) {
-    if ((name === 'token' || name === 'password') && typeof value === 'string') {
-      const variable = getTracingTemplateEnvironmentVariable(value);
-      if (variable) {
-        referencedCredentialEnvironmentVariables.add(variable);
-      }
-    }
-  }
-  for (const [name, value] of Object.entries(sanitizedHeaders ?? {})) {
-    if (!isNonSensitiveTracingHeader(name, value)) {
-      const variable = getTracingTemplateEnvironmentVariable(value);
-      if (variable) {
-        referencedCredentialEnvironmentVariables.add(variable);
-      }
-    }
-  }
+  const referencedCredentialEnvironmentVariables =
+    getReferencedTracingCredentialEnvironmentVariables(
+      sanitizedAuth,
+      sanitizedHeaders,
+      config.env as Record<string, unknown> | undefined,
+      references,
+    );
   const sanitizedEnv = config.env
     ? Object.fromEntries(
         Object.entries(config.env).flatMap(([name, value]) => {

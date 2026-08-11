@@ -511,6 +511,46 @@ describe('evaluator trace integration', () => {
       expect(programmaticSuite.tracing?.provider?.auth?.token).toBe('{{ env.TEMPO_READER_TOKEN }}');
     });
 
+    it('resolves chained config-local credential references for programmatic evals', async () => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const programmaticSuite: TestSuite = {
+        ...tracingSuite,
+        env: {
+          TEMPO_READER: '{{ env.TEMPO_INTERMEDIATE }}',
+          TEMPO_INTERMEDIATE: '{{ env.TEMPO_SOURCE_SECRET }}',
+          TEMPO_SOURCE_SECRET: 'programmatic-chained-secret',
+        } as TestSuite['env'],
+        providers: [provider],
+        prompts: [{ raw: 'Test prompt', label: 'test' }],
+        tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+        tracing: {
+          ...tracingSuite.tracing!,
+          provider: {
+            ...providerConfig,
+            auth: { token: '{{ env.TEMPO_READER }}' },
+            headers: { 'X-Tempo-Reader': '{{ env.TEMPO_READER }}' },
+          },
+        },
+      };
+
+      await evaluate(programmaticSuite, mockEval, { maxConcurrency: 1 });
+
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        traceId,
+        expect.objectContaining({
+          providerConfig: expect.objectContaining({
+            auth: { token: 'programmatic-chained-secret' },
+            headers: { 'X-Tempo-Reader': 'programmatic-chained-secret' },
+          }),
+        }),
+      );
+      expect(programmaticSuite.env).toEqual({
+        TEMPO_READER: '{{ env.TEMPO_INTERMEDIATE }}',
+        TEMPO_INTERMEDIATE: '{{ env.TEMPO_SOURCE_SECRET }}',
+        TEMPO_SOURCE_SECRET: 'programmatic-chained-secret',
+      });
+    });
+
     it('makes request-scoped tracing configuration available without exposing it in provider context', async () => {
       const requestProviderConfig = {
         ...providerConfig,

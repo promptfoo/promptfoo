@@ -773,6 +773,50 @@ describe('fetchTraceContext', () => {
     expect(JSON.stringify(result)).not.toContain('private-credential');
   });
 
+  it('redacts span fields that echo nested or array-backed redacted attribute values', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-nested-redacted-echo',
+      spans: [
+        {
+          spanId: 'nested-redacted-echo',
+          name: 'nested-secret',
+          statusMessage: 'array-secret',
+          startTime: 1,
+          attributes: {
+            http: { authorization: 'nested-secret', method: 'GET' },
+            events: [{ authorization: 'array-secret', name: 'safe-event' }],
+          },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-nested-redacted-echo', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      redactAttributes: ['authorization'],
+    });
+
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-nested-redacted-echo',
+      [
+        expect.objectContaining({
+          name: '[REDACTED]',
+          statusMessage: '[REDACTED]',
+          attributes: {
+            http: { authorization: '[REDACTED]', method: 'GET' },
+            events: [{ authorization: '[REDACTED]', name: 'safe-event' }],
+          },
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+    expect(JSON.stringify(result)).not.toContain('nested-secret');
+    expect(JSON.stringify(result)).not.toContain('array-secret');
+  });
+
   it('persists unsanitized span attributes when no explicit storage redactions are configured', async () => {
     const longToolArguments = 'argument-value '.repeat(40);
     const fetchTrace = vi.fn().mockResolvedValue({

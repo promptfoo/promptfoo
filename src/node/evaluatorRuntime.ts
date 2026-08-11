@@ -25,7 +25,26 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
       return testSuite;
     }
 
-    const renderedEnv = testSuite.env ? renderEnvOnlyInObject(testSuite.env) : undefined;
+    let renderedEnv = testSuite.env;
+    if (renderedEnv) {
+      const maxPasses = Object.keys(renderedEnv).length;
+      for (let pass = 0; pass < maxPasses; pass++) {
+        const previousEnv: NonNullable<typeof testSuite.env> = renderedEnv;
+        const nextEnv: NonNullable<typeof testSuite.env> = renderEnvOnlyInObject(
+          previousEnv,
+          previousEnv,
+        );
+        if (
+          Object.entries(nextEnv).every(
+            ([name, value]) => previousEnv[name as keyof typeof previousEnv] === value,
+          )
+        ) {
+          renderedEnv = nextEnv;
+          break;
+        }
+        renderedEnv = nextEnv;
+      }
+    }
     const runtimeTestSuite = {
       ...testSuite,
       ...(renderedEnv && { env: renderedEnv }),

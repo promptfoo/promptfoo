@@ -386,13 +386,38 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
     sanitizeSensitiveAttributes: false,
     truncateValues: false,
   });
-  const redactedValues = new Set(
-    Object.entries(attributes)
-      .filter(
-        ([key, value]) => typeof value === 'string' && sanitizedAttributes[key] === '[REDACTED]',
-      )
-      .map(([, value]) => value as string),
-  );
+  const redactedValues = new Set<string>();
+  const pendingValues: Array<{ original: unknown; sanitized: unknown }> = [
+    { original: attributes, sanitized: sanitizedAttributes },
+  ];
+  while (pendingValues.length > 0) {
+    const { original, sanitized } = pendingValues.pop()!;
+    if (typeof original === 'string') {
+      if (sanitized === '[REDACTED]') {
+        redactedValues.add(original);
+      }
+      continue;
+    }
+    if (!original || typeof original !== 'object') {
+      continue;
+    }
+    if (Array.isArray(original)) {
+      for (let index = 0; index < original.length; index++) {
+        pendingValues.push({
+          original: original[index],
+          sanitized: sanitized === '[REDACTED]' ? sanitized : (sanitized as unknown[])?.[index],
+        });
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(original)) {
+      pendingValues.push({
+        original: value,
+        sanitized:
+          sanitized === '[REDACTED]' ? sanitized : (sanitized as Record<string, unknown>)?.[key],
+      });
+    }
+  }
   const scrubEcho = <T extends string | undefined>(value: T): T => {
     if (typeof value !== 'string') {
       return value;
