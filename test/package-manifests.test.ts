@@ -558,6 +558,56 @@ describe('package manifests', () => {
     }
   });
 
+  it('pins the Chevrotain parser family together and blocks independent Renovate updates', () => {
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+    // chevrotain@X declares every @chevrotain/* sub-package at exactly X and all six reach npm
+    // within about a minute of each other, so Renovate must not move any of them alone.
+    // @chevrotain/cst-dts-gen is frozen too but is excluded from the version assertion below: it
+    // is currently overridden to 13.1.0 under chevrotain 11.2.0 (#10345) and gets realigned when
+    // the family moves as a set.
+    const pinnedGrammarPackages = [
+      '@chevrotain/gast',
+      '@chevrotain/types',
+      '@chevrotain/regexp-to-ast',
+      '@chevrotain/utils',
+    ];
+    const pinnedParserPackages = [
+      'chevrotain',
+      ...pinnedGrammarPackages,
+      '@chevrotain/cst-dts-gen',
+    ];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+
+    for (const dependencyName of pinnedGrammarPackages) {
+      expect(
+        chevrotainOverride?.[dependencyName],
+        `${dependencyName} must stay on the pinned parser version`,
+      ).toBe(parserVersion);
+    }
+
+    for (const packageName of pinnedParserPackages) {
+      expect(
+        renovateConfig.packageRules?.some(
+          (rule) => rule.enabled === false && rule.matchPackageNames?.includes(packageName),
+        ),
+        `Renovate must not independently update the pinned ${packageName} package`,
+      ).toBe(true);
+    }
+  });
+
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
