@@ -676,6 +676,33 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('omits temperature for Claude Opus 5 on the reported Bedrock path', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', temperature: 0.5 },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-5',
+      );
+
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('omits temperature for unlisted Claude 5+ models on Bedrock invokeModel', async () => {
+      for (const modelName of [
+        'us.anthropic.claude-haiku-5',
+        'global.anthropic.claude-research-preview-6',
+      ]) {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBeUndefined();
+      }
+    });
+
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
       // `thinking` field, so the bare 1024 default would truncate ordinary answers.
