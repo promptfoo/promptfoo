@@ -181,11 +181,17 @@ export function accumulateTokenUsagePreservingUnknown(
     cached: target.cached,
     total: target.total,
   };
-  const hasReportedTokenCounts =
-    update.prompt !== undefined ||
-    update.completion !== undefined ||
-    update.cached !== undefined ||
-    update.total !== undefined;
+  // Presence is tracked per field: a single flag across all four let a partial update
+  // fabricate zeros for the counts it never mentioned (reporting only `prompt` invented
+  // completion/cached/total as 0).
+  const reported = {
+    prompt: update.prompt !== undefined,
+    completion: update.completion !== undefined,
+    cached: update.cached !== undefined,
+    total: update.total !== undefined,
+  };
+  const reportedAnyTokenCount =
+    reported.prompt || reported.completion || reported.cached || reported.total;
 
   accumulateTokenUsage(target, update, incrementRequests);
 
@@ -204,14 +210,14 @@ export function accumulateTokenUsagePreservingUnknown(
   if (updateRequests > 0) {
     for (const field of ['prompt', 'completion', 'cached', 'total'] as const) {
       const priorCount = priorCounts[field];
-      if (!hasReportedTokenCounts || (priorRequests > 0 && priorCount === undefined)) {
+      // A counted request that did not supply this field leaves the aggregate unable to
+      // claim it, whether it reported nothing at all or only some of the four.
+      if (!reported[field] || (priorRequests > 0 && priorCount === undefined)) {
         delete target[field];
       }
     }
 
-    if (!hasReportedTokenCounts) {
-      delete target.completionDetails;
-    } else if (priorRequests > 0 && priorCompletionDetails === undefined) {
+    if (!reportedAnyTokenCount || (priorRequests > 0 && priorCompletionDetails === undefined)) {
       delete target.completionDetails;
     }
   }
