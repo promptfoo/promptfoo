@@ -310,6 +310,62 @@ describe('AzureChatCompletionProvider', () => {
       vi.resetAllMocks();
     });
 
+    it('uses audio-token pricing from chat completion usage details', async () => {
+      provider = new AzureChatCompletionProvider('gpt-audio-1.5-2026-02-23', {
+        config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 1_000,
+            prompt_tokens_details: { audio_tokens: 200, cached_tokens: 0 },
+            completion_tokens: 500,
+            completion_tokens_details: { audio_tokens: 100 },
+            total_tokens: 1_500,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo((800 * 2.5 + 200 * 32 + 400 * 10 + 100 * 64) / 1e6, 12);
+    });
+
+    it('reports API prompt-cache usage for a fresh chat response', async () => {
+      provider = new AzureChatCompletionProvider('gpt-5.6', {
+        config: { apiHost: 'test.azure.com', apiKey: 'test-key' },
+      });
+      setAuthHeaders(provider);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { index: 0, message: { role: 'assistant', content: 'hello' }, finish_reason: 'stop' },
+          ],
+          usage: {
+            prompt_tokens: 2_000,
+            prompt_tokens_details: { cached_tokens: 500 },
+            completion_tokens: 1_000,
+            total_tokens: 3_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 2_000, completion: 1_000, cached: 500 });
+      expect(result.cost).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 12);
+    });
+
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
       const mockResponse = {
         id: 'mock-id',

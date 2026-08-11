@@ -278,16 +278,20 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+- `google:gemini-omni-flash-preview` - Gemini Omni Flash preview for conversational video generation/editing via the Interactions API ($1.50/1M input, $9/1M text/thinking output, $17.50/1M video output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
 - `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite GA model optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
+- `google:live:gemini-3.1-flash-live-preview` - Gemini 3.1 Flash Live preview for real-time multimodal interactions ($0.75/1M text input, $1/1M image input, $0.002/minute video input, $4.50/1M text output, $3/1M audio input, $12/1M audio output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
-- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently resolves to `gemini-3.1-pro-preview`, same pricing)
-- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently resolves to `gemini-3.5-flash`, same pricing)
-- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently resolves to `gemini-3.1-flash-lite`, same pricing)
+- `google:gemini-2.5-pro-preview-tts` - Gemini 2.5 Pro text-to-speech model for high-fidelity audio generation
+- `google:gemini-2.5-flash-preview-tts` - Gemini 2.5 Flash text-to-speech model for low-latency audio generation
+- `google:gemini-pro-latest` - Google-maintained alias for the latest Gemini Pro release (currently Gemini 3.1 Pro pricing)
+- `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release (currently Gemini 3.5 Flash pricing)
+- `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release (currently Gemini 3.1 Flash-Lite pricing)
 
 ### Embedding Models
 
@@ -409,6 +413,23 @@ providers:
 ```
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
+
+### Video Generation Models (Gemini Omni Flash)
+
+Gemini Omni Flash uses the Gemini Interactions API rather than `generateContent`; Promptfoo automatically routes both `google:gemini-omni-flash-preview` and `vertex:gemini-omni-flash-preview` to the correct endpoint and stores returned video in blob storage. Vertex uses OAuth and the configured Google Cloud project. Use `store: true` and `previousInteractionId` with the Google AI Studio route to conversationally edit a prior result; Vertex does not currently support follow-up interactions. Omni does not support grounding, code execution, or function-calling tools.
+
+```yaml
+providers:
+  - id: google:gemini-omni-flash-preview
+    config:
+      aspectRatio: '9:16'
+      store: true
+
+prompts:
+  - 'Generate a short video of {{subject}}'
+```
+
+Video output is billed at $17.50/1M tokens (about $0.10/second at 720p); text and thinking output use the $9/1M rate.
 
 ### Video Generation Models (Veo)
 
@@ -1063,6 +1084,8 @@ providers:
       timeoutMs: 10000
 ```
 
+Gemini 3.1 Flash Live uses the `v1beta` WebSocket endpoint by default and produces native audio. If `response_modalities: ['text']` is configured, Promptfoo requests audio with output transcription so text-based assertions continue to work. Video must be supplied as individual `image/jpeg` or `image/png` frames, not as an inline video container such as `video/mp4`; Promptfoo paces multiple frames at one frame per second, bills those frames using the per-second video-input rate, and automatically terminates finite audio inputs. Promptfoo prices returned `IMAGE` and `DOCUMENT` input-token usage at the image rate and honors Gemini context-cache rates when the API reports cached-content usage.
+
 ### Key Features
 
 - **Real-time bidirectional communication**: Uses WebSockets for faster responses
@@ -1182,7 +1205,7 @@ promptfoo init --example google-live-audio
 ### Limitations
 
 - Sessions are limited to 15 minutes for audio or 2 minutes of audio and video
-- Token counting is not supported
+- Token usage and cost are reported when the API returns `usageMetadata`
 - Rate limits of 3 concurrent sessions per API key apply
 - Maximum of 4M tokens per minute
 

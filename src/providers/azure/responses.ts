@@ -47,10 +47,27 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
           modelName,
-          config,
+          {
+            ...config,
+            passthrough: {
+              ...config?.passthrough,
+              ...(config?.service_tier === undefined ? {} : { service_tier: config.service_tier }),
+            },
+          },
           usage?.prompt_tokens ?? usage?.input_tokens,
           usage?.completion_tokens ?? usage?.output_tokens,
-        ) ?? 0,
+          usage?.prompt_tokens_details?.cached_tokens ?? usage?.input_tokens_details?.cached_tokens,
+          usage?.prompt_tokens_details?.audio_tokens ?? usage?.input_tokens_details?.audio_tokens,
+          usage?.completion_tokens_details?.audio_tokens ??
+            usage?.output_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.image_tokens ?? usage?.input_tokens_details?.image_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.audio_tokens,
+          usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens ??
+            usage?.input_tokens_details?.cached_tokens_details?.image_tokens,
+          usage?.completion_tokens_details?.image_tokens ??
+            usage?.output_tokens_details?.image_tokens,
+        ),
     });
 
     if (this.config.mcp?.enabled) {
@@ -317,6 +334,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     logger.debug('\tAzure Responses API response', { data });
 
     // Use the shared response processor for all response processing
-    return this.processor.processResponseOutput(data, body, cached);
+    const result = await this.processor.processResponseOutput(data, body, cached);
+    const responseUsage = (data as any)?.usage;
+    const cachedInputTokens =
+      responseUsage?.prompt_tokens_details?.cached_tokens ??
+      responseUsage?.input_tokens_details?.cached_tokens;
+    if (!cached && result.tokenUsage && cachedInputTokens !== undefined) {
+      result.tokenUsage.cached = cachedInputTokens;
+    }
+    return result;
   }
 }

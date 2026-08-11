@@ -223,7 +223,7 @@ describe('TrueFoundry', () => {
             numRequests: 1,
           },
           cached: false,
-          cost: undefined,
+          cost: expect.closeTo(0.00045, 10),
           latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
@@ -361,7 +361,7 @@ describe('TrueFoundry', () => {
         expect(cachedResult).toEqual({
           output: 'Cached output',
           cached: true,
-          cost: undefined,
+          cost: 0,
           latencyMs: expect.any(Number),
           logProbs: undefined,
           guardrails: {
@@ -594,28 +594,31 @@ describe('TrueFoundry', () => {
         "Unable to determine whether response content blocked by label 'MultiSeverity_HateSpeechScore' because the content filtering system timed out",
         'Content management policy check did not complete because the content filtering system timed out',
         'Responsible AI policy check did not complete because the content filtering system timed out',
-      ])('should preserve downstream content filter failures as API errors: %s', async (message) => {
-        const errorResponse = {
-          error: {
-            message,
-            code: 'content_filter_error',
-          },
-        };
+      ])(
+        'should preserve downstream content filter failures as API errors: %s',
+        async (message) => {
+          const errorResponse = {
+            error: {
+              message,
+              code: 'content_filter_error',
+            },
+          };
 
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          const response = new Response(JSON.stringify(errorResponse), {
+            status: 400,
+            statusText: 'Bad Request',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          });
+          mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        const result = await provider.callApi('Test prompt');
+          const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toContain('400 Bad Request');
-        expect(result.error).toContain('content_filter_error');
-        expect(result.isRefusal).toBeUndefined();
-        expect(result.guardrails).toBeUndefined();
-      });
+          expect(result.error).toContain('400 Bad Request');
+          expect(result.error).toContain('content_filter_error');
+          expect(result.isRefusal).toBeUndefined();
+          expect(result.guardrails).toBeUndefined();
+        },
+      );
 
       it('should preserve nested downstream content filter failures as API errors', async () => {
         const errorResponse = {
