@@ -267,6 +267,18 @@ export function looksLikeSecret(value: string): boolean {
 const SAFE_TRACING_CREDENTIAL_TEMPLATE =
   /^(?:(?:bearer|basic|token|api[-_]?key)\s+)?\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])+\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}$/i;
 
+interface TracingCredentialReference {
+  template: string;
+  renderedValue: string;
+}
+
+interface TracingCredentialReferences {
+  auth: Map<string, TracingCredentialReference>;
+  headers: Map<string, TracingCredentialReference>;
+}
+
+const tracingCredentialReferences = new WeakMap<object, TracingCredentialReferences>();
+
 function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
@@ -285,6 +297,49 @@ function isTracingCredentialHeader(name: string, value: string): boolean {
 }
 
 /**
+ * Retains safe credential references alongside their rendered provider without exposing
+ * internal bookkeeping through config serialization or provider-visible properties.
+ */
+export function preserveTracingCredentialReferences(
+  sourceConfig: Partial<UnifiedConfig>,
+  renderedConfig: Partial<UnifiedConfig>,
+): void {
+  const sourceProvider = sourceConfig.tracing?.provider;
+  const renderedProvider = renderedConfig.tracing?.provider;
+  if (!sourceProvider || !renderedProvider) {
+    return;
+  }
+
+  const references: TracingCredentialReferences = {
+    auth: new Map(),
+    headers: new Map(),
+  };
+
+  for (const key of ['token', 'password'] as const) {
+    const template = sourceProvider.auth?.[key];
+    const renderedValue = renderedProvider.auth?.[key];
+    if (isSafeTracingCredentialTemplate(template) && typeof renderedValue === 'string') {
+      references.auth.set(key, { template, renderedValue });
+    }
+  }
+
+  for (const [name, template] of Object.entries(sourceProvider.headers ?? {})) {
+    const renderedValue = renderedProvider.headers?.[name];
+    if (
+      isSafeTracingCredentialTemplate(template) &&
+      typeof renderedValue === 'string' &&
+      isTracingCredentialHeader(name, renderedValue)
+    ) {
+      references.headers.set(name, { template, renderedValue });
+    }
+  }
+
+  if (references.auth.size > 0 || references.headers.size > 0) {
+    tracingCredentialReferences.set(renderedProvider, references);
+  }
+}
+
+/**
  * Keeps runtime trace-provider credentials out of persisted and exported eval configs.
  * Safe environment references remain intact so resumed evaluations can resolve them again.
  */
@@ -296,20 +351,27 @@ export function sanitizeTracingConfigForPersistence(
     return config;
   }
 
+  const references = tracingCredentialReferences.get(provider);
   const sanitizedAuth = provider.auth
     ? Object.fromEntries(
-        Object.entries(provider.auth).filter(
-          ([key, value]) =>
-            (key !== 'token' && key !== 'password') || isSafeTracingCredentialTemplate(value),
-        ),
+        Object.entries(provider.auth).flatMap(([key, value]) => {
+          if ((key !== 'token' && key !== 'password') || isSafeTracingCredentialTemplate(value)) {
+            return [[key, value]];
+          }
+          const reference = references?.auth.get(key);
+          return reference?.renderedValue === value ? [[key, reference.template]] : [];
+        }),
       )
     : undefined;
   const sanitizedHeaders = provider.headers
     ? Object.fromEntries(
-        Object.entries(provider.headers).filter(
-          ([name, value]) =>
-            isSafeTracingCredentialTemplate(value) || !isTracingCredentialHeader(name, value),
-        ),
+        Object.entries(provider.headers).flatMap(([name, value]) => {
+          if (isSafeTracingCredentialTemplate(value) || !isTracingCredentialHeader(name, value)) {
+            return [[name, value]];
+          }
+          const reference = references?.headers.get(name);
+          return reference?.renderedValue === value ? [[name, reference.template]] : [];
+        }),
       )
     : undefined;
 

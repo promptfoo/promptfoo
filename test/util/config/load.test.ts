@@ -23,6 +23,7 @@ import {
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
+import { sanitizeTracingConfigForPersistence } from '../../../src/util/sanitizer';
 import { readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
@@ -2744,6 +2745,51 @@ describe('readConfig with environment variable substitution', () => {
 
     expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
   });
+
+  it.each(['.yaml', '.js'])(
+    'preserves trace credential references for persistence after rendering %s configs',
+    async (extension) => {
+      mockProcessEnv({ MY_API_KEY: 'resolved-tempo-runtime-secret' });
+      const mockConfig = {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: {
+              token: '{{ env.MY_API_KEY }}',
+              password: '{{ env.MY_API_KEY | trim }}',
+            },
+            headers: {
+              Authorization: 'Bearer {{ env.MY_API_KEY }}',
+              'X-Api-Key': '{{ env["MY_API_KEY"] }}',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      };
+      vi.mocked(path.parse).mockReturnValue({ ext: extension } as unknown as path.ParsedPath);
+      if (extension === '.js') {
+        vi.mocked(importModule).mockResolvedValue(mockConfig);
+      } else {
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+      }
+
+      const config = await readConfig(`config${extension}`);
+      const persistedConfig = sanitizeTracingConfigForPersistence(config);
+
+      expect(config.tracing?.provider?.auth?.token).toBe('resolved-tempo-runtime-secret');
+      expect(config.tracing?.provider?.headers?.Authorization).toBe(
+        'Bearer resolved-tempo-runtime-secret',
+      );
+      expect(persistedConfig.tracing?.provider).toEqual(mockConfig.tracing.provider);
+      expect(JSON.stringify(persistedConfig.tracing)).not.toContain(
+        'resolved-tempo-runtime-secret',
+      );
+    },
+  );
 
   it('should preserve env templates in static _conversation vars', async () => {
     mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });

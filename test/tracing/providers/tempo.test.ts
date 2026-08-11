@@ -236,6 +236,26 @@ describe('TempoProvider', () => {
     },
   );
 
+  it.each([null, 42, { leaked: 'secret' }, ['invalid']])(
+    'discards spans with malformed status messages while preserving valid spans: %o',
+    async (message) => {
+      const malformedResponse = structuredClone(traceResponse);
+      const spans = malformedResponse.batches[0].scopeSpans[0].spans;
+      spans.unshift({
+        ...spans[0],
+        spanId: '2123456789abcdef',
+        name: 'malformed.status',
+        status: { code: 'STATUS_CODE_ERROR', message },
+      } as unknown as (typeof spans)[number]);
+      mockedFetch.mockResolvedValueOnce(response(malformedResponse));
+
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      const result = await provider.fetchTrace(TRACE_ID);
+
+      expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+    },
+  );
+
   it.each([
     ['attributes without values', [{ key: 'service.name' }]],
     ['a non-array attribute collection', { key: 'service.name' }],

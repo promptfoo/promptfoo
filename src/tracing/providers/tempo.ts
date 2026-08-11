@@ -201,6 +201,9 @@ function transformSpan(
   if (typeof span.name !== 'string' || span.name.trim().length === 0) {
     throw new Error('Span name must be a nonempty string');
   }
+  if (span.status?.message !== undefined && typeof span.status.message !== 'string') {
+    throw new Error('Span status message must be a string');
+  }
 
   const startTime = nanoToMs(span.startTimeUnixNano);
   if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {

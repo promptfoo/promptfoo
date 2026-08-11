@@ -8,6 +8,7 @@ import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
+import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
@@ -637,6 +638,48 @@ describe('evaluateOptions behavior', () => {
         ]);
       } finally {
         findByIdSpy.mockRestore();
+      }
+    });
+
+    it('resolves persisted trace-provider credential references when resuming an eval', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_TEST_TEMPO_RESUME_TOKEN: 'resumed-tempo-runtime-secret',
+      });
+      const resumeEval = new Eval(
+        {
+          providers: [{ id: 'echo', label: 'traced-target' }],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}' },
+              headers: {
+                Authorization: 'Bearer {{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}',
+              },
+            },
+          },
+        },
+        { id: 'eval-resume-tempo-credentials', persisted: true },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(resumedSuite.tracing?.provider?.auth?.token).toBe('resumed-tempo-runtime-secret');
+        expect(resumedSuite.tracing?.provider?.headers?.Authorization).toBe(
+          'Bearer resumed-tempo-runtime-secret',
+        );
+        expect(resumeEval.config.tracing?.provider?.auth?.token).toBe(
+          '{{ env.PROMPTFOO_TEST_TEMPO_RESUME_TOKEN }}',
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+        restoreEnv();
       }
     });
 

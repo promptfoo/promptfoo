@@ -55,6 +55,8 @@ import {
 } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
+import { renderEnvOnlyInObject } from '../util/render';
+import { preserveTracingCredentialReferences } from '../util/sanitizer';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -119,7 +121,14 @@ async function resolveReplayConfigs(
     );
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, evalRecord.config);
+  let replayConfig = evalRecord.config;
+  if (replayConfig.tracing?.provider) {
+    const renderedTracing = renderEnvOnlyInObject(replayConfig.tracing, replayConfig.env);
+    replayConfig = { ...replayConfig, tracing: renderedTracing };
+    preserveTracingCredentialReferences(evalRecord.config, replayConfig);
+  }
+
+  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges

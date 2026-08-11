@@ -380,6 +380,60 @@ describe('fetchTraceContext', () => {
     );
   });
 
+  it('redacts span fields that echo explicitly redacted attribute values before persistence', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 1,
+      traceId: 'trace-redacted-echo',
+      spans: [
+        {
+          spanId: 'redacted-echo',
+          name: 'Bearer echoed-secret',
+          statusCode: 2,
+          statusMessage: 'Bearer echoed-secret',
+          startTime: 1,
+          attributes: {
+            authorization: 'Bearer echoed-secret',
+            safe: 'visible',
+          },
+        },
+        {
+          spanId: 'safe-sibling',
+          name: 'safe.operation',
+          statusMessage: 'ordinary failure',
+          startTime: 2,
+          attributes: { authorization: 'Bearer another-secret' },
+        },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-redacted-echo', {
+      maxRetries: 0,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+      redactAttributes: ['authorization'],
+    });
+
+    expect(mocks.addSpans).toHaveBeenCalledWith(
+      'trace-redacted-echo',
+      [
+        expect.objectContaining({
+          name: '[REDACTED]',
+          statusMessage: '[REDACTED]',
+          attributes: { authorization: '[REDACTED]', safe: 'visible' },
+        }),
+        expect.objectContaining({
+          name: 'safe.operation',
+          statusMessage: 'ordinary failure',
+          attributes: { authorization: '[REDACTED]' },
+        }),
+      ],
+      { warnIfMissingTrace: false },
+    );
+    expect(JSON.stringify(result)).not.toContain('echoed-secret');
+    expect(JSON.stringify(result)).not.toContain('another-secret');
+  });
+
   it('persists unsanitized span attributes when no explicit storage redactions are configured', async () => {
     const longToolArguments = 'argument-value '.repeat(40);
     const fetchTrace = vi.fn().mockResolvedValue({

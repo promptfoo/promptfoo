@@ -43,6 +43,7 @@ import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
+import { preserveTracingCredentialReferences } from '../sanitizer';
 import { readTest, readTests } from '../testCaseReader';
 import {
   type PromptReferenceSource,
@@ -322,7 +323,12 @@ function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(co
     : undefined;
 
   // Second pass: render full config using pre-rendered config.env as overrides
-  return renderEnvOnlyInObject(config, filteredConfigEnv);
+  const renderedConfig = renderEnvOnlyInObject(config, filteredConfigEnv);
+  preserveTracingCredentialReferences(
+    config as Partial<UnifiedConfig>,
+    renderedConfig as Partial<UnifiedConfig>,
+  );
+  return renderedConfig;
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {

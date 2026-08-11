@@ -379,6 +379,31 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<v
   }
 }
 
+function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanData {
+  const attributes = span.attributes ?? {};
+  const sanitizedAttributes = sanitizeTraceAttributes(attributes, {
+    redactAttributes,
+    sanitizeSensitiveAttributes: false,
+    truncateValues: false,
+  });
+  const redactedValues = new Set(
+    Object.entries(attributes)
+      .filter(
+        ([key, value]) => typeof value === 'string' && sanitizedAttributes[key] === '[REDACTED]',
+      )
+      .map(([, value]) => value as string),
+  );
+  const scrubEcho = <T extends string | undefined>(value: T): T =>
+    typeof value === 'string' && redactedValues.has(value) ? ('[REDACTED]' as T) : value;
+
+  return {
+    ...span,
+    name: scrubEcho(span.name),
+    statusMessage: scrubEcho(span.statusMessage),
+    attributes: sanitizedAttributes,
+  };
+}
+
 /**
  * Fetch trace context from an external provider (Tempo, Jaeger, etc.)
  */
@@ -446,14 +471,7 @@ async function fetchFromExternalProvider(
 
       const validSpans = discardCyclicExternalSpans(result.spans);
       const storedSpans = fetchOptions.redactAttributes?.length
-        ? validSpans.map((span) => ({
-            ...span,
-            attributes: sanitizeTraceAttributes(span.attributes, {
-              redactAttributes: fetchOptions.redactAttributes,
-              sanitizeSensitiveAttributes: false,
-              truncateValues: false,
-            }),
-          }))
+        ? validSpans.map((span) => redactExternalSpan(span, fetchOptions.redactAttributes!))
         : validSpans;
 
       // Persist the complete trace before applying filters intended only for this reader.
