@@ -415,6 +415,7 @@ export class TempoProvider implements TraceProvider {
       disableTransientRetries: true,
       method: 'GET',
       headers: this.buildHeaders(),
+      redirect: 'error',
       signal,
     });
 
@@ -462,6 +463,7 @@ export class TempoProvider implements TraceProvider {
     try {
       const response = await fetchWithProxy(`${this.baseUrl}/ready`, {
         headers: this.buildHeaders(),
+        redirect: 'error',
         signal: AbortSignal.timeout(5_000),
       });
       return response.ok;

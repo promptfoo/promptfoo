@@ -85,6 +85,47 @@ describe('TempoProvider', () => {
     expect(() => new TempoProvider(config)).toThrow();
   });
 
+  it('blocks redirects before trace credentials can be sent to another origin', async () => {
+    mockedFetch.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { Location: 'https://other.example.com/collect' },
+      }),
+    );
+    const provider = new TempoProvider({
+      id: 'tempo',
+      endpoint: 'https://tempo.example.com',
+      headers: { 'X-Tempo-Reader': 'short-secret' },
+    });
+
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('Tempo returned HTTP 302');
+    expect(mockedFetch).toHaveBeenCalledOnce();
+    expect(mockedFetch).toHaveBeenCalledWith(
+      `https://tempo.example.com/api/traces/${TRACE_ID}`,
+      expect.objectContaining({
+        redirect: 'error',
+        headers: expect.objectContaining({ 'X-Tempo-Reader': 'short-secret' }),
+      }),
+    );
+  });
+
+  it('blocks redirects during credential-bearing readiness checks', async () => {
+    const provider = new TempoProvider({
+      id: 'tempo',
+      endpoint: 'https://tempo.example.com',
+      headers: { 'X-Tempo-Reader': 'short-secret' },
+    });
+
+    expect(await provider.healthCheck()).toBe(true);
+    expect(mockedFetch).toHaveBeenCalledWith(
+      'https://tempo.example.com/ready',
+      expect.objectContaining({
+        redirect: 'error',
+        headers: expect.objectContaining({ 'X-Tempo-Reader': 'short-secret' }),
+      }),
+    );
+  });
+
   it.each(['../../admin', 'abc123', '00000000000000000000000000000000'])(
     'rejects invalid trace IDs before sending a request: %s',
     async (traceId) => {
