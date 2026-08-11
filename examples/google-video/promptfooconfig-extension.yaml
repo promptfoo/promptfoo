@@ -8,7 +8,7 @@ providers:
   - id: google:video:veo-3.1-generate-preview
     config:
       sourceVideo: file://YOUR_SOURCE_VIDEO.mp4
-      durationSeconds: 8 # Required for extension; Veo adds 7 seconds to the source video
+      # durationSeconds is not an extension parameter; Veo adds a fixed 7 seconds.
 
 tests:
   - vars:

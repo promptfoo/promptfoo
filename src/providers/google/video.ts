@@ -111,14 +111,20 @@ export function validateDuration(
   return { valid: true };
 }
 
-function validateExtensionDuration(duration: number): { valid: boolean; message?: string } {
+/**
+ * Vertex's extend-a-video request body documents only `storageUri` and `sampleCount`, and fixes
+ * the added length at 7 seconds -- `durationSeconds` is not an extension parameter. Existing
+ * configs nonetheless carry 4 or 6 (this repo's own example shipped 6), so warn and fall back to
+ * the extension default rather than failing a request the API would have accepted.
+ */
+function resolveExtensionDuration(duration: number): GoogleVideoDuration {
   if (duration !== VEO_EXTENSION_DURATION) {
-    return {
-      valid: false,
-      message: `Video extension requires duration 8s. Received ${duration}s.`,
-    };
+    logger.warn(
+      `[Google Video] durationSeconds is not used when extending a video (Veo adds a fixed 7s). ` +
+        `Ignoring the configured ${duration}s.`,
+    );
   }
-  return { valid: true };
+  return VEO_EXTENSION_DURATION;
 }
 
 export function validateResolution(
@@ -908,7 +914,7 @@ export class GoogleVideoProvider implements ApiProvider {
     const resolution = effectiveConfig.resolution || DEFAULT_RESOLUTION;
     const isVideoExtension = Boolean(effectiveConfig.sourceVideo || effectiveConfig.extendVideoId);
     // Support both 'durationSeconds' and 'duration' (alias)
-    const durationSeconds =
+    let durationSeconds =
       effectiveConfig.durationSeconds ??
       effectiveConfig.duration ??
       (isVideoExtension ? VEO_EXTENSION_DURATION : DEFAULT_DURATION);
@@ -920,11 +926,13 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Validate duration
-    const durationValidation = isVideoExtension
-      ? validateExtensionDuration(durationSeconds)
-      : validateDuration(model, durationSeconds);
-    if (!durationValidation.valid) {
-      return { error: durationValidation.message };
+    if (isVideoExtension) {
+      durationSeconds = resolveExtensionDuration(durationSeconds);
+    } else {
+      const durationValidation = validateDuration(model, durationSeconds);
+      if (!durationValidation.valid) {
+        return { error: durationValidation.message };
+      }
     }
 
     // Validate resolution

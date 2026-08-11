@@ -773,20 +773,39 @@ describe('GoogleVideoProvider', () => {
       expect(body.instances[0].video).toEqual({ operationName: sourceOperationName });
     });
 
+    // Vertex's extend-a-video body documents only storageUri and sampleCount and fixes the added
+    // length at 7s, so durationSeconds is not an extension parameter. Existing configs still
+    // carry 4 or 6 (this repo's own example shipped 6), so those must not be rejected.
     it.each([
       4, 6,
-    ] as const)('should reject a %s-second Vertex source-video extension', async (durationSeconds) => {
+    ] as const)('should ignore a %s-second duration on a Vertex source-video extension instead of failing', async (durationSeconds) => {
+      const operationName = 'test-op';
+      mockRequest.mockResolvedValueOnce({ data: { name: operationName, done: false } });
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: Buffer.from('fake video').toString('base64') }],
+          },
+        },
+      });
+
       const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
         config: {
           sourceVideo: 'gs://video-bucket/source.mp4',
           durationSeconds,
+          pollIntervalMs: 10,
         },
       });
 
       const result = await provider.callApi('Extend');
 
-      expect(result.error).toContain('Video extension requires duration 8s');
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(result.error).toBeUndefined();
+      expect(mockRequest).toHaveBeenCalled();
+      const body = JSON.parse(mockRequest.mock.calls[0][0].body);
+      // The configured 4/6 must never reach the wire; Veo fixes the added length itself.
+      expect(body.parameters?.durationSeconds).not.toBe(durationSeconds);
     });
 
     it('should send a Vertex GCS source video using gcsUri', async () => {
