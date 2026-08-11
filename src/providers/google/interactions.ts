@@ -261,6 +261,22 @@ function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides):
   return 'https://generativelanguage.googleapis.com/v1beta/interactions';
 }
 
+/**
+ * Resolves the configured Vertex region, or null when the caller did not pick one.
+ */
+function getConfiguredVertexRegion(
+  config: GoogleProviderConfig,
+  env?: EnvOverrides,
+): string | null {
+  return (
+    config.region ||
+    env?.VERTEX_REGION ||
+    getEnvString('VERTEX_REGION') ||
+    getEnvString('GOOGLE_CLOUD_LOCATION') ||
+    null
+  );
+}
+
 function getVertexInteractionsEndpoint(
   config: GoogleProviderConfig,
   projectId: string,
@@ -385,6 +401,18 @@ export class GoogleInteractionsProvider implements ApiProvider {
         const token = typeof accessToken === 'string' ? accessToken : accessToken?.token;
         if (!token) {
           return { error: 'Gemini Omni on Vertex AI could not obtain an OAuth access token.' };
+        }
+        // The Interactions API accepts locations global, us and eu, but the Omni publisher
+        // model resolves only in global -- us and eu return 404 "Publisher model ... was not
+        // found". Rewriting a configured region to global silently would send prompts and
+        // generated video somewhere the caller did not choose, so say so instead.
+        const configuredRegion = getConfiguredVertexRegion(config, this.env);
+        if (configuredRegion && configuredRegion !== 'global') {
+          logger.warn(
+            `[Google Interactions] Gemini Omni is only served from the 'global' location, so the ` +
+              `configured region '${configuredRegion}' is not used. Prompts and generated video ` +
+              `are sent to the global endpoint.`,
+          );
         }
         endpoint = getVertexInteractionsEndpoint(config, projectId, this.env);
         const { authorization, ...authHeaders } =
