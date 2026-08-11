@@ -290,8 +290,15 @@ export class TempoProvider implements TraceProvider {
 
   private buildHeaders(): Record<string, string> {
     const headers: Record<string, string> = { ...this.config.headers };
+    const hasConfiguredAuthentication = Boolean(
+      this.config.auth?.token || (this.config.auth?.username && this.config.auth?.password),
+    );
     for (const header of Object.keys(headers)) {
-      if (header.toLowerCase() === 'accept') {
+      const normalizedHeader = header.toLowerCase();
+      if (
+        normalizedHeader === 'accept' ||
+        (hasConfiguredAuthentication && normalizedHeader === 'authorization')
+      ) {
         delete headers[header];
       }
     }
@@ -358,6 +365,7 @@ export class TempoProvider implements TraceProvider {
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
     const response = await fetchWithProxy(`${this.baseUrl}/api/traces/${traceId}`, {
+      disableTransientRetries: true,
       method: 'GET',
       headers: this.buildHeaders(),
       signal,

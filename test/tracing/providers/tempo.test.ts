@@ -116,7 +116,11 @@ describe('TempoProvider', () => {
     expect(result?.spans[1].attributes?.['otel.span.kind']).toBe('internal');
     expect(mockedFetch).toHaveBeenCalledWith(
       `http://tempo:3200/api/traces/${TRACE_ID}`,
-      expect.objectContaining({ method: 'GET', signal: expect.any(AbortSignal) }),
+      expect.objectContaining({
+        disableTransientRetries: true,
+        method: 'GET',
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -280,7 +284,7 @@ describe('TempoProvider', () => {
       id: 'tempo',
       endpoint: 'http://tempo:3200',
       auth: { token: 'secret-token' },
-      headers: { 'X-Scope-OrgID': 'tenant-a' },
+      headers: { authorization: 'stale-authorization', 'X-Scope-OrgID': 'tenant-a' },
       timeout: 250,
     });
 
@@ -296,6 +300,11 @@ describe('TempoProvider', () => {
         signal: expect.any(AbortSignal),
       }),
     );
+
+    const headers = mockedFetch.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(
+      Object.keys(headers).filter((header) => header.toLowerCase() === 'authorization'),
+    ).toEqual(['Authorization']);
   });
 
   it('supports basic authentication', async () => {
@@ -303,12 +312,35 @@ describe('TempoProvider', () => {
       id: 'tempo',
       endpoint: 'http://tempo:3200',
       auth: { username: 'user', password: 'pass' },
+      headers: { AUTHORIZATION: 'stale-authorization' },
     });
     await provider.fetchTrace(TRACE_ID);
     expect(mockedFetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Basic dXNlcjpwYXNz' }),
+      }),
+    );
+
+    const headers = mockedFetch.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(
+      Object.keys(headers).filter((header) => header.toLowerCase() === 'authorization'),
+    ).toEqual(['Authorization']);
+  });
+
+  it('preserves custom authorization headers when no explicit authentication is configured', async () => {
+    const provider = new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+      headers: { authorization: 'Custom tenant-credential' },
+    });
+
+    await provider.fetchTrace(TRACE_ID);
+
+    expect(mockedFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: 'Custom tenant-credential' }),
       }),
     );
   });
