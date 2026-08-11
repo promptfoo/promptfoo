@@ -169,18 +169,13 @@ describe('fetchTraceContext', () => {
     expect(result?.spans).toHaveLength(1_201);
     expect(mocks.addSpans).toHaveBeenCalledTimes(3);
     expect(mocks.addSpans.mock.calls.map(([, batch]) => batch.length)).toEqual([500, 500, 201]);
-    expect(mocks.addSpans).toHaveBeenNthCalledWith(
-      1,
-      'trace-large',
-      spans.slice(0, 500),
-      { warnIfMissingTrace: false },
-    );
-    expect(mocks.addSpans).toHaveBeenNthCalledWith(
-      2,
-      'trace-large',
-      spans.slice(500, 1_000),
-      { warnIfMissingTrace: false, skipTraceCheck: true },
-    );
+    expect(mocks.addSpans).toHaveBeenNthCalledWith(1, 'trace-large', spans.slice(0, 500), {
+      warnIfMissingTrace: false,
+    });
+    expect(mocks.addSpans).toHaveBeenNthCalledWith(2, 'trace-large', spans.slice(500, 1_000), {
+      warnIfMissingTrace: false,
+      skipTraceCheck: true,
+    });
   });
 
   it('stops batching when the trace does not exist in the local store', async () => {
