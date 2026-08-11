@@ -752,7 +752,14 @@ describe('package manifests', () => {
       expect(declaredVersion, `${manifestPath} must declare js-yaml`).toBeDefined();
       expect(packageLock.packages[lockPath]?.[field]?.['js-yaml']).toBe(declaredVersion);
       expect(
-        satisfies(minVersion(declaredVersion as string)!, PATCHED_JS_YAML_RANGE),
+        validRange(declaredVersion as string),
+        `${manifestPath} must declare a valid js-yaml semver range`,
+      ).not.toBeNull();
+
+      const minimumVersion = minVersion(declaredVersion as string);
+      expect(minimumVersion, `${manifestPath} must have a minimum js-yaml version`).not.toBeNull();
+      expect(
+        minimumVersion !== null && satisfies(minimumVersion, PATCHED_JS_YAML_RANGE),
         `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
       ).toBe(true);
       directVersions.push(declaredVersion as string);
