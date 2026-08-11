@@ -559,20 +559,39 @@ describe('package manifests', () => {
     }
   });
 
-  it('prevents Renovate from independently updating the pinned Chevrotain parser family', () => {
+  it('pins the Chevrotain parser family together and blocks independent Renovate updates', () => {
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
     const renovateConfig = readPackageJson<{
       packageRules?: Array<{
         enabled?: boolean;
         matchPackageNames?: string[];
       }>;
     }>('renovate.json');
-    const pinnedParserPackages = [
-      'chevrotain',
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+    // chevrotain@11.2.0 declares each grammar sub-package at exactly the parser version, so the
+    // overrides have to move as one set. @chevrotain/cst-dts-gen is versioned independently
+    // upstream and is deliberately excluded from the pinned family.
+    const pinnedGrammarPackages = [
       '@chevrotain/gast',
       '@chevrotain/types',
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
+    const pinnedParserPackages = ['chevrotain', ...pinnedGrammarPackages];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+
+    for (const dependencyName of pinnedGrammarPackages) {
+      expect(
+        chevrotainOverride?.[dependencyName],
+        `${dependencyName} must stay on the pinned parser version`,
+      ).toBe(parserVersion);
+    }
 
     for (const packageName of pinnedParserPackages) {
       expect(
