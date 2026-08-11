@@ -2765,6 +2765,7 @@ describe('readConfig with environment variable substitution', () => {
             headers: {
               Authorization: 'Bearer {{ env.MY_API_KEY }}',
               'X-Api-Key': '{{ env["MY_API_KEY"] }}',
+              'X-Tempo-Reader': '{{ env.MY_API_KEY }}',
               'X-Scope-OrgID': 'tenant-a',
             },
           },
@@ -2790,6 +2791,37 @@ describe('readConfig with environment variable substitution', () => {
       );
     },
   );
+
+  it('preserves env references for custom trace headers even when rendered values look harmless', async () => {
+    mockProcessEnv({ TEMPO_READER_TOKEN: 'short' });
+    const mockConfig = {
+      providers: ['echo'],
+      prompts: ['Hello'],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          headers: {
+            'X-Tempo-Reader': '{{ env.TEMPO_READER_TOKEN }}',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
+    };
+    vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+    const config = await readConfig('config.yaml');
+    const persistedConfig = sanitizeTracingConfigForPersistence(config);
+
+    expect(config.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe('short');
+    expect(persistedConfig.tracing?.provider?.headers).toEqual({
+      'X-Tempo-Reader': '{{ env.TEMPO_READER_TOKEN }}',
+      'X-Scope-OrgID': 'tenant-a',
+    });
+    expect(JSON.stringify(persistedConfig.tracing)).not.toContain('short');
+  });
 
   it('should preserve env templates in static _conversation vars', async () => {
     mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });

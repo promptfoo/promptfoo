@@ -212,13 +212,18 @@ function transformSpan(
   if (options?.spanFilter?.length && !matchesSpanFilter(span.name, options.spanFilter)) {
     return null;
   }
+  const endTimeUnixNano = span.endTimeUnixNano;
+  const endTime = endTimeUnixNano ? nanoToMs(endTimeUnixNano) : undefined;
+  if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
+    throw new Error('Span end time must not precede its start time');
+  }
 
   return {
     spanId,
     parentSpanId,
     name: span.name,
     startTime,
-    endTime: span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined,
+    endTime,
     attributes: {
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
@@ -363,9 +368,6 @@ export class TempoProvider implements TraceProvider {
 
     for (const { resourceAttributes, scopeSpan } of getValidResourceScopes(data)) {
       for (const span of scopeSpan.spans ?? []) {
-        if (spans.length >= limit) {
-          return spans;
-        }
         let normalizedSpan: SpanData | null;
         try {
           normalizedSpan = transformSpan(
@@ -394,7 +396,10 @@ export class TempoProvider implements TraceProvider {
         spans.push(normalizedSpan);
       }
     }
-    return spans;
+    spans.sort(
+      (left, right) => left.startTime - right.startTime || left.spanId.localeCompare(right.spanId),
+    );
+    return spans.slice(0, limit);
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {

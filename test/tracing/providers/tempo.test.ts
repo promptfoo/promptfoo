@@ -256,6 +256,24 @@ describe('TempoProvider', () => {
     },
   );
 
+  it('discards spans that finish before they start while retaining valid siblings', async () => {
+    const malformedResponse = structuredClone(traceResponse);
+    const spans = malformedResponse.batches[0].scopeSpans[0].spans;
+    spans.unshift({
+      ...spans[0],
+      spanId: '2123456789abcdef',
+      name: 'malformed.duration',
+      startTimeUnixNano: '1704067200000000999',
+      endTimeUnixNano: '1704067200000000998',
+    } as (typeof spans)[number]);
+    mockedFetch.mockResolvedValueOnce(response(malformedResponse));
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+  });
+
   it.each([
     ['attributes without values', [{ key: 'service.name' }]],
     ['a non-array attribute collection', { key: 'service.name' }],
@@ -335,6 +353,47 @@ describe('TempoProvider', () => {
       '0123456789abcdef',
       '1123456789abcdef',
     ]);
+  });
+
+  it('retains the earliest spans when unsorted traces exceed the adapter span limit', async () => {
+    const originalSpan = traceResponse.batches[0].scopeSpans[0].spans[0];
+    const lateSpans = Array.from({ length: 10_000 }, (_, index) => ({
+      traceId: TRACE_ID,
+      spanId: (index + 1).toString(16).padStart(16, '0'),
+      name: `late.operation.${index}`,
+      startTimeUnixNano: String(1_704_067_201_000_000_000n + BigInt(index) * 1_000_000n),
+    }));
+    mockedFetch.mockResolvedValueOnce(
+      response({
+        batches: [
+          {
+            resource: { attributes: [] },
+            scopeSpans: [{ spans: lateSpans }],
+          },
+          {
+            resource: { attributes: [] },
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    ...originalSpan,
+                    spanId: 'ffffffffffffffff',
+                    name: 'early.operation',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const result = await provider.fetchTrace(TRACE_ID);
+
+    expect(result?.spans).toHaveLength(10_000);
+    expect(result?.spans[0]?.name).toBe('early.operation');
+    expect(result?.spans.at(-1)?.name).toBe('late.operation.9998');
   });
 
   it('rejects compact responses that expand past the normalized attribute budget', async () => {

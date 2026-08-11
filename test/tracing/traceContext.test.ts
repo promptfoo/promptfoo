@@ -147,6 +147,84 @@ describe('fetchTraceContext', () => {
     });
   });
 
+  it('keeps earlier red-team turns out of later turn summaries despite clock skew', async () => {
+    const iterationStart = 1_700_000_000_000;
+    const firstTurnSpan = {
+      spanId: 'turn-1',
+      name: 'tool.first-turn',
+      startTime: iterationStart - 30_000,
+    };
+    const secondTurnSpan = {
+      spanId: 'turn-2',
+      name: 'tool.second-turn',
+      startTime: iterationStart - 25_000,
+    };
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({
+        fetchedAt: iterationStart,
+        spans: [firstTurnSpan],
+        traceId: 'trace-multiple-turns',
+      })
+      .mockResolvedValueOnce({
+        fetchedAt: iterationStart + 5_000,
+        spans: [firstTurnSpan, secondTurnSpan],
+        traceId: 'trace-multiple-turns',
+      });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+    const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+
+    const firstTurn = await fetchTraceContext('trace-multiple-turns', {
+      earliestStartTime: iterationStart,
+      maxRetries: 0,
+      providerConfig,
+      queryDelay: 0,
+    });
+    const secondTurn = await fetchTraceContext('trace-multiple-turns', {
+      earliestStartTime: iterationStart + 5_000,
+      maxRetries: 0,
+      providerConfig,
+      queryDelay: 0,
+    });
+
+    expect(firstTurn?.spans.map(({ name }) => name)).toEqual(['tool.first-turn']);
+    expect(secondTurn?.spans.map(({ name }) => name)).toEqual(['tool.second-turn']);
+    expect(mocks.addSpans.mock.calls[1][1]).toEqual([firstTurnSpan, secondTurnSpan]);
+  });
+
+  it('waits for a new turn span when the backend initially returns only earlier turns', async () => {
+    const firstTurnSpan = { spanId: 'turn-1', name: 'tool.first-turn', startTime: 1 };
+    const secondTurnSpan = { spanId: 'turn-2', name: 'tool.second-turn', startTime: 2 };
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({ fetchedAt: 1, spans: [firstTurnSpan], traceId: 'trace-turn-retry' })
+      .mockResolvedValueOnce({ fetchedAt: 2, spans: [firstTurnSpan], traceId: 'trace-turn-retry' })
+      .mockResolvedValueOnce({
+        fetchedAt: 3,
+        spans: [firstTurnSpan, secondTurnSpan],
+        traceId: 'trace-turn-retry',
+      });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+    const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+
+    await fetchTraceContext('trace-turn-retry', {
+      earliestStartTime: 1,
+      maxRetries: 0,
+      providerConfig,
+      queryDelay: 0,
+    });
+    const secondTurn = await fetchTraceContext('trace-turn-retry', {
+      earliestStartTime: 2,
+      maxRetries: 1,
+      retryDelayMs: 0,
+      providerConfig,
+      queryDelay: 0,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(3);
+    expect(secondTurn?.spans.map(({ name }) => name)).toEqual(['tool.second-turn']);
+  });
+
   it('persists large external traces in bounded batches', async () => {
     const spans = Array.from({ length: 1_201 }, (_, index) => ({
       spanId: `span-${index}`,

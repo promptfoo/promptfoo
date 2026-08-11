@@ -60,6 +60,7 @@ const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
 >();
+const fetchedExternalTurnSpanIds = new WeakMap<TraceProviderConfig, Map<string, Set<string>>>();
 
 const SPAN_KIND_MAP: Record<number, string> = {
   0: 'unspecified',
@@ -414,6 +415,38 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
   };
 }
 
+function getPreviouslyFetchedExternalTurnSpanIds(
+  providerConfig: TraceProviderConfig,
+  traceId: string,
+  earliestStartTime?: number,
+): Set<string> | undefined {
+  if (earliestStartTime === undefined) {
+    return undefined;
+  }
+
+  let providerTraces = fetchedExternalTurnSpanIds.get(providerConfig);
+  if (!providerTraces) {
+    providerTraces = new Map();
+    fetchedExternalTurnSpanIds.set(providerConfig, providerTraces);
+  }
+
+  let spanIds = providerTraces.get(traceId);
+  if (!spanIds) {
+    spanIds = new Set();
+    providerTraces.set(traceId, spanIds);
+  }
+  return spanIds;
+}
+
+function selectCurrentExternalTurnSpans(
+  spans: SpanData[],
+  previouslyFetchedSpanIds?: Set<string>,
+): SpanData[] {
+  return previouslyFetchedSpanIds
+    ? spans.filter((span) => !previouslyFetchedSpanIds.has(span.spanId))
+    : spans;
+}
+
 /**
  * Fetch trace context from an external provider (Tempo, Jaeger, etc.)
  */
@@ -435,6 +468,11 @@ async function fetchFromExternalProvider(
   },
 ): Promise<TraceContextData | null> {
   const { queryDelay, maxRetries, retryDelayMs, ...fetchOptions } = options;
+  const previouslyFetchedSpanIds = getPreviouslyFetchedExternalTurnSpanIds(
+    providerConfig,
+    traceId,
+    fetchOptions.earliestStartTime,
+  );
 
   let provider: ReturnType<typeof createTraceProvider>;
   try {
@@ -467,8 +505,10 @@ async function fetchFromExternalProvider(
         traceId,
         Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
       );
+      const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
+      const currentTurnSpans = selectCurrentExternalTurnSpans(validSpans, previouslyFetchedSpanIds);
 
-      if (!result || result.spans.length === 0) {
+      if (!result || currentTurnSpans.length === 0) {
         if (attempt === maxRetries) {
           logger.debug(
             `[TraceContext] No spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
@@ -482,7 +522,6 @@ async function fetchFromExternalProvider(
         continue;
       }
 
-      const validSpans = discardCyclicExternalSpans(result.spans);
       const storedSpans = fetchOptions.redactAttributes?.length
         ? validSpans.map((span) => redactExternalSpan(span, fetchOptions.redactAttributes!))
         : validSpans;
@@ -490,7 +529,8 @@ async function fetchFromExternalProvider(
       // Persist the complete trace before applying filters intended only for this reader.
       await storeExternalSpans(traceId, storedSpans);
 
-      const processedSpans = postProcessExternalSpans(storedSpans, {
+      const spansForReader = selectCurrentExternalTurnSpans(storedSpans, previouslyFetchedSpanIds);
+      const processedSpans = postProcessExternalSpans(spansForReader, {
         includeInternalSpans: fetchOptions.includeInternalSpans,
         sanitizeAttributes: fetchOptions.sanitizeAttributes,
         maxDepth: fetchOptions.maxDepth,
@@ -502,6 +542,7 @@ async function fetchFromExternalProvider(
       // Transform to TraceContextData format
       const traceSpans = createTraceSpans(processedSpans);
       const insights = deriveInsights(traceSpans);
+      validSpans.forEach((span) => previouslyFetchedSpanIds?.add(span.spanId));
 
       logger.debug(
         `[TraceContext] Resolved ${traceSpans.length} spans for trace ${traceId} from ${provider.id} with ${insights.length} insights`,

@@ -325,11 +325,7 @@ export function preserveTracingCredentialReferences(
 
   for (const [name, template] of Object.entries(sourceProvider.headers ?? {})) {
     const renderedValue = renderedProvider.headers?.[name];
-    if (
-      isSafeTracingCredentialTemplate(template) &&
-      typeof renderedValue === 'string' &&
-      isTracingCredentialHeader(name, renderedValue)
-    ) {
+    if (isSafeTracingCredentialTemplate(template) && typeof renderedValue === 'string') {
       references.headers.set(name, { template, renderedValue });
     }
   }
@@ -369,11 +365,14 @@ export function sanitizeTracingConfigForPersistence(
           if (typeof value !== 'string') {
             return [];
           }
+          const reference = references?.headers.get(name);
+          if (reference?.renderedValue === value) {
+            return [[name, reference.template]];
+          }
           if (isSafeTracingCredentialTemplate(value) || !isTracingCredentialHeader(name, value)) {
             return [[name, value]];
           }
-          const reference = references?.headers.get(name);
-          return reference?.renderedValue === value ? [[name, reference.template]] : [];
+          return [];
         }),
       )
     : undefined;
