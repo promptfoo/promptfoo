@@ -489,7 +489,7 @@ async function fetchFromExternalProvider(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (fetchOptions.abortSignal?.aborted) {
-      throw new Error('cancelled by user');
+      throw createTraceAbortError(fetchOptions.abortSignal);
     }
     try {
       const providerOptions = {
@@ -556,7 +556,7 @@ async function fetchFromExternalProvider(
       };
     } catch (error) {
       if (fetchOptions.abortSignal?.aborted) {
-        throw new Error('cancelled by user');
+        throw createTraceAbortError(fetchOptions.abortSignal);
       }
       logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
       if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
@@ -569,14 +569,21 @@ async function fetchFromExternalProvider(
   return null;
 }
 
+function createTraceAbortError(signal?: AbortSignal): Error {
+  const error = new Error('cancelled by user') as Error & { cause?: unknown };
+  error.cause = signal?.reason;
+  error.name = 'AbortError';
+  return error;
+}
+
 async function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
-    throw new Error('cancelled by user');
+    throw createTraceAbortError(signal);
   }
   await new Promise<void>((resolve, reject) => {
     const onAbort = () => {
       clearTimeout(timeout);
-      reject(new Error('cancelled by user'));
+      reject(createTraceAbortError(signal));
     };
     const timeout = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
@@ -609,7 +616,7 @@ async function fetchFromLocalStore(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
-      throw new Error('cancelled by user');
+      throw createTraceAbortError(abortSignal);
     }
     try {
       const spans = await traceStore.getSpans(traceId, spanOptions);
@@ -655,7 +662,7 @@ async function fetchFromLocalStore(
       return context;
     } catch (error) {
       if (abortSignal?.aborted) {
-        throw new Error('cancelled by user');
+        throw createTraceAbortError(abortSignal);
       }
       logger.error(`[TraceContext] Failed to fetch spans for trace ${traceId}: ${error}`);
       if (attempt === maxRetries) {

@@ -572,6 +572,7 @@ describe('evaluator', () => {
               'X-Api-Key': 'literal-api-key',
               'X-Honeycomb-Team': 'literal-honeycomb-key',
               'X-Tenant-Credential': 'literal-custom-credential',
+              'X-Tempo-Reader': 'short-reader-value',
               'X-Trace-Access': 'Bearer short-secret',
               'X-Scope-OrgID': 'tenant-a',
             },
@@ -592,6 +593,7 @@ describe('evaluator', () => {
       });
       expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('literal-');
       expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-secret');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-reader-value');
 
       evaluation.config.tracing!.provider!.auth!.token = 'updated-runtime-token';
       await evaluation.save();

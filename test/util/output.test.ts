@@ -198,6 +198,7 @@ describe('writeOutput', () => {
           auth: { token: 'output-tempo-secret' },
           headers: {
             'X-Honeycomb-Team': 'output-honeycomb-secret',
+            'X-Tempo-Reader': 'tiny-reader-key',
             'X-Trace-Access': 'Bearer short-secret',
             'X-Scope-OrgID': 'tenant-a',
           },
@@ -220,6 +221,7 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('output-tempo-secret');
     expect(outputJson).not.toContain('output-honeycomb-secret');
     expect(outputJson).not.toContain('short-secret');
+    expect(outputJson).not.toContain('tiny-reader-key');
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 

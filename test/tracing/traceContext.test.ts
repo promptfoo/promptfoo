@@ -679,7 +679,11 @@ describe('fetchTraceContext', () => {
     });
     controller.abort();
 
-    await expect(resultPromise).rejects.toThrow('cancelled by user');
+    await expect(resultPromise).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cancelled by user',
+      cause: controller.signal.reason,
+    });
     expect(fetchTrace).not.toHaveBeenCalled();
   });
 
@@ -698,7 +702,11 @@ describe('fetchTraceContext', () => {
     await vi.waitFor(() => expect(fetchTrace).toHaveBeenCalledTimes(1));
     controller.abort();
 
-    await expect(resultPromise).rejects.toThrow('cancelled by user');
+    await expect(resultPromise).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cancelled by user',
+      cause: controller.signal.reason,
+    });
   });
 
   it('shares concurrent requests for the same external provider and trace', async () => {

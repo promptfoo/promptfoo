@@ -1044,6 +1044,7 @@ describe('evalConfig store', () => {
                 Authorization: 'Bearer tempo-header-secret',
                 'X-Api-Key': 'tempo-api-key-secret',
                 'X-Honeycomb-Team': 'tempo-honeycomb-secret',
+                'X-Tempo-Reader': 'short-reader-value',
                 'X-Scope-OrgID': 'tenant-a',
               },
             },
@@ -1070,6 +1071,7 @@ describe('evalConfig store', () => {
         expect(serialized).not.toContain('tempo-header-secret');
         expect(serialized).not.toContain('tempo-api-key-secret');
         expect(serialized).not.toContain('tempo-honeycomb-secret');
+        expect(serialized).not.toContain('short-reader-value');
       },
     );
 
@@ -1078,6 +1080,7 @@ describe('evalConfig store', () => {
         env: {
           TEMPO_VALUE: 'opaque-tempo-secret',
           TEMPO_HEADER: 'opaque-tempo-header',
+          TEMPO_CUSTOM_READER: 'tiny',
           REGION: 'us-west-2',
         },
         tracing: {
@@ -1088,6 +1091,7 @@ describe('evalConfig store', () => {
             auth: { token: '{{ env.TEMPO_VALUE }}' },
             headers: {
               Authorization: 'Bearer {{ env.TEMPO_HEADER | trim }}',
+              'X-Tempo-Reader': '{{ env.TEMPO_CUSTOM_READER }}',
               'X-Scope-OrgID': 'tenant-a',
             },
           },
@@ -1101,12 +1105,14 @@ describe('evalConfig store', () => {
         auth: { token: '{{ env.TEMPO_VALUE }}' },
         headers: {
           Authorization: 'Bearer {{ env.TEMPO_HEADER | trim }}',
+          'X-Tempo-Reader': '{{ env.TEMPO_CUSTOM_READER }}',
           'X-Scope-OrgID': 'tenant-a',
         },
       });
       expect(persisted.env).toEqual({ REGION: 'us-west-2' });
       expect(JSON.stringify(persisted)).not.toContain('opaque-tempo-secret');
       expect(JSON.stringify(persisted)).not.toContain('opaque-tempo-header');
+      expect(JSON.stringify(persisted)).not.toContain('"tiny"');
     });
 
     it('redacts trace forwarding and provider credentials independently', () => {

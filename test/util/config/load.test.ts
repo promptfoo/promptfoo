@@ -2823,6 +2823,54 @@ describe('readConfig with environment variable substitution', () => {
     expect(JSON.stringify(persistedConfig.tracing)).not.toContain('short');
   });
 
+  it.each([
+    {
+      name: 'a direct config environment credential',
+      sourceValue: 'short-secret',
+      expectedPersistedEnv: { REGION: 'us-west-2' },
+    },
+    {
+      name: 'an environment-backed config environment credential',
+      sourceValue: '{{ env.TEMPO_SOURCE_SECRET }}',
+      expectedPersistedEnv: {
+        TEMPO_READER: '{{ env.TEMPO_SOURCE_SECRET }}',
+        REGION: 'us-west-2',
+      },
+    },
+  ])(
+    'keeps $name out of persisted config values',
+    async ({ sourceValue, expectedPersistedEnv }) => {
+      mockProcessEnv({ TEMPO_SOURCE_SECRET: 'short-secret' });
+      const mockConfig = {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        env: {
+          TEMPO_READER: sourceValue,
+          REGION: 'us-west-2',
+        },
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: '{{ env.TEMPO_READER }}' },
+            headers: { 'X-Tempo-Reader': '{{ env.TEMPO_READER }}' },
+          },
+        },
+      };
+      vi.mocked(path.parse).mockReturnValue({ ext: '.yaml' } as unknown as path.ParsedPath);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(yaml.dump(mockConfig));
+
+      const config = await readConfig('config.yaml');
+      const persistedConfig = sanitizeTracingConfigForPersistence(config);
+
+      expect((config.env as Record<string, string>)?.TEMPO_READER).toBe('short-secret');
+      expect(persistedConfig.env).toEqual(expectedPersistedEnv);
+      expect(persistedConfig.tracing?.provider?.auth?.token).toBe('{{ env.TEMPO_READER }}');
+      expect(JSON.stringify(persistedConfig)).not.toContain('short-secret');
+    },
+  );
+
   it('should preserve env templates in static _conversation vars', async () => {
     mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });
     const mockConfig = {

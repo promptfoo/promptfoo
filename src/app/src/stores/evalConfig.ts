@@ -52,6 +52,14 @@ const HEADER_CREDENTIAL_NAMES = new Set([
   'proxy_authorization',
   'x_amz_security_token',
 ]);
+const SAFE_TRACING_PROVIDER_HEADER_NAMES = new Set([
+  'accept',
+  'content_type',
+  'x_org_id',
+  'x_organization_id',
+  'x_scope_org_id',
+  'x_tenant_id',
+]);
 // Bare parameter aliases are credential carriers only in HTTP request data
 // (query params, form bodies, and multipart fields).
 const BARE_CREDENTIAL_PARAMETER_NAMES = new Set(['auth', 'passwd', 'pwd']);
@@ -970,11 +978,35 @@ const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): 
     return tracing;
   }
 
+  const sanitizedProvider = isRecord(tracing.provider)
+    ? (omitProviderCredentials(tracing.provider, undefined, templatePaths) as Record<
+        string,
+        unknown
+      >)
+    : undefined;
+  if (sanitizedProvider && isRecord(sanitizedProvider.headers)) {
+    sanitizedProvider.headers = Object.fromEntries(
+      Object.entries(sanitizedProvider.headers).filter(([name, value]) => {
+        if (typeof value !== 'string') {
+          return false;
+        }
+        const knownSafeHeader = SAFE_TRACING_PROVIDER_HEADER_NAMES.has(
+          normalizeCredentialName(name),
+        );
+        if (isTemplatedCredentialReference(value)) {
+          if (!knownSafeHeader) {
+            preserveCredentialTemplate(value, templatePaths);
+          }
+          return true;
+        }
+        return knownSafeHeader && !looksLikeHeaderCredential(name, value, templatePaths);
+      }),
+    );
+  }
+
   const sanitizedTracing = {
     ...tracing,
-    ...(isRecord(tracing.provider)
-      ? { provider: omitProviderCredentials(tracing.provider, undefined, templatePaths) }
-      : {}),
+    ...(sanitizedProvider ? { provider: sanitizedProvider } : {}),
   };
 
   if (!isRecord(tracing.forwarding)) {
