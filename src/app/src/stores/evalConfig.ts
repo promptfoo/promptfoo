@@ -964,15 +964,26 @@ const omitPromptCredentials = (prompts: unknown, templatePaths?: Set<string>): u
   };
 };
 
-// OTLP trace forwarding can carry an `Authorization` header. The rest of the
-// tracing block is non-secret runtime config.
+// OTLP forwarding and external trace providers can both contain credentials.
 const omitTracingCredentials = (tracing: unknown, templatePaths?: Set<string>): unknown => {
-  if (!isRecord(tracing) || !isRecord(tracing.forwarding)) {
+  if (!isRecord(tracing)) {
     return tracing;
   }
+
+  const sanitizedTracing = {
+    ...tracing,
+    ...(isRecord(tracing.provider)
+      ? { provider: omitProviderCredentials(tracing.provider, undefined, templatePaths) }
+      : {}),
+  };
+
+  if (!isRecord(tracing.forwarding)) {
+    return sanitizedTracing;
+  }
+
   const forwarding = tracing.forwarding;
   return {
-    ...tracing,
+    ...sanitizedTracing,
     forwarding: {
       ...forwarding,
       ...(typeof forwarding.endpoint === 'string'

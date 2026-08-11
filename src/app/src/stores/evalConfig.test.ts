@@ -1015,6 +1015,167 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('tracing-url-secret');
     });
 
+    it.each([
+      {
+        name: 'bearer token',
+        auth: { token: 'tempo-bearer-secret' },
+        expectedAuth: {},
+        secret: 'tempo-bearer-secret',
+      },
+      {
+        name: 'basic-auth password',
+        auth: { username: 'tempo-user', password: 'tempo-password-secret' },
+        expectedAuth: { username: 'tempo-user' },
+        secret: 'tempo-password-secret',
+      },
+    ])(
+      'redacts tracing provider $name and credential headers before persistence',
+      ({ auth, expectedAuth, secret }) => {
+        useStore.getState().setConfig({
+          tracing: {
+            enabled: true,
+            queryDelay: 1250,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth,
+              timeout: 5000,
+              headers: {
+                Authorization: 'Bearer tempo-header-secret',
+                'X-Api-Key': 'tempo-api-key-secret',
+                'X-Honeycomb-Team': 'tempo-honeycomb-secret',
+                'X-Scope-OrgID': 'tenant-a',
+              },
+            },
+          },
+        });
+
+        expect(JSON.stringify(useStore.getState().config.tracing)).toContain(secret);
+
+        const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+        expect(persisted.tracing).toEqual({
+          enabled: true,
+          queryDelay: 1250,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: expectedAuth,
+            timeout: 5000,
+            headers: { 'X-Scope-OrgID': 'tenant-a' },
+          },
+        });
+
+        const serialized = JSON.stringify(persisted);
+        expect(serialized).not.toContain(secret);
+        expect(serialized).not.toContain('tempo-header-secret');
+        expect(serialized).not.toContain('tempo-api-key-secret');
+        expect(serialized).not.toContain('tempo-honeycomb-secret');
+      },
+    );
+
+    it('preserves tracing provider credential templates while dropping referenced values', () => {
+      useStore.getState().setConfig({
+        env: {
+          TEMPO_VALUE: 'opaque-tempo-secret',
+          TEMPO_HEADER: 'opaque-tempo-header',
+          REGION: 'us-west-2',
+        },
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: '{{ env.TEMPO_VALUE }}' },
+            headers: {
+              Authorization: 'Bearer {{ env.TEMPO_HEADER | trim }}',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.provider).toEqual({
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com',
+        auth: { token: '{{ env.TEMPO_VALUE }}' },
+        headers: {
+          Authorization: 'Bearer {{ env.TEMPO_HEADER | trim }}',
+          'X-Scope-OrgID': 'tenant-a',
+        },
+      });
+      expect(persisted.env).toEqual({ REGION: 'us-west-2' });
+      expect(JSON.stringify(persisted)).not.toContain('opaque-tempo-secret');
+      expect(JSON.stringify(persisted)).not.toContain('opaque-tempo-header');
+    });
+
+    it('redacts trace forwarding and provider credentials independently', () => {
+      useStore.getState().setConfig({
+        tracing: {
+          enabled: true,
+          forwarding: {
+            enabled: true,
+            endpoint: 'https://collector.example.com/v1/traces',
+            headers: { Authorization: 'Bearer forwarding-secret' },
+          },
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: 'tempo-provider-secret' },
+            headers: { Authorization: 'Bearer tempo-provider-header' },
+          },
+        },
+      });
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.forwarding.headers).toEqual({});
+      expect(persisted.tracing.provider.auth).toEqual({});
+      expect(persisted.tracing.provider.headers).toEqual({});
+      expect(JSON.stringify(persisted)).not.toContain('forwarding-secret');
+      expect(JSON.stringify(persisted)).not.toContain('tempo-provider-secret');
+      expect(JSON.stringify(persisted)).not.toContain('tempo-provider-header');
+    });
+
+    it('removes previously persisted tracing provider credentials during rehydration', async () => {
+      localStorage.setItem(
+        'promptfoo',
+        JSON.stringify({
+          state: {
+            config: {
+              tracing: {
+                enabled: true,
+                provider: {
+                  id: 'tempo',
+                  endpoint: 'https://tempo.example.com',
+                  auth: { token: 'previously-persisted-tempo-token' },
+                  headers: {
+                    Authorization: 'Bearer previously-persisted-header',
+                    'X-Scope-OrgID': 'tenant-a',
+                  },
+                },
+              },
+            },
+          },
+          version: 0,
+        }),
+      );
+
+      await useStore.persist.rehydrate();
+
+      const expectedProvider = {
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com',
+        auth: {},
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      };
+      expect(useStore.getState().config.tracing?.provider).toEqual(expectedProvider);
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+      expect(persisted.tracing.provider).toEqual(expectedProvider);
+      expect(JSON.stringify(persisted)).not.toContain('previously-persisted-tempo-token');
+      expect(JSON.stringify(persisted)).not.toContain('previously-persisted-header');
+    });
+
     it('redacts raw HTTP request strings and multipart form-field values', () => {
       useStore.getState().setConfig({
         providers: [
