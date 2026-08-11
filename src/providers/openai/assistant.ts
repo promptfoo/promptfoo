@@ -1,15 +1,15 @@
-import path from 'path';
-
 import OpenAI from 'openai';
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   buildChatSpanContext,
   extractProviderResponseAttributes,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
@@ -107,39 +107,13 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 

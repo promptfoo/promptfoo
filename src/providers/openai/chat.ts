@@ -1,9 +1,5 @@
-import path from 'path';
-
 import { fetchWithCache } from '../../cache';
-import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   extractProviderResponseAttributes,
@@ -12,7 +8,11 @@ import {
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
@@ -138,39 +138,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
    * @returns The loaded function
    */
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      // Preserve the underlying error (path-traversal, missing module, bad
+      // export, etc.) on `cause` so upstream code can downcast/classify it.
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
