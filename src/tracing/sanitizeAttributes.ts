@@ -57,7 +57,13 @@ export function sanitizeTraceAttributes(
   }
 
   const { redactAttributes = [], sanitizeSensitiveAttributes = true } = options;
-  const customPatterns = redactAttributes.map((pattern) => pattern.toLowerCase());
+  const customPatterns = [
+    ...new Set(
+      redactAttributes
+        .map((pattern) => (typeof pattern === 'string' ? pattern.trim().toLowerCase() : ''))
+        .filter((pattern) => pattern.length > 0),
+    ),
+  ];
 
   const sanitizeValue = (value: any): any => {
     if (typeof value === 'string') {
