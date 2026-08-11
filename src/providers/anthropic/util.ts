@@ -416,8 +416,9 @@ export function normalizeClaudeThinkingConfig<
   modelId: string,
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
+  options: { allowGenerationFallback?: boolean } = {},
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
-  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId, options)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
   if (
