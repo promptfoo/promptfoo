@@ -30,6 +30,17 @@ describe('viewCommand ambiguous eval IDs', () => {
     process.exitCode = undefined;
   });
 
+  it('reports an empty eval ID cleanly', async () => {
+    viewCommand(program);
+    const viewCmd = program.commands[0];
+
+    await expect(viewCmd.parseAsync(['node', 'test', '--id', ''])).resolves.toBeDefined();
+
+    expect(logger.error).toHaveBeenCalledWith('Eval ID cannot be empty when using --id.');
+    expect(process.exitCode).toBe(1);
+    expect(startServer).not.toHaveBeenCalled();
+  });
+
   it.each(['.', '..'])('reports the invalid dot-segment eval ID %s cleanly', async (evalId) => {
     viewCommand(program);
     const viewCmd = program.commands[0];
