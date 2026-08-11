@@ -1,8 +1,9 @@
 import { getToolNameFromAttributes } from './toolAttributes';
 
-import type { SpanData } from './store';
-
-type SpanRelevanceInput = Pick<SpanData, 'attributes' | 'statusCode'>;
+interface SpanRelevanceInput {
+  attributes?: Record<string, unknown>;
+  statusCode?: number;
+}
 
 /** Identifies spans that describe model activity, tool calls, guardrails, or failures. */
 export function isRelevantSpan(span: SpanRelevanceInput): boolean {
