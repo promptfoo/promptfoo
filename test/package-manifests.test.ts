@@ -218,6 +218,45 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps jsdom on a release the supported Node floor can install', () => {
+    const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
+      'package.json',
+    );
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    // jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0. With engine-strict=true and a
+    // published floor of >=22.22.0, `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that
+    // exist to test that floor. jsdom is a dev-only Vitest environment, so the cap moves only
+    // after engines.node does.
+    const nodeFloor = minVersion(rootPackageJson.engines?.node as string);
+    const jsdomCap = renovateConfig.packageRules?.find((rule) =>
+      rule.matchPackageNames?.includes('jsdom'),
+    )?.allowedVersions;
+
+    expect(nodeFloor, 'the root manifest must declare a Node floor').toBeDefined();
+
+    if (nodeFloor!.compare('22.22.2') < 0) {
+      expect(
+        jsdomCap,
+        'Renovate must hold jsdom below 30 while the Node floor is below 22.22.2',
+      ).toBe('<30');
+
+      for (const manifestPath of ['src/app/package.json', 'site/package.json']) {
+        const range = readPackageJson<PackageManifest>(manifestPath).devDependencies?.jsdom;
+
+        expect(range, `${manifestPath} must declare jsdom`).toBeDefined();
+        expect(
+          satisfies('30.0.0', range as string),
+          `${manifestPath} resolves a jsdom the Node floor cannot install`,
+        ).toBe(false);
+      }
+    }
+  });
+
   it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
     const workflow = fs.readFileSync(
       path.join(process.cwd(), '.github/workflows/main.yml'),
