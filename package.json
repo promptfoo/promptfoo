@@ -52,9 +52,6 @@
     "promptfoo": "dist/src/entrypoint.js",
     "pf": "dist/src/entrypoint.js"
   },
-  "bundleDependencies": [
-    "cache-manager"
-  ],
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
     "architecture:baseline": "tsx scripts/regenerateEdgeBaseline.ts",
@@ -110,7 +107,6 @@
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@typescript/native,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@actions/core,@actions/exec,@actions/github,@octokit/rest,@vitest/coverage-v8,langium,block-no-verify,yaml\" --ignore-dirs=\"dist,site,examples\"",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
@@ -162,9 +158,9 @@
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^7.1.4",
     "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.3.1",
+    "ip-address": "10.4.0",
     "mongoose": {
-      "gcp-metadata": "^8.1.2"
+      "gcp-metadata": "^9.0.0"
     },
     "webpack-dev-server": {
       "express": "^4.22.2"
@@ -199,14 +195,14 @@
     },
     "chevrotain": {
       ".": "11.2.0",
-      "@chevrotain/cst-dts-gen": "13.0.0",
+      "@chevrotain/cst-dts-gen": "13.1.0",
       "@chevrotain/gast": "11.2.0",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "@chevrotain/types": "11.2.0",
       "@chevrotain/utils": "11.2.0"
     },
     "@chevrotain/cst-dts-gen": {
-      ".": "13.0.0",
+      ".": "13.1.0",
       "@chevrotain/gast": "11.2.0",
       "@chevrotain/types": "11.2.0"
     },
@@ -252,17 +248,16 @@
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^7.0.0",
-    "@typescript/native": "npm:typescript@^7.0.0",
     "@vitest/coverage-v8": "^4.1.0",
     "block-no-verify": "^1.2.0",
     "concurrently": "^9.2.3",
-    "depcheck": "^1.4.7",
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.6.0",
     "knip": "^6.0.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
+    "oxc-parser": "^0.142.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -274,7 +269,7 @@
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
     "tsdown": "0.22.14",
-    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript": "^7.0.0",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0",
     "yaml": "^2.9.0"
@@ -310,7 +305,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.46",
     "@swc/core-linux-x64-musl": "^1.15.46",
     "@swc/core-win32-x64-msvc": "^1.15.46",
-    "google-auth-library": "^10.9.1",
+    "google-auth-library": "^11.0.0",
     "hono": "^4.12.34",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
@@ -369,7 +364,7 @@
     "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.7.1",
     "fastest-levenshtein": "^1.0.16",
-    "gcp-metadata": "^8.1.2",
+    "gcp-metadata": "^9.0.0",
     "glob": "^13.0.6",
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
