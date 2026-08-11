@@ -441,6 +441,8 @@ tracing:
 
 After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
 
+Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
+
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
