@@ -284,7 +284,9 @@ function postProcessExternalSpans(
   },
 ): SpanData[] {
   const { includeInternalSpans, sanitizeAttributes, maxDepth, maxSpans, spanFilter } = options;
-  let filtered = [...spans].sort((left, right) => left.startTime - right.startTime);
+  let filtered = [...spans].sort(
+    (left, right) => left.startTime - right.startTime || left.spanId.localeCompare(right.spanId),
+  );
 
   filtered = filtered.filter((span) => {
     // Filter by internal spans

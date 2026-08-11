@@ -187,6 +187,27 @@ describe('fetchTraceContext', () => {
     expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(2);
   });
 
+  it('uses span IDs to order operations with identical start times consistently', async () => {
+    const fetchTrace = vi.fn().mockResolvedValue({
+      fetchedAt: 123,
+      traceId: 'trace-tied-start-times',
+      spans: [
+        { spanId: 'z-span', name: 'target.second', startTime: 10 },
+        { spanId: 'a-span', name: 'target.first', startTime: 10 },
+      ],
+    });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-tied-start-times', {
+      maxRetries: 0,
+      maxSpans: 1,
+      providerConfig: { id: 'tempo', endpoint: 'http://tempo:3200' },
+      queryDelay: 0,
+    });
+
+    expect(result?.spans.map(({ name }) => name)).toEqual(['target.first']);
+  });
+
   it.each([
     {
       name: 'self-referential parents without a depth limit',
