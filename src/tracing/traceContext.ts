@@ -55,13 +55,10 @@ const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_QUERY_DELAY_MS = 3000;
 const EXTERNAL_SPAN_BATCH_SIZE = 500;
-const EXTERNAL_CLOCK_SKEW_ALLOWANCE_MS = 60_000;
-const MAX_TRACKED_EXTERNAL_TRACES = 64;
 const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
 >();
-const fetchedExternalTurnSpanIds = new WeakMap<TraceProviderConfig, Map<string, Set<string>>>();
 
 const SPAN_KIND_MAP: Record<number, string> = {
   0: 'unspecified',
@@ -245,19 +242,6 @@ function computeSpanDepth(
   return depth;
 }
 
-function matchesExternalSpanFilter(spanName: string, filters: string[]): boolean {
-  return filters.some((filter) => {
-    if (!filter.includes('*') && !filter.includes('?')) {
-      return spanName.toLowerCase().includes(filter.toLowerCase());
-    }
-
-    const escapedFilter = filter.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-    const globPattern = escapedFilter.replace(/\*/g, '.*').replace(/\\\?/g, '.');
-
-    return new RegExp(`^${globPattern}$`, 'i').test(spanName);
-  });
-}
-
 /**
  * Drop malformed parent cycles before persisting or processing external spans.
  */
@@ -286,77 +270,10 @@ function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
 }
 
 /**
- * Apply reader-specific filtering and sanitization after the complete trace is persisted.
- */
-function postProcessExternalSpans(
-  spans: SpanData[],
-  options: {
-    includeInternalSpans: boolean;
-    sanitizeAttributes: boolean;
-    maxDepth?: number;
-    maxSpans?: number;
-    spanFilter?: string[];
-    redactAttributes?: string[];
-  },
-): SpanData[] {
-  const { includeInternalSpans, sanitizeAttributes, maxDepth, maxSpans, spanFilter } = options;
-  let filtered = [...spans].sort(
-    (left, right) => left.startTime - right.startTime || left.spanId.localeCompare(right.spanId),
-  );
-
-  filtered = filtered.filter((span) => {
-    // Filter by internal spans
-    if (!includeInternalSpans) {
-      const kind = resolveSpanKind(span);
-      if (kind === 'internal') {
-        return false;
-      }
-    }
-
-    // Preserve substring matching while supporting documented wildcard filters.
-    if (spanFilter && spanFilter.length > 0) {
-      if (!matchesExternalSpanFilter(span.name, spanFilter)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  if (maxDepth !== undefined) {
-    const spanMap = new Map(filtered.map((span) => [span.spanId, span]));
-    const depthCache = new Map<string, number | null>();
-
-    filtered = filtered.filter((span) => {
-      const depth = computeSpanDepth(span, spanMap, depthCache);
-      return depth !== null && depth < maxDepth;
-    });
-  }
-
-  // Apply maxSpans limit
-  if (maxSpans !== undefined && filtered.length > maxSpans) {
-    filtered = filtered.slice(0, maxSpans);
-  }
-
-  // Sanitize attributes if requested
-  if (sanitizeAttributes || options.redactAttributes?.length) {
-    filtered = filtered.map((span) => ({
-      ...span,
-      attributes: sanitizeTraceAttributes(span.attributes, {
-        redactAttributes: options.redactAttributes,
-        sanitizeSensitiveAttributes: sanitizeAttributes,
-      }),
-    }));
-  }
-
-  return filtered;
-}
-
-/**
  * Store spans fetched from an external provider in the local database.
  * This allows the spans to be displayed in the UI and persisted.
  */
-async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<void> {
+async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<boolean> {
   try {
     const traceStore = getTraceStore();
     for (let index = 0; index < spans.length; index += EXTERNAL_SPAN_BATCH_SIZE) {
@@ -369,13 +286,14 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<v
         },
       );
       if (!result.stored) {
-        return;
+        return false;
       }
     }
     logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
+    return true;
   } catch (error) {
-    // Non-fatal - continue with in-memory data
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
+    return false;
   }
 }
 
@@ -392,13 +310,16 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
   ];
   while (pendingValues.length > 0) {
     const { original, sanitized } = pendingValues.pop()!;
-    if (typeof original === 'string') {
-      if (original.length > 0 && sanitized === '[REDACTED]') {
-        redactedValues.add(original);
+    if (typeof original !== 'object') {
+      if (original !== undefined && original !== null && sanitized === '[REDACTED]') {
+        const value = String(original);
+        if (value.length > 0) {
+          redactedValues.add(value);
+        }
       }
       continue;
     }
-    if (!original || typeof original !== 'object') {
+    if (!original) {
       continue;
     }
     if (Array.isArray(original)) {
@@ -429,15 +350,6 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
     let sanitizedValue: string = value;
     for (const redactedValue of orderedRedactedValues) {
       sanitizedValue = sanitizedValue.split(redactedValue).join('[REDACTED]');
-      if (!sanitizedValue.endsWith('…')) {
-        continue;
-      }
-
-      const prefix = redactedValue.slice(0, Math.min(8, redactedValue.length));
-      const prefixIndex = sanitizedValue.lastIndexOf(prefix);
-      if (prefixIndex !== -1 && redactedValue.startsWith(sanitizedValue.slice(prefixIndex, -1))) {
-        sanitizedValue = `${sanitizedValue.slice(0, prefixIndex)}[REDACTED]`;
-      }
     }
 
     return sanitizedValue as T;
@@ -449,46 +361,6 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
     statusMessage: scrubEcho(span.statusMessage),
     attributes: sanitizedAttributes,
   };
-}
-
-function getPreviouslyFetchedExternalTurnSpanIds(
-  providerConfig: TraceProviderConfig,
-  traceId: string,
-  earliestStartTime?: number,
-): Set<string> | undefined {
-  if (earliestStartTime === undefined) {
-    return undefined;
-  }
-
-  let providerTraces = fetchedExternalTurnSpanIds.get(providerConfig);
-  if (!providerTraces) {
-    providerTraces = new Map();
-    fetchedExternalTurnSpanIds.set(providerConfig, providerTraces);
-  }
-
-  let spanIds = providerTraces.get(traceId);
-  if (spanIds) {
-    providerTraces.delete(traceId);
-  } else {
-    if (providerTraces.size >= MAX_TRACKED_EXTERNAL_TRACES) {
-      const leastRecentlyUsedTraceId = providerTraces.keys().next().value;
-      if (leastRecentlyUsedTraceId !== undefined) {
-        providerTraces.delete(leastRecentlyUsedTraceId);
-      }
-    }
-    spanIds = new Set();
-  }
-  providerTraces.set(traceId, spanIds);
-  return spanIds;
-}
-
-function selectCurrentExternalTurnSpans(
-  spans: SpanData[],
-  previouslyFetchedSpanIds?: Set<string>,
-): SpanData[] {
-  return previouslyFetchedSpanIds
-    ? spans.filter((span) => !previouslyFetchedSpanIds.has(span.spanId))
-    : spans;
 }
 
 /**
@@ -511,12 +383,8 @@ async function fetchFromExternalProvider(
     abortSignal?: AbortSignal;
   },
 ): Promise<TraceContextData | null> {
-  const { queryDelay, maxRetries, retryDelayMs, ...fetchOptions } = options;
-  const previouslyFetchedSpanIds = getPreviouslyFetchedExternalTurnSpanIds(
-    providerConfig,
-    traceId,
-    fetchOptions.earliestStartTime,
-  );
+  const { queryDelay, maxRetries, retryDelayMs, redactAttributes, abortSignal, ...spanOptions } =
+    options;
 
   let provider: ReturnType<typeof createTraceProvider>;
   try {
@@ -528,31 +396,18 @@ async function fetchFromExternalProvider(
 
   if (queryDelay > 0) {
     logger.debug(`[TraceContext] Waiting ${queryDelay}ms for spans to arrive at external backend`);
-    await waitForRetry(queryDelay, fetchOptions.abortSignal);
+    await waitForRetry(queryDelay, abortSignal);
   }
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (fetchOptions.abortSignal?.aborted) {
-      throw createTraceAbortError(fetchOptions.abortSignal);
+    if (abortSignal?.aborted) {
+      throw createTraceAbortError(abortSignal);
     }
     try {
-      const providerOptions = {
-        ...(fetchOptions.earliestStartTime !== undefined && {
-          earliestStartTime: Math.max(
-            0,
-            fetchOptions.earliestStartTime - EXTERNAL_CLOCK_SKEW_ALLOWANCE_MS,
-          ),
-        }),
-        ...(fetchOptions.abortSignal && { abortSignal: fetchOptions.abortSignal }),
-      };
-      const result = await provider.fetchTrace(
-        traceId,
-        Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
-      );
+      const result = await provider.fetchTrace(traceId, abortSignal ? { abortSignal } : undefined);
       const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
-      const currentTurnSpans = selectCurrentExternalTurnSpans(validSpans, previouslyFetchedSpanIds);
 
-      if (!result || currentTurnSpans.length === 0) {
+      if (!result || validSpans.length === 0) {
         if (attempt === maxRetries) {
           logger.debug(
             `[TraceContext] No spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
@@ -562,45 +417,25 @@ async function fetchFromExternalProvider(
         logger.debug(
           `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
         );
-        await waitForRetry(retryDelayMs, fetchOptions.abortSignal);
+        await waitForRetry(retryDelayMs, abortSignal);
         continue;
       }
 
-      const storedSpans = fetchOptions.redactAttributes?.length
-        ? validSpans.map((span) => redactExternalSpan(span, fetchOptions.redactAttributes!))
+      const storedSpans = redactAttributes?.length
+        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
         : validSpans;
 
-      // Persist the complete trace before applying filters intended only for this reader.
-      await storeExternalSpans(traceId, storedSpans);
-
-      const spansForReader = selectCurrentExternalTurnSpans(storedSpans, previouslyFetchedSpanIds);
-      const processedSpans = postProcessExternalSpans(spansForReader, {
-        includeInternalSpans: fetchOptions.includeInternalSpans,
-        sanitizeAttributes: fetchOptions.sanitizeAttributes,
-        maxDepth: fetchOptions.maxDepth,
-        maxSpans: fetchOptions.maxSpans,
-        spanFilter: fetchOptions.spanFilter,
-        redactAttributes: fetchOptions.redactAttributes,
-      });
-
-      if (processedSpans.length === 0) {
-        if (attempt === maxRetries) {
-          logger.debug(
-            `[TraceContext] No matching spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
-          );
-          return null;
-        }
-        logger.debug(
-          `[TraceContext] No matching spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
-        );
-        await waitForRetry(retryDelayMs, fetchOptions.abortSignal);
-        continue;
+      if (!(await storeExternalSpans(traceId, storedSpans))) {
+        return null;
       }
 
-      // Transform to TraceContextData format
-      const traceSpans = createTraceSpans(processedSpans);
+      const spans = await getTraceStore().getSpans(traceId, spanOptions);
+      if (spans.length === 0) {
+        return null;
+      }
+
+      const traceSpans = createTraceSpans(spans);
       const insights = deriveInsights(traceSpans);
-      validSpans.forEach((span) => previouslyFetchedSpanIds?.add(span.spanId));
 
       logger.debug(
         `[TraceContext] Resolved ${traceSpans.length} spans for trace ${traceId} from ${provider.id} with ${insights.length} insights`,
@@ -613,24 +448,18 @@ async function fetchFromExternalProvider(
         fetchedAt: result.fetchedAt,
       };
     } catch (error) {
-      if (fetchOptions.abortSignal?.aborted) {
-        throw createTraceAbortError(fetchOptions.abortSignal);
+      if (abortSignal?.aborted) {
+        throw createTraceAbortError(abortSignal);
       }
       logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
       if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
         return null;
       }
-      await waitForRetry(getTraceRetryDelay(error, retryDelayMs), fetchOptions.abortSignal);
+      await waitForRetry(retryDelayMs, abortSignal);
     }
   }
 
   return null;
-}
-
-function getTraceRetryDelay(error: unknown, fallbackDelayMs: number): number {
-  return error instanceof TraceProviderError
-    ? Math.max(fallbackDelayMs, error.retryAfterMs ?? 0)
-    : fallbackDelayMs;
 }
 
 function createTraceAbortError(signal?: AbortSignal): Error {

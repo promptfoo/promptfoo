@@ -58,17 +58,12 @@ export interface FetchTraceOptions {
 export class TraceProviderError extends Error {
   readonly statusCode?: number;
   readonly retryable: boolean;
-  readonly retryAfterMs?: number;
 
-  constructor(
-    message: string,
-    options: { statusCode?: number; retryable?: boolean; retryAfterMs?: number } = {},
-  ) {
+  constructor(message: string, options: { statusCode?: number; retryable?: boolean } = {}) {
     super(message);
     this.name = 'TraceProviderError';
     this.statusCode = options.statusCode;
     this.retryable = options.retryable ?? false;
-    this.retryAfterMs = options.retryAfterMs;
   }
 }
 

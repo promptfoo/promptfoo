@@ -42,25 +42,15 @@ interface TempoTraceResponse {
   }>;
 }
 
-type TempoBatch = NonNullable<TempoTraceResponse['batches']>[number];
-type TempoScopeSpan = NonNullable<TempoBatch['scopeSpans']>[number];
-
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
-const MAX_SPAN_TEXT_LENGTH = 1024;
-const MAX_RETRY_AFTER_MS = 60_000;
+const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 const TRACE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
-
-function truncateSpanText(value: string): string {
-  return value.length > MAX_SPAN_TEXT_LENGTH
-    ? `${value.slice(0, MAX_SPAN_TEXT_LENGTH - 1)}…`
-    : value;
-}
 
 function nanoToMs(value: string): number {
   const milliseconds = BigInt(value) / 1_000_000n;
@@ -180,19 +170,11 @@ function normalizeStatusCode(code: number | string | undefined): number | undefi
   }
 }
 
-function matchesSpanFilter(name: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-    return new RegExp(`^${escaped.replace(/\*/g, '.*').replace(/\\\?/g, '.')}$`, 'i').test(name);
-  });
-}
-
 function transformSpan(
   span: TempoSpan,
   traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
-  options?: FetchTraceOptions,
 ): SpanData | null {
   if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
     throw new Error('Span trace ID must match the requested trace');
@@ -216,12 +198,6 @@ function transformSpan(
   }
 
   const startTime = nanoToMs(span.startTimeUnixNano);
-  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
-    return null;
-  }
-  if (options?.spanFilter?.length && !matchesSpanFilter(span.name, options.spanFilter)) {
-    return null;
-  }
   const endTimeUnixNano = span.endTimeUnixNano;
   const endTime = endTimeUnixNano ? nanoToMs(endTimeUnixNano) : undefined;
   if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
@@ -231,79 +207,24 @@ function transformSpan(
   return {
     spanId,
     parentSpanId,
-    name: truncateSpanText(span.name),
+    name: span.name,
     startTime,
     endTime,
     attributes: {
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
       ...(scopeName && { 'otel.scope.name': scopeName }),
-      ...(typeof span.kind === 'number' && { 'otel.span.kind_code': span.kind }),
+      ...(typeof span.kind === 'number' && {
+        'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',
+        'otel.span.kind_code': span.kind,
+      }),
       ...(typeof span.kind === 'string' && {
         'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
       }),
     },
     statusCode: normalizeStatusCode(span.status?.code),
-    statusMessage:
-      typeof span.status?.message === 'string' ? truncateSpanText(span.status.message) : undefined,
+    statusMessage: span.status?.message,
   };
-}
-
-function* getValidResourceScopes(data: TempoTraceResponse): Generator<{
-  resourceAttributes: Record<string, unknown>;
-  scopeSpan: TempoScopeSpan;
-}> {
-  for (const batch of data.batches ?? []) {
-    let resourceAttributes: Record<string, unknown>;
-    try {
-      resourceAttributes = attributesToRecord(batch.resource?.attributes);
-    } catch (error) {
-      logger.warn(`[TempoProvider] Skipping batch with malformed resource attributes: ${error}`);
-      continue;
-    }
-    if (batch.scopeSpans !== undefined && !Array.isArray(batch.scopeSpans)) {
-      logger.warn('[TempoProvider] Skipping batch with a malformed scope collection');
-      continue;
-    }
-
-    for (const scopeSpan of batch.scopeSpans ?? []) {
-      if (
-        !scopeSpan ||
-        typeof scopeSpan !== 'object' ||
-        (scopeSpan.spans !== undefined && !Array.isArray(scopeSpan.spans))
-      ) {
-        logger.warn('[TempoProvider] Skipping scope with a malformed span collection');
-        continue;
-      }
-      yield { resourceAttributes, scopeSpan };
-    }
-  }
-}
-
-async function readLimitedResponse(response: Response): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return '';
-  }
-
-  const decoder = new TextDecoder();
-  let byteLength = 0;
-  let body = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      return body + decoder.decode();
-    }
-
-    byteLength += value.byteLength;
-    if (byteLength > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
-    }
-
-    body += decoder.decode(value, { stream: true });
-  }
 }
 
 async function releaseResponse(response: Response): Promise<void> {
@@ -312,26 +233,6 @@ async function releaseResponse(response: Response): Promise<void> {
   } catch (error) {
     logger.debug(`[TempoProvider] Failed to release response body: ${error}`);
   }
-}
-
-function parseRetryAfterMs(value: string | null): number | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  if (/^\d+$/.test(value.trim())) {
-    const seconds = Number(value.trim());
-    return Number.isFinite(seconds) ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS) : undefined;
-  }
-
-  if (!/^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s/i.test(value.trim())) {
-    return undefined;
-  }
-
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp)
-    ? undefined
-    : Math.min(Math.max(0, timestamp - Date.now()), MAX_RETRY_AFTER_MS);
 }
 
 export class TempoProvider implements TraceProvider {
@@ -403,50 +304,42 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(
-    data: TempoTraceResponse,
-    traceId: string,
-    options?: FetchTraceOptions,
-  ): SpanData[] {
+  private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
     const spans: SpanData[] = [];
     const seenSpanIds = new Set<string>();
-    const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
-    let normalizedAttributeBytes = 0;
+    let malformedSpans = 0;
 
-    for (const { resourceAttributes, scopeSpan } of getValidResourceScopes(data)) {
-      for (const span of scopeSpan.spans ?? []) {
-        let normalizedSpan: SpanData | null;
-        try {
-          normalizedSpan = transformSpan(
-            span,
-            traceId,
-            resourceAttributes,
-            scopeSpan.scope?.name,
-            options,
-          );
-        } catch (error) {
-          logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
-          continue;
-        }
-        if (!normalizedSpan || seenSpanIds.has(normalizedSpan.spanId)) {
-          continue;
-        }
+    for (const batch of data.batches ?? []) {
+      const resourceAttributes = attributesToRecord(batch.resource?.attributes);
+      for (const scopeSpan of batch.scopeSpans ?? []) {
+        for (const span of scopeSpan.spans ?? []) {
+          if (spans.length >= MAX_SPANS) {
+            return spans;
+          }
 
-        normalizedAttributeBytes += Buffer.byteLength(
-          JSON.stringify(normalizedSpan.attributes ?? {}),
-          'utf8',
-        );
-        if (normalizedAttributeBytes > MAX_RESPONSE_BYTES) {
-          throw new TraceProviderError('Tempo trace exceeds the maximum normalized attribute size');
+          try {
+            const normalizedSpan = transformSpan(
+              span,
+              traceId,
+              resourceAttributes,
+              scopeSpan.scope?.name,
+            );
+            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
+              seenSpanIds.add(normalizedSpan.spanId);
+              spans.push(normalizedSpan);
+            }
+          } catch {
+            malformedSpans++;
+          }
         }
-        seenSpanIds.add(normalizedSpan.spanId);
-        spans.push(normalizedSpan);
       }
     }
-    spans.sort(
-      (left, right) => left.startTime - right.startTime || left.spanId.localeCompare(right.spanId),
-    );
-    return spans.slice(0, limit);
+
+    if (malformedSpans > 0) {
+      logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
+    }
+
+    return spans;
   }
 
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
@@ -471,12 +364,10 @@ export class TempoProvider implements TraceProvider {
       return null;
     }
     if (!response.ok) {
-      const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
       await releaseResponse(response);
       throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
         statusCode: response.status,
         retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-        ...(retryAfterMs !== undefined && { retryAfterMs }),
       });
     }
 
@@ -485,7 +376,10 @@ export class TempoProvider implements TraceProvider {
       await releaseResponse(response);
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
-    const body = await readLimitedResponse(response);
+    const body = await response.text();
+    if (Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES) {
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
     const data = JSON.parse(body) as TempoTraceResponse;
     if (!Array.isArray(data.batches)) {
       throw new TraceProviderError('Tempo returned an invalid trace response');
@@ -493,19 +387,15 @@ export class TempoProvider implements TraceProvider {
 
     const services = new Set<string>();
     for (const batch of data.batches) {
-      try {
-        const service = attributesToRecord(batch.resource?.attributes)['service.name'];
-        if (typeof service === 'string') {
-          services.add(service);
-        }
-      } catch {
-        // Malformed batches are skipped and logged during span conversion.
+      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+      if (typeof service === 'string') {
+        services.add(service);
       }
     }
 
     return {
       traceId,
-      spans: this.transformSpans(data, traceId, options),
+      spans: this.transformSpans(data, traceId),
       services: [...services],
       fetchedAt: Date.now(),
     };
