@@ -881,7 +881,7 @@ describe('OpenAICodexAppServerProvider', () => {
     try {
       const provider = new OpenAICodexAppServerProvider({
         config: {
-          model: 'openai.gpt-5.5',
+          model: 'openai.gpt-5.6-sol',
           model_provider: 'amazon-bedrock',
           thread_cleanup: 'none',
         },
@@ -914,6 +914,16 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       });
       server.send({
+        method: 'thread/tokenUsage/updated',
+        params: {
+          threadId: 'thr_bedrock_noleak',
+          turnId: 'turn_bedrock_noleak',
+          tokenUsage: {
+            last: { inputTokens: 2_000, cachedInputTokens: 500, outputTokens: 1_000 },
+          },
+        },
+      });
+      server.send({
         method: 'turn/completed',
         params: {
           threadId: 'thr_bedrock_noleak',
@@ -921,7 +931,9 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       });
 
-      await expect(resultPromise).resolves.toMatchObject({ output: 'On Bedrock' });
+      const result = await resultPromise;
+      expect(result.output).toBe('On Bedrock');
+      expect(result.cost).toBeCloseTo(0.041525, 10);
 
       const spawnEnv = mocks.spawn.mock.calls[0][2].env as Record<string, string>;
       expect(spawnEnv.OPENAI_API_KEY).toBeUndefined();
@@ -4603,57 +4615,60 @@ describe('OpenAICodexAppServerProvider', () => {
   it.each([
     ['reusable', true],
     ['non-reusable', false],
-  ])('closes the active %s connection immediately when buffered turn events overflow', async (_label, reuseServer) => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenAICodexAppServerProvider({
-      config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
-    });
+  ])(
+    'closes the active %s connection immediately when buffered turn events overflow',
+    async (_label, reuseServer) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
+      });
 
-    const resultPromise = provider.callApi('overflow');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
-    });
-
-    for (let index = 0; index < 2; index++) {
+      const resultPromise = provider.callApi('overflow');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
       server.send({
-        method: 'item/agentMessage/delta',
+        id: turnStart.id,
+        result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
+      });
+
+      for (let index = 0; index < 2; index++) {
+        server.send({
+          method: 'item/agentMessage/delta',
+          params: {
+            threadId: 'thr_overflow',
+            turnId: 'turn_overflow',
+            itemId: 'stream',
+            delta: 'x'.repeat(4_000_000),
+          },
+        });
+      }
+      server.send({
+        id: 700,
+        method: 'item/commandExecution/requestApproval',
         params: {
           threadId: 'thr_overflow',
           turnId: 'turn_overflow',
-          itemId: 'stream',
-          delta: 'x'.repeat(4_000_000),
+          itemId: 'command',
+          command: 'x'.repeat(4_000_000),
         },
       });
-    }
-    server.send({
-      id: 700,
-      method: 'item/commandExecution/requestApproval',
-      params: {
-        threadId: 'thr_overflow',
-        turnId: 'turn_overflow',
-        itemId: 'command',
-        command: 'x'.repeat(4_000_000),
-      },
-    });
 
-    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
-    expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
-      false,
-    );
-    await expect(resultPromise).resolves.toMatchObject({
-      error: expect.stringContaining('codex app-server turn events exceeded'),
-    });
-  });
+      expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
+        false,
+      );
+      await expect(resultPromise).resolves.toMatchObject({
+        error: expect.stringContaining('codex app-server turn events exceeded'),
+      });
+    },
+  );
 
   it('sanitizes sensitive command metadata', async () => {
     const server = createMockAppServer();

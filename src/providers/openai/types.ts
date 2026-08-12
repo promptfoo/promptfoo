@@ -171,7 +171,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   prompt_cache_retention?: OpenAiPromptCacheRetention;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'flex' | 'priority' | 'premium') | null;
+  service_tier?: ('auto' | 'default' | 'fast' | 'flex' | 'priority' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;

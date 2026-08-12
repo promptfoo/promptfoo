@@ -1064,6 +1064,53 @@ describe('RedteamIterativeMetaProvider', () => {
         fetchedAt: Date.now(),
       });
 
+      const abortController = new AbortController();
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: { abortSignal: abortController.signal },
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should call fetchTraceContext
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        'test-trace-id',
+        expect.objectContaining({ abortSignal: abortController.signal }),
+      );
+
+      // Metadata should have trace data
+      expect(result.metadata.traceSnapshots).toBeDefined();
+      expect(result.metadata.traceSnapshots).toHaveLength(1);
+      expect(result.metadata.redteamHistory[0].trace).toBeDefined();
+      expect(result.metadata.redteamHistory[0].traceSummary).toBe('Trace summary');
+    });
+
+    it('skips trace retrieval when an iterative-meta target response came from cache', async () => {
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
+
       const result = await runMetaAgentRedteam({
         context: {
           vars: { query: 'test' },
@@ -1083,14 +1130,8 @@ describe('RedteamIterativeMetaProvider', () => {
         vars: { query: 'test' },
       });
 
-      // Should call fetchTraceContext
-      expect(mockFetchTraceContext).toHaveBeenCalled();
-
-      // Metadata should have trace data
-      expect(result.metadata.traceSnapshots).toBeDefined();
-      expect(result.metadata.traceSnapshots).toHaveLength(1);
-      expect(result.metadata.redteamHistory[0].trace).toBeDefined();
-      expect(result.metadata.redteamHistory[0].traceSummary).toBe('Trace summary');
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      expect(result.metadata.traceSnapshots).toBeUndefined();
     });
 
     it('should NOT fetch trace context when traceparent is missing', async () => {

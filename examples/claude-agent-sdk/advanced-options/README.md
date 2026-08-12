@@ -86,6 +86,20 @@ providers:
         - local # .claude/settings.local.json
 ```
 
+### Subagent Limits
+
+Configure nested-agent depth and concurrent background subagents:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      max_subagent_spawn_depth: 5
+      max_concurrent_subagents: 40
+```
+
+Promptfoo defaults to five nesting levels; the SDK defaults to 20 concurrent subagents when `max_concurrent_subagents` is omitted.
+
 ### Permission Bypass (Use with Caution)
 
 For automated testing scenarios that require bypassing permissions:
@@ -133,6 +147,8 @@ providers:
 | `sandbox.network.allowLocalBinding`  | boolean                      | Allow binding to localhost                       |
 | `allow_dangerously_skip_permissions` | boolean                      | Required for `bypassPermissions` mode            |
 | `permission_prompt_tool_name`        | string                       | MCP tool for permission prompts                  |
+| `max_subagent_spawn_depth`           | number                       | Maximum nested subagent depth (default: 5)       |
+| `max_concurrent_subagents`           | number                       | Maximum concurrent subagents (SDK default: 20)   |
 | `executable`                         | 'node' \| 'bun' \| 'deno'    | JavaScript runtime to use                        |
 | `executable_args`                    | string[]                     | Arguments for the runtime                        |
 | `extra_args`                         | Record<string, string\|null> | Additional CLI arguments                         |
