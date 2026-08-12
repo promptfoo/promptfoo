@@ -2,6 +2,7 @@ import { SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpProvider } from '../../src/providers/http';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
 import { GenAIAttributes, getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
@@ -178,6 +179,36 @@ describe('test-case execution trace hierarchy', () => {
       [SPAN_ROLE_ATTRIBUTE]: 'grader',
     });
     expect(gradingModelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+  });
+
+  it('records HTTP target execution without inventing a model-inference span', async () => {
+    const root = getGenAITracer().startSpan('test case http target');
+    const provider = Object.create(HttpProvider.prototype) as HttpProvider;
+    provider.id = () => 'https://customer.example/chat';
+    vi.spyOn(provider as any, 'callApiInternal').mockResolvedValue({ output: 'customer response' });
+    const callContext: CallApiContextParams = {
+      prompt: { raw: 'test prompt', label: 'target' },
+      vars: {},
+    };
+
+    await withTestCaseSpan(root, async () => {
+      await withTracedProviderCall({ provider, callContext }, (targetContext) =>
+        provider.callApi('test prompt', targetContext),
+      );
+      return [{ score: 1, success: true }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans.map((span) => span.name)).toEqual([
+      'https://customer.example/chat',
+      'test case http target',
+    ]);
+    expect(spans[0].attributes).toMatchObject({
+      [SPAN_ROLE_ATTRIBUTE]: 'target',
+      'promptfoo.target.type': 'http',
+    });
+    expect(spans[0].attributes).not.toHaveProperty(GenAIAttributes.OPERATION_NAME);
+    expect(spans[0].attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
   });
 
   it('records embedding inference beneath the grading-provider span', async () => {
