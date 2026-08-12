@@ -7,7 +7,6 @@ import {
   getRemoteGenerationUrl,
 } from '../src/redteam/remoteGeneration';
 import { doRemoteGrading } from '../src/remoteGrading';
-import { getActiveTraceparent } from '../src/tracing/spanRoles';
 
 const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
@@ -45,10 +44,6 @@ vi.mock('../src/logger', () => ({
   default: {
     debug: mockLoggerDebug,
   },
-}));
-
-vi.mock('../src/tracing/spanRoles', () => ({
-  getActiveTraceparent: vi.fn(),
 }));
 
 describe('doRemoteGrading', () => {
@@ -129,35 +124,6 @@ describe('doRemoteGrading', () => {
       reason: 'ok',
     });
     expect(result.metadata?.graderError).toBeUndefined();
-  });
-
-  it('propagates the active grader traceparent to remote grading requests', async () => {
-    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
-    vi.mocked(getActiveTraceparent).mockReturnValue(traceparent);
-    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
-    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
-    vi.mocked(getRemoteGenerationHeaders).mockImplementation((extraHeaders) => ({
-      authorization: 'Bearer test',
-      ...extraHeaders,
-    }));
-    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: { result: { pass: true, score: 1, reason: 'ok' } },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    } as any);
-
-    await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
-
-    expect(getRemoteGenerationHeaders).toHaveBeenCalledWith({ traceparent });
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.promptfoo.test/task',
-      expect.objectContaining({
-        headers: { authorization: 'Bearer test', traceparent },
-      }),
-      1234,
-    );
   });
 
   it('redacts inline image data from remote grading debug logs', async () => {

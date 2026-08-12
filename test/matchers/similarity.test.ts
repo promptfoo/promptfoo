@@ -5,12 +5,10 @@ import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesSimilarity', () => {
@@ -56,30 +54,6 @@ describe('matchesSimilarity', () => {
         numRequests: 0,
       },
     });
-  });
-
-  it('records both similarity embeddings beneath the grading trace', async () => {
-    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-      async ({ callContext }, invoke) => invoke(callContext),
-    );
-
-    await withProviderCallTracingContext(
-      {
-        getActiveTraceparent: () => undefined,
-        withGraderSpan: async (_options, invoke) => invoke(),
-        withProviderSpan: providerSpan,
-      },
-      () => matchesSimilarity('Expected output', 'Sample output', 0.5),
-    );
-
-    expect(providerSpan).toHaveBeenCalledTimes(2);
-    for (const [options] of providerSpan.mock.calls) {
-      expect(options).toMatchObject({
-        operationName: 'embeddings',
-        role: 'grader',
-        promptLabel: 'similarity.embedding',
-      });
-    }
   });
 
   it('should fail when similarity is below the threshold', async () => {
@@ -424,29 +398,6 @@ describe('matchesSimilarity', () => {
   });
 
   describe('metric validation', () => {
-    it('records native similarity providers beneath the grading trace', async () => {
-      const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
-        callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 0.9 }),
-      });
-      const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-        async ({ callContext }, invoke) => invoke(callContext),
-      );
-
-      await withProviderCallTracingContext(
-        {
-          getActiveTraceparent: () => undefined,
-          withGraderSpan: async (_options, invoke) => invoke(),
-          withProviderSpan: providerSpan,
-        },
-        () => matchesSimilarity('expected', 'output', 0.8, false, { provider }),
-      );
-
-      expect(providerSpan).toHaveBeenCalledWith(
-        expect.objectContaining({ provider, role: 'grader', promptLabel: 'similarity' }),
-        expect.any(Function),
-      );
-    });
-
     it('should normalize missing completion details for native similarity providers', async () => {
       const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({

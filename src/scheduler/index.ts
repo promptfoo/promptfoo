@@ -15,7 +15,6 @@ export {
   parseRateLimitHeaders,
   parseRetryAfter,
 } from './headerParser';
-export { getProviderCallTracingContext } from './providerCallExecutionContext';
 // Provider state
 export { ProviderRateLimitState } from './providerRateLimitState';
 // Provider wrapper

@@ -45,7 +45,6 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
-  runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
@@ -915,8 +914,7 @@ export class HydraProvider implements ApiProvider {
             });
           }
 
-          const { grade, rubric } = await runRedteamGrader(
-            grader,
+          const { grade, rubric } = await grader.getResult(
             nextMessage,
             targetResponse.output,
             test,

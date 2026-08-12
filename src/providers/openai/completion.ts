@@ -1,7 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -43,32 +42,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   }
 
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const providerId = this.id();
-
-    return withGenAISpan(
-      {
-        system: providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai',
-        operationName: 'text_completion',
-        model: this.modelName,
-        providerId,
-        maxTokens: this.config.max_tokens,
-        temperature: this.config.temperature,
-        topP: this.config.top_p,
-        evalId: context?.evaluationId,
-        promptLabel: context?.prompt?.label,
-        traceparent: context?.traceparent,
-        requestBody: prompt,
-      },
-      () => this.callApiInternal(prompt, context, callApiOptions),
-      extractProviderResponseAttributes,
-    );
-  }
-
-  private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,

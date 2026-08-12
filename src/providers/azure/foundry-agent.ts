@@ -6,6 +6,13 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
+  buildChatSpanContext,
+  emitTurnMarkerSpan,
+  extractProviderResponseAttributes,
+  getGenAITracer,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -18,15 +25,6 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import {
-  buildChatSpanContext,
-  emitTurnMarkerSpan,
-  extractProviderResponseAttributes,
-  GenAIAttributes,
-  getGenAITracer,
-  withGenAISpan,
-  withGenAIToolSpan,
-} from '../tracing';
 import {
   formatContentFilterResponse,
   isContentFilterError,
@@ -301,9 +299,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
-        callback(args, context),
-      );
+      const result = await callback(args, context);
       if (result === undefined || result === null) {
         return '';
       }
@@ -549,14 +545,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const spanContext = buildChatSpanContext({
       system: 'azure',
-      model: this.assistantConfig.modelName || this.deploymentName,
+      model: this.deploymentName,
       providerId: this.id(),
       prompt,
       context,
     });
 
     return withGenAISpan(
-      { ...spanContext, operationName: 'invoke_agent', agentName: this.deploymentName },
+      spanContext,
       () => this.callApiInternal(prompt, context, callApiOptions),
       extractProviderResponseAttributes,
     );
@@ -604,10 +600,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           index: turnCount,
           startTime: callStartedAt,
           endTime: callEndedAt,
-          attributes: {
-            'gen_ai.turn.index': turnCount,
-            [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
-          },
+          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
           errorMessage,
           logLabel: 'AzureFoundryAgent',
         });

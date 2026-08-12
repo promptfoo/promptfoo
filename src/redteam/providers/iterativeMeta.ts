@@ -41,7 +41,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -594,8 +593,7 @@ export async function runMetaAgentRedteam({
           });
         }
 
-        const { grade, rubric } = await runRedteamGrader(
-          grader,
+        const { grade, rubric } = await grader.getResult(
           attackPrompt,
           targetResponse.output,
           iterationTest,

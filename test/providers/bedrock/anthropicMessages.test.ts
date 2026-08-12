@@ -124,7 +124,6 @@ describe('Bedrock Anthropic Messages provider', () => {
 
       const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
       expect(provider.id()).toBe(`bedrock:${bedrockModel}`);
-      expect(provider['getGenAISystem']()).toBe('bedrock');
       expect(params.model).toBe(bedrockModel);
       expect(params).not.toHaveProperty('temperature');
       expect(params).not.toHaveProperty('top_p');

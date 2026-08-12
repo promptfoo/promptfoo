@@ -77,7 +77,7 @@ describe('OpenTelemetry Tracing Integration', () => {
       expect(span.name).toBe('chat gpt-4');
 
       // Verify GenAI attributes
-      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
+      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
       expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4');
       expect(span.attributes[GenAIAttributes.REQUEST_MAX_TOKENS]).toBe(1000);
@@ -91,7 +91,7 @@ describe('OpenTelemetry Tracing Integration', () => {
       // Verify response attributes
       expect(span.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(10);
       expect(span.attributes[GenAIAttributes.USAGE_OUTPUT_TOKENS]).toBe(5);
-      expect(span.attributes[PromptfooAttributes.USAGE_TOTAL_TOKENS]).toBe(15);
+      expect(span.attributes[GenAIAttributes.USAGE_TOTAL_TOKENS]).toBe(15);
       expect(span.attributes[GenAIAttributes.RESPONSE_FINISH_REASONS]).toEqual(['stop']);
 
       // Verify span status
@@ -147,7 +147,7 @@ describe('OpenTelemetry Tracing Integration', () => {
       expect(spans.length).toBe(1);
 
       // Should still have basic attributes
-      expect(spans[0].attributes[GenAIAttributes.PROVIDER_NAME]).toBe('aws.bedrock');
+      expect(spans[0].attributes[GenAIAttributes.SYSTEM]).toBe('bedrock');
       expect(spans[0].status.code).toBe(SpanStatusCode.OK);
     });
 
@@ -183,8 +183,8 @@ describe('OpenTelemetry Tracing Integration', () => {
 
       expect(embeddingSpan).toBeDefined();
       expect(chatSpan).toBeDefined();
-      expect(embeddingSpan!.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
-      expect(chatSpan!.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('azure.ai.openai');
+      expect(embeddingSpan!.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
+      expect(chatSpan!.attributes[GenAIAttributes.SYSTEM]).toBe('azure');
     });
   });
 
@@ -229,7 +229,7 @@ describe('OpenTelemetry Tracing Integration', () => {
       const span = spans[0];
       expect(span.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(100);
       expect(span.attributes[GenAIAttributes.USAGE_OUTPUT_TOKENS]).toBe(500);
-      expect(span.attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS]).toBe(450);
+      expect(span.attributes[GenAIAttributes.USAGE_REASONING_TOKENS]).toBe(450);
     });
 
     it('should capture predicted token details', async () => {
@@ -257,8 +257,8 @@ describe('OpenTelemetry Tracing Integration', () => {
       const spans = memoryExporter.getFinishedSpans();
       const span = spans[0];
 
-      expect(span.attributes[PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS]).toBe(25);
-      expect(span.attributes[PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS]).toBe(5);
+      expect(span.attributes[GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS]).toBe(25);
+      expect(span.attributes[GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS]).toBe(5);
     });
 
     it('should capture cached tokens', async () => {
@@ -287,7 +287,7 @@ describe('OpenTelemetry Tracing Integration', () => {
       const spans = memoryExporter.getFinishedSpans();
       const span = spans[0];
 
-      expect(span.attributes[PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS]).toBe(150);
+      expect(span.attributes[GenAIAttributes.USAGE_CACHED_TOKENS]).toBe(150);
     });
   });
 });

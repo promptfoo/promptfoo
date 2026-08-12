@@ -40,10 +40,8 @@ import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from 
 import { getGoalRubric } from './prompts';
 import {
   buildGraderResultAssertion,
-  callTargetProvider,
   getGraderAssertionValue,
   getLastMessageContent,
-  runRedteamGrader,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -323,8 +321,7 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await callTargetProvider(
-              targetProvider,
+            const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
               options,
@@ -589,8 +586,7 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await callTargetProvider(
-          targetProvider,
+        const targetResponse = (await targetProvider.callApi(
           targetPrompt,
           targetContext,
           options,
@@ -787,8 +783,7 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
-          const { grade, rubric } = await runRedteamGrader(
-            grader,
+          const { grade, rubric } = await grader.getResult(
             attackerMessage.content,
             finalOutput,
             test,

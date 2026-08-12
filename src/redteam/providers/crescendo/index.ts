@@ -52,7 +52,6 @@ import {
   isValidChatMessageArray,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
-  runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -662,8 +661,7 @@ export class CrescendoProvider implements ApiProvider {
               ),
             };
 
-            const { grade, rubric } = await runRedteamGrader(
-              grader,
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,

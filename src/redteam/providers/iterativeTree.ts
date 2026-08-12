@@ -57,7 +57,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  runRedteamGrader,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -944,8 +943,7 @@ async function runRedteamConversation({
               };
             }
 
-            const { grade, rubric } = await runRedteamGrader(
-              grader,
+            const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
               iterationTest,

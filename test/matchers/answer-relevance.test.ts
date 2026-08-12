@@ -5,10 +5,8 @@ import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
-import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {
@@ -81,37 +79,6 @@ describe('matchesAnswerRelevance', () => {
       expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
-  });
-
-  it('records both text and embedding providers beneath the grading trace', async () => {
-    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-      async ({ callContext }, invoke) => invoke(callContext),
-    );
-
-    await withProviderCallTracingContext(
-      {
-        getActiveTraceparent: () => undefined,
-        withGraderSpan: async (_options, invoke) => invoke(),
-        withProviderSpan: providerSpan,
-      },
-      () => matchesAnswerRelevance('input', 'output', 0.5),
-    );
-
-    expect(providerSpan.mock.calls.map(([options]) => options.promptLabel)).toEqual([
-      'answer-relevance',
-      'answer-relevance',
-      'answer-relevance',
-      'answer-relevance.embedding',
-      'answer-relevance.embedding',
-      'answer-relevance.embedding',
-      'answer-relevance.embedding',
-    ]);
-    expect(providerSpan.mock.calls.every(([options]) => options.role === 'grader')).toBe(true);
-    expect(
-      providerSpan.mock.calls
-        .filter(([options]) => options.promptLabel === 'answer-relevance.embedding')
-        .every(([options]) => options.operationName === 'embeddings'),
-    ).toBe(true);
   });
 
   it('should fail when the relevance score is below the threshold', async () => {

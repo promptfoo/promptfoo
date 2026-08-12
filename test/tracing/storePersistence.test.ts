@@ -149,16 +149,6 @@ describe('TraceStore span persistence', () => {
         statusMessage: 'rate limited',
         attributes: { 'otel.span.kind': 'client' },
       },
-      {
-        spanId: 'grader-model',
-        name: 'chat grading-model',
-        startTime: 9,
-        attributes: {
-          'gen_ai.operation.name': 'chat',
-          'gen_ai.request.model': 'grading-model',
-          'promptfoo.span.role': 'grader',
-        },
-      },
     ];
     await traceStore.addSpans('semantic-selection', spans);
 
@@ -215,58 +205,6 @@ describe('TraceStore span persistence', () => {
     });
 
     expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
-  });
-
-  it('excludes descendants of grading spans even when external SDKs omit role attributes', async () => {
-    const traceStore = await createTrace('grader-descendants');
-    await traceStore.addSpans('grader-descendants', [
-      {
-        spanId: 'target',
-        name: 'chat target-model',
-        startTime: 1,
-        attributes: { 'gen_ai.operation.name': 'chat', 'promptfoo.span.role': 'target' },
-      },
-      {
-        spanId: 'grader',
-        name: 'grader llm-rubric',
-        startTime: 2,
-        attributes: { 'promptfoo.span.role': 'grader' },
-      },
-      {
-        spanId: 'grader-agent',
-        parentSpanId: 'grader',
-        name: 'agent grading-agent',
-        startTime: 3,
-        attributes: { 'agent.name': 'grading-agent' },
-      },
-      {
-        spanId: 'grader-model',
-        parentSpanId: 'grader-agent',
-        name: 'chat grading-model',
-        startTime: 4,
-        attributes: { 'gen_ai.operation.name': 'chat' },
-      },
-      {
-        spanId: 'grader-tool',
-        parentSpanId: 'grader-model',
-        name: 'execute_tool search',
-        startTime: 5,
-        attributes: { 'gen_ai.tool.name': 'search' },
-      },
-    ]);
-
-    await expect(
-      traceStore.getSpans('grader-descendants', { includeInternalSpans: false }),
-    ).resolves.toEqual([expect.objectContaining({ spanId: 'target' })]);
-    await expect(
-      traceStore.getSpans('grader-descendants', {
-        includeInternalSpans: false,
-        spanFilter: ['chat*', '*tool*'],
-      }),
-    ).resolves.toEqual([expect.objectContaining({ spanId: 'target' })]);
-    await expect(
-      traceStore.getSpans('grader-descendants', { includeInternalSpans: true }),
-    ).resolves.toHaveLength(5);
   });
 
   it('supports wildcard span-name filters and preserves explicit nonsemantic selections', async () => {

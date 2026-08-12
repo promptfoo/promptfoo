@@ -112,41 +112,7 @@ describe('tokenUsageCompat', () => {
       });
     });
 
-    it('reads current OpenTelemetry and Promptfoo token-usage attributes', () => {
-      const span: SpanData = {
-        spanId: 'span-1',
-        name: 'test',
-        startTime: 0,
-        attributes: {
-          'gen_ai.usage.input_tokens': 100,
-          'gen_ai.usage.output_tokens': 50,
-          'promptfoo.usage.total_tokens': 150,
-          'promptfoo.usage.cached_response_tokens': 25,
-          'gen_ai.usage.reasoning.output_tokens': 20,
-          'gen_ai.usage.cache_read.input_tokens': 70,
-          'gen_ai.usage.cache_creation.input_tokens': 30,
-          'promptfoo.usage.accepted_prediction_tokens': 10,
-          'promptfoo.usage.rejected_prediction_tokens': 5,
-        },
-      };
-
-      expect(extractUsageFromSpan(span)).toEqual({
-        numRequests: 1,
-        prompt: 100,
-        completion: 50,
-        total: 150,
-        cached: 25,
-        completionDetails: {
-          reasoning: 20,
-          acceptedPrediction: 10,
-          rejectedPrediction: 5,
-          cacheReadInputTokens: 70,
-          cacheCreationInputTokens: 30,
-        },
-      });
-    });
-
-    it('continues reading historical token-usage attributes', () => {
+    it('should extract all standard usage attributes', () => {
       const span: SpanData = {
         spanId: 'span-1',
         name: 'test',
@@ -169,7 +135,7 @@ describe('tokenUsageCompat', () => {
       });
     });
 
-    it('continues reading historical completion-detail attributes', () => {
+    it('should extract completion details attributes', () => {
       const span: SpanData = {
         spanId: 'span-1',
         name: 'test',
@@ -198,7 +164,7 @@ describe('tokenUsageCompat', () => {
       });
     });
 
-    it('continues reading historical provider prompt-cache attributes', () => {
+    it('should extract cache token completion details attributes', () => {
       const span: SpanData = {
         spanId: 'span-1',
         name: 'test',
@@ -222,53 +188,6 @@ describe('tokenUsageCompat', () => {
           cacheReadInputTokens: 200,
           cacheCreationInputTokens: 30,
         },
-      });
-    });
-
-    it('prefers current attributes when a span also contains historical variants', () => {
-      const span: SpanData = {
-        spanId: 'span-1',
-        name: 'test',
-        startTime: 0,
-        attributes: {
-          'gen_ai.usage.input_tokens': 100,
-          'gen_ai.usage.output_tokens': 50,
-          'promptfoo.usage.total_tokens': 150,
-          'gen_ai.usage.total_tokens': 999,
-          'promptfoo.usage.cached_response_tokens': 25,
-          'gen_ai.usage.cached_tokens': 999,
-          'gen_ai.usage.reasoning.output_tokens': 20,
-          'gen_ai.usage.reasoning_tokens': 999,
-          'gen_ai.usage.cache_read.input_tokens': 70,
-          'gen_ai.usage.cache_read_input_tokens': 999,
-        },
-      };
-
-      expect(extractUsageFromSpan(span)).toMatchObject({
-        total: 150,
-        cached: 25,
-        completionDetails: { reasoning: 20, cacheReadInputTokens: 70 },
-      });
-    });
-
-    it('calculates total usage when an external span only provides standard token counts', () => {
-      const span: SpanData = {
-        spanId: 'span-1',
-        name: 'external inference',
-        startTime: 0,
-        attributes: {
-          'gen_ai.usage.input_tokens': 100,
-          'gen_ai.usage.output_tokens': 50,
-          'gen_ai.usage.cache_read.input_tokens': 70,
-        },
-      };
-
-      expect(extractUsageFromSpan(span)).toEqual({
-        numRequests: 1,
-        prompt: 100,
-        completion: 50,
-        total: 150,
-        completionDetails: { cacheReadInputTokens: 70 },
       });
     });
 

@@ -4,16 +4,15 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { parseFileUrl } from '../../util/functions/loadFunction';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
-import { sleep } from '../../util/time';
-import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
 import {
   buildChatSpanContext,
   extractProviderResponseAttributes,
   withGenAISpan,
-  withGenAIToolSpan,
-} from '../tracing';
+} from '../../tracing/genaiTracer';
+import { parseFileUrl } from '../../util/functions/loadFunction';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { sleep } from '../../util/time';
+import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
@@ -195,9 +194,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
-      const result = await withGenAIToolSpan({ name: functionName, arguments: parsedArgs }, () =>
-        callback(parsedArgs, context),
-      );
+      const result = await callback(parsedArgs, context);
 
       // Format the result
       if (result === undefined || result === null) {
@@ -235,7 +232,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      { ...spanContext, operationName: 'invoke_agent', agentId: this.assistantId },
+      spanContext,
       () => this.callApiInternal(prompt, context, callApiOptions),
       extractProviderResponseAttributes,
     );

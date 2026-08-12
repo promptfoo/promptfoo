@@ -48,7 +48,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -610,8 +609,7 @@ export async function runRedteamConversation({
           };
         }
 
-        const { grade, rubric } = await runRedteamGrader(
-          grader,
+        const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
           iterationTest,

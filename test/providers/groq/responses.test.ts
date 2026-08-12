@@ -32,11 +32,6 @@ describe('GroqResponsesProvider', () => {
       expect(provider.id()).toBe('groq:responses:openai/gpt-oss-120b');
     });
 
-    it('identifies the actual provider instead of its OpenAI-compatible transport', () => {
-      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
-      expect(provider['getGenAISystem']()).toBe('groq');
-    });
-
     it('should return correct string representation', () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
       expect(provider.toString()).toBe('[Groq Responses Provider openai/gpt-oss-120b]');

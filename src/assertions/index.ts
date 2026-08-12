@@ -20,10 +20,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import {
-  getProviderCallExecutionContext,
-  getProviderCallTracingContext,
-} from '../scheduler/providerCallExecutionContext';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -406,7 +403,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-async function runAssertionInternal({
+export async function runAssertion({
   prompt,
   provider,
   assertion,
@@ -607,12 +604,7 @@ async function runAssertionInternal({
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
-  const graderTraceparent = traceId
-    ? activeTraceparent?.split('-')[1] === traceId
-      ? activeTraceparent
-      : generateTraceparent(traceId, generateSpanId())
-    : undefined;
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -678,28 +670,6 @@ async function runAssertionInternal({
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
-}
-
-export async function runAssertion(
-  options: Parameters<typeof runAssertionInternal>[0],
-): Promise<GradingResult> {
-  if (!options.traceId) {
-    return runAssertionInternal(options);
-  }
-
-  const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return runAssertionInternal(options);
-  }
-
-  return tracingContext.withGraderSpan(
-    {
-      graderId: options.assertion.type,
-      evalId: options.test.metadata?.evaluationId as string | undefined,
-      testIndex: options.test.vars?.__testIdx as number | undefined,
-    },
-    () => runAssertionInternal(options),
-  );
 }
 
 /**

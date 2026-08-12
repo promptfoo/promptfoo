@@ -2349,47 +2349,6 @@ describe('OpenAICodexSDKProvider', () => {
                 `deployment.environment=test,promptfoo.trace_id=${traceId},` +
                 `promptfoo.parent_span_id=${spanId}`,
             }),
-            config: expect.objectContaining({
-              otel: {
-                trace_exporter: {
-                  'otlp-http': {
-                    endpoint: 'http://127.0.0.1:4318/v1/traces',
-                    protocol: 'json',
-                  },
-                },
-              },
-            }),
-          }),
-        );
-      });
-
-      it('routes native Codex spans to the receiver configured for the active eval', async () => {
-        mockRun.mockResolvedValue(createMockResponse('Response'));
-        const provider = new OpenAICodexSDKProvider({
-          config: { deep_tracing: true },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-
-        await cliState.withRequestTracingConfig(
-          { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
-          async () => provider.callApi('Test prompt'),
-        );
-
-        expect(MockCodex).toHaveBeenCalledWith(
-          expect.objectContaining({
-            env: expect.objectContaining({
-              OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.2:14318',
-            }),
-            config: expect.objectContaining({
-              otel: {
-                trace_exporter: {
-                  'otlp-http': {
-                    endpoint: 'http://127.0.0.2:14318/v1/traces',
-                    protocol: 'json',
-                  },
-                },
-              },
-            }),
           }),
         );
       });
@@ -3610,8 +3569,8 @@ describe('OpenAICodexSDKProvider', () => {
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
-        expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
-        expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
+        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
         spy.mockRestore();
       });
     });
@@ -3644,8 +3603,6 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.server': 'inventory',
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input': '{"query":"quantum computing","limit":3}',
-        'gen_ai.operation.name': 'execute_tool',
-        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(
@@ -3688,8 +3645,6 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input':
           '{"query":"quantum computing","email":"[REDACTED]","apiKey":"[REDACTED]","headers":{"Authorization":"[REDACTED]"}}',
-        'gen_ai.operation.name': 'execute_tool',
-        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(

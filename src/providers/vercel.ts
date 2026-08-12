@@ -5,7 +5,6 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { getRequestTimeoutMs, parseChatPrompt } from './shared';
-import { hasActiveTracingSpan } from './tracing';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -128,22 +127,6 @@ function mapTokenUsage(usage?: {
     completion: usage?.completionTokens,
     total: usage?.totalTokens ?? (usage?.promptTokens ?? 0) + (usage?.completionTokens ?? 0),
     numRequests: 1,
-  };
-}
-
-/** Let the AI SDK create its own model, tool, and embedding spans for traced evaluations. */
-function getSdkTelemetryOptions(providerId: string, context?: CallApiContextParams) {
-  if (!context?.traceparent && !hasActiveTracingSpan()) {
-    return {};
-  }
-
-  return {
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: providerId,
-      recordInputs: false,
-      recordOutputs: false,
-    },
   };
 }
 
@@ -281,10 +264,7 @@ export class VercelAiProvider implements ApiProvider {
   /**
    * Handles streaming API calls using streamText().
    */
-  private async callApiStreaming(
-    messages: ChatMessage[],
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  private async callApiStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
     const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
@@ -302,7 +282,6 @@ export class VercelAiProvider implements ApiProvider {
         model: gateway(this.modelName),
         messages,
         ...pickGenerateOptions(this.config),
-        ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
 
@@ -332,10 +311,7 @@ export class VercelAiProvider implements ApiProvider {
   /**
    * Handles structured output API calls using generateObject().
    */
-  private async callApiStructured(
-    messages: ChatMessage[],
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  private async callApiStructured(messages: ChatMessage[]): Promise<ProviderResponse> {
     const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
@@ -360,7 +336,6 @@ export class VercelAiProvider implements ApiProvider {
         messages,
         schema,
         ...pickGenerateOptions(this.config),
-        ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
 
@@ -408,11 +383,11 @@ export class VercelAiProvider implements ApiProvider {
     // Dispatch to appropriate method based on config
     let response: ProviderResponse;
     if (this.config.responseSchema) {
-      response = await this.callApiStructured(messages, context);
+      response = await this.callApiStructured(messages);
     } else if (this.config.streaming) {
-      response = await this.callApiStreaming(messages, context);
+      response = await this.callApiStreaming(messages);
     } else {
-      response = await this.callApiNonStreaming(messages, context);
+      response = await this.callApiNonStreaming(messages);
     }
 
     // Cache the response if successful
@@ -430,10 +405,7 @@ export class VercelAiProvider implements ApiProvider {
   /**
    * Handles non-streaming API calls using generateText().
    */
-  private async callApiNonStreaming(
-    messages: ChatMessage[],
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  private async callApiNonStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
     const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
@@ -451,7 +423,6 @@ export class VercelAiProvider implements ApiProvider {
         model: gateway(this.modelName),
         messages,
         ...pickGenerateOptions(this.config),
-        ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
 
@@ -546,7 +517,6 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       const result = await embed({
         model: gateway.textEmbeddingModel(this.modelName),
         value: input,
-        ...getSdkTelemetryOptions(this.id(), context),
         abortSignal: signal,
       });
 

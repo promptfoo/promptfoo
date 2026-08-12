@@ -797,27 +797,6 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[0][2].sessionInputCallback).toBe(sessionInputCallback);
   });
 
-  it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
-    vi.resetModules();
-    const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
-      '../../../src/providers/openai/agents'
-    );
-    const provider = new IsolatedOpenAiAgentsProvider('gpt-5-mini', {
-      config: {
-        agent: {
-          name: 'Inline Support Agent',
-          instructions: 'Help the user.',
-        },
-        tracing: true,
-      },
-    });
-
-    await provider.callApi('Where is my order?');
-
-    expect(addTraceProcessor).toHaveBeenCalledTimes(1);
-    expect(setTraceProcessors).not.toHaveBeenCalled();
-  });
-
   it('joins SDK tracing to the evaluator trace when traceparent is provided', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
@@ -853,33 +832,21 @@ describe('OpenAiAgentsProvider', () => {
     });
   });
 
-  it('routes SDK spans to the receiver configured for the active eval', async () => {
+  it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
         agent: {
           name: 'Inline Support Agent',
           instructions: 'Help the user.',
         },
+        tracing: true,
       },
     });
 
-    await cliState.withRequestTracingConfig(
-      { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
-      async () =>
-        provider.callApi('Where is my order?', {
-          prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
-          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
-          vars: {},
-        }),
-    );
+    await provider.callApi('Where is my order?');
 
-    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
-      traceId: 'trace_0123456789abcdef0123456789abcdef',
-      metadata: {
-        'promptfoo.parent_span_id': '0123456789abcdef',
-        'promptfoo.otlp_endpoint': 'http://127.0.0.2:14318',
-      },
-    });
+    expect(addTraceProcessor).toHaveBeenCalledTimes(1);
+    expect(setTraceProcessors).not.toHaveBeenCalled();
   });
 
   it('passes structured multimodal JSON prompts to the SDK as agent input items', async () => {

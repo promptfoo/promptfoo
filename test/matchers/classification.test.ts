@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider } from '../factories/provider';
 
-import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type {
   ApiProvider,
   GradingConfig,
@@ -47,27 +45,6 @@ describe('matchesClassification', () => {
       reason: `Classification ${expected} has score 0.60 >= ${threshold}`,
       score: 0.6,
     });
-  });
-
-  it('records classification providers beneath the grading trace', async () => {
-    const provider = new TestGrader();
-    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
-      async ({ callContext }, invoke) => invoke(callContext),
-    );
-
-    await withProviderCallTracingContext(
-      {
-        getActiveTraceparent: () => undefined,
-        withGraderSpan: async (_options, invoke) => invoke(),
-        withProviderSpan: providerSpan,
-      },
-      () => matchesClassification('classA', 'sample output', 0.5, { provider }),
-    );
-
-    expect(providerSpan).toHaveBeenCalledWith(
-      expect.objectContaining({ provider, role: 'grader', promptLabel: 'classification' }),
-      expect.any(Function),
-    );
   });
 
   it('should fail when the classification score is below the threshold', async () => {

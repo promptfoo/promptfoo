@@ -46,17 +46,6 @@ describe('trace span relevance', () => {
     expect(isRelevantSpan({ attributes: {}, statusCode: 2 })).toBe(true);
   });
 
-  it('excludes grader model activity and grading errors from target evidence', () => {
-    expect(
-      isRelevantSpan({
-        attributes: { 'gen_ai.operation.name': 'chat', 'promptfoo.span.role': 'grader' },
-      }),
-    ).toBe(false);
-    expect(isRelevantSpan({ attributes: { 'promptfoo.span.role': 'grader' }, statusCode: 2 })).toBe(
-      false,
-    );
-  });
-
   it.each([
     { 'http.request.method': 'POST' },
     { 'url.full': 'https://example.com/chat' },

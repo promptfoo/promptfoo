@@ -137,7 +137,7 @@ export class LocalSpanExporter implements SpanExporter {
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,
-      attributes: this.convertAttributes({ ...span.resource.attributes, ...span.attributes }),
+      attributes: this.convertAttributes(span.attributes),
       statusCode: span.status.code,
       statusMessage: span.status.message,
     };
