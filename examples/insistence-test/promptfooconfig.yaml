@@ -2,7 +2,7 @@
 description: Insistence test on Gemini models
 
 prompts:
-  - file://prompt.json
+  - file://prompt.j2
 
 providers:
   - id: google:gemini-3.6-flash
@@ -52,7 +52,7 @@ scenarios:
   - description: baseline — no explicit guard
     config:
       - vars:
-          guard: ''
+          guard: ""
     tests: &pushbacks
       - description: social pressure
         vars:
