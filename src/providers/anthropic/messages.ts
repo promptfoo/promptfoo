@@ -297,6 +297,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   // their model ids don't trigger the unknown-Anthropic-model warning.
   static readonly WARNS_ON_UNKNOWN_MODEL: boolean = true;
 
+  /**
+   * Whether this provider's model name is authoritative enough for the forward-looking Claude 5+
+   * sampling fallback. Compatible gateways may use arbitrary aliases; forwarding providers can
+   * override this when they preserve the upstream Anthropic model ID.
+   */
+  protected usesAuthoritativeModelIds(): boolean {
+    return isOfficialAnthropicApiBaseUrl(this.getApiBaseUrl());
+  }
+
   constructor(
     modelName: string,
     options: { id?: string; config?: AnthropicMessageOptions; env?: EnvOverrides } = {},
@@ -735,8 +744,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // capability separate from the forward-looking sampling-parameter fallback:
     // a new family may reject sampling controls before its thinking behavior is known.
     const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
-      // Anthropic-compatible gateways may use arbitrary routing aliases rather than model IDs.
-      allowUnknownFamilyFallback: isOfficialAnthropicApiBaseUrl(this.getApiBaseUrl()),
+      allowUnknownFamilyFallback: this.usesAuthoritativeModelIds(),
     });
     const manualThinkingDeprecated = isManualThinkingDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);

@@ -420,6 +420,11 @@ export class CloudflareGatewayAnthropicProvider extends AnthropicMessagesProvide
     });
   }
 
+  protected override usesAuthoritativeModelIds(): boolean {
+    // Cloudflare forwards this provider's model ID to Anthropic unchanged.
+    return true;
+  }
+
   id(): string {
     return `cloudflare-gateway:anthropic:${this.modelName}`;
   }
