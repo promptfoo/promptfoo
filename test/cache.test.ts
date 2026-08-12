@@ -35,6 +35,7 @@ vi.mock('../src/globalConfig/cloud', () => ({
   cloudConfig: {
     getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
+    getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
     getCurrentOrganizationId: vi.fn().mockReturnValue('org-1'),
     getCurrentTeamId: vi.fn(),
   },
@@ -344,6 +345,7 @@ describe('fetchWithCache', () => {
     mockFetchWithRetries.mockReset();
     vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-1');
     vi.mocked(cloudConfig.getCurrentTeamId).mockReset().mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
     await clearCache();
     enableCache();
   });
@@ -1177,6 +1179,40 @@ describe('fetchWithCache', () => {
         const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
         for (const cacheKey of cacheKeys) {
           expect(cacheKey).not.toContain('caller-token');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should key cloud requests by the configured auth header name, not always Authorization', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'same-cloud-token' });
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('Authorization');
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Same token, same body, but a different configured header name — the request
+        // actually sent differs (the token is injected under a different header), so this
+        // must be a separate cache entry rather than a hit on the Authorization-keyed one.
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        expect(cacheKeys[0]).not.toEqual(cacheKeys[1]);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('same-cloud-token');
         }
       } finally {
         restoreEnv();

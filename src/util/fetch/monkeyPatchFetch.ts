@@ -74,7 +74,16 @@ export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
 }
 
 /**
- * Resolves the `Authorization` header value for a request to the configured Promptfoo
+ * Resolves the header name used to carry the Cloud API credential (defaults to
+ * `Authorization`, but may be configured to a different name via
+ * `promptfoo auth login --auth-header-name` or `PROMPTFOO_CLOUD_AUTH_HEADER`).
+ */
+export function getCloudAuthHeaderName(): string {
+  return cloudConfig.getAuthHeaderName();
+}
+
+/**
+ * Resolves the auth header value for a request to the configured Promptfoo
  * Cloud origin, or `undefined` when the request is not cloud-bound or no API key is
  * saved. Centralizing this keeps the live request (`monkeyPatchFetch`) and the cache
  * key (`getHeadersForCacheKey` in cache.ts) in lockstep.
@@ -126,11 +135,6 @@ function getEffectiveHeaders(
   return headers ?? (url instanceof Request ? url.headers : undefined);
 }
 
-/** Case-insensitive check for a caller-supplied `Authorization` header (any `HeadersInit` shape). */
-function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
-  return new Headers(headers).has('authorization');
-}
-
 function hasHeader(headers: HeadersInit | undefined, name: string): boolean {
   return new Headers(headers).has(name);
 }
@@ -180,12 +184,15 @@ export async function monkeyPatchFetch(
   }
 
   // Attach the saved cloud credential only for cloud-bound requests, and never
-  // override an Authorization header the caller set explicitly — token
-  // validation/rotation sends the token being validated, not the saved one.
+  // override an auth header the caller set explicitly — token validation/rotation
+  // sends the token being validated, not the saved one. The header name itself may
+  // be configured to something other than `Authorization` via
+  // `promptfoo auth login --auth-header-name` or PROMPTFOO_CLOUD_AUTH_HEADER.
   const cloudAuth = getCloudBearerToken(url);
+  const cloudAuthHeaderName = getCloudAuthHeaderName();
   const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
-  if (cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
-    opts.headers = setHeader(effectiveHeaders, 'Authorization', cloudAuth);
+  if (cloudAuth && !hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
+    opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);

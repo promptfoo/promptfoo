@@ -14,6 +14,7 @@ import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
+  getCloudAuthHeaderName,
   getCloudBearerToken,
   getCloudTaskTeamId,
   getRequestUrlString,
@@ -416,12 +417,13 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
-  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
-  // without overriding a caller-supplied Authorization.
+  // Mirror monkeyPatchFetch so the cache key reflects the auth header that will
+  // actually be sent: fold in the cloud bearer token for cloud-bound requests, under
+  // whatever header name is configured, without overriding a caller-supplied header.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !headers.has('Authorization')) {
-    headers.set('Authorization', cloudAuth);
+  const cloudAuthHeaderName = getCloudAuthHeaderName();
+  if (cloudAuth && !headers.has(cloudAuthHeaderName)) {
+    headers.set(cloudAuthHeaderName, cloudAuth);
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);

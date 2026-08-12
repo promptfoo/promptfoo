@@ -41,6 +41,8 @@ describe('cloud utils', () => {
 
     mockCloudConfig.getApiHost.mockReturnValue('https://api.example.com');
     mockCloudConfig.getApiKey.mockReturnValue('test-api-key');
+    mockCloudConfig.getAuthHeaderName.mockReturnValue('Authorization');
+    mockCloudConfig.getAuthHeaders.mockReturnValue({ Authorization: 'Bearer test-api-key' });
 
     mockMakeRequest = vi.spyOn(cloudModule, 'makeRequest');
   });
@@ -77,8 +79,9 @@ describe('cloud utils', () => {
       });
     });
 
-    it('should handle undefined API key', async () => {
+    it('should omit the auth header when undefined API key', async () => {
       mockCloudConfig.getApiKey.mockReturnValue(undefined);
+      mockCloudConfig.getAuthHeaders.mockReturnValue(undefined);
 
       const path = 'test/path';
       const method = 'GET';
@@ -88,7 +91,27 @@ describe('cloud utils', () => {
       expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
         method: 'GET',
         body: undefined,
-        headers: { Authorization: 'Bearer undefined', 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    it('should use the configured custom auth header name', async () => {
+      mockCloudConfig.getAuthHeaders.mockReturnValue({
+        'X-Promptfoo-Api-Key': 'Bearer test-api-key',
+      });
+
+      const path = 'test/path';
+      const method = 'GET';
+
+      await makeRequest(path, method);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/test/path', {
+        method: 'GET',
+        body: undefined,
+        headers: {
+          'X-Promptfoo-Api-Key': 'Bearer test-api-key',
+          'Content-Type': 'application/json',
+        },
       });
     });
 

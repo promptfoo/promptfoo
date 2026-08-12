@@ -85,13 +85,14 @@ describe('auth command', () => {
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
       expect(setUserEmail).toHaveBeenCalledWith('test@example.com');
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', undefined, undefined);
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
         undefined,
         mockCloudUser,
         mockApp,
         false,
+        undefined,
       );
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
@@ -169,13 +170,67 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--host', customHost]);
 
-      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost);
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith('test-key', customHost, undefined);
       expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
         'test-key',
         customHost,
         mockCloudUser,
         mockApp,
         false,
+        undefined,
+      );
+    });
+
+    it('should validate and persist an explicit --auth-header-name', async () => {
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync([
+        'node',
+        'test',
+        '--api-key',
+        'test-key',
+        '--auth-header-name',
+        'X-Promptfoo-Api-Key',
+      ]);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Promptfoo-Api-Key',
+      );
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        'X-Promptfoo-Api-Key',
+      );
+    });
+
+    it('should fall back to the currently configured auth header name when --auth-header-name is omitted', async () => {
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Existing-Header');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        'X-Existing-Header',
+      );
+      // The raw (unset) CLI flag value is what gets persisted, so an existing
+      // configured header name is preserved rather than overwritten with the fallback.
+      expect(cloudConfig.saveValidatedApiToken).toHaveBeenCalledWith(
+        'test-key',
+        undefined,
+        mockCloudUser,
+        mockApp,
+        false,
+        undefined,
       );
     });
 
@@ -335,7 +390,7 @@ describe('auth command', () => {
         'security',
       ]);
 
-      expect(getUserTeams).toHaveBeenCalledWith(customHost, 'test-key');
+      expect(getUserTeams).toHaveBeenCalledWith(customHost, 'test-key', undefined);
       expect(cloudConfig.setCurrentOrganization).toHaveBeenCalledWith('org-2');
       expect(cloudConfig.cacheTeams).toHaveBeenCalledWith([mockTeams[1]], 'org-2');
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', 'org-2');
