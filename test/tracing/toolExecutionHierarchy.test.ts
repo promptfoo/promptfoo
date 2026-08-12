@@ -1,7 +1,15 @@
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { getGenAITracer, withGenAISpan, withGenAIToolSpan } from '../../src/tracing/genaiTracer';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  addActiveSpanRoleAttribute,
+  closeTurnSpan,
+  emitTurnMarkerSpan,
+  getGenAITracer,
+  openTurnSpan,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../../src/tracing/genaiTracer';
 import { SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import { withTestCaseSpan, withTracedProviderCall } from '../../src/tracing/targetTracer';
 
@@ -21,6 +29,10 @@ describe('provider tool execution hierarchy', () => {
 
   afterAll(async () => {
     await tracerProvider.shutdown();
+  });
+
+  beforeEach(() => {
+    exporter.reset();
   });
 
   it('parents target tool executions beneath the active model span', async () => {
@@ -70,4 +82,53 @@ describe('provider tool execution hierarchy', () => {
       'tool.output': '{"status":"shipped"}',
     });
   });
+
+  it.each(['target', 'grader'] as const)(
+    'preserves the %s role on nested tool, streaming-turn, and marker spans',
+    async (role) => {
+      const root = getGenAITracer().startSpan(`test case ${role} agent`);
+      const provider: ApiProvider = {
+        id: () => 'openai:agent',
+        callApi: async () => ({ output: 'done' }),
+      };
+      const callContext: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: role },
+        vars: {},
+      };
+
+      await withTestCaseSpan(root, async () => {
+        await withTracedProviderCall({ provider, callContext, role }, async () => {
+          const tracer = getGenAITracer();
+          const state = { turnCount: 0, activeTurnIndex: 0 };
+          const now = Date.now();
+
+          openTurnSpan(state, { tracer, eventTime: now, system: 'openai' });
+          const tool = tracer.startSpan('tool search', {
+            attributes: addActiveSpanRoleAttribute({ 'tool.name': 'search' }),
+          });
+          tool.end();
+          closeTurnSpan(state, { eventTime: now + 1 });
+          emitTurnMarkerSpan({
+            tracer,
+            index: 2,
+            startTime: now,
+            endTime: now + 1,
+            attributes: { 'gen_ai.turn.index': 2 },
+          });
+
+          return { output: 'done' };
+        });
+        return [{ score: 1, success: true }];
+      });
+
+      const childSpans = exporter
+        .getFinishedSpans()
+        .filter((span) => span.name.startsWith('gen_ai.turn') || span.name === 'tool search');
+
+      expect(childSpans).toHaveLength(3);
+      for (const span of childSpans) {
+        expect(span.attributes[SPAN_ROLE_ATTRIBUTE]).toBe(role);
+      }
+    },
+  );
 });
