@@ -35,6 +35,7 @@ import {
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
+import type { Span } from '@opentelemetry/api';
 import type {
   Response as OpenAIResponse,
   ResponseCreateParamsNonStreaming,
@@ -553,14 +554,20 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     });
 
     return withGenAISpan(
-      { ...spanContext, operationName: 'invoke_agent', agentName: this.deploymentName },
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      {
+        ...spanContext,
+        operationName: 'invoke_agent',
+        agentName: this.resolvedAgent?.name ?? this.deploymentName,
+        agentId: this.resolvedAgent?.id,
+      },
+      (span) => this.callApiInternal(prompt, span, context, callApiOptions),
       extractProviderResponseAttributes,
     );
   }
 
   private async callApiInternal(
     prompt: string,
+    span: Span,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -587,6 +594,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     try {
       const client = await this.initializeClient();
       const agent = await this.resolveAgent(client);
+      span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
+      span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
+      span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
       const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;

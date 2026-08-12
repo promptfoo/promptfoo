@@ -1047,6 +1047,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   // through the Responses wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {
+    if (this.constructor === OpenAiResponsesProvider) {
+      return 'openai';
+    }
     const providerId = this.id();
     return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
   }

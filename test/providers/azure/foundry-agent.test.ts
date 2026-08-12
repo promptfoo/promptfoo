@@ -107,6 +107,9 @@ function installSpanRecorder(): RecordedSpan[] {
       setStatus: vi.fn((status: { code: number; message?: string }) => {
         entry.status = status;
       }),
+      updateName: vi.fn((updatedName: string) => {
+        entry.name = updatedName;
+      }),
     };
   };
 
@@ -493,9 +496,28 @@ describe('AzureFoundryAgentProvider', () => {
       expect(agentSpan?.attributes).toMatchObject({
         'gen_ai.provider.name': 'azure.ai.openai',
         'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.id': 'agent_123',
         'gen_ai.agent.name': 'weather-agent',
       });
       expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
+    });
+
+    it('records the resolved agent identity when configured with a legacy agent ID', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce(createMessageResponse('Hello'));
+
+      const provider = new AzureFoundryAgentProvider('agent_123', {
+        config: { projectUrl },
+      });
+
+      await provider.callApi('test prompt');
+
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.agent.id': 'agent_123',
+        'gen_ai.agent.name': 'weather-agent',
+      });
     });
 
     it('emits an agent invocation span but no gen_ai.turn spans on a cache hit', async () => {

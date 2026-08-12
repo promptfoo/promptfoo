@@ -39,7 +39,7 @@ Tracing provides visibility into:
 
 When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, and every target receives a child span automatically. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace.
 
-Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai), while custom applications can add their own child spans using the propagated `traceparent`. Agent providers use `invoke_agent` for the overall run, while model calls use the operation that describes the inference they perform.
+Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/), while custom applications can add their own child spans using the propagated `traceparent`. Agent providers can distinguish an overall `invoke_agent` run from the individual model calls it contains.
 
 ### Supported Providers
 

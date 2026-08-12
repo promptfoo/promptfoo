@@ -234,6 +234,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected getGenAISystem(): string {
+    if (this.constructor === OpenAiChatCompletionProvider) {
+      return 'openai';
+    }
     const providerId = this.id();
     return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
   }
@@ -453,7 +456,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       stopSequences: this.config.stop,
       // Promptfoo context from test case if available
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,

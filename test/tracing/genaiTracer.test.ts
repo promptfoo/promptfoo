@@ -364,6 +364,7 @@ describe('genaiTracer', () => {
   describe('setGenAIResponseAttributes', () => {
     it('should set token usage attributes', () => {
       const result: GenAISpanResult = {
+        cacheHit: true,
         tokenUsage: {
           prompt: 100,
           completion: 50,
@@ -382,6 +383,41 @@ describe('genaiTracer', () => {
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        20,
+      );
+    });
+
+    it('records provider prompt-cache reads without marking them as response-cache hits', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: false,
+        tokenUsage: { prompt: 100, completion: 50, cached: 20 },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        expect.anything(),
+      );
+    });
+
+    it('prefers explicit provider cache-read details over the legacy cached count', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: false,
+        tokenUsage: {
+          cached: 20,
+          completionDetails: { cacheReadInputTokens: 12 },
+        },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        12,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
         20,
       );
     });
