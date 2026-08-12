@@ -401,7 +401,7 @@ export async function generateTraceContextIfNeeded(
   }
 
   const candidateRootSpan = getGenAITracer().startSpan(
-    `test case ${testCaseId}`,
+    'promptfoo.test_case',
     { kind: SpanKind.INTERNAL, attributes: rootAttributes },
     ROOT_CONTEXT,
   );

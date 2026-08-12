@@ -470,7 +470,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return `[Anthropic Messages Provider ${this.modelName}]`;
   }
 
-  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // The `gen_ai.provider.name` span attribute. Subclasses serving a different vendor
   // through the Anthropic wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {

@@ -258,7 +258,7 @@ describe('OpenAI Provider', () => {
       const chatSpan = spans.find((span) => span.name === 'chat test-assistant-id');
       expect(chatSpan).toBeDefined();
       expect(chatSpan?.attributes).toMatchObject({
-        'gen_ai.system': 'openai',
+        'gen_ai.provider.name': 'openai',
         'gen_ai.operation.name': 'chat',
         'gen_ai.request.model': 'test-assistant-id',
       });

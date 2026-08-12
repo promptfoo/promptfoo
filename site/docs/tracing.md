@@ -69,8 +69,8 @@ Each provider call creates a span with these attributes:
 
 **Request Attributes:**
 
-- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
-- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.provider.name` - Provider name (e.g., "openai", "anthropic", "azure.ai.openai", "aws.bedrock")
+- `gen_ai.operation.name` - Operation type ("chat", "text_completion", "embeddings")
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting
@@ -81,9 +81,9 @@ Each provider call creates a span with these attributes:
 
 - `gen_ai.usage.input_tokens` - Input/prompt token count
 - `gen_ai.usage.output_tokens` - Output/completion token count
-- `gen_ai.usage.total_tokens` - Total token count
-- `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
-- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.usage.reasoning.output_tokens` - Reasoning token count (when available)
+- `gen_ai.usage.cache_read.input_tokens` - Input tokens read from the provider's prompt cache
+- `gen_ai.usage.cache_creation.input_tokens` - Input tokens written to the provider's prompt cache
 - `gen_ai.response.finish_reasons` - Finish/stop reasons
 
 **Promptfoo-specific Attributes:**
@@ -92,8 +92,17 @@ Each provider call creates a span with these attributes:
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
 - `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.usage.total_tokens` - Total token count reported by the provider
+- `promptfoo.usage.cached_response_tokens` - Tokens associated with a cached Promptfoo response
+- `promptfoo.usage.accepted_prediction_tokens` - Accepted prediction tokens, when available
+- `promptfoo.usage.rejected_prediction_tokens` - Rejected prediction tokens, when available
 - `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
 - `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+Grading spans describe each assertion with `gen_ai.evaluation.name`,
+`gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
+reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
+by the grader appears in a child span.
 
 ### Example Trace Output
 
@@ -101,14 +110,14 @@ When calling OpenAI's GPT-4:
 
 ```
 Span: chat gpt-4
-├─ gen_ai.system: openai
+├─ gen_ai.provider.name: openai
 ├─ gen_ai.operation.name: chat
 ├─ gen_ai.request.model: gpt-4
 ├─ gen_ai.request.max_tokens: 1000
 ├─ gen_ai.request.temperature: 0.7
 ├─ gen_ai.usage.input_tokens: 150
 ├─ gen_ai.usage.output_tokens: 85
-├─ gen_ai.usage.total_tokens: 235
+├─ promptfoo.usage.total_tokens: 235
 ├─ gen_ai.response.finish_reasons: ["stop"]
 ├─ promptfoo.provider.id: openai:chat:gpt-4
 └─ promptfoo.test.index: 0
@@ -315,7 +324,7 @@ tracing:
 ```
 
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
-key, so short patterns over-match: `token` also matches `gen_ai.usage.total_tokens`, and
+key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
 `key` matches `monkey`. Prefer specific keys (e.g. `authorization`, `tool.arguments`).
 Patterns are matched against each attribute key **at every nesting level individually**: a
 nested key like `authorization` inside a `headers` object is matched by the pattern

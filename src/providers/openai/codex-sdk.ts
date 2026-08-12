@@ -11,6 +11,7 @@ import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm'
 import logger from '../../logger';
 import {
   closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
@@ -1362,10 +1363,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         attributes['gen_ai.usage.output_tokens'] = outputTokens;
       }
       if (typeof cachedTokens === 'number') {
-        attributes['gen_ai.usage.cached_tokens'] = cachedTokens;
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
       }
       if (typeof reasoningTokens === 'number') {
-        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });

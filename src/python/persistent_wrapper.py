@@ -226,7 +226,7 @@ def _traced_call(method_callable, args, function_name):
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
             # Set GenAI semantic convention attributes
-            span.set_attribute("gen_ai.system", "python")
+            span.set_attribute("gen_ai.provider.name", "python")
             span.set_attribute("gen_ai.operation.name", function_name)
 
             # Set request attributes from prompt (1st arg)
@@ -279,7 +279,7 @@ def _traced_call(method_callable, args, function_name):
                         usage = result["tokenUsage"]
                         if "total" in usage:
                             span.set_attribute(
-                                "gen_ai.usage.total_tokens", usage["total"]
+                                "promptfoo.usage.total_tokens", usage["total"]
                             )
                         if "prompt" in usage:
                             span.set_attribute(

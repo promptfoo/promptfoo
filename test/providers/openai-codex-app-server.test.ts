@@ -512,8 +512,8 @@ describe('OpenAICodexAppServerProvider', () => {
       'gen_ai.turn.index': 1,
       'gen_ai.usage.input_tokens': 13,
       'gen_ai.usage.output_tokens': 5,
-      'gen_ai.usage.cached_tokens': 2,
-      'gen_ai.usage.reasoning_tokens': 1,
+      'gen_ai.usage.cache_read.input_tokens': 2,
+      'gen_ai.usage.reasoning.output_tokens': 1,
     });
     expect(turnSpan?.ended).toBe(true);
 

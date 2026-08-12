@@ -5734,7 +5734,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(turnSpans[1].name).toBe('gen_ai.turn 2');
           expect(turnSpans[0].attrs['gen_ai.turn.index']).toBe(1);
           expect(turnSpans[1].attrs['gen_ai.turn.index']).toBe(2);
-          expect(turnSpans[0].attrs['gen_ai.system']).toBe('anthropic');
+          expect(turnSpans[0].attrs['gen_ai.provider.name']).toBe('anthropic');
         });
 
         it('tags tool spans with the index of the assistant turn that emitted them', async () => {

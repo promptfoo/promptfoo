@@ -11,6 +11,7 @@ import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
   emitTurnMarkerSpan,
+  GenAIAttributes,
   getGenAITracer,
   getTraceparent,
   sanitizeBody,
@@ -1522,7 +1523,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             turnCount = index;
             const attributes: Record<string, string | number | boolean> = {
               'gen_ai.turn.index': index,
-              'gen_ai.system': 'anthropic',
+              [GenAIAttributes.PROVIDER_NAME]: 'anthropic',
             };
             if (msg.parent_tool_use_id) {
               attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;

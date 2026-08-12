@@ -491,7 +491,7 @@ describe('AzureFoundryAgentProvider', () => {
       const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
       expect(chatSpan).toBeDefined();
       expect(chatSpan?.attributes).toMatchObject({
-        'gen_ai.system': 'azure',
+        'gen_ai.provider.name': 'azure.ai.openai',
         'gen_ai.operation.name': 'chat',
       });
     });

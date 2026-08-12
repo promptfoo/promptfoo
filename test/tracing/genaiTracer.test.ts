@@ -64,10 +64,20 @@ describe('genaiTracer', () => {
   describe('GenAIAttributes', () => {
     it('should have correct attribute names for GenAI semantic conventions', () => {
       expect(GenAIAttributes.SYSTEM).toBe('gen_ai.system');
+      expect(GenAIAttributes.PROVIDER_NAME).toBe('gen_ai.provider.name');
       expect(GenAIAttributes.OPERATION_NAME).toBe('gen_ai.operation.name');
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
       expect(GenAIAttributes.USAGE_OUTPUT_TOKENS).toBe('gen_ai.usage.output_tokens');
+      expect(GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS).toBe(
+        'gen_ai.usage.reasoning.output_tokens',
+      );
+      expect(GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS).toBe(
+        'gen_ai.usage.cache_read.input_tokens',
+      );
+      expect(GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS).toBe(
+        'gen_ai.usage.cache_creation.input_tokens',
+      );
     });
   });
 
@@ -77,6 +87,10 @@ describe('genaiTracer', () => {
       expect(PromptfooAttributes.EVAL_ID).toBe('promptfoo.eval.id');
       expect(PromptfooAttributes.TEST_INDEX).toBe('promptfoo.test.index');
       expect(PromptfooAttributes.PROMPT_LABEL).toBe('promptfoo.prompt.label');
+      expect(PromptfooAttributes.USAGE_TOTAL_TOKENS).toBe('promptfoo.usage.total_tokens');
+      expect(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS).toBe(
+        'promptfoo.usage.cached_response_tokens',
+      );
     });
   });
 
@@ -117,11 +131,42 @@ describe('genaiTracer', () => {
       const options = callArgs[1];
 
       expect(options.attributes).toMatchObject({
-        [GenAIAttributes.SYSTEM]: 'openai',
+        [GenAIAttributes.PROVIDER_NAME]: 'openai',
         [GenAIAttributes.OPERATION_NAME]: 'chat',
         [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
         [PromptfooAttributes.PROVIDER_ID]: 'openai:gpt-4',
       });
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
+    });
+
+    it.each([
+      ['bedrock', 'aws.bedrock'],
+      ['azure', 'azure.ai.openai'],
+      ['vertex:anthropic', 'gcp.vertex_ai'],
+      ['mistral', 'mistral_ai'],
+      ['watsonx', 'ibm.watsonx.ai'],
+      ['xai', 'x_ai'],
+      ['custom-provider', 'custom-provider'],
+    ])('normalizes provider %s to %s', async (system, providerName) => {
+      await withGenAISpan({ ...baseContext, system }, async () => ({ output: 'test' }));
+
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).toHaveProperty(
+        GenAIAttributes.PROVIDER_NAME,
+        providerName,
+      );
+    });
+
+    it.each([
+      ['completion', 'text_completion'],
+      ['embedding', 'embeddings'],
+      ['text_completion', 'text_completion'],
+      ['embeddings', 'embeddings'],
+    ] as const)('normalizes %s operations to %s', async (operationName, expectedOperation) => {
+      await withGenAISpan({ ...baseContext, operationName }, async () => ({ output: 'test' }));
+
+      const [name, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(name).toBe(`${expectedOperation} gpt-4`);
+      expect(options.attributes[GenAIAttributes.OPERATION_NAME]).toBe(expectedOperation);
     });
 
     it('should set optional request attributes when provided', async () => {
@@ -199,7 +244,18 @@ describe('genaiTracer', () => {
         code: SpanStatusCode.ERROR,
         message: 'API call failed',
       });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'Error');
       expect(mockSpan.recordException).toHaveBeenCalledWith(error);
+    });
+
+    it('records a stable error type when a provider returns an error response', async () => {
+      await withGenAISpan(baseContext, async () => ({ error: 'provider unavailable' }));
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'provider_error');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'provider unavailable',
+      });
     });
 
     it('should end span even on failure', async () => {
@@ -244,8 +300,14 @@ describe('genaiTracer', () => {
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_INPUT_TOKENS, 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_TOTAL_TOKENS, 150);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_CACHED_TOKENS, 20);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_TOTAL_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        20,
+      );
     });
 
     it('should set completion details attributes', () => {
@@ -262,15 +324,15 @@ describe('genaiTracer', () => {
       setGenAIResponseAttributes(mockSpan as any, result);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REASONING_TOKENS,
+        GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
         25,
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
+        PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
         10,
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
+        PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
         5,
       );
     });

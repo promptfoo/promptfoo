@@ -23,6 +23,36 @@ function getAttributes(span: any): Record<string, unknown> {
 }
 
 describe('OTLPTracingExporter', () => {
+  it('keeps provider token counts standard and namespaces Promptfoo totals', () => {
+    const exporter = new OTLPTracingExporter() as any;
+    const payload = exporter.transformToOTLP([
+      {
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: 'span_0123456789abcdef',
+        parentId: null,
+        startedAt: '2026-05-06T12:00:00.000Z',
+        endedAt: '2026-05-06T12:00:01.000Z',
+        spanData: {
+          type: 'generation',
+          model: 'gpt-4.1',
+          usage: { input_tokens: 12, output_tokens: 8, total_tokens: 20 },
+        },
+        traceMetadata: {},
+        error: null,
+      },
+    ]);
+
+    const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+    expect(getAttributes(span)).toMatchObject({
+      'gen_ai.request.model': 'gpt-4.1',
+      'gen_ai.usage.input_tokens': 12,
+      'gen_ai.usage.output_tokens': 8,
+      'promptfoo.usage.total_tokens': 20,
+    });
+    expect(getAttributes(span)).not.toHaveProperty('gen_ai.usage.total_tokens');
+  });
+
   it('maps function spans into Promptfoo trajectory-friendly tool attributes', () => {
     const exporter = new OTLPTracingExporter() as any;
     const payload = exporter.transformToOTLP([

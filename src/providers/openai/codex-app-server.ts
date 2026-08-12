@@ -12,6 +12,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
   closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
@@ -3255,10 +3256,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       attributes['gen_ai.usage.input_tokens'] = usage.input;
       attributes['gen_ai.usage.output_tokens'] = usage.output;
       if (usage.cached) {
-        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
       }
       if (usage.reasoning) {
-        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });

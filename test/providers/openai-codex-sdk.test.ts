@@ -3569,8 +3569,8 @@ describe('OpenAICodexSDKProvider', () => {
         const turnSpan = emitted.find((s) => s.name === 'gen_ai.turn 1');
         expect(turnSpan?.attrs['gen_ai.usage.input_tokens']).toBe(100);
         expect(turnSpan?.attrs['gen_ai.usage.output_tokens']).toBe(40);
-        expect(turnSpan?.attrs['gen_ai.usage.cached_tokens']).toBe(25);
-        expect(turnSpan?.attrs['gen_ai.usage.reasoning_tokens']).toBe(12);
+        expect(turnSpan?.attrs['gen_ai.usage.cache_read.input_tokens']).toBe(25);
+        expect(turnSpan?.attrs['gen_ai.usage.reasoning.output_tokens']).toBe(12);
         spy.mockRestore();
       });
     });

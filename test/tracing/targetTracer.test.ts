@@ -98,6 +98,29 @@ describe('universal target tracing', () => {
     expect(mocks.span.recordException).toHaveBeenCalledWith(expect.any(Error));
   });
 
+  it('keeps grader-provider spans free of target-only metadata', async () => {
+    await withTargetSpan(
+      {
+        targetType: 'provider',
+        providerId: 'openai:judge',
+        label: 'Judge provider',
+        role: 'grader',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      },
+      async () => ({ output: 'pass' }),
+    );
+
+    const [name, options] = mocks.tracer.startActiveSpan.mock.calls[0];
+    expect(name).toBe('grader provider Judge provider');
+    expect(options.attributes).toMatchObject({
+      [PromptfooAttributes.PROVIDER_ID]: 'openai:judge',
+      'promptfoo.span.role': 'grader',
+    });
+    expect(options.attributes).not.toHaveProperty(TargetAttributes.TARGET_TYPE);
+    expect(options.attributes).not.toHaveProperty(TargetAttributes.TARGET_LABEL);
+    expect(options.attributes).not.toHaveProperty('service.name');
+  });
+
   it('records and rethrows provider exceptions', async () => {
     const error = new Error('target unavailable');
 

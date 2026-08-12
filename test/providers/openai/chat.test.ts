@@ -140,8 +140,8 @@ describe('OpenAI Provider', () => {
           cacheReadInputTokens: 2,
           cacheCreationInputTokens: 3,
         });
-        expect(spanAttributes['gen_ai.usage.cache_read_input_tokens']).toBe(2);
-        expect(spanAttributes['gen_ai.usage.cache_creation_input_tokens']).toBe(3);
+        expect(spanAttributes['gen_ai.usage.cache_read.input_tokens']).toBe(2);
+        expect(spanAttributes['gen_ai.usage.cache_creation.input_tokens']).toBe(3);
       } finally {
         getTracerSpy.mockRestore();
       }

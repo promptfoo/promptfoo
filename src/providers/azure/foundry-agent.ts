@@ -9,6 +9,7 @@ import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
   extractProviderResponseAttributes,
+  GenAIAttributes,
   getGenAITracer,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
@@ -600,7 +601,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           index: turnCount,
           startTime: callStartedAt,
           endTime: callEndedAt,
-          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          attributes: {
+            'gen_ai.turn.index': turnCount,
+            [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
+          },
           errorMessage,
           logLabel: 'AzureFoundryAgent',
         });

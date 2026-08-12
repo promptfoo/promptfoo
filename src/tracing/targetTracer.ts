@@ -7,7 +7,7 @@ import {
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
-import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import { GenAIAttributes, getGenAITracer, PromptfooAttributes, sanitizeBody } from './genaiTracer';
 import {
   getActiveTraceparent,
   type PromptfooSpanRole,
@@ -18,16 +18,15 @@ import {
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 export const TargetAttributes = {
-  SERVICE_NAME: 'service.name',
   TARGET_TYPE: 'promptfoo.target.type',
   TARGET_LABEL: 'promptfoo.target.label',
 } as const;
 
 export const GraderAttributes = {
   GRADER_ID: 'promptfoo.grader.id',
-  GRADER_PASS: 'promptfoo.grader.pass',
-  GRADER_SCORE: 'promptfoo.grader.score',
 } as const;
+
+const MAX_GRADING_EXPLANATION_LENGTH = 1024;
 
 export type TargetType = 'http' | 'mcp' | 'websocket' | 'provider';
 
@@ -110,14 +109,15 @@ export async function withTargetSpan<T>(
       : propagation.extract(ROOT_CONTEXT, { traceparent: ctx.traceparent });
   const role = ctx.role ?? 'target';
   const attributes: Record<string, string | number> = {
-    [TargetAttributes.SERVICE_NAME]: 'promptfoo-cli',
-    [TargetAttributes.TARGET_TYPE]: ctx.targetType,
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
     [SPAN_ROLE_ATTRIBUTE]: role,
   };
 
-  if (ctx.label) {
-    attributes[TargetAttributes.TARGET_LABEL] = ctx.label;
+  if (role === 'target') {
+    attributes[TargetAttributes.TARGET_TYPE] = ctx.targetType;
+    if (ctx.label) {
+      attributes[TargetAttributes.TARGET_LABEL] = ctx.label;
+    }
   }
   if (ctx.promptLabel) {
     attributes[PromptfooAttributes.PROMPT_LABEL] = ctx.promptLabel;
@@ -130,7 +130,9 @@ export async function withTargetSpan<T>(
   }
 
   return getGenAITracer().startActiveSpan(
-    role === 'grader' ? `grader model ${ctx.label || ctx.providerId}` : ctx.label || ctx.providerId,
+    role === 'grader'
+      ? `grader provider ${ctx.label || ctx.providerId}`
+      : ctx.label || ctx.providerId,
     { kind: SpanKind.CLIENT, attributes },
     parentContext,
     async (span) => {
@@ -228,6 +230,29 @@ interface GraderSpanContext {
   testIndex?: number;
 }
 
+function setEvaluationResultAttributes(span: Span, result: unknown): void {
+  const grade = result && typeof result === 'object' && 'grade' in result ? result.grade : result;
+  if (!grade || typeof grade !== 'object') {
+    return;
+  }
+
+  if ('pass' in grade && typeof grade.pass === 'boolean') {
+    span.setAttribute(GenAIAttributes.EVALUATION_SCORE_LABEL, grade.pass ? 'pass' : 'fail');
+  }
+  if ('score' in grade && typeof grade.score === 'number') {
+    span.setAttribute(GenAIAttributes.EVALUATION_SCORE_VALUE, grade.score);
+  }
+  if ('reason' in grade && typeof grade.reason === 'string' && grade.reason) {
+    const explanation = sanitizeBody(grade.reason);
+    span.setAttribute(
+      GenAIAttributes.EVALUATION_EXPLANATION,
+      explanation.length > MAX_GRADING_EXPLANATION_LENGTH
+        ? `${explanation.slice(0, MAX_GRADING_EXPLANATION_LENGTH - 1)}…`
+        : explanation,
+    );
+  }
+}
+
 /** Instrument assertion dispatch and registered graders at their shared invocation boundaries. */
 export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promise<T>): Promise<T> {
   const traceparent = getActiveTraceparent() ?? ctx.traceparent;
@@ -242,6 +267,7 @@ export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promis
       : propagation.extract(ROOT_CONTEXT, { traceparent });
   const attributes: Record<string, string | number> = {
     [GraderAttributes.GRADER_ID]: ctx.graderId,
+    [GenAIAttributes.EVALUATION_NAME]: ctx.graderId,
     [SPAN_ROLE_ATTRIBUTE]: 'grader',
   };
   if (ctx.evalId) {
@@ -258,16 +284,7 @@ export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promis
     async (span) => {
       try {
         const result = await withSpanRole('grader', fn);
-        const grade =
-          result && typeof result === 'object' && 'grade' in result ? result.grade : result;
-        if (grade && typeof grade === 'object') {
-          if ('pass' in grade && typeof grade.pass === 'boolean') {
-            span.setAttribute(GraderAttributes.GRADER_PASS, grade.pass);
-          }
-          if ('score' in grade && typeof grade.score === 'number') {
-            span.setAttribute(GraderAttributes.GRADER_SCORE, grade.score);
-          }
-        }
+        setEvaluationResultAttributes(span, result);
         span.setStatus({ code: SpanStatusCode.OK });
         return result;
       } catch (error) {

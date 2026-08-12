@@ -3,11 +3,10 @@ import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tr
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
-import { getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
+import { GenAIAttributes, getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
 import { isRelevantSpan } from '../../src/tracing/spanFilter';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import {
-  GraderAttributes,
   withGraderSpan,
   withTestCaseSpan,
   withTracedProviderCall,
@@ -72,6 +71,7 @@ describe('test-case execution trace hierarchy', () => {
     await withTestCaseSpan(traceContext?.rootSpan, async () => [{ score: 1, success: true }]);
 
     const [root] = exporter.getFinishedSpans();
+    expect(root.name).toBe('promptfoo.test_case');
     expect(root.parentSpanContext).toBeUndefined();
     expect(root.attributes).toMatchObject({
       [SPAN_ROLE_ATTRIBUTE]: 'test_case',
@@ -135,7 +135,7 @@ describe('test-case execution trace hierarchy', () => {
               async () => ({ output: 'judge response' }),
             ),
         );
-        return { pass: false, score: 0 };
+        return { pass: false, score: 0, reason: 'The response did not satisfy the rubric.' };
       });
 
       return [{ score: 0, success: false }];
@@ -146,7 +146,7 @@ describe('test-case execution trace hierarchy', () => {
     const targetSpan = spans.find((span) => span.name === 'http:customer-agent')!;
     const targetModel = spans.find((span) => span.name === 'chat application-model')!;
     const graderSpan = spans.find((span) => span.name === 'grader llm-rubric')!;
-    const gradingProviderSpan = spans.find((span) => span.name === 'grader model openai:judge')!;
+    const gradingProviderSpan = spans.find((span) => span.name === 'grader provider openai:judge')!;
     const judgeModel = spans.find((span) => span.name === 'chat judge-model')!;
 
     expect(targetSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
@@ -156,14 +156,42 @@ describe('test-case execution trace hierarchy', () => {
     expect(judgeModel.parentSpanContext?.spanId).toBe(gradingProviderSpan.spanContext().spanId);
     expect(targetContexts[0]?.traceparent).toContain(targetSpan.spanContext().spanId);
     expect(graderSpan.attributes).toMatchObject({
-      [GraderAttributes.GRADER_PASS]: false,
-      [GraderAttributes.GRADER_SCORE]: 0,
+      [GenAIAttributes.EVALUATION_NAME]: 'llm-rubric',
+      [GenAIAttributes.EVALUATION_SCORE_LABEL]: 'fail',
+      [GenAIAttributes.EVALUATION_SCORE_VALUE]: 0,
+      [GenAIAttributes.EVALUATION_EXPLANATION]: 'The response did not satisfy the rubric.',
       [SPAN_ROLE_ATTRIBUTE]: 'grader',
     });
+    expect(gradingProviderSpan.attributes).not.toHaveProperty('promptfoo.target.type');
+    expect(gradingProviderSpan.attributes).not.toHaveProperty('promptfoo.target.label');
+    expect(gradingProviderSpan.attributes).not.toHaveProperty(GenAIAttributes.OPERATION_NAME);
     expect(targetModel.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('target');
     expect(judgeModel.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
     expect(isRelevantSpan({ attributes: targetModel.attributes })).toBe(true);
+    expect(isRelevantSpan({ attributes: graderSpan.attributes })).toBe(false);
     expect(isRelevantSpan({ attributes: judgeModel.attributes })).toBe(false);
+  });
+
+  it('sanitizes and bounds grader explanations before exporting them', async () => {
+    const root = getGenAITracer().startSpan('test case grader explanation');
+
+    await withTestCaseSpan(root, async () => {
+      await withGraderSpan({ graderId: 'contains' }, async () => ({
+        pass: true,
+        score: 1,
+        reason: `api_key=abcdefghijklmnop ${'long explanation '.repeat(100)}`,
+      }));
+      return [{ score: 1, success: true }];
+    });
+
+    const graderSpan = exporter.getFinishedSpans().find((span) => span.name === 'grader contains')!;
+    const explanation = graderSpan.attributes[GenAIAttributes.EVALUATION_EXPLANATION] as string;
+
+    expect(explanation).toContain('api_key=<REDACTED>');
+    expect(explanation).not.toContain('abcdefghijklmnop');
+    expect(explanation).toHaveLength(1024);
+    expect(explanation.endsWith('…')).toBe(true);
+    expect(graderSpan.attributes[GenAIAttributes.EVALUATION_SCORE_LABEL]).toBe('pass');
   });
 
   it('keeps the root open until deferred grading finishes', async () => {

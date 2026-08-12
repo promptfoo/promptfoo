@@ -207,7 +207,7 @@ export class OTLPTracingExporter implements TracingExporter {
           attributes['gen_ai.usage.output_tokens'] = data.usage.output_tokens;
         }
         if (data.usage && 'total_tokens' in data.usage) {
-          attributes['gen_ai.usage.total_tokens'] = data.usage.total_tokens;
+          attributes['promptfoo.usage.total_tokens'] = data.usage.total_tokens;
         }
         break;
       case 'response':

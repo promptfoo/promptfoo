@@ -1047,7 +1047,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  // The `gen_ai.system` span attribute. Subclasses serving a different vendor
+  // The `gen_ai.provider.name` span attribute. Subclasses serving a different vendor
   // through the Responses wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {

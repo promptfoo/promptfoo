@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -291,6 +291,59 @@ class TestInitTracing(unittest.TestCase):
         self.assertTrue(persistent_wrapper._tracing_enabled)
         self.assertIs(persistent_wrapper._tracer, fake_tracer)
         self.assertEqual(stderr_capture.getvalue(), "")
+
+
+class TestTracedCall(unittest.TestCase):
+    """Tests standardized OpenTelemetry attributes on traced Python provider calls."""
+
+    def test_uses_current_provider_and_usage_attribute_names(self) -> None:
+        span = MagicMock()
+        tracer = MagicMock()
+        tracer.start_as_current_span.return_value.__enter__.return_value = span
+
+        propagate_module = ModuleType("opentelemetry.propagate")
+        propagate_module.extract = MagicMock(return_value=object())
+        trace_module = ModuleType("opentelemetry.trace")
+        trace_module.SpanKind = SimpleNamespace(CLIENT="client")
+        trace_module.Status = MagicMock()
+        trace_module.StatusCode = SimpleNamespace(OK="ok", ERROR="error")
+
+        with patch.dict(
+            sys.modules,
+            {
+                "opentelemetry.propagate": propagate_module,
+                "opentelemetry.trace": trace_module,
+            },
+        ):
+            with patch.object(persistent_wrapper, "_tracer", tracer):
+                with patch.object(persistent_wrapper, "_tracing_enabled", True):
+                    result = persistent_wrapper._traced_call(
+                        lambda *_args: {
+                            "output": "done",
+                            "tokenUsage": {
+                                "prompt": 10,
+                                "completion": 5,
+                                "total": 15,
+                            },
+                        },
+                        [
+                            "prompt",
+                            {"config": {"model": "customer-model"}},
+                            {
+                                "traceparent": "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01"
+                            },
+                        ],
+                        "call_api",
+                    )
+
+        self.assertEqual(result["output"], "done")
+        span.set_attribute.assert_any_call("gen_ai.provider.name", "python")
+        span.set_attribute.assert_any_call("gen_ai.usage.input_tokens", 10)
+        span.set_attribute.assert_any_call("gen_ai.usage.output_tokens", 5)
+        span.set_attribute.assert_any_call("promptfoo.usage.total_tokens", 15)
+        attribute_names = [call.args[0] for call in span.set_attribute.call_args_list]
+        self.assertNotIn("gen_ai.system", attribute_names)
+        self.assertNotIn("gen_ai.usage.total_tokens", attribute_names)
 
 
 class TestMain(unittest.TestCase):
