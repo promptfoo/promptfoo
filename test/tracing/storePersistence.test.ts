@@ -83,7 +83,7 @@ describe('TraceStore span persistence', () => {
     await expect(secondTraceStore.getSpans('second-trace')).resolves.toHaveLength(1);
   });
 
-  it('keeps meaningful internal model, tool, guardrail, and error spans in red-team context', async () => {
+  it('keeps meaningful model, tool, command, search, guardrail, and error spans in red-team context', async () => {
     const traceStore = await createTrace('semantic-selection');
     const spans = [
       {
@@ -128,9 +128,23 @@ describe('TraceStore span persistence', () => {
         attributes: { 'otel.span.kind': 'internal', 'guardrails.decision': 'blocked' },
       },
       {
+        spanId: 'command',
+        parentSpanId: 'model',
+        name: 'execute operation',
+        startTime: 6,
+        attributes: { 'otel.span.kind': 'client', 'command.name': 'git status' },
+      },
+      {
+        spanId: 'search',
+        parentSpanId: 'model',
+        name: 'retrieve information',
+        startTime: 7,
+        attributes: { 'otel.span.kind': 'client', search_query: 'customer records' },
+      },
+      {
         spanId: 'error',
         name: 'POST /remote-api',
-        startTime: 6,
+        startTime: 8,
         statusCode: 2,
         statusMessage: 'rate limited',
         attributes: { 'otel.span.kind': 'client' },
@@ -146,6 +160,8 @@ describe('TraceStore span persistence', () => {
       'chat gpt-4.1-mini',
       'execute_tool search_knowledge_base',
       'policy check',
+      'execute operation',
+      'retrieve information',
       'POST /remote-api',
     ]);
     await expect(traceStore.getSpans('semantic-selection')).resolves.toHaveLength(spans.length);

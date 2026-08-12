@@ -1,13 +1,23 @@
-import { getToolNameFromAttributes } from './toolAttributes';
+import {
+  COMMAND_ATTRIBUTE_KEYS,
+  getFirstStringAttribute,
+  getToolNameFromAttributes,
+  SEARCH_ATTRIBUTE_KEYS,
+} from './toolAttributes';
 
 interface SpanRelevanceInput {
   attributes?: Record<string, unknown>;
   statusCode?: number;
 }
 
-/** Identifies spans that describe model activity, tool calls, guardrails, or failures. */
+/** Identifies spans that describe model, tool, command, search, guardrail, or error activity. */
 export function isRelevantSpan(span: SpanRelevanceInput): boolean {
-  if (span.statusCode === 2 || getToolNameFromAttributes(span.attributes)) {
+  if (
+    span.statusCode === 2 ||
+    getToolNameFromAttributes(span.attributes) ||
+    getFirstStringAttribute(span.attributes, COMMAND_ATTRIBUTE_KEYS) ||
+    getFirstStringAttribute(span.attributes, SEARCH_ATTRIBUTE_KEYS)
+  ) {
     return true;
   }
 

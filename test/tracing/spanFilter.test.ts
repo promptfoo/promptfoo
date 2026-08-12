@@ -30,6 +30,14 @@ describe('trace span relevance', () => {
       description: 'guardrail decisions',
       attributes: { 'guardrails.decision': 'blocked' },
     },
+    ...['codex.command', 'command', 'command.name', 'command_name'].map((attribute) => ({
+      description: `command activity from ${attribute}`,
+      attributes: { [attribute]: 'git status' },
+    })),
+    ...['codex.search.query', 'search.query', 'search_query'].map((attribute) => ({
+      description: `search activity from ${attribute}`,
+      attributes: { [attribute]: 'customer records' },
+    })),
   ])('includes $description regardless of the span name', ({ attributes }) => {
     expect(isRelevantSpan({ attributes })).toBe(true);
   });
@@ -42,6 +50,10 @@ describe('trace span relevance', () => {
     { 'http.request.method': 'POST' },
     { 'url.full': 'https://example.com/chat' },
     { 'otel.span.kind': 'internal' },
+    { 'command.output': 'git status output' },
+    { 'search.results': 'customer records' },
+    { command: '  ' },
+    { 'search.query': '' },
     {},
   ])('excludes framework and HTTP spans without meaningful attributes: %o', (attributes) => {
     expect(isRelevantSpan({ attributes })).toBe(false);

@@ -6,6 +6,19 @@ type ToolAttributeFamily = {
   extraArgKeys?: readonly string[];
 };
 
+export const COMMAND_ATTRIBUTE_KEYS = [
+  'codex.command',
+  'command',
+  'command.name',
+  'command_name',
+] as const;
+
+export const SEARCH_ATTRIBUTE_KEYS = [
+  'codex.search.query',
+  'search.query',
+  'search_query',
+] as const;
+
 const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
   {
     prefix: 'tool',
