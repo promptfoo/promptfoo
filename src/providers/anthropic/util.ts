@@ -197,11 +197,11 @@ const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
 // forward-compatible fallback for post-4.6 Claude 4.x and Claude 5+ family names so providers do
-// not send rejected parameters while waiting for a model-specific capability row. Limit 4.x to
-// the one-digit minors after 4.6, and later major generations to one or two digits, so lookalikes
-// such as `claude-opus-4-80` and date-stamped aliases are not mistaken for future models.
+// not send rejected parameters while waiting for a model-specific capability row. Accept every
+// numeric 4.x minor after 4.6, while keeping later major generations to one or two digits so
+// date-stamped aliases are not mistaken for future models.
 const CLAUDE_POST_46_OR_5_PLUS_PATTERN =
-  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:4-[7-9]|[5-9]|[1-9][0-9])(?![a-z0-9])/i;
+  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:4-(?:[7-9]|[1-9][0-9]+)|[5-9]|[1-9][0-9])(?![a-z0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;

@@ -1985,9 +1985,10 @@ describe('Anthropic utilities', () => {
       ]) {
         expect(getClaudeModelWarningName(id)).not.toBe('Claude Opus 4.7 and 4.8');
       }
-      // `claude-opus-4-80` is not a recognized family at all, and keeps sampling params.
+      // `claude-opus-4-80` is not a recognized capability-table family, so it has no
+      // family-specific warning even though the forward-compatible sampling fallback covers it.
       expect(getClaudeModelWarningName('claude-opus-4-80')).toBeUndefined();
-      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-80')).toBe(false);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-80')).toBe(true);
     });
 
     it('still detects dated Opus 4.8 snapshots', () => {
@@ -2048,6 +2049,8 @@ describe('Anthropic utilities', () => {
     it('future-proofs sampling deprecation for post-4.6 Claude 4.x families', () => {
       for (const id of [
         'claude-opus-4-9',
+        'claude-opus-4-10',
+        'claude-opus-4-50',
         'anthropic:messages:claude-haiku-4-9-20260901',
         'us.anthropic.claude-research-preview-4-9',
         'vertex:claude-sonnet-4-9',
@@ -2072,10 +2075,9 @@ describe('Anthropic utilities', () => {
       ).toBe(true);
     });
 
-    it('does not mistake legacy or lookalike model IDs for Claude 5+', () => {
+    it('does not mistake legacy or lookalike IDs for sampling-deprecated models', () => {
       for (const id of [
         'claude-3-5-sonnet-20241022',
-        'claude-opus-4-50',
         'claude-sonnet-5x',
         'claude-prod-20260811',
         'notclaude-opus-5',
