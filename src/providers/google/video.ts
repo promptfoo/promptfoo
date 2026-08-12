@@ -41,6 +41,7 @@ const DEFAULT_LOCATION = 'us-central1';
  */
 const VEO_3_DURATIONS: GoogleVideoDuration[] = [4, 6, 8];
 const VEO_2_DURATIONS: GoogleVideoDuration[] = [5, 6, 8];
+const VEO_EXTENSION_DURATION: GoogleVideoDuration = 8;
 
 /**
  * Default configuration values
@@ -108,6 +109,22 @@ export function validateDuration(
     };
   }
   return { valid: true };
+}
+
+/**
+ * Vertex's extend-a-video request body documents only `storageUri` and `sampleCount`, and fixes
+ * the added length at 7 seconds -- `durationSeconds` is not an extension parameter. Existing
+ * configs nonetheless carry 4 or 6 (this repo's own example shipped 6), so warn and fall back to
+ * the extension default rather than failing a request the API would have accepted.
+ */
+function resolveExtensionDuration(duration: number): GoogleVideoDuration {
+  if (duration !== VEO_EXTENSION_DURATION) {
+    logger.warn(
+      `[Google Video] durationSeconds is not used when extending a video (Veo adds a fixed 7s). ` +
+        `Ignoring the configured ${duration}s.`,
+    );
+  }
+  return VEO_EXTENSION_DURATION;
 }
 
 export function validateResolution(
@@ -268,6 +285,41 @@ export class GoogleVideoProvider implements ApiProvider {
     return this.createAiStudioVideoJob(prompt, config);
   }
 
+  private addVertexVideoInput(
+    instance: Record<string, unknown>,
+    config: GoogleVideoOptions,
+  ): string | undefined {
+    if (!config.sourceVideo) {
+      if (config.extendVideoId) {
+        instance.video = { operationName: config.extendVideoId };
+      }
+      return undefined;
+    }
+
+    if (config.sourceVideo.includes('/operations/')) {
+      instance.video = { operationName: config.sourceVideo };
+      return undefined;
+    }
+
+    if (config.sourceVideo.startsWith('gs://')) {
+      instance.video = {
+        gcsUri: config.sourceVideo,
+        mimeType: 'video/mp4',
+      };
+      return undefined;
+    }
+
+    const { data: videoData, error } = this.loadVideoData(config.sourceVideo);
+    if (error) {
+      return error;
+    }
+    instance.video = {
+      bytesBase64Encoded: videoData,
+      mimeType: 'video/mp4',
+    };
+    return undefined;
+  }
+
   private buildVertexRequestBody(
     prompt: string,
     config: GoogleVideoOptions,
@@ -334,9 +386,9 @@ export class GoogleVideoProvider implements ApiProvider {
       instance.referenceImages = refs;
     }
 
-    const extendVideoId = config.extendVideoId || config.sourceVideo;
-    if (extendVideoId) {
-      instance.video = { operationName: extendVideoId };
+    const videoError = this.addVertexVideoInput(instance, config);
+    if (videoError) {
+      return { error: videoError };
     }
 
     return {
@@ -426,7 +478,7 @@ export class GoogleVideoProvider implements ApiProvider {
       if (sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Use `vertex:video:*` with `extendVideoId`, or provide base64/file:// video data via `sourceVideo`.',
+            'Google AI Studio Veo does not accept operation IDs for video extension. Provide base64 or a file:// video via `sourceVideo`. For Vertex AI, use `sourceVideo` with a gs:// URI, base64 data, or a file:// path.',
         };
       }
       const { data: videoData, error } = this.loadVideoData(sourceVideo);
@@ -860,9 +912,12 @@ export class GoogleVideoProvider implements ApiProvider {
     const model = effectiveConfig.model || this.modelName;
     const aspectRatio = effectiveConfig.aspectRatio || DEFAULT_ASPECT_RATIO;
     const resolution = effectiveConfig.resolution || DEFAULT_RESOLUTION;
+    const isVideoExtension = Boolean(effectiveConfig.sourceVideo || effectiveConfig.extendVideoId);
     // Support both 'durationSeconds' and 'duration' (alias)
-    const durationSeconds =
-      effectiveConfig.durationSeconds || effectiveConfig.duration || DEFAULT_DURATION;
+    let durationSeconds =
+      effectiveConfig.durationSeconds ??
+      effectiveConfig.duration ??
+      (isVideoExtension ? VEO_EXTENSION_DURATION : DEFAULT_DURATION);
 
     // Validate aspect ratio
     const ratioValidation = validateAspectRatio(aspectRatio);
@@ -871,9 +926,13 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Validate duration
-    const durationValidation = validateDuration(model, durationSeconds);
-    if (!durationValidation.valid) {
-      return { error: durationValidation.message };
+    if (isVideoExtension) {
+      durationSeconds = resolveExtensionDuration(durationSeconds);
+    } else {
+      const durationValidation = validateDuration(model, durationSeconds);
+      if (!durationValidation.valid) {
+        return { error: durationValidation.message };
+      }
     }
 
     // Validate resolution

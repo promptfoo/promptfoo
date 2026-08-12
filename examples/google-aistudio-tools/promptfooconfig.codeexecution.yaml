@@ -6,9 +6,9 @@ prompts:
   - '{{query}}'
 
 providers:
-  - id: google:gemini-2.5-flash
+  - id: google:gemini-3.6-flash
     config:
-      temperature: 0.2
+      maxOutputTokens: 2048
       tools:
         - codeExecution: {}
 

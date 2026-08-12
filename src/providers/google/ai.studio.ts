@@ -11,16 +11,21 @@ import {
   calculateGoogleCost,
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
   normalizeGeminiAudio,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
@@ -332,13 +337,23 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     const {
       service_tier: passthroughServiceTier,
+      serviceTier: camelCasePassthroughServiceTier,
       tools: passthroughTools,
+      // resolveGoogleToolConfig already folds these in; keeping them in the raw spread would
+      // let a conflicting passthrough mode overwrite a resolved NONE, so the request would
+      // carry mode ANY with the declarations already stripped.
+      toolConfig: _passthroughToolConfig,
+      tool_config: _passthroughToolConfigSnakeCase,
       ...passthrough
     } = config.passthrough || {};
+    const serviceTier = normalizeGoogleServiceTier(
+      passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+    );
     const requestPassthroughTools =
       toolsDisabled && passthroughTools !== undefined
         ? removeGoogleFunctionDeclarations(passthroughTools)
         : passthroughTools;
+    const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
     const body: Record<string, any> = {
       contents,
@@ -366,25 +381,15 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
+      ...(mergedTools ? { tools: mergedTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
-      ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
       ...passthrough,
-      // Normalize a single-object passthrough `tools` value to a one-element array and
-      // always merge with requestTools so config/MCP tools aren't dropped and `tools`
-      // stays the array shape the Gemini API requires.
-      ...(requestPassthroughTools === undefined
-        ? {}
-        : {
-            tools: [
-              ...requestTools,
-              ...(Array.isArray(requestPassthroughTools)
-                ? requestPassthroughTools
-                : [requestPassthroughTools]),
-            ],
-          }),
-      ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
@@ -403,11 +408,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     let data;
     let cached = false;
+    let responseHeaders: unknown;
     try {
       const endpoint = this.getApiEndpoint('generateContent');
       const headers = await this.getAuthHeaders();
       const authDiscriminator = createAuthCacheDiscriminator(headers);
-      ({ data, cached } = (await fetchWithCache(
+      const response = await fetchWithCache(
         endpoint,
         {
           method: 'POST',
@@ -418,10 +424,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         getRequestTimeoutMs(),
         'json',
         shouldBustCache(context),
-      )) as {
-        data: GeminiResponseData;
-        cached: boolean;
-      });
+      );
+      data = response.data as GeminiResponseData;
+      cached = response.cached;
+      responseHeaders = response.headers;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -452,7 +458,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         output = mergeParts(output, formatCandidateContents(candidate));
       }
 
-      if (output === undefined || candidate === undefined) {
+      if (output === undefined || output === '' || candidate === undefined) {
         throw new Error(`No output found in response: ${JSON.stringify(data)}`);
       }
     } catch (err) {
@@ -481,6 +487,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       }
 
       const grounding = collectGroundingMetadata(dataWithResponse);
+      const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
+      const actualServiceTier = getGoogleResponseServiceTier(
+        responseHeaders,
+        lastData.usageMetadata,
+      );
 
       const tokenUsage = cached
         ? {
@@ -532,18 +543,23 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             completionForCost,
             false,
             lastData.usageMetadata,
+            actualServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
 
       return {
-        output,
+        output: await this.executeFunctionToolCallbacks(output, config, toolsDisabled),
         ...(audio && { audio }),
         tokenUsage,
         cost,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: { ...grounding },
+        metadata: {
+          ...grounding,
+          ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+          ...(actualServiceTier && { serviceTier: actualServiceTier }),
+        },
       };
     } catch (err) {
       return {
@@ -663,7 +679,7 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.6-flash';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

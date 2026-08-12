@@ -5,12 +5,10 @@ prompts:
   - 'Continue this video: {{continuation}}'
 
 providers:
-  - id: vertex:video:veo-3.1-generate-preview
+  - id: google:video:veo-3.1-generate-preview
     config:
-      # Use the operation ID from a previous Veo video generation
-      # This is returned in metadata.operationName of the generation response
-      extendVideoId: projects/YOUR_PROJECT/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/YOUR_OPERATION_ID
-      durationSeconds: 6 # Valid: 4, 6, 8 for Veo 3.x
+      sourceVideo: file://YOUR_SOURCE_VIDEO.mp4
+      # durationSeconds is not an extension parameter; Veo adds a fixed 7 seconds.
 
 tests:
   - vars:
@@ -22,8 +20,7 @@ tests:
     assert:
       - type: is-valid-video
 
-# Note: Video extension uses the explicit Vertex AI provider path.
 # To use this:
-# 1. First generate a video using promptfooconfig.yaml
-# 2. Get the operation ID from the results (metadata.operationName field)
-# 3. Replace YOUR_PROJECT and YOUR_OPERATION_ID above with your values
+# 1. Save a source video locally.
+# 2. Replace YOUR_SOURCE_VIDEO.mp4 with its path.
+# 3. Set GOOGLE_API_KEY or GEMINI_API_KEY.

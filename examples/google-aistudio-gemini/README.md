@@ -20,10 +20,10 @@ The example tests across multiple Gemini and Gemma models:
 
 - **Gemma 4 31B IT** - Open model with strong reasoning, coding, and agentic capabilities
 - **Gemma 4 26B A4B IT** - Smaller open Gemma 4 model for lower-latency reasoning and coding evals
-- **Gemini 3.5 Flash** - Newest, fastest frontier Flash model with high-effort thinking
+- **Gemini 3.6 Flash** - Latest frontier Flash model for coding, agentic, and multimodal tasks
 - **Gemini 3.1 Pro** - Frontier model with improved reasoning and multimodal understanding
 - **Gemini 3 Flash** - Frontier Flash model with strong reasoning at lower latency
-- **Gemini 3.1 Flash-Lite** - Low-latency, cost-efficient model for high-volume tasks
+- **Gemini 3.5 Flash-Lite** - Low-latency, cost-efficient model for high-volume agentic and document-processing tasks
 - **Gemini 2.5 Pro** - Stable model with strong reasoning, coding, and multimodal understanding; also used with structured JSON output and function calling
 - **Gemini 2.5 Flash** - Stable Flash model with enhanced reasoning and thinking capabilities
 - **Gemini 2.5 Flash-Lite** - Cost-efficient and fast 2.5 model, optimized for high-volume, latency-sensitive tasks

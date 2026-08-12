@@ -9,8 +9,9 @@ prompts:
 
 providers:
   # See https://www.promptfoo.dev/docs/providers/vertex/
-  - id: 'vertex:gemini-2.5-flash-002'
+  - id: 'vertex:gemini-3.6-flash'
     config:
+      region: global
       tools: file://tools.json
 
 defaultTest:
@@ -31,7 +32,10 @@ defaultTest:
     # This overrides the default grading providers with Vertex AI models.
     providers:
       embedding: 'vertex:embedding:text-embedding-005'
-      text: 'vertex:gemini-2.5-flash-002'
+      text:
+        id: 'vertex:gemini-3.6-flash'
+        config:
+          region: global
 
 tests:
   - vars:
