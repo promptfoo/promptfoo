@@ -1647,9 +1647,9 @@ providers:
 
 URL resolution order for this provider is:
 
-1. `config.apiBaseUrl` (full URL; highest priority)
-2. `config.apiHost` (host only; Promptfoo builds `https://<host>/v1`)
-3. `OPENAI_API_HOST` (host only)
+1. `config.apiHost` (host only; Promptfoo builds `https://<host>/v1`; highest priority)
+2. `config.apiBaseUrl` (full URL)
+3. `OPENAI_API_HOST` (host only; provider `env:` or ambient)
 4. `OPENAI_API_BASE_URL` / `OPENAI_BASE_URL`
 5. the default OpenAI API host
 
