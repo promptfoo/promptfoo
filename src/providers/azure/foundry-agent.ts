@@ -6,13 +6,6 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  buildChatSpanContext,
-  emitTurnMarkerSpan,
-  extractProviderResponseAttributes,
-  getGenAITracer,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -25,6 +18,14 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import {
+  buildChatSpanContext,
+  emitTurnMarkerSpan,
+  extractProviderResponseAttributes,
+  GenAIAttributes,
+  getGenAITracer,
+  withGenAISpan,
+} from '../tracing';
 import {
   formatContentFilterResponse,
   isContentFilterError,
@@ -545,14 +546,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const spanContext = buildChatSpanContext({
       system: 'azure',
-      model: this.deploymentName,
+      model: this.assistantConfig.modelName || this.deploymentName,
       providerId: this.id(),
       prompt,
       context,
     });
 
     return withGenAISpan(
-      spanContext,
+      { ...spanContext, operationName: 'invoke_agent', agentName: this.deploymentName },
       () => this.callApiInternal(prompt, context, callApiOptions),
       extractProviderResponseAttributes,
     );
@@ -600,7 +601,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           index: turnCount,
           startTime: callStartedAt,
           endTime: callEndedAt,
-          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          attributes: {
+            'gen_ai.turn.index': turnCount,
+            [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
+          },
           errorMessage,
           logLabel: 'AzureFoundryAgent',
         });

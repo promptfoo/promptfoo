@@ -72,11 +72,12 @@ export async function getTokenUsage(query: TokenUsageQuery): Promise<TokenUsage>
  * information from the standard GenAI semantic convention attributes:
  * - `gen_ai.usage.input_tokens` -> prompt tokens
  * - `gen_ai.usage.output_tokens` -> completion tokens
- * - `gen_ai.usage.total_tokens` -> total tokens
- * - `gen_ai.usage.cached_tokens` -> cached tokens
- * - `gen_ai.usage.reasoning_tokens` -> reasoning tokens
- * - `gen_ai.usage.accepted_prediction_tokens` -> accepted prediction tokens
- * - `gen_ai.usage.rejected_prediction_tokens` -> rejected prediction tokens
+ * - `gen_ai.usage.reasoning.output_tokens` -> reasoning tokens
+ * - `gen_ai.usage.cache_read.input_tokens` -> provider prompt-cache reads
+ * - `gen_ai.usage.cache_creation.input_tokens` -> provider prompt-cache writes
+ *
+ * Promptfoo-specific measurements use the `promptfoo.usage.*` namespace.
+ * Historical `gen_ai.usage.*` variants remain readable for existing traces.
  *
  * @param traceId - The trace ID to retrieve usage for
  * @returns Aggregated token usage from all spans in the trace
@@ -152,6 +153,7 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
   const hasUsageAttributes =
     attrs['gen_ai.usage.input_tokens'] !== undefined ||
     attrs['gen_ai.usage.output_tokens'] !== undefined ||
+    attrs['promptfoo.usage.total_tokens'] !== undefined ||
     attrs['gen_ai.usage.total_tokens'] !== undefined;
 
   if (!hasUsageAttributes) {
@@ -163,45 +165,81 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
   };
 
   // Extract standard GenAI semantic convention attributes
-  if (typeof attrs['gen_ai.usage.input_tokens'] === 'number') {
-    usage.prompt = attrs['gen_ai.usage.input_tokens'];
+  const readNumericAttribute = (...keys: string[]): number | undefined => {
+    for (const key of keys) {
+      const value = attrs[key];
+      if (typeof value === 'number') {
+        return value;
+      }
+    }
+    return undefined;
+  };
+
+  const prompt = readNumericAttribute('gen_ai.usage.input_tokens');
+  const completion = readNumericAttribute('gen_ai.usage.output_tokens');
+  const total = readNumericAttribute('promptfoo.usage.total_tokens', 'gen_ai.usage.total_tokens');
+  if (prompt !== undefined) {
+    usage.prompt = prompt;
   }
-  if (typeof attrs['gen_ai.usage.output_tokens'] === 'number') {
-    usage.completion = attrs['gen_ai.usage.output_tokens'];
+  if (completion !== undefined) {
+    usage.completion = completion;
   }
-  if (typeof attrs['gen_ai.usage.total_tokens'] === 'number') {
-    usage.total = attrs['gen_ai.usage.total_tokens'];
+  if (total !== undefined) {
+    usage.total = total;
+  } else if (prompt !== undefined && completion !== undefined) {
+    usage.total = prompt + completion;
   }
-  if (typeof attrs['gen_ai.usage.cached_tokens'] === 'number') {
-    usage.cached = attrs['gen_ai.usage.cached_tokens'];
+  const cached = readNumericAttribute(
+    'promptfoo.usage.cached_response_tokens',
+    'gen_ai.usage.cached_tokens',
+  );
+  if (cached !== undefined) {
+    usage.cached = cached;
   }
 
-  // Extract completion details (custom attributes)
-  const hasCompletionDetails =
-    attrs['gen_ai.usage.reasoning_tokens'] !== undefined ||
-    attrs['gen_ai.usage.accepted_prediction_tokens'] !== undefined ||
-    attrs['gen_ai.usage.rejected_prediction_tokens'] !== undefined ||
-    attrs['gen_ai.usage.cache_read_input_tokens'] !== undefined ||
-    attrs['gen_ai.usage.cache_creation_input_tokens'] !== undefined;
+  const reasoning = readNumericAttribute(
+    'gen_ai.usage.reasoning.output_tokens',
+    'gen_ai.usage.reasoning_tokens',
+  );
+  const acceptedPrediction = readNumericAttribute(
+    'promptfoo.usage.accepted_prediction_tokens',
+    'gen_ai.usage.accepted_prediction_tokens',
+  );
+  const rejectedPrediction = readNumericAttribute(
+    'promptfoo.usage.rejected_prediction_tokens',
+    'gen_ai.usage.rejected_prediction_tokens',
+  );
+  const cacheReadInputTokens = readNumericAttribute(
+    'gen_ai.usage.cache_read.input_tokens',
+    'gen_ai.usage.cache_read_input_tokens',
+  );
+  const cacheCreationInputTokens = readNumericAttribute(
+    'gen_ai.usage.cache_creation.input_tokens',
+    'gen_ai.usage.cache_creation_input_tokens',
+  );
 
-  if (hasCompletionDetails) {
+  if (
+    reasoning !== undefined ||
+    acceptedPrediction !== undefined ||
+    rejectedPrediction !== undefined ||
+    cacheReadInputTokens !== undefined ||
+    cacheCreationInputTokens !== undefined
+  ) {
     usage.completionDetails = {};
-
-    if (typeof attrs['gen_ai.usage.reasoning_tokens'] === 'number') {
-      usage.completionDetails.reasoning = attrs['gen_ai.usage.reasoning_tokens'];
+    if (reasoning !== undefined) {
+      usage.completionDetails.reasoning = reasoning;
     }
-    if (typeof attrs['gen_ai.usage.accepted_prediction_tokens'] === 'number') {
-      usage.completionDetails.acceptedPrediction = attrs['gen_ai.usage.accepted_prediction_tokens'];
+    if (acceptedPrediction !== undefined) {
+      usage.completionDetails.acceptedPrediction = acceptedPrediction;
     }
-    if (typeof attrs['gen_ai.usage.rejected_prediction_tokens'] === 'number') {
-      usage.completionDetails.rejectedPrediction = attrs['gen_ai.usage.rejected_prediction_tokens'];
+    if (rejectedPrediction !== undefined) {
+      usage.completionDetails.rejectedPrediction = rejectedPrediction;
     }
-    if (typeof attrs['gen_ai.usage.cache_read_input_tokens'] === 'number') {
-      usage.completionDetails.cacheReadInputTokens = attrs['gen_ai.usage.cache_read_input_tokens'];
+    if (cacheReadInputTokens !== undefined) {
+      usage.completionDetails.cacheReadInputTokens = cacheReadInputTokens;
     }
-    if (typeof attrs['gen_ai.usage.cache_creation_input_tokens'] === 'number') {
-      usage.completionDetails.cacheCreationInputTokens =
-        attrs['gen_ai.usage.cache_creation_input_tokens'];
+    if (cacheCreationInputTokens !== undefined) {
+      usage.completionDetails.cacheCreationInputTokens = cacheCreationInputTokens;
     }
   }
 

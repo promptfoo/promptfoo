@@ -6,7 +6,14 @@ describe('sanitizeTraceAttributes', () => {
     expect(
       sanitizeTraceAttributes(
         {
+          'gen_ai.usage.reasoning.output_tokens': 3,
+          'gen_ai.usage.cache_read.input_tokens': 4,
+          'gen_ai.usage.cache_creation.input_tokens': 5,
           'gen_ai.usage.total_tokens': 12,
+          'promptfoo.usage.total_tokens': 12,
+          'promptfoo.usage.cached_response_tokens': 6,
+          'promptfoo.usage.accepted_prediction_tokens': 7,
+          'promptfoo.usage.rejected_prediction_tokens': 8,
           'X-API-Key': 'secret',
           nested: { access_token: 'secret' },
           customer_email: 'private@example.com',
@@ -14,7 +21,14 @@ describe('sanitizeTraceAttributes', () => {
         { redactAttributes: ['email'] },
       ),
     ).toEqual({
+      'gen_ai.usage.reasoning.output_tokens': 3,
+      'gen_ai.usage.cache_read.input_tokens': 4,
+      'gen_ai.usage.cache_creation.input_tokens': 5,
       'gen_ai.usage.total_tokens': 12,
+      'promptfoo.usage.total_tokens': 12,
+      'promptfoo.usage.cached_response_tokens': 6,
+      'promptfoo.usage.accepted_prediction_tokens': 7,
+      'promptfoo.usage.rejected_prediction_tokens': 8,
       'X-API-Key': '<redacted>',
       nested: { access_token: '<redacted>' },
       customer_email: '[REDACTED]',

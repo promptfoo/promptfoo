@@ -24,11 +24,15 @@ const TRACER_NAME = 'promptfoo.providers';
 const TRACER_VERSION = '1.0.0';
 
 // GenAI Semantic Convention attribute names
-// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+// See: https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai
 export const GenAIAttributes = {
-  // System identification
+  // Provider identification
+  /** @deprecated Read-only compatibility for spans emitted before gen_ai.provider.name. */
   SYSTEM: 'gen_ai.system',
+  PROVIDER_NAME: 'gen_ai.provider.name',
   OPERATION_NAME: 'gen_ai.operation.name',
+  AGENT_ID: 'gen_ai.agent.id',
+  AGENT_NAME: 'gen_ai.agent.name',
 
   // Request attributes
   REQUEST_MODEL: 'gen_ai.request.model',
@@ -45,18 +49,18 @@ export const GenAIAttributes = {
   RESPONSE_ID: 'gen_ai.response.id',
   RESPONSE_FINISH_REASONS: 'gen_ai.response.finish_reasons',
 
-  // Usage attributes (official)
+  // Evaluation attributes
+  EVALUATION_NAME: 'gen_ai.evaluation.name',
+  EVALUATION_SCORE_VALUE: 'gen_ai.evaluation.score.value',
+  EVALUATION_SCORE_LABEL: 'gen_ai.evaluation.score.label',
+  EVALUATION_EXPLANATION: 'gen_ai.evaluation.explanation',
+
+  // Usage attributes
   USAGE_INPUT_TOKENS: 'gen_ai.usage.input_tokens',
   USAGE_OUTPUT_TOKENS: 'gen_ai.usage.output_tokens',
-
-  // Usage attributes (custom/extended)
-  USAGE_TOTAL_TOKENS: 'gen_ai.usage.total_tokens',
-  USAGE_CACHED_TOKENS: 'gen_ai.usage.cached_tokens',
-  USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
-  USAGE_ACCEPTED_PREDICTION_TOKENS: 'gen_ai.usage.accepted_prediction_tokens',
-  USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
-  USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read_input_tokens',
-  USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation_input_tokens',
+  USAGE_REASONING_OUTPUT_TOKENS: 'gen_ai.usage.reasoning.output_tokens',
+  USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read.input_tokens',
+  USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation.input_tokens',
 } as const;
 
 // Promptfoo-specific attributes
@@ -68,7 +72,29 @@ export const PromptfooAttributes = {
   CACHE_HIT: 'promptfoo.cache_hit',
   REQUEST_BODY: 'promptfoo.request.body',
   RESPONSE_BODY: 'promptfoo.response.body',
+  USAGE_TOTAL_TOKENS: 'promptfoo.usage.total_tokens',
+  USAGE_CACHED_RESPONSE_TOKENS: 'promptfoo.usage.cached_response_tokens',
+  USAGE_ACCEPTED_PREDICTION_TOKENS: 'promptfoo.usage.accepted_prediction_tokens',
+  USAGE_REJECTED_PREDICTION_TOKENS: 'promptfoo.usage.rejected_prediction_tokens',
 } as const;
+
+type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings' | 'invoke_agent';
+
+const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
+  aws_bedrock: 'aws.bedrock',
+  azure: 'azure.ai.openai',
+  azure_ai_inference: 'azure.ai.inference',
+  azure_openai: 'azure.ai.openai',
+  bedrock: 'aws.bedrock',
+  gemini: 'gcp.gemini',
+  google: 'gcp.gen_ai',
+  gcp_vertex_ai: 'gcp.vertex_ai',
+  ibm_watsonx: 'ibm.watsonx.ai',
+  mistral: 'mistral_ai',
+  vertex: 'gcp.vertex_ai',
+  watsonx: 'ibm.watsonx.ai',
+  xai: 'x_ai',
+};
 
 /** Maximum length for request/response body attributes (characters) */
 const MAX_BODY_LENGTH = 4096;
@@ -119,10 +145,16 @@ const SENSITIVE_PATTERNS: Array<{
 export interface GenAISpanContext {
   /** The GenAI system (e.g., 'openai', 'anthropic', 'bedrock') */
   system: string;
-  /** The operation type */
-  operationName: 'chat' | 'completion' | 'embedding';
+  /** The operation type. Legacy completion and embedding values are normalized on spans. */
+  operationName: GenAIOperationName | 'completion' | 'embedding';
   /** The requested model name */
   model: string;
+  /** Stable identifier for a remotely hosted agent, when available. */
+  agentId?: string;
+  /** Human-readable agent name for invoke_agent spans. */
+  agentName?: string;
+  /** Distinguishes OpenAI's Responses and Chat Completions APIs. */
+  openaiApiType?: 'responses' | 'chat_completions';
   /** The promptfoo provider ID */
   providerId: string;
 
@@ -173,7 +205,7 @@ export function getGenAITracer(): Tracer {
   return trace.getTracer(TRACER_NAME, TRACER_VERSION);
 }
 
-/** Preserve whether provider-created spans belong to the target or the grader. */
+/** Preserve whether provider-created child spans belong to the target or the grader. */
 export function addActiveSpanRoleAttribute(attributes: Attributes): Attributes {
   const role = getActiveSpanRole();
   return role ? { ...attributes, [SPAN_ROLE_ATTRIBUTE]: role } : attributes;
@@ -222,9 +254,15 @@ export async function withGenAISpan<T>(
   resultExtractor?: (value: T) => GenAISpanResult,
 ): Promise<T> {
   const tracer = getGenAITracer();
+  const operationName = normalizeOperationName(ctx.operationName);
 
-  // Span name follows GenAI convention: "{operation} {model}"
-  const spanName = `${ctx.operationName} ${ctx.model}`;
+  // Agent spans identify the invoked agent; inference spans identify the requested model.
+  const spanName =
+    operationName === 'invoke_agent'
+      ? ctx.agentName
+        ? `${operationName} ${ctx.agentName}`
+        : operationName
+      : `${operationName} ${ctx.model}`;
 
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
@@ -251,6 +289,7 @@ export async function withGenAISpan<T>(
       // Many providers return { error: "..." } instead of throwing
       const valueAsRecord = value as Record<string, unknown>;
       if (valueAsRecord && typeof valueAsRecord.error === 'string' && valueAsRecord.error) {
+        span.setAttribute('error.type', 'provider_error');
         span.setStatus({
           code: SpanStatusCode.ERROR,
           message: valueAsRecord.error,
@@ -260,6 +299,7 @@ export async function withGenAISpan<T>(
       }
       return value;
     } catch (error) {
+      span.setAttribute('error.type', error instanceof Error ? error.name : '_OTHER');
       span.setStatus({
         code: SpanStatusCode.ERROR,
         message: error instanceof Error ? error.message : String(error),
@@ -279,7 +319,7 @@ export async function withGenAISpan<T>(
     spanName,
     {
       kind: SpanKind.CLIENT,
-      attributes: buildRequestAttributes(ctx),
+      attributes: buildRequestAttributes(ctx, operationName),
     },
     parentContext,
     spanCallback,
@@ -289,16 +329,49 @@ export async function withGenAISpan<T>(
 /**
  * Build request attributes for a GenAI span.
  */
-function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
+function normalizeOperationName(
+  operationName: GenAISpanContext['operationName'],
+): GenAIOperationName {
+  if (operationName === 'completion') {
+    return 'text_completion';
+  }
+  return operationName === 'embedding' ? 'embeddings' : operationName;
+}
+
+function getProviderName(system: string): string {
+  const baseSystem = system.split(':', 1)[0];
+  const normalizedSystem = baseSystem.toLowerCase().replace(/[-.\s]/g, '_');
+  return GEN_AI_PROVIDER_NAMES[normalizedSystem] ?? baseSystem;
+}
+
+function buildRequestAttributes(
+  ctx: GenAISpanContext,
+  operationName: GenAIOperationName,
+): Attributes {
   const attrs: Attributes = {
     // GenAI semantic conventions
-    [GenAIAttributes.SYSTEM]: ctx.system,
-    [GenAIAttributes.OPERATION_NAME]: ctx.operationName,
-    [GenAIAttributes.REQUEST_MODEL]: ctx.model,
+    [GenAIAttributes.PROVIDER_NAME]: getProviderName(ctx.system),
+    [GenAIAttributes.OPERATION_NAME]: operationName,
 
     // Promptfoo attributes
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
+
+  if (operationName === 'invoke_agent' && ctx.agentName) {
+    attrs[GenAIAttributes.AGENT_NAME] = ctx.agentName;
+  }
+  if (operationName === 'invoke_agent' && ctx.agentId) {
+    attrs[GenAIAttributes.AGENT_ID] = ctx.agentId;
+  }
+  if (
+    operationName !== 'invoke_agent' ||
+    (ctx.model !== ctx.agentName && ctx.model !== ctx.agentId)
+  ) {
+    attrs[GenAIAttributes.REQUEST_MODEL] = ctx.model;
+  }
+  if (ctx.openaiApiType && attrs[GenAIAttributes.PROVIDER_NAME] === 'openai') {
+    attrs['openai.api.type'] = ctx.openaiApiType;
+  }
 
   const spanRole = getActiveSpanRole();
   if (spanRole) {
@@ -404,29 +477,29 @@ export function setGenAIResponseAttributes(
       span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
     }
     if (usage.total !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_TOTAL_TOKENS, usage.total);
+      span.setAttribute(PromptfooAttributes.USAGE_TOTAL_TOKENS, usage.total);
     }
     if (usage.cached !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_CACHED_TOKENS, usage.cached);
+      span.setAttribute(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS, usage.cached);
     }
 
     // Completion details (reasoning tokens, etc.)
     if (usage.completionDetails) {
       if (usage.completionDetails.reasoning !== undefined) {
         span.setAttribute(
-          GenAIAttributes.USAGE_REASONING_TOKENS,
+          GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
           usage.completionDetails.reasoning,
         );
       }
       if (usage.completionDetails.acceptedPrediction !== undefined) {
         span.setAttribute(
-          GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
+          PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
           usage.completionDetails.acceptedPrediction,
         );
       }
       if (usage.completionDetails.rejectedPrediction !== undefined) {
         span.setAttribute(
-          GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
+          PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
           usage.completionDetails.rejectedPrediction,
         );
       }
@@ -626,11 +699,11 @@ export function openTurnSpan(
     const span = opts.tracer.startSpan(`gen_ai.turn ${index}`, {
       kind: SpanKind.INTERNAL,
       startTime: opts.eventTime,
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'gen_ai.turn.index': index,
-        'gen_ai.system': opts.system,
+        [GenAIAttributes.PROVIDER_NAME]: getProviderName(opts.system),
         ...opts.attributes,
-      },
+      }),
     });
     state.turnCount = index;
     state.activeTurnIndex = index;
@@ -697,7 +770,7 @@ export function emitTurnMarkerSpan(opts: {
     const span = opts.tracer.startSpan(`gen_ai.turn ${opts.index}`, {
       kind: SpanKind.INTERNAL,
       startTime: opts.startTime,
-      attributes: opts.attributes,
+      attributes: addActiveSpanRoleAttribute(opts.attributes),
     });
     span.setStatus(
       opts.errorMessage

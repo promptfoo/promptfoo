@@ -5,11 +5,6 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import {
-  extractProviderResponseAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
@@ -28,6 +23,11 @@ import {
   transformToolChoice,
   transformTools,
 } from '../shared';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  withGenAISpan,
+} from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
 import {
@@ -234,7 +234,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected getGenAISystem(): string {
-    return 'openai';
+    const providerId = this.id();
+    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
   }
 
   async getOpenAiBody(
@@ -442,6 +443,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const spanContext: GenAISpanContext = {
       system: this.getGenAISystem(),
       operationName: 'chat',
+      openaiApiType: 'chat_completions',
       model: this.modelName,
       providerId: this.id(),
       // Optional request parameters
