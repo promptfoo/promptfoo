@@ -3085,6 +3085,52 @@ describe('AnthropicMessagesProvider', () => {
       expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Manual extended thinking'));
     });
 
+    it('keeps sampling params for a custom gateway alias configured with apiBaseUrl', async () => {
+      const provider = createProvider('claude-prod-5', {
+        config: {
+          apiBaseUrl: 'https://gateway.example.com/anthropic',
+          temperature: 0.5,
+        },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-prod-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0.5);
+    });
+
+    it('keeps sampling params for a custom gateway alias configured from the environment', async () => {
+      const provider = createProvider('claude-prod-5', {
+        config: { temperature: 0.5 },
+        env: { ANTHROPIC_BASE_URL: 'https://gateway.example.com/anthropic' },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-prod-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0.5);
+    });
+
+    it('keeps the fallback for an explicitly configured official Anthropic endpoint', async () => {
+      const provider = createProvider('claude-haiku-5', {
+        config: { apiBaseUrl: 'https://api.anthropic.com', temperature: 0.5 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-haiku-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+    });
+
     it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
       // Regression for the live-API 400: `temperature` is deprecated for this model.
       const provider = createProvider('claude-sonnet-5', { config: {} });

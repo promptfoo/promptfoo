@@ -249,6 +249,18 @@ function withMergedAnthropicUsage(
   return usage ? { ...response, usage } : response;
 }
 
+function isOfficialAnthropicApiBaseUrl(apiBaseUrl: string | undefined): boolean {
+  if (!apiBaseUrl) {
+    return true;
+  }
+
+  try {
+    return new URL(apiBaseUrl).hostname === 'api.anthropic.com';
+  } catch {
+    return false;
+  }
+}
+
 function getAnthropicCostFromMessage(
   modelName: string,
   config: AnthropicMessageOptions,
@@ -722,7 +734,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Keep this
     // capability separate from the forward-looking sampling-parameter fallback:
     // a new family may reject sampling controls before its thinking behavior is known.
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      // Anthropic-compatible gateways may use arbitrary routing aliases rather than model IDs.
+      allowUnknownFamilyFallback: isOfficialAnthropicApiBaseUrl(this.getApiBaseUrl()),
+    });
     const manualThinkingDeprecated = isManualThinkingDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
