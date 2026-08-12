@@ -25,6 +25,7 @@ import {
   GenAIAttributes,
   getGenAITracer,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../tracing';
 import {
   formatContentFilterResponse,
@@ -300,7 +301,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      const result = await callback(args, context);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+        callback(args, context),
+      );
       if (result === undefined || result === null) {
         return '';
       }

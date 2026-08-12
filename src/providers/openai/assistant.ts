@@ -8,7 +8,12 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
-import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
+import {
+  buildChatSpanContext,
+  extractProviderResponseAttributes,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../tracing';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
@@ -190,7 +195,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
-      const result = await callback(parsedArgs, context);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: parsedArgs }, () =>
+        callback(parsedArgs, context),
+      );
 
       // Format the result
       if (result === undefined || result === null) {

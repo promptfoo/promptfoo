@@ -27,6 +27,7 @@ import {
   extractProviderResponseAttributes,
   type GenAISpanContext,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
@@ -212,7 +213,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+        callback(args),
+      );
 
       // Format the result
       if (result === undefined || result === null) {

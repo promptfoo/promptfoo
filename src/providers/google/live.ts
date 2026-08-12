@@ -9,6 +9,7 @@ import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -1278,7 +1279,9 @@ export class GoogleLiveProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+        callback(args),
+      );
 
       return result;
     } catch (error: any) {

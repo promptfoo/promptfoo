@@ -23,6 +23,7 @@ import {
   type GenAISpanContext,
   type GenAISpanResult,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -895,7 +896,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Execute the callback
       logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+        callback(args),
+      );
 
       // Format the result
       if (result === undefined || result === null) {

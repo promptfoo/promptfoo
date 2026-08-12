@@ -1,4 +1,4 @@
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
@@ -10,6 +10,7 @@ import {
   PromptfooAttributes,
   setGenAIResponseAttributes,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../src/tracing/genaiTracer';
 
 // Mock @opentelemetry/api
@@ -358,6 +359,102 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_INPUT_TOKENS, 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'resp-123');
+    });
+  });
+
+  describe('withGenAIToolSpan', () => {
+    beforeEach(() => {
+      vi.mocked(trace.getActiveSpan).mockReturnValue(mockSpan as any);
+    });
+
+    it('records standard tool attributes and sanitizes inputs and output', async () => {
+      const result = await withGenAIToolSpan(
+        {
+          name: 'lookup_account',
+          arguments: { apiKey: 'sk-abcdefghijklmnopqrstuvwxyz' },
+          callId: 'call-123',
+        },
+        async () => ({ token: 'secret-token-value-12345678901234567890' }),
+      );
+
+      expect(result).toEqual({ token: 'secret-token-value-12345678901234567890' });
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'execute_tool lookup_account',
+        expect.objectContaining({
+          kind: SpanKind.INTERNAL,
+          attributes: expect.objectContaining({
+            'gen_ai.operation.name': 'execute_tool',
+            'gen_ai.tool.name': 'lookup_account',
+            'gen_ai.tool.call.id': 'call-123',
+            'tool.name': 'lookup_account',
+            'tool.arguments': '{"apiKey":"<REDACTED_API_KEY>"}',
+          }),
+        }),
+        expect.any(Function),
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', '{"token":"<REDACTED>"}');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('does not create orphan tool spans when no parent span is active', async () => {
+      vi.mocked(trace.getActiveSpan).mockReturnValue(undefined);
+
+      expect(await withGenAIToolSpan({ name: 'search' }, async () => 'found')).toBe('found');
+      expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+    });
+
+    it('marks MCP error results as failed without changing the returned result', async () => {
+      const failure = { content: 'denied', isError: true };
+
+      expect(await withGenAIToolSpan({ name: 'search' }, async () => failure)).toBe(failure);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('records thrown errors and preserves the original exception', async () => {
+      const error = new Error('Tool failed');
+
+      await expect(
+        withGenAIToolSpan({ name: 'search' }, async () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      expect(mockSpan.recordException).toHaveBeenCalledWith(error);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Tool failed',
+      });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('does not fail tool execution when attributes cannot be serialized', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+
+      expect(await withGenAIToolSpan({ name: 'search', arguments: circular }, () => circular)).toBe(
+        circular,
+      );
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).not.toHaveProperty(
+        'tool.arguments',
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith('tool.output', expect.anything());
+    });
+
+    it('limits large tool attributes', async () => {
+      const largeValue = 'x'.repeat(5000);
+
+      await withGenAIToolSpan({ name: 'search', arguments: largeValue }, () => largeValue);
+
+      const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+      expect(attributes['tool.arguments']).toHaveLength(4096);
+      expect(attributes['tool.arguments']).toContain('[truncated]');
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'tool.output',
+        expect.stringContaining('[truncated]'),
+      );
     });
   });
 

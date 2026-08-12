@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
@@ -75,6 +76,42 @@ describe('FunctionCallbackHandler', () => {
         isError: false,
       });
       expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', undefined);
+    });
+
+    it('traces function callbacks with their tool call identifier', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        const result = await handler.processCall(
+          { id: 'call-123', name: 'lookup_order', arguments: '{"order_id":"123"}' },
+          { lookup_order: async () => 'shipped' },
+        );
+
+        expect(result).toEqual({ output: 'shipped', isError: false });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool lookup_order',
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              'gen_ai.operation.name': 'execute_tool',
+              'gen_ai.tool.call.id': 'call-123',
+              'tool.arguments': '{"order_id":"123"}',
+            }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'shipped');
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
     });
 
     it('should pass context to callback', async () => {

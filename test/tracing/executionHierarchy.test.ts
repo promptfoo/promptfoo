@@ -3,7 +3,7 @@ import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tr
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
-import { getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
+import { getGenAITracer, withGenAISpan, withGenAIToolSpan } from '../../src/tracing/genaiTracer';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import { withTestCaseSpan, withTracedProviderCall } from '../../src/tracing/targetTracer';
 
@@ -113,6 +113,54 @@ describe('test-case execution trace hierarchy', () => {
     expect(targetSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
     expect(modelSpan.parentSpanContext?.spanId).toBe(targetSpan.spanContext().spanId);
     expect(modelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('target');
+  });
+
+  it('parents target tool executions beneath the active model span', async () => {
+    const root = getGenAITracer().startSpan('test case target tool');
+    const provider: ApiProvider = {
+      id: () => 'openai:gpt-4.1',
+      callApi: async () => ({ output: 'done' }),
+    };
+    const callContext: CallApiContextParams = {
+      prompt: { raw: 'test prompt', label: 'target' },
+      vars: {},
+    };
+
+    await withTestCaseSpan(root, async () => {
+      await withTracedProviderCall({ provider, callContext }, (targetContext) =>
+        withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'chat',
+            model: 'gpt-4.1',
+            providerId: provider.id(),
+            traceparent: targetContext?.traceparent,
+          },
+          async () => {
+            await withGenAIToolSpan(
+              { name: 'lookup_order', arguments: { order_id: '123' }, callId: 'call-1' },
+              async () => ({ status: 'shipped' }),
+            );
+            return { output: 'done' };
+          },
+        ),
+      );
+      return [{ score: 1, success: true }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    const modelSpan = spans.find((span) => span.name === 'chat gpt-4.1')!;
+    const toolSpan = spans.find((span) => span.name === 'execute_tool lookup_order')!;
+
+    expect(toolSpan.parentSpanContext?.spanId).toBe(modelSpan.spanContext().spanId);
+    expect(toolSpan.attributes).toMatchObject({
+      [SPAN_ROLE_ATTRIBUTE]: 'target',
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.name': 'lookup_order',
+      'gen_ai.tool.call.id': 'call-1',
+      'tool.arguments': '{"order_id":"123"}',
+      'tool.output': '{"status":"shipped"}',
+    });
   });
 
   it('keeps the root open until deferred grading finishes', async () => {
