@@ -196,12 +196,12 @@ const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
 // Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
-// forward-compatible fallback for Claude 5+ family names so providers do not send rejected
-// parameters while waiting for a model-specific capability row. Limit the generation token to
-// one or two digits so date-stamped deployment aliases (for example, `claude-prod-20260811`) are
-// not mistaken for future Claude generations.
-const CLAUDE_5_OR_LATER_PATTERN =
-  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:[5-9]|[1-9][0-9])(?![a-z0-9])/i;
+// forward-compatible fallback for post-4.6 Claude 4.x and Claude 5+ family names so providers do
+// not send rejected parameters while waiting for a model-specific capability row. Limit 4.x to
+// the one-digit minors after 4.6, and later major generations to one or two digits, so lookalikes
+// such as `claude-opus-4-80` and date-stamped aliases are not mistaken for future models.
+const CLAUDE_POST_46_OR_5_PLUS_PATTERN =
+  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:4-[7-9]|[5-9]|[1-9][0-9])(?![a-z0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
@@ -386,16 +386,16 @@ export function normalizeAnthropicModelName(modelName: string): string {
 }
 
 interface SamplingParamsDeprecationOptions {
-  /** Apply the forward-looking Claude 5+ family matcher to values known to be model IDs. */
+  /** Apply the forward-looking post-4.6 family matcher to values known to be model IDs. */
   allowUnknownFamilyFallback?: boolean;
 }
 
 /**
- * Claude Opus 4.7/4.8 and Claude 5+ models deprecate manual sampling controls at the model
+ * Claude models released after Opus 4.6 deprecate manual sampling controls at the model
  * level — `temperature`, `top_p`, and `top_k` return 400 `invalid_request_error` (including
  * promptfoo's built-in `temperature` default of 0). Shared by the Anthropic, Bedrock, Vertex,
  * and Azure providers. Known families use the capability table above; the generation fallback
- * keeps newly released Claude 5+ family names safe before their model-specific rows land.
+ * keeps newly released post-4.6 family names safe before their model-specific rows land.
  */
 export function isSamplingParamsDeprecatedClaudeModel(
   modelId: string,
@@ -403,7 +403,7 @@ export function isSamplingParamsDeprecatedClaudeModel(
 ): boolean {
   return (
     hasClaudeCapability(modelId, 'samplingParamsDeprecated') ||
-    (allowUnknownFamilyFallback && CLAUDE_5_OR_LATER_PATTERN.test(modelId))
+    (allowUnknownFamilyFallback && CLAUDE_POST_46_OR_5_PLUS_PATTERN.test(modelId))
   );
 }
 

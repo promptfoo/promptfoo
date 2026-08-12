@@ -2045,8 +2045,19 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('future-proofs sampling deprecation for post-4.6 Claude 4.x families', () => {
+      for (const id of [
+        'claude-opus-4-9',
+        'anthropic:messages:claude-haiku-4-9-20260901',
+        'us.anthropic.claude-research-preview-4-9',
+        'vertex:claude-sonnet-4-9',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
     it('can disable the unknown-family fallback for alias-based providers', () => {
-      for (const alias of ['claude-prod-5', 'claude-prod-25']) {
+      for (const alias of ['claude-prod-4-9', 'claude-prod-5', 'claude-prod-25']) {
         expect(
           isSamplingParamsDeprecatedClaudeModel(alias, {
             allowUnknownFamilyFallback: false,

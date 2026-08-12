@@ -3086,7 +3086,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('keeps sampling params for a custom gateway alias configured with apiBaseUrl', async () => {
-      const provider = createProvider('claude-prod-5', {
+      const provider = createProvider('claude-prod-4-9', {
         config: {
           apiBaseUrl: 'https://gateway.example.com/anthropic',
           temperature: 0.5,
@@ -3094,7 +3094,7 @@ describe('AnthropicMessagesProvider', () => {
       });
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-prod-5' });
+        .mockResolvedValue({ ...mockResp, model: 'claude-prod-4-9' });
 
       await provider.callApi('Hello');
 
@@ -3117,19 +3117,22 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).toHaveProperty('temperature', 0.5);
     });
 
-    it('keeps the fallback for an explicitly configured official Anthropic endpoint', async () => {
-      const provider = createProvider('claude-haiku-5', {
-        config: { apiBaseUrl: 'https://api.anthropic.com', temperature: 0.5 },
-      });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-haiku-5' });
+    it.each(['claude-haiku-5', 'claude-opus-4-9'])(
+      'keeps the fallback for %s on an explicitly configured official Anthropic endpoint',
+      async (modelName) => {
+        const provider = createProvider(modelName, {
+          config: { apiBaseUrl: 'https://api.anthropic.com', temperature: 0.5 },
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model: modelName });
 
-      await provider.callApi('Hello');
+        await provider.callApi('Hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(params).not.toHaveProperty('temperature');
-    });
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params).not.toHaveProperty('temperature');
+      },
+    );
 
     it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
       // Regression for the live-API 400: `temperature` is deprecated for this model.
