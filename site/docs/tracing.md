@@ -37,7 +37,7 @@ Tracing provides visibility into:
 
 ## Built-in Provider Instrumentation
 
-When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, and every target receives a child span automatically. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace.
+When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, with target requests and grading recorded beneath it. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace. Multi-turn tests keep their target requests and grading together in the same trace.
 
 Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai), while custom applications can add their own child spans using the propagated `traceparent`. Agent providers use `invoke_agent` for the overall run, while model calls use the operation that describes the inference they perform.
 
@@ -102,6 +102,11 @@ Each provider call creates a span with these attributes:
 - `promptfoo.usage.rejected_prediction_tokens` - Rejected prediction tokens, when available
 - `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
 - `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+Grading spans describe each assertion with `gen_ai.evaluation.name`,
+`gen_ai.evaluation.score.value`, and `gen_ai.evaluation.score.label`. When a grader supplies a
+reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
+by the grader appears in a child span.
 
 ### Example Trace Output
 

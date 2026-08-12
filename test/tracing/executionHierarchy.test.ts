@@ -3,9 +3,13 @@ import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tr
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
-import { getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
+import { GenAIAttributes, getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
-import { withTestCaseSpan, withTracedProviderCall } from '../../src/tracing/targetTracer';
+import {
+  withGraderSpan,
+  withTestCaseSpan,
+  withTracedProviderCall,
+} from '../../src/tracing/targetTracer';
 
 import type { ApiProvider, CallApiContextParams, TestSuite } from '../../src/types/index';
 
@@ -113,6 +117,122 @@ describe('test-case execution trace hierarchy', () => {
     expect(targetSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
     expect(modelSpan.parentSpanContext?.spanId).toBe(targetSpan.spanContext().spanId);
     expect(modelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('target');
+  });
+
+  it('parents target and grading branches beneath the same test-case root', async () => {
+    const root = getGenAITracer().startSpan('test case shared');
+    const targetProvider: ApiProvider = {
+      id: () => 'http:customer-agent',
+      callApi: async () => ({ output: 'customer response' }),
+    };
+    const gradingProvider: ApiProvider = {
+      id: () => 'openai:judge',
+      callApi: async () => ({ output: 'judge response' }),
+    };
+    const callContext: CallApiContextParams = {
+      prompt: { raw: 'test prompt', label: 'target' },
+      vars: {},
+    };
+
+    await withTestCaseSpan(root, async () => {
+      await withTracedProviderCall({ provider: targetProvider, callContext }, (targetContext) =>
+        targetProvider.callApi('test prompt', targetContext),
+      );
+      await withGraderSpan({ graderId: 'llm-rubric' }, async () => {
+        await withTracedProviderCall(
+          { provider: gradingProvider, callContext, role: 'grader' },
+          async (gradingContext) =>
+            withGenAISpan(
+              {
+                system: 'openai',
+                operationName: 'chat',
+                model: 'judge-model',
+                providerId: gradingProvider.id(),
+                traceparent: gradingContext?.traceparent,
+              },
+              async () => ({ output: 'judge response' }),
+            ),
+        );
+        return { pass: false, score: 0, reason: 'The response failed the rubric.' };
+      });
+      return [{ score: 0, success: false }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    const rootSpan = spans.find((span) => span.name === 'test case shared')!;
+    const targetSpan = spans.find((span) => span.name === 'http:customer-agent')!;
+    const graderSpan = spans.find((span) => span.name === 'grader llm-rubric')!;
+    const gradingProviderSpan = spans.find((span) => span.name === 'grader provider openai:judge')!;
+    const gradingModelSpan = spans.find((span) => span.name === 'chat judge-model')!;
+
+    expect(targetSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
+    expect(graderSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
+    expect(gradingProviderSpan.parentSpanContext?.spanId).toBe(graderSpan.spanContext().spanId);
+    expect(gradingModelSpan.parentSpanContext?.spanId).toBe(
+      gradingProviderSpan.spanContext().spanId,
+    );
+    expect(graderSpan.attributes).toMatchObject({
+      [GenAIAttributes.EVALUATION_NAME]: 'llm-rubric',
+      [GenAIAttributes.EVALUATION_SCORE_LABEL]: 'fail',
+      [GenAIAttributes.EVALUATION_SCORE_VALUE]: 0,
+      [SPAN_ROLE_ATTRIBUTE]: 'grader',
+    });
+    expect(gradingModelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+  });
+
+  it('records embedding inference beneath the grading-provider span', async () => {
+    const root = getGenAITracer().startSpan('test case embedding grader');
+    const provider: ApiProvider & { modelName: string } = {
+      id: () => 'azure:text-embedding-3-small',
+      modelName: 'text-embedding-3-small',
+      callApi: async () => ({ output: 'unused' }),
+    };
+
+    await withTestCaseSpan(root, async () => {
+      await withGraderSpan({ graderId: 'similarity' }, async () => {
+        await withTracedProviderCall(
+          { provider, role: 'grader', operationName: 'embeddings' },
+          async () => ({ embedding: [1, 0], tokenUsage: { prompt: 7, total: 7 } }),
+        );
+        return { pass: true, score: 1 };
+      });
+      return [{ score: 1, success: true }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    const providerSpan = spans.find(
+      (span) => span.name === 'grader provider azure:text-embedding-3-small',
+    )!;
+    const embeddingSpan = spans.find((span) => span.name === 'embeddings text-embedding-3-small')!;
+
+    expect(embeddingSpan.parentSpanContext?.spanId).toBe(providerSpan.spanContext().spanId);
+    expect(embeddingSpan.attributes).toMatchObject({
+      [GenAIAttributes.OPERATION_NAME]: 'embeddings',
+      [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
+      [GenAIAttributes.USAGE_INPUT_TOKENS]: 7,
+      [SPAN_ROLE_ATTRIBUTE]: 'grader',
+    });
+  });
+
+  it('sanitizes and bounds grader explanations before exporting them', async () => {
+    const root = getGenAITracer().startSpan('test case grader explanation');
+
+    await withTestCaseSpan(root, async () => {
+      await withGraderSpan({ graderId: 'contains' }, async () => ({
+        pass: true,
+        score: 1,
+        reason: `api_key=abcdefghijklmnop ${'long explanation '.repeat(100)}`,
+      }));
+      return [{ score: 1, success: true }];
+    });
+
+    const graderSpan = exporter.getFinishedSpans().find((span) => span.name === 'grader contains')!;
+    const explanation = graderSpan.attributes[GenAIAttributes.EVALUATION_EXPLANATION] as string;
+
+    expect(explanation).toContain('api_key=<REDACTED>');
+    expect(explanation).not.toContain('abcdefghijklmnop');
+    expect(explanation).toHaveLength(1024);
+    expect(explanation.endsWith('…')).toBe(true);
   });
 
   it('keeps the root open until deferred grading finishes', async () => {

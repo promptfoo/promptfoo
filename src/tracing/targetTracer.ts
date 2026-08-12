@@ -7,7 +7,13 @@ import {
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
-import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import {
+  GenAIAttributes,
+  getGenAITracer,
+  PromptfooAttributes,
+  sanitizeBody,
+  withGenAISpan,
+} from './genaiTracer';
 import {
   getActiveTraceparent,
   type PromptfooSpanRole,
@@ -21,6 +27,12 @@ export const TargetAttributes = {
   TARGET_TYPE: 'promptfoo.target.type',
   TARGET_LABEL: 'promptfoo.target.label',
 } as const;
+
+export const GraderAttributes = {
+  GRADER_ID: 'promptfoo.grader.id',
+} as const;
+
+const MAX_GRADING_EXPLANATION_LENGTH = 1024;
 
 export type TargetType = 'http' | 'mcp' | 'websocket' | 'provider';
 
@@ -162,6 +174,7 @@ export async function withTargetSpan<T>(
 interface TracedProviderCallOptions {
   provider: ApiProvider;
   callContext?: CallApiContextParams;
+  operationName?: 'embeddings';
   role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
   promptLabel?: string;
   evalId?: string;
@@ -183,6 +196,7 @@ export async function withTracedProviderCall<T extends ProviderResponse>(
   {
     provider,
     callContext,
+    operationName,
     role = 'target',
     promptLabel,
     evalId,
@@ -209,9 +223,116 @@ export async function withTracedProviderCall<T extends ProviderResponse>(
     },
     async () => {
       const childTraceparent = getActiveTraceparent() ?? traceparent;
-      return callContext
-        ? invoke({ ...callContext, traceparent: childTraceparent })
-        : invoke(undefined);
+      const invokeProvider = () =>
+        callContext ? invoke({ ...callContext, traceparent: childTraceparent }) : invoke(undefined);
+
+      if (operationName === 'embeddings') {
+        const providerWithModel = provider as ApiProvider & {
+          deploymentName?: unknown;
+          modelName?: unknown;
+        };
+        const providerModel =
+          typeof providerWithModel.modelName === 'string'
+            ? providerWithModel.modelName
+            : typeof providerWithModel.deploymentName === 'string'
+              ? providerWithModel.deploymentName
+              : providerId.split(':').slice(1).join(':') || providerId;
+
+        return withGenAISpan(
+          {
+            system: providerId.split(':', 1)[0],
+            operationName,
+            model: providerModel,
+            providerId,
+            promptLabel,
+            traceparent: childTraceparent,
+          },
+          invokeProvider,
+          (response) => ({ tokenUsage: response.tokenUsage, cacheHit: response.cached }),
+        );
+      }
+
+      return invokeProvider();
+    },
+  );
+}
+
+interface GraderSpanContext {
+  graderId: string;
+  traceparent?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+function setEvaluationResultAttributes(span: Span, result: unknown): void {
+  const grade = result && typeof result === 'object' && 'grade' in result ? result.grade : result;
+  if (!grade || typeof grade !== 'object') {
+    return;
+  }
+
+  if ('pass' in grade && typeof grade.pass === 'boolean') {
+    span.setAttribute(GenAIAttributes.EVALUATION_SCORE_LABEL, grade.pass ? 'pass' : 'fail');
+  }
+  if ('score' in grade && typeof grade.score === 'number') {
+    span.setAttribute(GenAIAttributes.EVALUATION_SCORE_VALUE, grade.score);
+  }
+  if ('reason' in grade && typeof grade.reason === 'string' && grade.reason) {
+    const explanation = sanitizeBody(grade.reason);
+    span.setAttribute(
+      GenAIAttributes.EVALUATION_EXPLANATION,
+      explanation.length > MAX_GRADING_EXPLANATION_LENGTH
+        ? `${explanation.slice(0, MAX_GRADING_EXPLANATION_LENGTH - 1)}…`
+        : explanation,
+    );
+  }
+}
+
+/** Instrument assertion dispatch and registered graders at their shared invocation boundaries. */
+export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promise<T>): Promise<T> {
+  const traceparent = getActiveTraceparent() ?? ctx.traceparent;
+  if (!traceparent) {
+    return fn();
+  }
+
+  const activeTraceparent = getActiveTraceparent();
+  const parentContext =
+    activeTraceparent?.split('-')[1] === traceparent.split('-')[1]
+      ? context.active()
+      : propagation.extract(ROOT_CONTEXT, { traceparent });
+  const attributes: Record<string, string | number> = {
+    [GraderAttributes.GRADER_ID]: ctx.graderId,
+    [GenAIAttributes.EVALUATION_NAME]: ctx.graderId,
+    [SPAN_ROLE_ATTRIBUTE]: 'grader',
+  };
+  if (ctx.evalId) {
+    attributes[PromptfooAttributes.EVAL_ID] = ctx.evalId;
+  }
+  if (ctx.testIndex !== undefined) {
+    attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
+  }
+
+  return getGenAITracer().startActiveSpan(
+    `grader ${ctx.graderId}`,
+    { kind: SpanKind.INTERNAL, attributes },
+    parentContext,
+    async (span) => {
+      try {
+        const result = await withSpanRole('grader', fn);
+        setEvaluationResultAttributes(span, result);
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (error instanceof Error) {
+          span.recordException(error);
+        }
+        throw error;
+      } finally {
+        span.end();
+      }
     },
   );
 }
