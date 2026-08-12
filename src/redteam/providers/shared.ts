@@ -16,6 +16,7 @@ import {
   type ApiProvider,
   type Assertion,
   type AssertionOrSet,
+  type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
   isApiProvider,
@@ -36,7 +37,6 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
-import type { RedteamGraderBase } from '../plugins/base';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -581,24 +581,37 @@ export async function getTargetResponse(
   );
 }
 
+interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
+  id: string;
+  getResult: (
+    prompt: string,
+    output: string,
+    test: AtomicTestCase,
+    ...args: TArgs
+  ) => Promise<TResult>;
+}
+
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
-export function runRedteamGrader(
-  grader: RedteamGraderBase,
-  ...args: Parameters<RedteamGraderBase['getResult']>
-): ReturnType<RedteamGraderBase['getResult']> {
+export function runRedteamGrader<TResult, TArgs extends unknown[]>(
+  grader: TraceableRedteamGrader<TResult, TArgs>,
+  prompt: string,
+  output: string,
+  test: AtomicTestCase,
+  ...args: TArgs
+): Promise<TResult> {
+  const invoke = () => grader.getResult(prompt, output, test, ...args);
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
-    return grader.getResult(...args);
+    return invoke();
   }
 
-  const test = args[2];
   return tracingContext.withGraderSpan(
     {
       graderId: grader.id,
       evalId: test.metadata?.evaluationId as string | undefined,
       testIndex: test.vars?.__testIdx as number | undefined,
     },
-    () => grader.getResult(...args),
+    invoke,
   );
 }
 

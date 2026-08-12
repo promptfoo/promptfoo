@@ -39,7 +39,8 @@ describe('test-case execution trace hierarchy', () => {
 
   beforeEach(() => {
     exporter.reset();
-    createTrace.mockClear();
+    createTrace.mockReset();
+    createTrace.mockResolvedValue(undefined);
   });
 
   it('uses the recorded test-case root as the traceparent for one provider execution', async () => {
