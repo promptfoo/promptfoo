@@ -130,6 +130,26 @@ describe('GroqProvider', () => {
   });
 
   describe('getOpenAiBody', () => {
+    it('preserves Groq reasoning and temperature capabilities for a no-op model override', async () => {
+      const provider = new GroqProvider('openai/gpt-oss-120b', {
+        config: {
+          temperature: 0.7,
+          max_tokens: 123,
+          max_completion_tokens: 456,
+          passthrough: { model: 'openai/gpt-oss-120b' },
+        },
+      });
+
+      const { body } = await provider['getOpenAiBody']('Test prompt');
+
+      expect(body).toMatchObject({
+        model: 'openai/gpt-oss-120b',
+        temperature: 0.7,
+        max_completion_tokens: 456,
+      });
+      expect(body.max_tokens).toBeUndefined();
+    });
+
     it('should include reasoning_format when configured', async () => {
       const provider = new GroqProvider('openai/gpt-oss-120b', {
         config: {

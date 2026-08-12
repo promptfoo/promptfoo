@@ -169,7 +169,11 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       (body.models as unknown[]).some(
         (m) => typeof m === 'string' && reasoningUpstreamRejectsTemperature(m),
       );
-    if ('temperature' in body && (!this.supportsTemperature() || anyFallbackRejectsTemperature)) {
+    if (
+      'temperature' in body &&
+      (!this.supportsTemperature(typeof body.model === 'string' ? body.model : undefined) ||
+        anyFallbackRejectsTemperature)
+    ) {
       delete body.temperature;
     }
 
@@ -183,11 +187,11 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
    * OpenAI-style `temperature` is the parameter they reject.
    * Reference: https://docs.orcarouter.ai/advanced/reasoning
    */
-  protected supportsTemperature(): boolean {
-    if (!super.supportsTemperature()) {
+  protected supportsTemperature(modelName = this.modelName): boolean {
+    if (!super.supportsTemperature(modelName)) {
       return false;
     }
-    return !reasoningUpstreamRejectsTemperature(this.modelName);
+    return !reasoningUpstreamRejectsTemperature(modelName);
   }
 }
 

@@ -133,17 +133,17 @@ export class OpenAiGenericProvider implements ApiProvider {
    * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
    * prefix while retaining the real request model in {@link modelName}.
    */
-  protected getCapabilityModelName(): string {
-    return this.modelName;
+  protected getCapabilityModelName(modelName = this.modelName): string {
+    return modelName;
   }
 
-  protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+  protected isGPT5Model(modelName?: string): boolean {
+    const model = this.getCapabilityModelName(modelName).replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
-  protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+  protected isReasoningModel(modelName?: string): boolean {
+    const model = this.getCapabilityModelName(modelName).replace(/(^|\/)ft:/, '$1');
     return (
       model.startsWith('o1') ||
       model.startsWith('o3') ||
@@ -151,12 +151,12 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o1') ||
       model.includes('/o3') ||
       model.includes('/o4') ||
-      this.isGPT5Model()
+      this.isGPT5Model(modelName)
     );
   }
 
-  protected supportsTemperature(): boolean {
-    return !this.isReasoningModel();
+  protected supportsTemperature(modelName?: string): boolean {
+    return !this.isReasoningModel(modelName);
   }
 
   protected getBillingModelName(_config: OpenAiSharedOptions): string {

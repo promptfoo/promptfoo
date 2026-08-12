@@ -642,8 +642,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return this.config?.apiKey;
   }
 
-  protected isReasoningModel(): boolean {
-    return GROK_REASONING_MODELS.includes(this.modelName);
+  protected isReasoningModel(modelName = this.modelName): boolean {
+    return GROK_REASONING_MODELS.includes(modelName);
   }
 
   protected supportsReasoningEffort(): boolean {
@@ -653,7 +653,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(_modelName?: string): boolean {
     return true;
   }
 
