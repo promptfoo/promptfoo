@@ -581,6 +581,66 @@ describe('AzureFoundryAgentProvider', () => {
       });
     });
 
+    it('preserves provider prompt-cache usage when replaying a cached response', async () => {
+      const spans = installSpanRecorder();
+      let storedResponse: unknown;
+      const mockCache = {
+        get: vi.fn(async () => storedResponse),
+        set: vi.fn(async (_key: string, value: unknown) => {
+          storedResponse = value;
+        }),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse('cached result'),
+        usage: {
+          input_tokens: 2_000,
+          output_tokens: 1_000,
+          total_tokens: 3_000,
+          input_tokens_details: { cached_tokens: 500 },
+        },
+      });
+
+      const firstProvider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+      const freshResult = await firstProvider.callApi('weather in Paris');
+
+      expect(freshResult.tokenUsage).toMatchObject({
+        cached: 500,
+        total: 3_000,
+        completionDetails: { cacheReadInputTokens: 500 },
+      });
+
+      const secondProvider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+      const cachedResult = await secondProvider.callApi('weather in Paris');
+
+      expect(cachedResult).toMatchObject({
+        cached: true,
+        tokenUsage: {
+          cached: 3_000,
+          total: 3_000,
+          completionDetails: { cacheReadInputTokens: 500 },
+        },
+      });
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+
+      const agentSpans = spans.filter((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpans).toHaveLength(2);
+      expect(agentSpans[0].attributes).toMatchObject({
+        'gen_ai.usage.cache_read.input_tokens': 500,
+      });
+      expect(agentSpans[0].attributes).not.toHaveProperty('promptfoo.usage.cached_response_tokens');
+      expect(agentSpans[1].attributes).toMatchObject({
+        'gen_ai.usage.cache_read.input_tokens': 500,
+        'promptfoo.usage.cached_response_tokens': 3_000,
+      });
+    });
+
     it('stores resolved agent identity alongside a cacheable response', async () => {
       const mockCache = {
         get: vi.fn().mockResolvedValue(undefined),

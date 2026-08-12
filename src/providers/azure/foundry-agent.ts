@@ -593,7 +593,25 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             span.setAttribute(GenAIAttributes.AGENT_NAME, cachedAgent.name);
             span.updateName(`invoke_agent ${cachedAgent.name}`);
           }
-          return { ...response, cached: true };
+
+          const tokenUsage = response.tokenUsage;
+          return {
+            ...response,
+            ...(tokenUsage && {
+              tokenUsage: {
+                ...tokenUsage,
+                ...(tokenUsage.total !== undefined && { cached: tokenUsage.total }),
+                ...(tokenUsage.cached !== undefined &&
+                  tokenUsage.completionDetails?.cacheReadInputTokens === undefined && {
+                    completionDetails: {
+                      ...tokenUsage.completionDetails,
+                      cacheReadInputTokens: tokenUsage.cached,
+                    },
+                  }),
+              },
+            }),
+            cached: true,
+          };
         }
       } catch (error) {
         logger.warn(`Error checking cache for Azure Foundry agent response: ${error}`);

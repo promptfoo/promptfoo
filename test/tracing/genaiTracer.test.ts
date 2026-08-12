@@ -422,6 +422,26 @@ describe('genaiTracer', () => {
       );
     });
 
+    it('keeps provider prompt-cache counts distinct on Promptfoo response-cache hits', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: true,
+        tokenUsage: {
+          cached: 3_000,
+          total: 3_000,
+          completionDetails: { cacheReadInputTokens: 500 },
+        },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        3_000,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        500,
+      );
+    });
+
     it('should set completion details attributes', () => {
       const result: GenAISpanResult = {
         tokenUsage: {
