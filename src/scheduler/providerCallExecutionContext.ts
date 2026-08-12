@@ -1,6 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { RateLimitRegistryRef } from '../types/index';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  RateLimitRegistryRef,
+} from '../types/index';
 import type { ProviderCallQueue } from './providerCallQueue';
 
 /**
@@ -16,7 +21,34 @@ export interface ProviderCallExecutionContext {
   rateLimitRegistry?: RateLimitRegistryRef;
 }
 
+interface TracedProviderCallOptions {
+  provider: ApiProvider;
+  callContext?: CallApiContextParams;
+  role?: 'target' | 'grader';
+  promptLabel?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+interface TracedGraderOptions {
+  graderId: string;
+  traceparent?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+/** Runtime-only instrumentation hooks injected by the evaluator for one traced execution. */
+export interface ProviderCallTracingContext {
+  getActiveTraceparent: () => string | undefined;
+  withGraderSpan: <T>(options: TracedGraderOptions, fn: () => Promise<T>) => Promise<T>;
+  withProviderSpan: (
+    options: TracedProviderCallOptions,
+    fn: (callContext: CallApiContextParams | undefined) => Promise<ProviderResponse>,
+  ) => Promise<ProviderResponse>;
+}
+
 const providerCallExecutionContext = new AsyncLocalStorage<ProviderCallExecutionContext>();
+const providerCallTracingContext = new AsyncLocalStorage<ProviderCallTracingContext>();
 
 export function getProviderCallExecutionContext(): ProviderCallExecutionContext | undefined {
   return providerCallExecutionContext.getStore();
@@ -27,4 +59,15 @@ export function withProviderCallExecutionContext<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   return providerCallExecutionContext.run(context, fn);
+}
+
+export function getProviderCallTracingContext(): ProviderCallTracingContext | undefined {
+  return providerCallTracingContext.getStore();
+}
+
+export function withProviderCallTracingContext<T>(
+  tracingContext: ProviderCallTracingContext,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return providerCallTracingContext.run(tracingContext, fn);
 }

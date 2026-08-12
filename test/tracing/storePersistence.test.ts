@@ -149,6 +149,16 @@ describe('TraceStore span persistence', () => {
         statusMessage: 'rate limited',
         attributes: { 'otel.span.kind': 'client' },
       },
+      {
+        spanId: 'grader-model',
+        name: 'chat grading-model',
+        startTime: 9,
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': 'grading-model',
+          'promptfoo.span.role': 'grader',
+        },
+      },
     ];
     await traceStore.addSpans('semantic-selection', spans);
 

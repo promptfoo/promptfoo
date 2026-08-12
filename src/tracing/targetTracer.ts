@@ -5,13 +5,28 @@ import {
   type Span,
   SpanKind,
   SpanStatusCode,
+  trace,
 } from '@opentelemetry/api';
 import { getGenAITracer, PromptfooAttributes } from './genaiTracer';
+import {
+  getActiveTraceparent,
+  type PromptfooSpanRole,
+  SPAN_ROLE_ATTRIBUTE,
+  withSpanRole,
+} from './spanRoles';
+
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 export const TargetAttributes = {
   SERVICE_NAME: 'service.name',
   TARGET_TYPE: 'promptfoo.target.type',
   TARGET_LABEL: 'promptfoo.target.label',
+} as const;
+
+export const GraderAttributes = {
+  GRADER_ID: 'promptfoo.grader.id',
+  GRADER_PASS: 'promptfoo.grader.pass',
+  GRADER_SCORE: 'promptfoo.grader.score',
 } as const;
 
 export type TargetType = 'http' | 'mcp' | 'websocket' | 'provider';
@@ -24,6 +39,63 @@ export interface TargetSpanContext {
   promptLabel?: string;
   evalId?: string;
   testIndex?: number;
+  role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
+}
+
+/** Keep one recorded test-case root active until immediate or deferred grading has finished. */
+export async function withTestCaseSpan<T>(
+  rootSpan: Span | undefined,
+  fn: () => Promise<T>,
+  getDeferredCompletion?: (result: T) => Promise<unknown> | undefined,
+): Promise<T> {
+  if (!rootSpan) {
+    return fn();
+  }
+
+  let result: T;
+  try {
+    const rootContext = trace.setSpan(ROOT_CONTEXT, rootSpan);
+    result = await context.with(rootContext, () => withSpanRole('test_case', fn));
+  } catch (error) {
+    rootSpan.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    if (error instanceof Error) {
+      rootSpan.recordException(error);
+    }
+    rootSpan.end();
+    throw error;
+  }
+
+  const finish = () => {
+    const row = Array.isArray(result) ? result[0] : undefined;
+    if (row && typeof row === 'object') {
+      if ('success' in row && typeof row.success === 'boolean') {
+        rootSpan.setAttribute('promptfoo.test.success', row.success);
+      }
+      if ('score' in row && typeof row.score === 'number') {
+        rootSpan.setAttribute('promptfoo.test.score', row.score);
+      }
+      if ('error' in row && row.error) {
+        rootSpan.setStatus({ code: SpanStatusCode.ERROR, message: String(row.error) });
+      } else {
+        rootSpan.setStatus({ code: SpanStatusCode.OK });
+      }
+    } else {
+      rootSpan.setStatus({ code: SpanStatusCode.OK });
+    }
+    rootSpan.end();
+  };
+
+  const completion = getDeferredCompletion?.(result);
+  if (completion) {
+    void completion.then(finish, finish);
+  } else {
+    finish();
+  }
+
+  return result;
 }
 
 /** Record one target span for every evaluated provider, including custom providers. */
@@ -31,11 +103,17 @@ export async function withTargetSpan<T>(
   ctx: TargetSpanContext,
   fn: (span: Span) => Promise<T>,
 ): Promise<T> {
-  const parentContext = propagation.extract(ROOT_CONTEXT, { traceparent: ctx.traceparent });
+  const activeTraceparent = getActiveTraceparent();
+  const parentContext =
+    activeTraceparent?.split('-')[1] === ctx.traceparent.split('-')[1]
+      ? context.active()
+      : propagation.extract(ROOT_CONTEXT, { traceparent: ctx.traceparent });
+  const role = ctx.role ?? 'target';
   const attributes: Record<string, string | number> = {
     [TargetAttributes.SERVICE_NAME]: 'promptfoo-cli',
     [TargetAttributes.TARGET_TYPE]: ctx.targetType,
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
+    [SPAN_ROLE_ATTRIBUTE]: role,
   };
 
   if (ctx.label) {
@@ -52,12 +130,12 @@ export async function withTargetSpan<T>(
   }
 
   return getGenAITracer().startActiveSpan(
-    ctx.label || ctx.providerId,
+    role === 'grader' ? `grader model ${ctx.label || ctx.providerId}` : ctx.label || ctx.providerId,
     { kind: SpanKind.CLIENT, attributes },
     parentContext,
     async (span) => {
       try {
-        const result = await fn(span);
+        const result = await withSpanRole(role, () => fn(span));
         if (result && typeof result === 'object' && 'cached' in result) {
           span.setAttribute(PromptfooAttributes.CACHE_HIT, Boolean(result.cached));
         }
@@ -85,10 +163,130 @@ export async function withTargetSpan<T>(
   );
 }
 
+interface TracedProviderCallOptions {
+  provider: ApiProvider;
+  callContext?: CallApiContextParams;
+  role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
+  promptLabel?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+function getTargetType(providerId: string): TargetType {
+  if (providerId.startsWith('mcp')) {
+    return 'mcp';
+  }
+  if (providerId.startsWith('ws')) {
+    return 'websocket';
+  }
+  return providerId.startsWith('http') ? 'http' : 'provider';
+}
+
+/** Apply consistent provider spans and propagation without modifying provider implementations. */
+export async function withTracedProviderCall(
+  {
+    provider,
+    callContext,
+    role = 'target',
+    promptLabel,
+    evalId,
+    testIndex,
+  }: TracedProviderCallOptions,
+  invoke: (callContext: CallApiContextParams | undefined) => Promise<ProviderResponse>,
+): Promise<ProviderResponse> {
+  const traceparent = getActiveTraceparent() ?? callContext?.traceparent;
+  if (!traceparent) {
+    return invoke(callContext);
+  }
+
+  const providerId = provider.id();
+  return withTargetSpan(
+    {
+      targetType: getTargetType(providerId),
+      providerId,
+      label: provider.label,
+      traceparent,
+      promptLabel: promptLabel ?? callContext?.prompt?.label,
+      evalId: evalId ?? callContext?.evaluationId,
+      testIndex,
+      role,
+    },
+    async () => {
+      const childTraceparent = getActiveTraceparent() ?? traceparent;
+      if (!callContext) {
+        return invoke(callContext);
+      }
+      return invoke({ ...callContext, traceparent: childTraceparent });
+    },
+  );
+}
+
+interface GraderSpanContext {
+  graderId: string;
+  traceparent?: string;
+  evalId?: string;
+  testIndex?: number;
+}
+
+/** Instrument assertion dispatch and registered graders at their shared invocation boundaries. */
+export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promise<T>): Promise<T> {
+  const traceparent = getActiveTraceparent() ?? ctx.traceparent;
+  if (!traceparent) {
+    return fn();
+  }
+
+  const activeTraceparent = getActiveTraceparent();
+  const parentContext =
+    activeTraceparent?.split('-')[1] === traceparent.split('-')[1]
+      ? context.active()
+      : propagation.extract(ROOT_CONTEXT, { traceparent });
+  const attributes: Record<string, string | number> = {
+    [GraderAttributes.GRADER_ID]: ctx.graderId,
+    [SPAN_ROLE_ATTRIBUTE]: 'grader',
+  };
+  if (ctx.evalId) {
+    attributes[PromptfooAttributes.EVAL_ID] = ctx.evalId;
+  }
+  if (ctx.testIndex !== undefined) {
+    attributes[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
+  }
+
+  return getGenAITracer().startActiveSpan(
+    `grader ${ctx.graderId}`,
+    { kind: SpanKind.INTERNAL, attributes },
+    parentContext,
+    async (span) => {
+      try {
+        const result = await withSpanRole('grader', fn);
+        const grade =
+          result && typeof result === 'object' && 'grade' in result ? result.grade : result;
+        if (grade && typeof grade === 'object') {
+          if ('pass' in grade && typeof grade.pass === 'boolean') {
+            span.setAttribute(GraderAttributes.GRADER_PASS, grade.pass);
+          }
+          if ('score' in grade && typeof grade.score === 'number') {
+            span.setAttribute(GraderAttributes.GRADER_SCORE, grade.score);
+          }
+        }
+        span.setStatus({ code: SpanStatusCode.OK });
+        return result;
+      } catch (error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (error instanceof Error) {
+          span.recordException(error);
+        }
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
 /** Prefer an existing active span when it already belongs to the evaluation trace. */
 export function getActiveTargetTraceparent(fallback: string): string {
-  const activeSpan = context.active();
-  const carrier: Record<string, string> = {};
-  propagation.inject(activeSpan, carrier);
-  return carrier.traceparent || fallback;
+  return getActiveTraceparent() || fallback;
 }

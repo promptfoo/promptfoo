@@ -37,7 +37,10 @@ import {
   createRateLimitRegistry,
   type RateLimitRegistry,
 } from './scheduler';
-import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -50,7 +53,8 @@ import {
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import { isExternalTraceProvider } from './tracing/providers';
-import { getActiveTargetTraceparent, withTargetSpan } from './tracing/targetTracer';
+import { getActiveTraceparent } from './tracing/spanRoles';
+import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from './tracing/targetTracer';
 import { fetchTraceContext } from './tracing/traceContext';
 import { isCliEventSource } from './types/eventSource';
 import {
@@ -1052,41 +1056,19 @@ async function callActiveProvider({
 
   const callApi = () => {
     onProviderInvoked();
-    const invoke = () => {
-      if (!traceContext?.traceparent) {
-        return activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-      }
-
-      const providerId = activeProvider.id();
-      const targetType = providerId.startsWith('mcp')
-        ? 'mcp'
-        : providerId.startsWith('ws')
-          ? 'websocket'
-          : providerId.startsWith('http')
-            ? 'http'
-            : 'provider';
-
-      return withTargetSpan(
-        {
-          targetType,
-          providerId,
-          label: activeProvider.label,
-          traceparent: traceContext.traceparent,
-          promptLabel: promptForRender.label,
-          evalId: callApiContext.evaluationId,
-          testIndex: test.vars?.__testIdx as number | undefined,
-        },
-        async () =>
-          activeProvider.callApi(
-            renderedPrompt,
+    const invoke = () =>
+      traceContext?.traceparent
+        ? withTracedProviderCall(
             {
-              ...callApiContext,
-              traceparent: getActiveTargetTraceparent(traceContext.traceparent!),
+              provider: activeProvider,
+              callContext: callApiContext,
+              promptLabel: promptForRender.label,
+              evalId: callApiContext.evaluationId,
+              testIndex: test.vars?.__testIdx as number | undefined,
             },
-            callApiOptions,
-          ),
-      );
-    };
+            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+          )
+        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
     return testSuite?.tracing
       ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();
@@ -1640,100 +1622,123 @@ async function runEvalInternal({
           testIndex,
           promptIndex,
           testSuite,
+          {
+            providerId: provider.id(),
+            promptLabel: state.promptForRender.label,
+            repeatIndex,
+          },
         );
-    const providerCall = await callProviderForRunEval({
-      abortSignal,
-      evalId,
-      filters,
-      promptForRender: {
-        ...state.promptForRender,
-        config: rendered.setup.prompt.config,
-      },
-      provider,
-      rateLimitRegistry,
-      renderedPrompt: rendered.renderedPrompt,
-      repeatIndex,
-      test,
-      testSuite,
-      traceContext,
-      vars: state.vars,
-    });
-    const { response } = providerCall;
-    latencyMs = providerCall.latencyMs;
+    const executionTraceContext = traceContext;
+    const runExecution = () =>
+      withTestCaseSpan(
+        executionTraceContext?.rootSpan,
+        async () => {
+          const providerCall = await callProviderForRunEval({
+            abortSignal,
+            evalId,
+            filters,
+            promptForRender: {
+              ...state.promptForRender,
+              config: rendered.setup.prompt.config,
+            },
+            provider,
+            rateLimitRegistry,
+            renderedPrompt: rendered.renderedPrompt,
+            repeatIndex,
+            test,
+            testSuite,
+            traceContext: executionTraceContext,
+            vars: state.vars,
+          });
+          const { response } = providerCall;
+          latencyMs = providerCall.latencyMs;
 
-    updateConversationHistory({
-      conversationKey: state.conversationKey,
-      conversations,
-      renderedJson: rendered.renderedJson,
-      renderedPrompt: rendered.renderedPrompt,
-      response,
-    });
+          updateConversationHistory({
+            conversationKey: state.conversationKey,
+            conversations,
+            renderedJson: rendered.renderedJson,
+            renderedPrompt: rendered.renderedPrompt,
+            response,
+          });
 
-    logger.debug('Evaluator response', {
-      responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-    });
-    logger.debug(
-      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-    );
+          logger.debug('Evaluator response', {
+            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+          });
+          logger.debug(
+            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+          );
 
-    await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response);
 
-    // The __eval* runtime vars were exposed to prompt/provider rendering above.
-    // Build a copy without them for the persisted result, assertions, and
-    // graders. state.vars itself is left intact — it is shared by reference
-    // with the provider call context.
-    const persistedVars = omitEvalRuntimeVars(state.vars);
+          // The __eval* runtime vars were exposed to prompt/provider rendering above.
+          // Build a copy without them for the persisted result, assertions, and
+          // graders. state.vars itself is left intact — it is shared by reference
+          // with the provider call context.
+          const persistedVars = omitEvalRuntimeVars(state.vars);
 
-    const ret = createEvaluateResult({
-      fileMetadata: state.fileMetadata,
-      latencyMs,
-      prompt,
-      promptIdx: promptIndex,
-      rendered,
-      response,
-      setup,
-      test,
-      testIdx: testIndex,
-      traceContext,
-      evalId,
-      vars: persistedVars,
-    });
+          const ret = createEvaluateResult({
+            fileMetadata: state.fileMetadata,
+            latencyMs,
+            prompt,
+            promptIdx: promptIndex,
+            rendered,
+            response,
+            setup,
+            test,
+            testIdx: testIndex,
+            traceContext: executionTraceContext,
+            evalId,
+            vars: persistedVars,
+          });
 
-    invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+          invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-    trackProviderUsage(provider, response);
-    await applyRunEvalResponseOutcome({
-      abortSignal,
-      deferGrading,
-      evalId,
-      isRedteam,
-      latencyMs,
-      prompt,
-      promptIdx: promptIndex,
-      provider,
-      providerCallQueue,
-      rateLimitRegistry,
-      renderedPrompt: rendered.renderedPrompt,
-      response,
-      ret,
-      test,
-      testIdx: testIndex,
-      testSuite,
-      traceContext,
-      vars: persistedVars,
-    });
+          trackProviderUsage(provider, response);
+          await applyRunEvalResponseOutcome({
+            abortSignal,
+            deferGrading,
+            evalId,
+            isRedteam,
+            latencyMs,
+            prompt,
+            promptIdx: promptIndex,
+            provider,
+            providerCallQueue,
+            rateLimitRegistry,
+            renderedPrompt: rendered.renderedPrompt,
+            response,
+            ret,
+            test,
+            testIdx: testIndex,
+            testSuite,
+            traceContext: executionTraceContext,
+            vars: persistedVars,
+          });
 
-    // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsage(ret.tokenUsage, response);
-    }
+          // Update token usage stats
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
 
-    if (test.options?.storeOutputAs && ret.response?.output && registers) {
-      // Save the output in a register for later use
-      registers[test.options.storeOutputAs] = ret.response.output;
-    }
+          if (test.options?.storeOutputAs && ret.response?.output && registers) {
+            // Save the output in a register for later use
+            registers[test.options.storeOutputAs] = ret.response.output;
+          }
 
-    return [ret];
+          return [ret];
+        },
+        (rows) => deferredGradingPromises.get(rows[0]),
+      );
+    return executionTraceContext
+      ? await withProviderCallTracingContext(
+          {
+            getActiveTraceparent,
+            withGraderSpan,
+            withProviderSpan: withTracedProviderCall,
+          },
+          runExecution,
+        )
+      : await runExecution();
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,

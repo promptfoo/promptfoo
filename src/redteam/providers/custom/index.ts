@@ -30,6 +30,7 @@ import {
   isConversationEndedResponse,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -552,7 +553,8 @@ export class CustomProvider implements ApiProvider {
               providerResponse: lastResponse,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
-            const { grade, rubric } = await grader.getResult(
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
               attackPrompt,
               lastResponse.output,
               test,

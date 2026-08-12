@@ -7,7 +7,11 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
+import {
+  getProviderCallTracingContext,
+  type RateLimitRegistry,
+  wrapProviderWithRateLimiting,
+} from '../../scheduler';
 import {
   type ApiProvider,
   type Assertion,
@@ -32,6 +36,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGraderBase } from '../plugins/base';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -464,6 +469,24 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
+/** Invoke a red-team target with the same tracing behavior across every strategy. */
+export function callTargetProvider(
+  targetProvider: ApiProvider,
+  targetPrompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return targetProvider.callApi(targetPrompt, context, options);
+  }
+
+  return tracingContext.withProviderSpan(
+    { provider: targetProvider, callContext: context },
+    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+  );
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -480,7 +503,7 @@ export async function getTargetResponse(
 
   try {
     throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
-    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
+    targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
@@ -555,6 +578,27 @@ export async function getTargetResponse(
 
     Note: Empty strings are valid output values.
     `,
+  );
+}
+
+/** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
+export function runRedteamGrader(
+  grader: RedteamGraderBase,
+  ...args: Parameters<RedteamGraderBase['getResult']>
+): ReturnType<RedteamGraderBase['getResult']> {
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return grader.getResult(...args);
+  }
+
+  const test = args[2];
+  return tracingContext.withGraderSpan(
+    {
+      graderId: grader.id,
+      evalId: test.metadata?.evaluationId as string | undefined,
+      testIndex: test.vars?.__testIdx as number | undefined,
+    },
+    () => grader.getResult(...args),
   );
 }
 

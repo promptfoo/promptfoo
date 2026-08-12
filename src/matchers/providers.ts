@@ -3,7 +3,10 @@ import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
 
@@ -65,10 +68,18 @@ export function callProviderWithContext(
   const callApiOptions = executionContext?.abortSignal
     ? { abortSignal: executionContext.abortSignal }
     : undefined;
-  const callApi = () =>
+  const invoke = async (tracedContext: CallApiContextParams | undefined) =>
     callApiOptions
-      ? provider.callApi(prompt, callApiContext, callApiOptions)
-      : provider.callApi(prompt, callApiContext);
+      ? provider.callApi(prompt, tracedContext, callApiOptions)
+      : provider.callApi(prompt, tracedContext);
+  const tracingContext = getProviderCallTracingContext();
+  const callApi = () =>
+    tracingContext
+      ? tracingContext.withProviderSpan(
+          { provider, callContext: callApiContext, role: 'grader', promptLabel: label },
+          invoke,
+        )
+      : invoke(callApiContext);
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {

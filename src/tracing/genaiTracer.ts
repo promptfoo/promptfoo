@@ -10,6 +10,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import logger from '../logger';
+import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -292,6 +293,11 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
     // Promptfoo attributes
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
+
+  const spanRole = getActiveSpanRole();
+  if (spanRole) {
+    attrs[SPAN_ROLE_ATTRIBUTE] = spanRole;
+  }
 
   // Optional request parameters
   if (ctx.maxTokens !== undefined) {

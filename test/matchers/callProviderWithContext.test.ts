@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callProviderWithContext } from '../../src/matchers/providers';
-import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { createMockProvider } from '../factories/provider';
 
+import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
   ApiProvider,
@@ -96,6 +100,46 @@ describe('callProviderWithContext', () => {
       {
         prompt: { raw: 'grade this', label: 'rubric' },
         vars,
+      },
+      { abortSignal: abortController.signal },
+    );
+  });
+
+  it('traces grading providers while preserving scheduler and cancellation context', async () => {
+    const provider = createProvider();
+    const registry = createRegistry();
+    const abortController = new AbortController();
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+      { callContext },
+      invoke,
+    ) => invoke({ ...callContext!, traceparent });
+    const providerSpan = vi.fn(withProviderSpan);
+
+    await withProviderCallExecutionContext(
+      { abortSignal: abortController.signal, rateLimitRegistry: registry },
+      () =>
+        withProviderCallTracingContext(
+          {
+            getActiveTraceparent: () => traceparent,
+            withGraderSpan: async (_options, invoke) => invoke(),
+            withProviderSpan: providerSpan,
+          },
+          () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+        ),
+    );
+
+    expect(registry.executeSpy).toHaveBeenCalledTimes(1);
+    expect(providerSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ provider, role: 'grader', promptLabel: 'rubric' }),
+      expect.any(Function),
+    );
+    expect(provider.callApi).toHaveBeenCalledWith(
+      'grade this',
+      {
+        prompt: { raw: 'grade this', label: 'rubric' },
+        vars,
+        traceparent,
       },
       { abortSignal: abortController.signal },
     );
