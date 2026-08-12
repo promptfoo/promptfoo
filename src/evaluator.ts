@@ -1619,7 +1619,7 @@ async function runEvalInternal({
           promptIndex,
           testSuite,
           {
-            providerId: provider.id(),
+            providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
             promptLabel: state.promptForRender.label,
             repeatIndex,
           },
