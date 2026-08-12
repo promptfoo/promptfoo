@@ -11,7 +11,9 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  addActiveSpanRoleAttribute,
   closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
@@ -24,6 +26,7 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { getCodexTraceEndpoint, withCodexTraceExporter } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
@@ -1224,8 +1227,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex-app-server',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex App Server',
+      agentName: 'Codex App Server',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -1483,7 +1487,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     if (config.deep_tracing) {
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
         sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
@@ -1517,19 +1521,24 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     );
   }
 
-  private buildAppServerArgs(config: CodexAppServerConfig): string[] {
+  private buildAppServerArgs(config: CodexAppServerConfig, env: Record<string, string>): string[] {
     const args = ['app-server', '--listen', 'stdio://'];
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
     for (const { key, value } of flattenConfig(cliConfig)) {
       args.push('-c', `${key}=${toTomlLiteral(value)}`);
     }
     return args;
   }
 
-  private getResolvedCliConfig(config: CodexAppServerConfig): Record<string, unknown> {
-    return {
-      ...(config.cli_config ?? {}),
-    };
+  private getResolvedCliConfig(
+    config: CodexAppServerConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> {
+    return withCodexTraceExporter(
+      { ...(config.cli_config ?? {}) },
+      env,
+      config.deep_tracing === true,
+    );
   }
 
   private getRequestTimeoutMs(config: CodexAppServerConfig): number {
@@ -1579,7 +1588,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
       command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config),
+      args: this.buildAppServerArgs(config, env),
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -1671,7 +1680,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const keyData = {
       env: stableEnv,
       codex_path_override: config.codex_path_override,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       experimental_api: config.experimental_api,
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
@@ -3208,12 +3217,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.app_server.item.id': itemId,
         'codex.app_server.item.type': item?.type ?? 'unknown',
         ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
   }
 
@@ -3255,10 +3264,10 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       attributes['gen_ai.usage.input_tokens'] = usage.input;
       attributes['gen_ai.usage.output_tokens'] = usage.output;
       if (usage.cached) {
-        attributes['gen_ai.usage.cached_tokens'] = usage.cached;
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = usage.cached;
       }
       if (usage.reasoning) {
-        attributes['gen_ai.usage.reasoning_tokens'] = usage.reasoning;
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = usage.reasoning;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexAppServer' });
@@ -3333,10 +3342,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         attrs['codex.mcp.server'] = item.server;
       }
       if (typeof item.tool === 'string') {
+        attrs['gen_ai.operation.name'] = 'execute_tool';
+        attrs['gen_ai.tool.name'] = item.tool;
         attrs['codex.mcp.tool'] = item.tool;
       }
     }
     if (item?.type === 'dynamicToolCall' && typeof item.tool === 'string') {
+      attrs['gen_ai.operation.name'] = 'execute_tool';
+      attrs['gen_ai.tool.name'] = item.tool;
       attrs['codex.tool.name'] = item.tool;
     }
     if (item?.type === 'webSearch' && typeof item.query === 'string') {

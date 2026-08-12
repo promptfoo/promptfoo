@@ -6,6 +6,7 @@ import fs from 'fs';
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache, isCacheEnabled } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import {
@@ -1501,6 +1502,74 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(callArgs.options.env.CLAUDE_CODE_ENABLE_TELEMETRY).toBe('1');
         expect(callArgs.options.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://localhost:4318');
         expect(callArgs.options.env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe('http/protobuf');
+      });
+
+      it('enables native model and tool tracing only when deep tracing is requested', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: { deep_tracing: true },
+        });
+        await provider.callApi('prompt');
+
+        const env = mockQuery.mock.calls.at(-1)?.[0].options.env;
+        expect(env).toMatchObject({
+          CLAUDE_CODE_ENABLE_TELEMETRY: '1',
+          CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: '1',
+          OTEL_TRACES_EXPORTER: 'otlp',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
+          OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+          OTEL_TRACES_EXPORT_INTERVAL: '1000',
+        });
+        expect(env.OTEL_LOG_USER_PROMPTS).toBeUndefined();
+        expect(env.OTEL_LOG_TOOL_DETAILS).toBeUndefined();
+        expect(env.OTEL_LOG_TOOL_CONTENT).toBeUndefined();
+      });
+
+      it('preserves explicit collector settings when enabling native Claude traces', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            deep_tracing: true,
+            env: {
+              OTEL_EXPORTER_OTLP_ENDPOINT: 'https://collector.example.com',
+              OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
+              OTEL_TRACES_EXPORT_INTERVAL: '2500',
+            },
+          },
+        });
+        await provider.callApi('prompt');
+
+        expect(mockQuery.mock.calls.at(-1)?.[0].options.env).toMatchObject({
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'https://collector.example.com',
+          OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json',
+          OTEL_TRACES_EXPORT_INTERVAL: '2500',
+        });
+      });
+
+      it('routes native Claude spans to the receiver configured for the active eval', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+        (cliState as any).requestTracingConfig = {
+          enabled: true,
+          otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } },
+        };
+
+        try {
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            config: { deep_tracing: true },
+          });
+          await provider.callApi('prompt');
+
+          expect(mockQuery.mock.calls.at(-1)?.[0].options.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+            'http://127.0.0.2:14318',
+          );
+        } finally {
+          delete (cliState as any).requestTracingConfig;
+        }
       });
 
       it('should let EnvOverrides take precedence over config.env', async () => {
@@ -5112,6 +5181,9 @@ describe('ClaudeCodeSDKProvider', () => {
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Read');
         expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['gen_ai.operation.name']).toBe('execute_tool');
+        expect(toolSpan!.attrs['gen_ai.tool.call.id']).toBe('tool-1');
+        expect(toolSpan!.attrs['gen_ai.tool.name']).toBe('Read');
         expect(toolSpan!.attrs['tool.name']).toBe('Read');
         expect(toolSpan!.attrs['tool.is_error']).toBe(false);
         expect(toolSpan!.attrs['tool.input']).toContain('/test/file.ts');
@@ -5120,6 +5192,69 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(typeof toolSpan!.endedAt).toBe('number');
         expect(toolSpan!.endedAt! >= toolSpan!.options.startTime).toBe(true);
         expect(toolSpan!.status?.code).toBe(1); // SpanStatusCode.OK
+      });
+
+      it('avoids synthetic duplicates when the Claude SDK exports its own spans', async () => {
+        const { emittedSpans } = installTracerSpy();
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'tool-1',
+                  name: 'Read',
+                  input: { file_path: '/test/file.ts' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-1',
+                    content: 'file contents here',
+                    is_error: false,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(10, 20),
+              total_cost_usd: 0.001,
+              duration_ms: 500,
+              duration_api_ms: 400,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: { deep_tracing: true },
+        });
+        const result = await provider.callApi('prompt');
+
+        expect(emittedSpans).not.toContainEqual(
+          expect.objectContaining({ name: expect.stringMatching(/^(tool |gen_ai\.turn )/) }),
+        );
+        expect(result.metadata?.toolCalls).toEqual([
+          expect.objectContaining({ name: 'Read', id: 'tool-1' }),
+        ]);
       });
 
       it('marks tool spans as ERROR when the tool_result reports an error', async () => {
@@ -5734,7 +5869,7 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(turnSpans[1].name).toBe('gen_ai.turn 2');
           expect(turnSpans[0].attrs['gen_ai.turn.index']).toBe(1);
           expect(turnSpans[1].attrs['gen_ai.turn.index']).toBe(2);
-          expect(turnSpans[0].attrs['gen_ai.system']).toBe('anthropic');
+          expect(turnSpans[0].attrs['gen_ai.provider.name']).toBe('anthropic');
         });
 
         it('tags tool spans with the index of the assistant turn that emitted them', async () => {
