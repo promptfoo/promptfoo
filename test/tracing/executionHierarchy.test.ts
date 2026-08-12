@@ -12,6 +12,7 @@ import {
   getGenAITracer,
   openTurnSpan,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../src/tracing/genaiTracer';
 import { isRelevantSpan } from '../../src/tracing/spanFilter';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
@@ -123,7 +124,13 @@ describe('test-case execution trace hierarchy', () => {
               providerId: 'http:customer-agent',
               traceparent: targetContext?.traceparent,
             },
-            async () => ({ output: 'model response' }),
+            async () => {
+              await withGenAIToolSpan(
+                { name: 'lookup_order', arguments: { order_id: '123' }, callId: 'call-1' },
+                async () => ({ status: 'shipped' }),
+              );
+              return { output: 'model response' };
+            },
           );
           return targetProvider.callApi('test prompt', targetContext);
         },
@@ -141,7 +148,13 @@ describe('test-case execution trace hierarchy', () => {
                 providerId: gradingProvider.id(),
                 traceparent: gradingContext?.traceparent,
               },
-              async () => ({ output: 'judge response' }),
+              async () => {
+                await withGenAIToolSpan(
+                  { name: 'check_policy', arguments: { policy: 'returns' } },
+                  async () => ({ allowed: true }),
+                );
+                return { output: 'judge response' };
+              },
             ),
         );
         return { pass: false, score: 0, reason: 'The response did not satisfy the rubric.' };
@@ -154,15 +167,19 @@ describe('test-case execution trace hierarchy', () => {
     const rootSpan = spans.find((span) => span.name === 'test case shared')!;
     const targetSpan = spans.find((span) => span.name === 'http:customer-agent')!;
     const targetModel = spans.find((span) => span.name === 'chat application-model')!;
+    const targetTool = spans.find((span) => span.name === 'execute_tool lookup_order')!;
     const graderSpan = spans.find((span) => span.name === 'grader llm-rubric')!;
     const gradingProviderSpan = spans.find((span) => span.name === 'grader provider openai:judge')!;
     const judgeModel = spans.find((span) => span.name === 'chat judge-model')!;
+    const graderTool = spans.find((span) => span.name === 'execute_tool check_policy')!;
 
     expect(targetSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
     expect(targetModel.parentSpanContext?.spanId).toBe(targetSpan.spanContext().spanId);
+    expect(targetTool.parentSpanContext?.spanId).toBe(targetModel.spanContext().spanId);
     expect(graderSpan.parentSpanContext?.spanId).toBe(rootSpan.spanContext().spanId);
     expect(gradingProviderSpan.parentSpanContext?.spanId).toBe(graderSpan.spanContext().spanId);
     expect(judgeModel.parentSpanContext?.spanId).toBe(gradingProviderSpan.spanContext().spanId);
+    expect(graderTool.parentSpanContext?.spanId).toBe(judgeModel.spanContext().spanId);
     expect(targetContexts[0]?.traceparent).toContain(targetSpan.spanContext().spanId);
     expect(graderSpan.attributes).toMatchObject({
       [GenAIAttributes.EVALUATION_NAME]: 'llm-rubric',
@@ -175,10 +192,21 @@ describe('test-case execution trace hierarchy', () => {
     expect(gradingProviderSpan.attributes).not.toHaveProperty('promptfoo.target.label');
     expect(gradingProviderSpan.attributes).not.toHaveProperty(GenAIAttributes.OPERATION_NAME);
     expect(targetModel.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('target');
+    expect(targetTool.attributes).toMatchObject({
+      [GenAIAttributes.OPERATION_NAME]: 'execute_tool',
+      [SPAN_ROLE_ATTRIBUTE]: 'target',
+      'gen_ai.tool.call.id': 'call-1',
+      'gen_ai.tool.name': 'lookup_order',
+      'tool.arguments': '{"order_id":"123"}',
+      'tool.output': '{"status":"shipped"}',
+    });
     expect(judgeModel.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+    expect(graderTool.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
     expect(isRelevantSpan({ attributes: targetModel.attributes })).toBe(true);
+    expect(isRelevantSpan({ attributes: targetTool.attributes })).toBe(true);
     expect(isRelevantSpan({ attributes: graderSpan.attributes })).toBe(false);
     expect(isRelevantSpan({ attributes: judgeModel.attributes })).toBe(false);
+    expect(isRelevantSpan({ attributes: graderTool.attributes })).toBe(false);
   });
 
   it('records HTTP target execution without inventing a model-inference span', async () => {

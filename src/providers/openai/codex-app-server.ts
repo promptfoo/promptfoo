@@ -26,6 +26,7 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { getCodexTraceEndpoint, withCodexTraceExporter } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
@@ -1226,8 +1227,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex-app-server',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex App Server',
+      agentName: 'Codex App Server',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -1485,7 +1487,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     if (config.deep_tracing) {
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
         sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
@@ -1519,19 +1521,24 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     );
   }
 
-  private buildAppServerArgs(config: CodexAppServerConfig): string[] {
+  private buildAppServerArgs(config: CodexAppServerConfig, env: Record<string, string>): string[] {
     const args = ['app-server', '--listen', 'stdio://'];
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
     for (const { key, value } of flattenConfig(cliConfig)) {
       args.push('-c', `${key}=${toTomlLiteral(value)}`);
     }
     return args;
   }
 
-  private getResolvedCliConfig(config: CodexAppServerConfig): Record<string, unknown> {
-    return {
-      ...(config.cli_config ?? {}),
-    };
+  private getResolvedCliConfig(
+    config: CodexAppServerConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> {
+    return withCodexTraceExporter(
+      { ...(config.cli_config ?? {}) },
+      env,
+      config.deep_tracing === true,
+    );
   }
 
   private getRequestTimeoutMs(config: CodexAppServerConfig): number {
@@ -1581,7 +1588,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const connection = new CodexAppServerConnection({
       connectionInstanceId,
       command: config.codex_path_override ?? 'codex',
-      args: this.buildAppServerArgs(config),
+      args: this.buildAppServerArgs(config, env),
       env,
       requestTimeoutMs: this.getRequestTimeoutMs(config),
       startupTimeoutMs: config.startup_timeout_ms ?? DEFAULT_STARTUP_TIMEOUT_MS,
@@ -1673,7 +1680,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const keyData = {
       env: stableEnv,
       codex_path_override: config.codex_path_override,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       experimental_api: config.experimental_api,
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');

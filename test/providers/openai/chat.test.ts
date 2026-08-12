@@ -113,15 +113,22 @@ describe('OpenAI Provider', () => {
     it('should record GPT-5.6 cache writes in the chat span', async () => {
       const spanAttributes: Record<string, unknown> = {};
       const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
-        startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
-          callback({
+        startActiveSpan: (
+          _name: string,
+          options: { attributes?: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          Object.assign(spanAttributes, options.attributes);
+          return callback({
             setAttribute: (key: string, value: unknown) => {
               spanAttributes[key] = value;
             },
             setStatus: vi.fn(),
             recordException: vi.fn(),
             end: vi.fn(),
-          }),
+          });
+        },
       } as any);
       mockFetchWithCache.mockResolvedValue({
         data: {
@@ -148,6 +155,7 @@ describe('OpenAI Provider', () => {
         });
         expect(spanAttributes['gen_ai.usage.cache_read.input_tokens']).toBe(2);
         expect(spanAttributes['gen_ai.usage.cache_creation.input_tokens']).toBe(3);
+        expect(spanAttributes['openai.api.type']).toBe('chat_completions');
       } finally {
         getTracerSpy.mockRestore();
       }

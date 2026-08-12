@@ -7,6 +7,7 @@ import {
   startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
+import { getConfiguredTracingEndpoint } from '../tracing';
 import {
   loadAgentDefinition,
   loadHandoffs,
@@ -146,6 +147,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private async setupTracingIfNeeded(context?: CallApiContextParams): Promise<void> {
     const tracingEnabled =
       this.agentConfig.tracing === true ||
+      Boolean(context?.traceparent) ||
       context?.test?.metadata?.tracingEnabled === true ||
       process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 
@@ -203,7 +205,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       const traceContext = parseTraceparent(context?.traceparent);
       const traceMetadata = buildTraceMetadata(
         context,
-        this.agentConfig.otlpEndpoint,
+        this.agentConfig.otlpEndpoint ?? getConfiguredTracingEndpoint(),
         traceContext,
       );
 

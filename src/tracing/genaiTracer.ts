@@ -24,13 +24,15 @@ const TRACER_NAME = 'promptfoo.providers';
 const TRACER_VERSION = '1.0.0';
 
 // GenAI Semantic Convention attribute names
-// See: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+// See: https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai
 export const GenAIAttributes = {
   // Provider identification
   /** @deprecated Read-only compatibility for spans emitted before gen_ai.provider.name. */
   SYSTEM: 'gen_ai.system',
   PROVIDER_NAME: 'gen_ai.provider.name',
   OPERATION_NAME: 'gen_ai.operation.name',
+  AGENT_ID: 'gen_ai.agent.id',
+  AGENT_NAME: 'gen_ai.agent.name',
 
   // Request attributes
   REQUEST_MODEL: 'gen_ai.request.model',
@@ -76,7 +78,7 @@ export const PromptfooAttributes = {
   USAGE_REJECTED_PREDICTION_TOKENS: 'promptfoo.usage.rejected_prediction_tokens',
 } as const;
 
-type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings';
+type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings' | 'invoke_agent';
 
 const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
   aws_bedrock: 'aws.bedrock',
@@ -147,6 +149,12 @@ export interface GenAISpanContext {
   operationName: GenAIOperationName | 'completion' | 'embedding';
   /** The requested model name */
   model: string;
+  /** Stable identifier for a remotely hosted agent, when available. */
+  agentId?: string;
+  /** Human-readable agent name for invoke_agent spans. */
+  agentName?: string;
+  /** Distinguishes OpenAI's Responses and Chat Completions APIs. */
+  openaiApiType?: 'responses' | 'chat_completions';
   /** The promptfoo provider ID */
   providerId: string;
 
@@ -190,6 +198,13 @@ export interface GenAISpanResult {
   additionalAttributes?: Record<string, string | number | boolean>;
 }
 
+/** Details shared by function callbacks and MCP tool executions. */
+export interface GenAIToolSpanContext {
+  name: string;
+  arguments?: unknown;
+  callId?: string;
+}
+
 /**
  * Get the tracer instance for GenAI operations.
  */
@@ -201,6 +216,88 @@ export function getGenAITracer(): Tracer {
 export function addActiveSpanRoleAttribute(attributes: Attributes): Attributes {
   const role = getActiveSpanRole();
   return role ? { ...attributes, [SPAN_ROLE_ATTRIBUTE]: role } : attributes;
+}
+
+/** Record tool execution beneath its existing target or grader span. */
+export async function withGenAIToolSpan<T>(
+  tool: GenAIToolSpanContext,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  if (!trace.getActiveSpan()) {
+    return await fn();
+  }
+
+  const attributes: Attributes = addActiveSpanRoleAttribute({
+    [GenAIAttributes.OPERATION_NAME]: 'execute_tool',
+    'gen_ai.tool.name': tool.name,
+    'tool.name': tool.name,
+  });
+  if (tool.callId) {
+    attributes['gen_ai.tool.call.id'] = tool.callId;
+  }
+  const toolArguments = serializeToolAttribute(tool.arguments);
+  if (toolArguments !== undefined) {
+    attributes['tool.arguments'] = toolArguments;
+  }
+
+  return getGenAITracer().startActiveSpan(
+    `execute_tool ${tool.name}`,
+    { kind: SpanKind.INTERNAL, attributes },
+    async (span) => {
+      try {
+        const result = await fn();
+        const resultRecord =
+          result && typeof result === 'object' ? (result as Record<string, unknown>) : undefined;
+        const output = serializeToolAttribute(
+          resultRecord && 'content' in resultRecord ? resultRecord.content : result,
+        );
+        if (output !== undefined) {
+          span.setAttribute('tool.output', output);
+        }
+
+        if (resultRecord?.isError === true || typeof resultRecord?.error === 'string') {
+          span.setAttribute('tool.is_error', true);
+          span.setAttribute('error.type', 'tool_error');
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            ...(typeof resultRecord.error === 'string'
+              ? { message: truncateBody(resultRecord.error) }
+              : {}),
+          });
+        } else {
+          span.setAttribute('tool.is_error', false);
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+        return result;
+      } catch (error) {
+        span.setAttribute('tool.is_error', true);
+        span.setAttribute('error.type', error instanceof Error ? error.name : '_OTHER');
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: truncateBody(error instanceof Error ? error.message : String(error)),
+        });
+        if (error instanceof Error) {
+          span.recordException(error);
+        }
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+function serializeToolAttribute(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    return serialized === undefined ? undefined : truncateBody(serialized);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -248,8 +345,13 @@ export async function withGenAISpan<T>(
   const tracer = getGenAITracer();
   const operationName = normalizeOperationName(ctx.operationName);
 
-  // Span name follows GenAI convention: "{operation} {model}"
-  const spanName = `${operationName} ${ctx.model}`;
+  // Agent spans identify the invoked agent; inference spans identify the requested model.
+  const spanName =
+    operationName === 'invoke_agent'
+      ? ctx.agentName
+        ? `${operationName} ${ctx.agentName}`
+        : operationName
+      : `${operationName} ${ctx.model}`;
 
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
@@ -339,11 +441,26 @@ function buildRequestAttributes(
     // GenAI semantic conventions
     [GenAIAttributes.PROVIDER_NAME]: getProviderName(ctx.system),
     [GenAIAttributes.OPERATION_NAME]: operationName,
-    [GenAIAttributes.REQUEST_MODEL]: ctx.model,
 
     // Promptfoo attributes
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
+
+  if (operationName === 'invoke_agent' && ctx.agentName) {
+    attrs[GenAIAttributes.AGENT_NAME] = ctx.agentName;
+  }
+  if (operationName === 'invoke_agent' && ctx.agentId) {
+    attrs[GenAIAttributes.AGENT_ID] = ctx.agentId;
+  }
+  if (
+    operationName !== 'invoke_agent' ||
+    (ctx.model !== ctx.agentName && ctx.model !== ctx.agentId)
+  ) {
+    attrs[GenAIAttributes.REQUEST_MODEL] = ctx.model;
+  }
+  if (ctx.openaiApiType && attrs[GenAIAttributes.PROVIDER_NAME] === 'openai') {
+    attrs['openai.api.type'] = ctx.openaiApiType;
+  }
 
   const spanRole = getActiveSpanRole();
   if (spanRole) {

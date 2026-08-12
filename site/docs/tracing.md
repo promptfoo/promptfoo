@@ -39,7 +39,7 @@ Tracing provides visibility into:
 
 When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, with target requests and grading recorded beneath it. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace. Multi-turn tests keep their target requests and grading together in the same trace.
 
-All targets, including custom providers, receive a target span automatically. Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/), while custom applications can add their own child spans using the propagated `traceparent`.
+All targets, including custom providers, receive a target span automatically. Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai/tree/main/docs/gen-ai), while custom applications can add their own child spans using the propagated `traceparent`. Agent providers use `invoke_agent` for the overall run, with model calls and tool executions recorded separately underneath. When an SDK already produces those spans, Promptfoo uses its native instrumentation instead of creating a second copy.
 
 ### Supported Providers
 
@@ -70,7 +70,11 @@ Each provider call creates a span with these attributes:
 **Request Attributes:**
 
 - `gen_ai.provider.name` - Provider name (e.g., "openai", "anthropic", "azure.ai.openai", "aws.bedrock")
-- `gen_ai.operation.name` - Operation type ("chat", "text_completion", "embeddings")
+- `gen_ai.operation.name` - Operation type ("chat", "text_completion", "embeddings", "invoke_agent", or "execute_tool")
+- `gen_ai.agent.id` - Stable identifier for hosted agents
+- `gen_ai.agent.name` - Agent name for agent invocations
+- `gen_ai.tool.name` - Tool name for tool executions
+- `openai.api.type` - OpenAI API used ("chat_completions" or "responses")
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
 - `gen_ai.request.temperature` - Temperature setting

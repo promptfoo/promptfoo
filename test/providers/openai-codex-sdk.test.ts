@@ -2349,6 +2349,47 @@ describe('OpenAICodexSDKProvider', () => {
                 `deployment.environment=test,promptfoo.trace_id=${traceId},` +
                 `promptfoo.parent_span_id=${spanId}`,
             }),
+            config: expect.objectContaining({
+              otel: {
+                trace_exporter: {
+                  'otlp-http': {
+                    endpoint: 'http://127.0.0.1:4318/v1/traces',
+                    protocol: 'json',
+                  },
+                },
+              },
+            }),
+          }),
+        );
+      });
+
+      it('routes native Codex spans to the receiver configured for the active eval', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const provider = new OpenAICodexSDKProvider({
+          config: { deep_tracing: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
+          async () => provider.callApi('Test prompt'),
+        );
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.2:14318',
+            }),
+            config: expect.objectContaining({
+              otel: {
+                trace_exporter: {
+                  'otlp-http': {
+                    endpoint: 'http://127.0.0.2:14318/v1/traces',
+                    protocol: 'json',
+                  },
+                },
+              },
+            }),
           }),
         );
       });

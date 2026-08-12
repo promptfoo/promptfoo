@@ -477,7 +477,7 @@ describe('AzureFoundryAgentProvider', () => {
       });
     });
 
-    it('wraps each call in a chat <model> span', async () => {
+    it('wraps each call in an agent invocation span', async () => {
       const spans = installSpanRecorder();
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValueOnce(createMessageResponse('Hello'));
@@ -488,15 +488,17 @@ describe('AzureFoundryAgentProvider', () => {
 
       await provider.callApi('test prompt');
 
-      const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
-      expect(chatSpan).toBeDefined();
-      expect(chatSpan?.attributes).toMatchObject({
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpan).toBeDefined();
+      expect(agentSpan?.attributes).toMatchObject({
         'gen_ai.provider.name': 'azure.ai.openai',
-        'gen_ai.operation.name': 'chat',
+        'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.name': 'weather-agent',
       });
+      expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
     });
 
-    it('emits a chat span but no gen_ai.turn spans on a cache hit', async () => {
+    it('emits an agent invocation span but no gen_ai.turn spans on a cache hit', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
         get: vi.fn().mockResolvedValue({ output: 'cached response' }),
@@ -516,9 +518,9 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.cached).toBe(true);
       expect(mockResponsesCreate).not.toHaveBeenCalled();
       expect(spans.filter((span) => span.name.startsWith('gen_ai.turn '))).toHaveLength(0);
-      const chatSpan = spans.find((span) => span.name === 'chat weather-agent');
-      expect(chatSpan).toBeDefined();
-      expect(chatSpan?.attributes['promptfoo.cache_hit']).toBe(true);
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpan).toBeDefined();
+      expect(agentSpan?.attributes['promptfoo.cache_hit']).toBe(true);
     });
 
     it('marks a resolved-but-failed Responses turn as errored', async () => {

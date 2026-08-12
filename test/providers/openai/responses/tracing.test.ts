@@ -88,6 +88,7 @@ describe('OpenAiResponsesProvider tracing', () => {
       'gen_ai.provider.name': 'openai',
       'gen_ai.operation.name': 'chat',
       'gen_ai.request.model': 'gpt-4o',
+      'openai.api.type': 'responses',
       'promptfoo.provider.id': 'openai:gpt-4o',
     });
     expect(chatSpan?.attributes['promptfoo.usage.total_tokens']).toBe(30);

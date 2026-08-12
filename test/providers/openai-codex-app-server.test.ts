@@ -3,6 +3,7 @@ import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -179,6 +180,29 @@ describe('OpenAICodexAppServerProvider', () => {
     expect((provider as any).getAttributesForItem(item)).toMatchObject({
       'gen_ai.operation.name': 'execute_tool',
       'gen_ai.tool.name': expectedToolName,
+    });
+  });
+
+  it('routes native app-server spans to the receiver configured for the active eval', async () => {
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true },
+    });
+
+    const env = await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: true, host: '127.0.0.2', port: 14318 } } },
+      async () => (provider as any).prepareEnvironment({ deep_tracing: true }),
+    );
+
+    expect(env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://127.0.0.2:14318');
+    expect((provider as any).getResolvedCliConfig({ deep_tracing: true }, env)).toMatchObject({
+      otel: {
+        trace_exporter: {
+          'otlp-http': {
+            endpoint: 'http://127.0.0.2:14318/v1/traces',
+            protocol: 'json',
+          },
+        },
+      },
     });
   });
 
@@ -1737,6 +1761,12 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondInitialize = await waitForMessage(
       secondServer,
       (message) => message.method === 'initialize',
+    );
+    expect(mocks.spawn.mock.calls[0][1]).toEqual(
+      expect.arrayContaining([
+        'otel.trace_exporter.otlp-http.endpoint="http://127.0.0.1:4318/v1/traces"',
+        'otel.trace_exporter.otlp-http.protocol="json"',
+      ]),
     );
     firstServer.send({ id: firstInitialize.id, result: {} });
     secondServer.send({ id: secondInitialize.id, result: {} });

@@ -5,6 +5,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { parseFileUrl } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
+import { withGenAIToolSpan } from './tracing';
 
 import type {
   FunctionCall,
@@ -68,6 +69,7 @@ export class FunctionCallbackHandler {
         functionInfo.arguments || '{}',
         callbacks,
         context,
+        typeof call?.id === 'string' ? call.id : undefined,
       );
       return {
         output: result,
@@ -167,6 +169,7 @@ export class FunctionCallbackHandler {
     args: string,
     callbacks: FunctionCallbackConfig,
     context?: any,
+    callId?: string,
   ): Promise<string> {
     // Get or load the callback
     let callback = this.loadedCallbacks[functionName];
@@ -193,7 +196,9 @@ export class FunctionCallbackHandler {
     }
 
     // Execute the callback
-    const result = await callback(args, context);
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+      callback(args, context),
+    );
     return typeof result === 'string' ? result : JSON.stringify(result);
   }
 

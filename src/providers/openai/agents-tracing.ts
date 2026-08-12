@@ -1,11 +1,15 @@
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
 
 const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
+const OTLP_SPAN_KIND_INTERNAL = 1;
+const OTLP_SPAN_KIND_CLIENT = 3;
 const INTERNAL_TRACE_METADATA_KEYS = new Set([
   'promptfoo.otlp_endpoint',
   'promptfoo.parent_span_id',
+  'promptfoo.service_name',
 ]);
 
 /**
@@ -76,22 +80,31 @@ export class OTLPTracingExporter implements TracingExporter {
    * Transform openai-agents-js spans to OTLP JSON format.
    */
   private transformToOTLP(spans: Span<any>[]): any {
+    const spansByService = new Map<string, Span<any>[]>();
+    const defaultServiceName = getTracingServiceName();
+
+    for (const span of spans) {
+      const serviceName =
+        getStringTraceMetadata(span, 'promptfoo.service_name') ?? defaultServiceName;
+      const serviceSpans = spansByService.get(serviceName) ?? [];
+      serviceSpans.push(span);
+      spansByService.set(serviceName, serviceSpans);
+    }
+
     return {
-      resourceSpans: [
-        {
-          resource: {
-            attributes: [{ key: 'service.name', value: { stringValue: 'promptfoo-agents' } }],
-          },
-          scopeSpans: [
-            {
-              scope: {
-                name: 'openai-agents-js',
-              },
-              spans: spans.map((span) => this.spanToOTLP(span)),
-            },
-          ],
+      resourceSpans: [...spansByService.entries()].map(([serviceName, serviceSpans]) => ({
+        resource: {
+          attributes: [{ key: 'service.name', value: { stringValue: serviceName } }],
         },
-      ],
+        scopeSpans: [
+          {
+            scope: {
+              name: 'openai-agents-js',
+            },
+            spans: serviceSpans.map((span) => this.spanToOTLP(span)),
+          },
+        ],
+      })),
     };
   }
 
@@ -111,7 +124,10 @@ export class OTLPTracingExporter implements TracingExporter {
       spanId: this.hexToBase64(spanId, 'span'),
       parentSpanId: parentSpanId ? this.hexToBase64(parentSpanId, 'span') : undefined,
       name: this.getSpanName(span),
-      kind: 1,
+      kind:
+        span.spanData.type === 'generation' || span.spanData.type === 'response'
+          ? OTLP_SPAN_KIND_CLIENT
+          : OTLP_SPAN_KIND_INTERNAL,
       startTimeUnixNano: String(startTime * 1_000_000),
       endTimeUnixNano: endTime ? String(endTime * 1_000_000) : undefined,
       attributes: this.attributesToOTLP(this.getSpanAttributes(span)),
@@ -124,15 +140,15 @@ export class OTLPTracingExporter implements TracingExporter {
 
     switch (data.type) {
       case 'function':
-        return `tool ${data.name || 'function'}`;
+        return `execute_tool ${data.name || 'function'}`;
       case 'handoff':
         return `handoff ${data.from_agent || 'unknown'} -> ${data.to_agent || 'unknown'}`;
       case 'agent':
-        return `agent ${data.name || 'agent'}`;
+        return `invoke_agent ${data.name || 'agent'}`;
       case 'generation':
         return `chat ${data.model || 'unknown-model'}`;
       case 'response':
-        return `response ${data.response_id || 'response'}`;
+        return `chat ${getResponseModel(data) || 'unknown-model'}`;
       case 'guardrail':
         return `guardrail ${data.name || 'guardrail'}`;
       case 'custom':
@@ -189,6 +205,8 @@ export class OTLPTracingExporter implements TracingExporter {
         attributes['handoff.to_agent'] = data.to_agent;
         break;
       case 'agent':
+        attributes['gen_ai.operation.name'] = 'invoke_agent';
+        attributes['gen_ai.agent.name'] = data.name;
         attributes['agent.name'] = data.name;
         if (data.tools !== undefined) {
           attributes['agent.tools'] = data.tools;
@@ -215,7 +233,7 @@ export class OTLPTracingExporter implements TracingExporter {
         }
         break;
       case 'response':
-        attributes['openai.response_id'] = data.response_id;
+        this.applyResponseSpanAttributes(data, attributes);
         break;
       case 'guardrail':
         attributes['guardrail.name'] = data.name;
@@ -242,6 +260,51 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     return attributes;
+  }
+
+  private applyResponseSpanAttributes(
+    data: Extract<SpanData, { type: 'response' }>,
+    attributes: Record<string, unknown>,
+  ): void {
+    const response = isRecord(data._response) ? data._response : undefined;
+    const responseId = data.response_id ?? getStringValue(response?.id);
+    const model = getResponseModel(data);
+    const usage = isRecord(response?.usage) ? response.usage : undefined;
+
+    attributes['gen_ai.operation.name'] = 'chat';
+    attributes['gen_ai.provider.name'] = 'openai';
+    attributes['openai.api.type'] = 'responses';
+
+    if (model) {
+      attributes['gen_ai.request.model'] = model;
+      attributes['gen_ai.response.model'] = model;
+    }
+    if (responseId) {
+      attributes['gen_ai.response.id'] = responseId;
+      attributes['openai.response_id'] = responseId;
+    }
+
+    setNumericAttribute(attributes, 'gen_ai.usage.input_tokens', usage?.input_tokens);
+    setNumericAttribute(attributes, 'gen_ai.usage.output_tokens', usage?.output_tokens);
+    setNumericAttribute(attributes, 'promptfoo.usage.total_tokens', usage?.total_tokens);
+
+    const inputTokenDetails = isRecord(usage?.input_tokens_details)
+      ? usage.input_tokens_details
+      : undefined;
+    const outputTokenDetails = isRecord(usage?.output_tokens_details)
+      ? usage.output_tokens_details
+      : undefined;
+
+    setNumericAttribute(
+      attributes,
+      'gen_ai.usage.cache_read.input_tokens',
+      inputTokenDetails?.cached_tokens,
+    );
+    setNumericAttribute(
+      attributes,
+      'gen_ai.usage.reasoning.output_tokens',
+      outputTokenDetails?.reasoning_tokens,
+    );
   }
 
   private applyCustomSpanAttributes(
@@ -363,6 +426,24 @@ export class OTLPTracingExporter implements TracingExporter {
       buffer[i] = Math.floor(Math.random() * 256);
     }
     return buffer.toString('hex').substring(0, length);
+  }
+}
+
+function getResponseModel(data: Extract<SpanData, { type: 'response' }>): string | undefined {
+  return isRecord(data._response) ? getStringValue(data._response.model) : undefined;
+}
+
+function getStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+function setNumericAttribute(
+  attributes: Record<string, unknown>,
+  name: string,
+  value: unknown,
+): void {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    attributes[name] = value;
   }
 }
 

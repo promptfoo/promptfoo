@@ -27,6 +27,7 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import { getCodexTraceEndpoint, withCodexTraceExporter } from './codex-tracing';
 import {
   applyApiKeyToCliEnv,
   shouldInjectApiKey,
@@ -826,7 +827,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (config.deep_tracing) {
       // Standard OTEL environment variables - use defaults only if not already set
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
         sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
@@ -884,18 +885,28 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     );
   }
 
-  private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode && !config.model_provider) {
+  private getResolvedCliConfig(
+    config: OpenAICodexSDKConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> | undefined {
+    if (
+      !config.cli_config &&
+      !config.collaboration_mode &&
+      !config.model_provider &&
+      !config.deep_tracing
+    ) {
       return undefined;
     }
 
-    return {
+    const cliConfig = {
       ...(config.cli_config ?? {}),
       // The first-class `model_provider` option takes precedence over any value
       // supplied through raw `cli_config`.
       ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
+
+    return withCodexTraceExporter(cliConfig, env, config.deep_tracing === true);
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
@@ -995,7 +1006,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     config: OpenAICodexSDKConfig,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
 
     // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
     // CODEX_API_KEY. Gate it with the same predicate as the env injection so an ambient
@@ -1881,7 +1892,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const keyData = {
       env,
       base_url: config.base_url,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       codex_path_override: config.codex_path_override,
     };
 
@@ -2034,8 +2045,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex',
+      agentName: 'Codex',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
