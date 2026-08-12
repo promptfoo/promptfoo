@@ -10,6 +10,7 @@ import { getEnvString } from '../../envars';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 import {
+  addActiveSpanRoleAttribute,
   closeTurnSpan,
   GenAIAttributes,
   type GenAISpanContext,
@@ -1326,13 +1327,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return tracer.startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.item.id': itemId,
         'codex.item.type': item.type,
         ...(startTime === undefined ? {} : { 'codex.timing.estimated': true }),
         ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
   }
 
@@ -1671,6 +1672,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.mcp.server'] = item.server;
         }
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.mcp.tool'] = item.tool;
         }
         {
@@ -1689,6 +1692,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Collaboration mode attributes
       case 'collaboration_tool_call':
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.collab.tool'] = item.tool;
         }
         if (typeof item.target_thread_id === 'string') {

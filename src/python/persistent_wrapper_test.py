@@ -337,12 +337,17 @@ class TestTracedCall(unittest.TestCase):
                     )
 
         self.assertEqual(result["output"], "done")
-        span.set_attribute.assert_any_call("gen_ai.provider.name", "python")
+        span.set_attribute.assert_any_call("promptfoo.provider.type", "python")
+        span.set_attribute.assert_any_call("promptfoo.provider.function", "call_api")
+        span.set_attribute.assert_any_call("promptfoo.provider.model", "customer-model")
         span.set_attribute.assert_any_call("gen_ai.usage.input_tokens", 10)
         span.set_attribute.assert_any_call("gen_ai.usage.output_tokens", 5)
         span.set_attribute.assert_any_call("promptfoo.usage.total_tokens", 15)
         attribute_names = [call.args[0] for call in span.set_attribute.call_args_list]
         self.assertNotIn("gen_ai.system", attribute_names)
+        self.assertNotIn("gen_ai.operation.name", attribute_names)
+        self.assertNotIn("gen_ai.provider.name", attribute_names)
+        self.assertNotIn("gen_ai.request.model", attribute_names)
         self.assertNotIn("gen_ai.usage.total_tokens", attribute_names)
 
 

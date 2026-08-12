@@ -2,8 +2,17 @@ import { SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpProvider } from '../../src/providers/http';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
-import { GenAIAttributes, getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
+import {
+  addActiveSpanRoleAttribute,
+  closeTurnSpan,
+  emitTurnMarkerSpan,
+  GenAIAttributes,
+  getGenAITracer,
+  openTurnSpan,
+  withGenAISpan,
+} from '../../src/tracing/genaiTracer';
 import { isRelevantSpan } from '../../src/tracing/spanFilter';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import {
@@ -172,6 +181,72 @@ describe('test-case execution trace hierarchy', () => {
     expect(isRelevantSpan({ attributes: judgeModel.attributes })).toBe(false);
   });
 
+  it('records HTTP target execution without inventing a model-inference span', async () => {
+    const root = getGenAITracer().startSpan('test case http target');
+    const provider = Object.create(HttpProvider.prototype) as HttpProvider;
+    provider.id = () => 'https://customer.example/chat';
+    vi.spyOn(provider as any, 'callApiInternal').mockResolvedValue({ output: 'customer response' });
+    const callContext: CallApiContextParams = {
+      prompt: { raw: 'test prompt', label: 'target' },
+      vars: {},
+    };
+
+    await withTestCaseSpan(root, async () => {
+      await withTracedProviderCall({ provider, callContext }, (targetContext) =>
+        provider.callApi('test prompt', targetContext),
+      );
+      return [{ score: 1, success: true }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans.map((span) => span.name)).toEqual([
+      'https://customer.example/chat',
+      'test case http target',
+    ]);
+    expect(spans[0].attributes).toMatchObject({
+      [SPAN_ROLE_ATTRIBUTE]: 'target',
+      'promptfoo.target.type': 'http',
+    });
+    expect(spans[0].attributes).not.toHaveProperty(GenAIAttributes.OPERATION_NAME);
+    expect(spans[0].attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
+  });
+
+  it('records embedding inference and usage beneath the grading-provider span', async () => {
+    const root = getGenAITracer().startSpan('test case embedding grader');
+    const provider: ApiProvider & { modelName: string } = {
+      id: () => 'azure:text-embedding-3-small',
+      modelName: 'text-embedding-3-small',
+      callApi: async () => ({ output: 'unused' }),
+    };
+
+    await withTestCaseSpan(root, async () => {
+      await withGraderSpan({ graderId: 'similarity' }, async () => {
+        await withTracedProviderCall(
+          { provider, role: 'grader', operationName: 'embeddings' },
+          async () => ({ embedding: [1, 0], tokenUsage: { prompt: 7, total: 7 } }),
+        );
+        return { pass: true, score: 1 };
+      });
+      return [{ score: 1, success: true }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    const providerSpan = spans.find(
+      (span) => span.name === 'grader provider azure:text-embedding-3-small',
+    )!;
+    const embeddingSpan = spans.find((span) => span.name === 'embeddings text-embedding-3-small')!;
+
+    expect(embeddingSpan.parentSpanContext?.spanId).toBe(providerSpan.spanContext().spanId);
+    expect(embeddingSpan.attributes).toMatchObject({
+      [GenAIAttributes.OPERATION_NAME]: 'embeddings',
+      [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
+      [GenAIAttributes.REQUEST_MODEL]: 'text-embedding-3-small',
+      [GenAIAttributes.USAGE_INPUT_TOKENS]: 7,
+      [SPAN_ROLE_ATTRIBUTE]: 'grader',
+      'promptfoo.usage.total_tokens': 7,
+    });
+  });
+
   it('sanitizes and bounds grader explanations before exporting them', async () => {
     const root = getGenAITracer().startSpan('test case grader explanation');
 
@@ -193,6 +268,56 @@ describe('test-case execution trace hierarchy', () => {
     expect(explanation.endsWith('…')).toBe(true);
     expect(graderSpan.attributes[GenAIAttributes.EVALUATION_SCORE_LABEL]).toBe('pass');
   });
+
+  it.each(['target', 'grader'] as const)(
+    'preserves the %s role on nested tool, streaming-turn, and marker spans',
+    async (role) => {
+      const root = getGenAITracer().startSpan(`test case ${role} agent`);
+      const provider: ApiProvider = {
+        id: () => 'openai:agent',
+        callApi: async () => ({ output: 'done' }),
+      };
+      const callContext: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: role },
+        vars: {},
+      };
+
+      await withTestCaseSpan(root, async () => {
+        await withTracedProviderCall({ provider, callContext, role }, async () => {
+          const tracer = getGenAITracer();
+          const state = { turnCount: 0, activeTurnIndex: 0 };
+          const now = Date.now();
+
+          openTurnSpan(state, { tracer, eventTime: now, system: 'openai' });
+          const tool = tracer.startSpan('tool search', {
+            attributes: addActiveSpanRoleAttribute({ 'tool.name': 'search' }),
+          });
+          tool.end();
+          closeTurnSpan(state, { eventTime: now + 1 });
+          emitTurnMarkerSpan({
+            tracer,
+            index: 2,
+            startTime: now,
+            endTime: now + 1,
+            attributes: { 'gen_ai.turn.index': 2 },
+          });
+
+          return { output: 'done' };
+        });
+        return [{ score: 1, success: true }];
+      });
+
+      const childSpans = exporter
+        .getFinishedSpans()
+        .filter((span) => span.name.startsWith('gen_ai.turn') || span.name === 'tool search');
+
+      expect(childSpans).toHaveLength(3);
+      for (const span of childSpans) {
+        expect(span.attributes[SPAN_ROLE_ATTRIBUTE]).toBe(role);
+        expect(isRelevantSpan({ attributes: span.attributes })).toBe(role === 'target');
+      }
+    },
+  );
 
   it('keeps the root open until deferred grading finishes', async () => {
     const root = getGenAITracer().startSpan('test case deferred');

@@ -3603,6 +3603,8 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.server': 'inventory',
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input': '{"query":"quantum computing","limit":3}',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(
@@ -3645,6 +3647,8 @@ describe('OpenAICodexSDKProvider', () => {
         'codex.mcp.tool': 'search_inventory',
         'codex.mcp.input':
           '{"query":"quantum computing","email":"[REDACTED]","apiKey":"[REDACTED]","headers":{"Authorization":"[REDACTED]"}}',
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'search_inventory',
       });
 
       expect(

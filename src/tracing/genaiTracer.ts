@@ -197,6 +197,12 @@ export function getGenAITracer(): Tracer {
   return trace.getTracer(TRACER_NAME, TRACER_VERSION);
 }
 
+/** Preserve whether provider-created child spans belong to the target or the grader. */
+export function addActiveSpanRoleAttribute(attributes: Attributes): Attributes {
+  const role = getActiveSpanRole();
+  return role ? { ...attributes, [SPAN_ROLE_ATTRIBUTE]: role } : attributes;
+}
+
 /**
  * Execute a function within a GenAI span.
  *
@@ -665,11 +671,11 @@ export function openTurnSpan(
     const span = opts.tracer.startSpan(`gen_ai.turn ${index}`, {
       kind: SpanKind.INTERNAL,
       startTime: opts.eventTime,
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'gen_ai.turn.index': index,
         [GenAIAttributes.PROVIDER_NAME]: getProviderName(opts.system),
         ...opts.attributes,
-      },
+      }),
     });
     state.turnCount = index;
     state.activeTurnIndex = index;
@@ -736,7 +742,7 @@ export function emitTurnMarkerSpan(opts: {
     const span = opts.tracer.startSpan(`gen_ai.turn ${opts.index}`, {
       kind: SpanKind.INTERNAL,
       startTime: opts.startTime,
-      attributes: opts.attributes,
+      attributes: addActiveSpanRoleAttribute(opts.attributes),
     });
     span.setStatus(
       opts.errorMessage

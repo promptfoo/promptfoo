@@ -7,7 +7,13 @@ import {
   SpanStatusCode,
   trace,
 } from '@opentelemetry/api';
-import { GenAIAttributes, getGenAITracer, PromptfooAttributes, sanitizeBody } from './genaiTracer';
+import {
+  GenAIAttributes,
+  getGenAITracer,
+  PromptfooAttributes,
+  sanitizeBody,
+  withGenAISpan,
+} from './genaiTracer';
 import {
   getActiveTraceparent,
   type PromptfooSpanRole,
@@ -168,6 +174,7 @@ export async function withTargetSpan<T>(
 interface TracedProviderCallOptions {
   provider: ApiProvider;
   callContext?: CallApiContextParams;
+  operationName?: 'embeddings';
   role?: Extract<PromptfooSpanRole, 'target' | 'grader'>;
   promptLabel?: string;
   evalId?: string;
@@ -185,17 +192,18 @@ function getTargetType(providerId: string): TargetType {
 }
 
 /** Apply consistent provider spans and propagation without modifying provider implementations. */
-export async function withTracedProviderCall(
+export async function withTracedProviderCall<T extends ProviderResponse>(
   {
     provider,
     callContext,
+    operationName,
     role = 'target',
     promptLabel,
     evalId,
     testIndex,
   }: TracedProviderCallOptions,
-  invoke: (callContext: CallApiContextParams | undefined) => Promise<ProviderResponse>,
-): Promise<ProviderResponse> {
+  invoke: (callContext: CallApiContextParams | undefined) => Promise<T>,
+): Promise<T> {
   const traceparent = getActiveTraceparent() ?? callContext?.traceparent;
   if (!traceparent) {
     return invoke(callContext);
@@ -215,10 +223,36 @@ export async function withTracedProviderCall(
     },
     async () => {
       const childTraceparent = getActiveTraceparent() ?? traceparent;
-      if (!callContext) {
-        return invoke(callContext);
+      const invokeProvider = () =>
+        callContext ? invoke({ ...callContext, traceparent: childTraceparent }) : invoke(undefined);
+
+      if (operationName === 'embeddings') {
+        const providerWithModel = provider as ApiProvider & {
+          deploymentName?: unknown;
+          modelName?: unknown;
+        };
+        const providerModel =
+          typeof providerWithModel.modelName === 'string'
+            ? providerWithModel.modelName
+            : typeof providerWithModel.deploymentName === 'string'
+              ? providerWithModel.deploymentName
+              : providerId.split(':').slice(1).join(':') || providerId;
+
+        return withGenAISpan(
+          {
+            system: providerId.split(':', 1)[0],
+            operationName,
+            model: providerModel,
+            providerId,
+            promptLabel,
+            traceparent: childTraceparent,
+          },
+          invokeProvider,
+          (response) => ({ tokenUsage: response.tokenUsage, cacheHit: response.cached }),
+        );
       }
-      return invoke({ ...callContext, traceparent: childTraceparent });
+
+      return invokeProvider();
     },
   );
 }

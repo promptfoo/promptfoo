@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { callProviderWithContext } from '../../src/matchers/providers';
+import { callGradingProvider, callProviderWithContext } from '../../src/matchers/providers';
 import {
   withProviderCallExecutionContext,
   withProviderCallTracingContext,
@@ -12,6 +12,8 @@ import type { ProviderCallTracingContext } from '../../src/scheduler/providerCal
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
   ApiProvider,
+  ProviderClassificationResponse,
+  ProviderEmbeddingResponse,
   ProviderResponse,
   RateLimitRegistryRef,
   VarValue,
@@ -207,5 +209,60 @@ describe('callProviderWithContext', () => {
       prompt: { raw: 'grade this', label: 'rubric' },
       vars,
     });
+  });
+});
+
+describe('callGradingProvider', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('traces non-text grading calls without changing their response shape', async () => {
+    const provider = createProvider();
+    const response: ProviderClassificationResponse = { classification: { safe: 0.9 } };
+    const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+    const providerSpan = vi.fn<ProviderCallTracingContext['withProviderSpan']>(
+      async ({ callContext }, invoke) => invoke(callContext),
+    );
+
+    await expect(
+      withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => callGradingProvider(provider, 'classification', async () => response),
+      ),
+    ).resolves.toBe(response);
+
+    expect(providerSpan).toHaveBeenCalledWith(
+      expect.objectContaining({ provider, role: 'grader', promptLabel: 'classification' }),
+      expect.any(Function),
+    );
+  });
+
+  it('reuses rate limiting and grouped execution for embedding calls', async () => {
+    const provider = createProvider();
+    const registry = createRegistry();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const invoke = vi.fn(
+      async (): Promise<ProviderEmbeddingResponse> => ({
+        embedding: [1, 0, 0],
+      }),
+    );
+
+    const promise = withProviderCallExecutionContext(
+      { providerCallQueue, rateLimitRegistry: registry },
+      () => callGradingProvider(provider, 'similarity.embedding', invoke),
+    );
+
+    expect(invoke).not.toHaveBeenCalled();
+    const [group] = providerCallQueue.takeNextGroup();
+    await providerCallQueue.run(group);
+
+    await expect(promise).resolves.toEqual({ embedding: [1, 0, 0] });
+    expect(registry.executeSpy).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledTimes(1);
   });
 });

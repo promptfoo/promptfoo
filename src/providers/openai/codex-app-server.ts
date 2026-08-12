@@ -11,6 +11,7 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import {
+  addActiveSpanRoleAttribute,
   closeTurnSpan,
   GenAIAttributes,
   type GenAISpanContext,
@@ -3209,12 +3210,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return trace.getTracer('promptfoo.codex-app-server').startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.app_server.item.id': itemId,
         'codex.app_server.item.type': item?.type ?? 'unknown',
         ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
   }
 
@@ -3334,10 +3335,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         attrs['codex.mcp.server'] = item.server;
       }
       if (typeof item.tool === 'string') {
+        attrs['gen_ai.operation.name'] = 'execute_tool';
+        attrs['gen_ai.tool.name'] = item.tool;
         attrs['codex.mcp.tool'] = item.tool;
       }
     }
     if (item?.type === 'dynamicToolCall' && typeof item.tool === 'string') {
+      attrs['gen_ai.operation.name'] = 'execute_tool';
+      attrs['gen_ai.tool.name'] = item.tool;
       attrs['codex.tool.name'] = item.tool;
     }
     if (item?.type === 'webSearch' && typeof item.query === 'string') {

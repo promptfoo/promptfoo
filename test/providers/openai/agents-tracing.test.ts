@@ -44,7 +44,10 @@ describe('OTLPTracingExporter', () => {
     ]);
 
     const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+    expect(span.name).toBe('chat gpt-4.1');
     expect(getAttributes(span)).toMatchObject({
+      'gen_ai.operation.name': 'chat',
+      'gen_ai.provider.name': 'openai',
       'gen_ai.request.model': 'gpt-4.1',
       'gen_ai.usage.input_tokens': 12,
       'gen_ai.usage.output_tokens': 8,
@@ -82,6 +85,8 @@ describe('OTLPTracingExporter', () => {
     expect(span.name).toBe('tool lookup_order');
     expect(getAttributes(span)).toMatchObject({
       'evaluation.id': 'eval-1',
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.name': 'lookup_order',
       'openai.agents.span_type': 'function',
       'test.case.id': 'case-1',
       'tool.arguments': '{"order_id":"123"}',

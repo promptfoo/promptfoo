@@ -10,6 +10,7 @@ import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
+  addActiveSpanRoleAttribute,
   emitTurnMarkerSpan,
   GenAIAttributes,
   getGenAITracer,
@@ -168,6 +169,9 @@ function emitToolSpan(
   try {
     const tracer = getGenAITracer();
     const attributes: Record<string, string | number | boolean> = {
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.call.id': entry.id,
+      'gen_ai.tool.name': entry.name,
       'tool.name': entry.name,
       'tool.is_error': isError,
     };
@@ -191,7 +195,7 @@ function emitToolSpan(
 
     const span = tracer.startSpan(`tool ${entry.name}`, {
       startTime: startTimeMs,
-      attributes,
+      attributes: addActiveSpanRoleAttribute(attributes),
     });
     span.setStatus({
       code: isError || incomplete ? SpanStatusCode.ERROR : SpanStatusCode.OK,
@@ -1837,17 +1841,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const metadata = response.metadata ?? {};
           const additional: Record<string, string | number | boolean> = {};
           if (typeof metadata.numTurns === 'number') {
-            additional['gen_ai.agent.num_turns'] = metadata.numTurns;
+            additional['promptfoo.agent.num_turns'] = metadata.numTurns;
           }
           if (typeof metadata.durationApiMs === 'number') {
-            additional['gen_ai.agent.duration_api_ms'] = metadata.durationApiMs;
+            additional['promptfoo.agent.duration_api_ms'] = metadata.durationApiMs;
           }
           if (typeof response.cost === 'number' && response.cost > 0) {
-            additional['gen_ai.agent.cost_usd'] = response.cost;
+            additional['promptfoo.agent.cost_usd'] = response.cost;
           }
           const toolCalls = metadata.toolCalls;
           if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-            additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
+            additional['promptfoo.agent.tool_call_count'] = toolCalls.length;
           }
           // Response model: the SDK reports per-model usage keyed by model name.
           // Pick the key with the largest token usage rather than iteration order —

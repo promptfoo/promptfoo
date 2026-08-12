@@ -170,6 +170,18 @@ describe('OpenAICodexAppServerProvider', () => {
     mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey, CODEX_API_KEY: originalCodexApiKey });
   });
 
+  it.each([
+    [{ type: 'mcpToolCall', server: 'inventory', tool: 'lookup_order' }, 'lookup_order'],
+    [{ type: 'dynamicToolCall', tool: 'search_documents' }, 'search_documents'],
+  ])('adds standard tool attributes for %s', (item, expectedToolName) => {
+    const provider = new OpenAICodexAppServerProvider();
+
+    expect((provider as any).getAttributesForItem(item)).toMatchObject({
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.name': expectedToolName,
+    });
+  });
+
   it('initializes with safe defaults and validates config strictly', () => {
     const provider = new OpenAICodexAppServerProvider();
 

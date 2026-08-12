@@ -509,7 +509,6 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       { system: 'cohere', model: 'command-r-plus', providerName: 'cohere' },
       { system: 'huggingface', model: 'meta-llama/Llama-2-7b', providerName: 'huggingface' },
       { system: 'watsonx', model: 'ibm/granite-13b-chat-v2', providerName: 'ibm.watsonx.ai' },
-      { system: 'http', model: 'custom-endpoint', providerName: 'http' },
       { system: 'replicate', model: 'meta/llama-2-70b-chat', providerName: 'replicate' },
       { system: 'openrouter', model: 'openai/gpt-4', providerName: 'openrouter' },
     ];

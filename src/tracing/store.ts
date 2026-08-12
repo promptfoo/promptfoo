@@ -4,6 +4,7 @@ import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TraceData } from '../types/tracing';
 
@@ -66,6 +67,38 @@ function serializeSpan(
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
   };
+}
+
+function isGraderOwnedSpan(
+  span: typeof spansTable.$inferSelect,
+  spansById: ReadonlyMap<string, typeof spansTable.$inferSelect>,
+  ownershipCache: Map<string, boolean>,
+): boolean {
+  let ancestor: typeof spansTable.$inferSelect | undefined = span;
+  const visitedSpanIds = new Set<string>();
+  let belongsToGrader = false;
+
+  while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
+    const cached = ownershipCache.get(ancestor.spanId);
+    if (cached !== undefined) {
+      belongsToGrader = cached;
+      break;
+    }
+
+    visitedSpanIds.add(ancestor.spanId);
+    if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+      belongsToGrader = true;
+      break;
+    }
+
+    ancestor = ancestor.parentSpanId ? spansById.get(ancestor.parentSpanId) : undefined;
+  }
+
+  for (const spanId of visitedSpanIds) {
+    ownershipCache.set(spanId, belongsToGrader);
+  }
+
+  return belongsToGrader;
 }
 
 function sqliteTimestampFromMs(timestampMs: number): string {
@@ -368,6 +401,8 @@ export class TraceStore {
         .where(eq(spansTable.traceId, traceId))
         .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
+      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
+      const graderOwnedSpanIds = new Map<string, boolean>();
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
@@ -377,6 +412,10 @@ export class TraceStore {
         }
 
         const rawAttributes = row.attributes ?? {};
+
+        if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
+          continue;
+        }
 
         const spanData: SpanData = {
           spanId: row.spanId,

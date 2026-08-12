@@ -24,6 +24,7 @@ export interface ProviderCallExecutionContext {
 interface TracedProviderCallOptions {
   provider: ApiProvider;
   callContext?: CallApiContextParams;
+  operationName?: 'embeddings';
   role?: 'target' | 'grader';
   promptLabel?: string;
   evalId?: string;

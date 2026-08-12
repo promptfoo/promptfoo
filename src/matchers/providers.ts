@@ -40,15 +40,48 @@ export function shouldUseRemoteGrading(
 }
 
 /**
- * Helper to call provider with consistent context propagation pattern.
- * Spreads the optional context and merges with prompt label and vars.
- * Also reuses evaluator scheduler context for cancellation, rate limits,
- * and grouped grading provider calls when present.
- *
- * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
- * override. This ensures originalProvider from context is preserved while
- * allowing this call to specify its own prompt metadata.
+ * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
+export function callGradingProvider<T extends ProviderResponse>(
+  provider: ApiProvider,
+  label: string,
+  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  options: {
+    callContext?: CallApiContextParams;
+    operationName?: 'embeddings';
+  } = {},
+): Promise<T> {
+  const { callContext, operationName } = options;
+  const executionContext = getProviderCallExecutionContext();
+  const tracingContext = getProviderCallTracingContext();
+  const callProvider = (): Promise<T> =>
+    tracingContext
+      ? (tracingContext.withProviderSpan(
+          { provider, callContext, operationName, role: 'grader', promptLabel: label },
+          invoke,
+        ) as Promise<T>)
+      : invoke(callContext);
+
+  const executeCall = () => {
+    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      return executionContext.rateLimitRegistry.execute(
+        provider,
+        callProvider,
+        createProviderRateLimitOptions(),
+      );
+    }
+
+    return callProvider();
+  };
+
+  if (executionContext?.providerCallQueue) {
+    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+  }
+
+  return executeCall();
+}
+
+/** Preserve evaluator context while adding this grading call's prompt metadata and cancellation. */
 export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
@@ -68,36 +101,15 @@ export function callProviderWithContext(
   const callApiOptions = executionContext?.abortSignal
     ? { abortSignal: executionContext.abortSignal }
     : undefined;
-  const invoke = async (tracedContext: CallApiContextParams | undefined) =>
-    callApiOptions
-      ? provider.callApi(prompt, tracedContext, callApiOptions)
-      : provider.callApi(prompt, tracedContext);
-  const tracingContext = getProviderCallTracingContext();
-  const callApi = () =>
-    tracingContext
-      ? tracingContext.withProviderSpan(
-          { provider, callContext: callApiContext, role: 'grader', promptLabel: label },
-          invoke,
-        )
-      : invoke(callApiContext);
-
-  const executeCall = () => {
-    if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callApi,
-        createProviderRateLimitOptions(),
-      );
-    }
-
-    return callApi();
-  };
-
-  if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
-  }
-
-  return executeCall();
+  return callGradingProvider(
+    provider,
+    label,
+    (tracedContext) =>
+      callApiOptions
+        ? provider.callApi(prompt, tracedContext, callApiOptions)
+        : provider.callApi(prompt, tracedContext),
+    { callContext: callApiContext },
+  );
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {

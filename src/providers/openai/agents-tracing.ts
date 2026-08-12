@@ -130,7 +130,7 @@ export class OTLPTracingExporter implements TracingExporter {
       case 'agent':
         return `agent ${data.name || 'agent'}`;
       case 'generation':
-        return `generation ${data.model || 'unknown-model'}`;
+        return `chat ${data.model || 'unknown-model'}`;
       case 'response':
         return `response ${data.response_id || 'response'}`;
       case 'guardrail':
@@ -174,6 +174,8 @@ export class OTLPTracingExporter implements TracingExporter {
 
     switch (data.type) {
       case 'function':
+        attributes['gen_ai.operation.name'] = 'execute_tool';
+        attributes['gen_ai.tool.name'] = data.name;
         attributes['tool.name'] = data.name;
         if (data.input !== undefined) {
           attributes['tool.arguments'] = data.input;
@@ -199,6 +201,8 @@ export class OTLPTracingExporter implements TracingExporter {
         }
         break;
       case 'generation':
+        attributes['gen_ai.operation.name'] = 'chat';
+        attributes['gen_ai.provider.name'] = 'openai';
         attributes['gen_ai.request.model'] = data.model;
         if (data.usage?.input_tokens !== undefined) {
           attributes['gen_ai.usage.input_tokens'] = data.usage.input_tokens;

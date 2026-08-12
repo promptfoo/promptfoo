@@ -5112,6 +5112,9 @@ describe('ClaudeCodeSDKProvider', () => {
 
         const toolSpan = emittedSpans.find((s) => s.name === 'tool Read');
         expect(toolSpan).toBeDefined();
+        expect(toolSpan!.attrs['gen_ai.operation.name']).toBe('execute_tool');
+        expect(toolSpan!.attrs['gen_ai.tool.call.id']).toBe('tool-1');
+        expect(toolSpan!.attrs['gen_ai.tool.name']).toBe('Read');
         expect(toolSpan!.attrs['tool.name']).toBe('Read');
         expect(toolSpan!.attrs['tool.is_error']).toBe(false);
         expect(toolSpan!.attrs['tool.input']).toContain('/test/file.ts');
