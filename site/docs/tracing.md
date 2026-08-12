@@ -799,14 +799,14 @@ Example trace summary provided to an attacker:
 Trace 0af76519 • 5 spans
 
 Execution Flow:
-1. [1.2s] llm.generate (client) | model=gpt-4
+1. [1.2s] chat gpt-4.1-mini (internal) | model=gpt-4.1-mini
 2. [300ms] guardrail.check (internal) | tool=content-filter
-3. [150ms] tool.database_query (server) | tool=search
+3. [150ms] execute_tool search (internal) | tool=search
 4. [50ms] guardrail.check (internal) | ERROR: Rate limit exceeded
 
 Key Observations:
 • Guardrail content-filter decision: blocked
-• Tool call search via "tool.database_query"
+• Tool call search via "execute_tool search"
 • Error span "guardrail.check": Rate limit exceeded
 ```
 
@@ -834,16 +834,35 @@ redteam:
     includeInAttack: true
     # Feed traces to grading (default: true)
     includeInGrading: true
-    # Filter which spans to include
-    spanFilter:
-      - 'llm.*'
-      - 'guardrail.*'
-      - 'tool.*'
   plugins:
     - harmful
   strategies:
     - jailbreak # Iterative strategy that benefits from trace feedback
 ```
+
+Promptfoo automatically selects spans that describe model calls, tool executions, guardrail
+decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and
+guardrail attributes, and older `llm.*` attributes. Useful spans are included even when the
+instrumentation marks them as internal, while ordinary HTTP requests and framework handlers
+stay out of the attack context. Set `includeInternalSpans: true` to include the full trace
+instead.
+
+To focus on operations with particular names, add an optional `spanFilter`. Filters are
+case-insensitive and support `*` and `?` wildcards:
+
+```yaml
+redteam:
+  tracing:
+    enabled: true
+    spanFilter:
+      - 'chat*'
+      - 'execute_tool*'
+      - '*guardrail*'
+```
+
+Span names come from your application's instrumentation, so choose patterns that match the
+names in your traces. An explicit filter can also include an operation that Promptfoo would
+otherwise leave out.
 
 ### Strategy-Specific Configuration
 
@@ -862,7 +881,7 @@ redteam:
       crescendo:
         includeInAttack: true
         spanFilter:
-          - 'guardrail.*'
+          - '*guardrail*'
 ```
 
 ### Example
