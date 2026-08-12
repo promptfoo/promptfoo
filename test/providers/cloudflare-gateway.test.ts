@@ -385,7 +385,7 @@ describe('CloudflareGateway Provider', () => {
       );
     });
 
-    it.each(['claude-haiku-5', 'claude-opus-4-9'])(
+    it.each(['claude-haiku-5', 'claude-opus-4-9', 'claude-opus-4-10'])(
       'applies sampling deprecations to authoritative model ID %s forwarded to Anthropic',
       async (modelName) => {
         const provider = new CloudflareGatewayAnthropicProvider(modelName, {

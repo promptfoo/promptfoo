@@ -3117,7 +3117,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).toHaveProperty('temperature', 0.5);
     });
 
-    it.each(['claude-haiku-5', 'claude-opus-4-9'])(
+    it.each(['claude-haiku-5', 'claude-opus-4-9', 'claude-opus-4-10'])(
       'keeps the fallback for %s on an explicitly configured official Anthropic endpoint',
       async (modelName) => {
         const provider = createProvider(modelName, {
