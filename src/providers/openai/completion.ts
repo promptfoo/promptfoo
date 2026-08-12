@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -46,6 +47,44 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const providerId = this.id();
+    const requestParameters = {
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+    };
+    const effectiveParameters = {
+      ...requestParameters,
+      ...(this.config.passthrough || {}),
+    };
+    const effectiveModel = (this.config.passthrough as { model?: unknown } | undefined)?.model;
+
+    return withGenAISpan(
+      {
+        system: this.getGenAISystem(),
+        operationName: 'text_completion',
+        model: typeof effectiveModel === 'string' ? effectiveModel : this.modelName,
+        providerId,
+        maxTokens: effectiveParameters.max_tokens,
+        temperature: effectiveParameters.temperature,
+        topP: effectiveParameters.top_p,
+        evalId: context?.evaluationId,
+        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
+        promptLabel: context?.prompt?.label,
+        traceparent: context?.traceparent,
+        requestBody: prompt,
+      },
+      () => this.callApiInternal(prompt, requestParameters, context, callApiOptions),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    requestParameters: { max_tokens: number; temperature: number; top_p: number },
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
@@ -62,9 +101,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       seed: this.config.seed,
-      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
+      ...requestParameters,
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),

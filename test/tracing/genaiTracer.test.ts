@@ -44,6 +44,7 @@ vi.mock('@opentelemetry/api', async () => {
     },
     SpanKind: {
       CLIENT: 2,
+      INTERNAL: 0,
     },
     SpanStatusCode: {
       OK: 1,
@@ -64,10 +65,22 @@ describe('genaiTracer', () => {
   describe('GenAIAttributes', () => {
     it('should have correct attribute names for GenAI semantic conventions', () => {
       expect(GenAIAttributes.SYSTEM).toBe('gen_ai.system');
+      expect(GenAIAttributes.PROVIDER_NAME).toBe('gen_ai.provider.name');
       expect(GenAIAttributes.OPERATION_NAME).toBe('gen_ai.operation.name');
+      expect(GenAIAttributes.AGENT_ID).toBe('gen_ai.agent.id');
+      expect(GenAIAttributes.AGENT_NAME).toBe('gen_ai.agent.name');
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
       expect(GenAIAttributes.USAGE_OUTPUT_TOKENS).toBe('gen_ai.usage.output_tokens');
+      expect(GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS).toBe(
+        'gen_ai.usage.reasoning.output_tokens',
+      );
+      expect(GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS).toBe(
+        'gen_ai.usage.cache_read.input_tokens',
+      );
+      expect(GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS).toBe(
+        'gen_ai.usage.cache_creation.input_tokens',
+      );
     });
   });
 
@@ -77,6 +90,10 @@ describe('genaiTracer', () => {
       expect(PromptfooAttributes.EVAL_ID).toBe('promptfoo.eval.id');
       expect(PromptfooAttributes.TEST_INDEX).toBe('promptfoo.test.index');
       expect(PromptfooAttributes.PROMPT_LABEL).toBe('promptfoo.prompt.label');
+      expect(PromptfooAttributes.USAGE_TOTAL_TOKENS).toBe('promptfoo.usage.total_tokens');
+      expect(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS).toBe(
+        'promptfoo.usage.cached_response_tokens',
+      );
     });
   });
 
@@ -117,11 +134,116 @@ describe('genaiTracer', () => {
       const options = callArgs[1];
 
       expect(options.attributes).toMatchObject({
-        [GenAIAttributes.SYSTEM]: 'openai',
+        [GenAIAttributes.PROVIDER_NAME]: 'openai',
         [GenAIAttributes.OPERATION_NAME]: 'chat',
         [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
         [PromptfooAttributes.PROVIDER_ID]: 'openai:gpt-4',
       });
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
+    });
+
+    it('identifies agent invocations without treating the agent name as a model', async () => {
+      await withGenAISpan(
+        {
+          ...baseContext,
+          operationName: 'invoke_agent',
+          agentName: 'Support Agent',
+          model: 'Support Agent',
+        },
+        async () => ({ output: 'test' }),
+      );
+
+      const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(spanName).toBe('invoke_agent Support Agent');
+      expect(options.attributes).toMatchObject({
+        [GenAIAttributes.OPERATION_NAME]: 'invoke_agent',
+        [GenAIAttributes.AGENT_NAME]: 'Support Agent',
+      });
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
+    });
+
+    it('preserves an explicitly configured model on agent invocation spans', async () => {
+      await withGenAISpan(
+        {
+          ...baseContext,
+          operationName: 'invoke_agent',
+          agentName: 'Support Agent',
+        },
+        async () => ({ output: 'test' }),
+      );
+
+      const [, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(options.attributes).toMatchObject({
+        [GenAIAttributes.AGENT_NAME]: 'Support Agent',
+        [GenAIAttributes.REQUEST_MODEL]: 'gpt-4',
+      });
+    });
+
+    it('keeps hosted agent identifiers separate from names and model names', async () => {
+      await withGenAISpan(
+        {
+          ...baseContext,
+          operationName: 'invoke_agent',
+          agentId: 'asst_123',
+          model: 'asst_123',
+        },
+        async () => ({ output: 'test' }),
+      );
+
+      const [spanName, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(spanName).toBe('invoke_agent');
+      expect(options.attributes[GenAIAttributes.AGENT_ID]).toBe('asst_123');
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.AGENT_NAME);
+      expect(options.attributes).not.toHaveProperty(GenAIAttributes.REQUEST_MODEL);
+    });
+
+    it('identifies OpenAI API types without adding OpenAI attributes to other providers', async () => {
+      await withGenAISpan({ ...baseContext, openaiApiType: 'responses' }, async () => ({
+        output: 'test',
+      }));
+      await withGenAISpan(
+        { ...baseContext, system: 'azure', openaiApiType: 'responses' },
+        async () => ({ output: 'test' }),
+      );
+
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).toHaveProperty(
+        'openai.api.type',
+        'responses',
+      );
+      expect(mockTracer.startActiveSpan.mock.calls[1][1].attributes).not.toHaveProperty(
+        'openai.api.type',
+      );
+    });
+
+    it.each([
+      ['alibaba', 'alibaba_cloud'],
+      ['bedrock', 'aws.bedrock'],
+      ['azure', 'azure.ai.openai'],
+      ['vertex:anthropic', 'gcp.vertex_ai'],
+      ['mistral', 'mistral_ai'],
+      ['watsonx', 'ibm.watsonx.ai'],
+      ['xai', 'x_ai'],
+      ['custom-provider', 'custom-provider'],
+    ])('normalizes provider %s to %s', async (system, providerName) => {
+      await withGenAISpan({ ...baseContext, system }, async () => ({ output: 'test' }));
+
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).toHaveProperty(
+        GenAIAttributes.PROVIDER_NAME,
+        providerName,
+      );
+    });
+
+    it.each([
+      ['completion', 'text_completion'],
+      ['embedding', 'embeddings'],
+      ['text_completion', 'text_completion'],
+      ['embeddings', 'embeddings'],
+    ] as const)('normalizes %s operations to %s', async (operationName, expectedOperation) => {
+      await withGenAISpan({ ...baseContext, operationName }, async () => ({ output: 'test' }));
+
+      const [name, options] = mockTracer.startActiveSpan.mock.calls[0];
+      expect(name).toBe(`${expectedOperation} gpt-4`);
+      expect(options.attributes[GenAIAttributes.OPERATION_NAME]).toBe(expectedOperation);
     });
 
     it('should set optional request attributes when provided', async () => {
@@ -199,7 +321,18 @@ describe('genaiTracer', () => {
         code: SpanStatusCode.ERROR,
         message: 'API call failed',
       });
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'Error');
       expect(mockSpan.recordException).toHaveBeenCalledWith(error);
+    });
+
+    it('records a stable error type when a provider returns an error response', async () => {
+      await withGenAISpan(baseContext, async () => ({ error: 'provider unavailable' }));
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'provider_error');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'provider unavailable',
+      });
     });
 
     it('should end span even on failure', async () => {
@@ -227,11 +360,56 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'resp-123');
     });
+
+    it('preserves response-cache status omitted by a legacy result extractor', async () => {
+      await withGenAISpan(
+        baseContext,
+        async () => ({
+          output: 'cached output',
+          cached: true,
+          tokenUsage: { cached: 150, total: 150 },
+        }),
+        (response) => ({ tokenUsage: response.tokenUsage }),
+      );
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, true);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        expect.anything(),
+      );
+    });
+
+    it('preserves an explicit cache classification from the result extractor', async () => {
+      await withGenAISpan(
+        baseContext,
+        async () => ({
+          output: 'provider-cached output',
+          cached: true,
+          tokenUsage: { cached: 20 },
+        }),
+        (response) => ({ tokenUsage: response.tokenUsage, cacheHit: false }),
+      );
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, false);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        expect.anything(),
+      );
+    });
   });
 
   describe('setGenAIResponseAttributes', () => {
     it('should set token usage attributes', () => {
       const result: GenAISpanResult = {
+        cacheHit: true,
         tokenUsage: {
           prompt: 100,
           completion: 50,
@@ -244,8 +422,69 @@ describe('genaiTracer', () => {
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_INPUT_TOKENS, 100);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_TOTAL_TOKENS, 150);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_CACHED_TOKENS, 20);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_TOTAL_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        20,
+      );
+    });
+
+    it('records provider prompt-cache reads without marking them as response-cache hits', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: false,
+        tokenUsage: { prompt: 100, completion: 50, cached: 20 },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        expect.anything(),
+      );
+    });
+
+    it('prefers explicit provider cache-read details over the legacy cached count', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: false,
+        tokenUsage: {
+          cached: 20,
+          completionDetails: { cacheReadInputTokens: 12 },
+        },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        12,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+    });
+
+    it('keeps provider prompt-cache counts distinct on Promptfoo response-cache hits', () => {
+      setGenAIResponseAttributes(mockSpan as any, {
+        cacheHit: true,
+        tokenUsage: {
+          cached: 3_000,
+          total: 3_000,
+          completionDetails: { cacheReadInputTokens: 500 },
+        },
+      });
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        3_000,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        500,
+      );
     });
 
     it('should set completion details attributes', () => {
@@ -262,15 +501,15 @@ describe('genaiTracer', () => {
       setGenAIResponseAttributes(mockSpan as any, result);
 
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REASONING_TOKENS,
+        GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
         25,
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
+        PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
         10,
       );
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
-        GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
+        PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
         5,
       );
     });

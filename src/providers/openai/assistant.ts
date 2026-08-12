@@ -4,15 +4,11 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import {
-  buildChatSpanContext,
-  extractProviderResponseAttributes,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
+import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
@@ -232,7 +228,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      spanContext,
+      { ...spanContext, operationName: 'invoke_agent', agentId: this.assistantId },
       () => this.callApiInternal(prompt, context, callApiOptions),
       extractProviderResponseAttributes,
     );

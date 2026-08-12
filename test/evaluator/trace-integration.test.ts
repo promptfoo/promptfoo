@@ -503,6 +503,19 @@ describe('evaluator trace integration', () => {
       );
     });
 
+    it('passes the real evaluation test index to the active provider', async () => {
+      const provider = createMockProvider({ response: { output: 'Target output' } });
+      const options = createRunOptions(provider, { testIdx: 7 });
+
+      await runEval(options);
+
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ testIdx: 7 }),
+        undefined,
+      );
+    });
+
     it('renders trace-provider credentials and suite environment overrides for programmatic evals', async () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       const programmaticSuite: TestSuite = {

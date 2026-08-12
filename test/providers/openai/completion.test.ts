@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -54,6 +55,95 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
+    });
+
+    it('records standard text-completion model attributes and token usage', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const attributes: Record<string, unknown> = {};
+      const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (
+          name: string,
+          options: { attributes: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          attributes.spanName = name;
+          Object.assign(attributes, options.attributes);
+          return callback({
+            setAttribute: (key: string, value: unknown) => {
+              attributes[key] = value;
+            },
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          });
+        },
+      } as any);
+
+      try {
+        await new OpenAiCompletionProvider('text-davinci-003').callApi('Test prompt', {
+          prompt: { raw: 'Test prompt', label: 'completion prompt' },
+          testIdx: 7,
+          vars: {},
+        });
+
+        expect(attributes).toMatchObject({
+          spanName: 'text_completion text-davinci-003',
+          'gen_ai.operation.name': 'text_completion',
+          'gen_ai.provider.name': 'openai',
+          'gen_ai.request.model': 'text-davinci-003',
+          'gen_ai.request.max_tokens': 1024,
+          'gen_ai.request.temperature': 0,
+          'gen_ai.request.top_p': 1,
+          'gen_ai.usage.input_tokens': 5,
+          'gen_ai.usage.output_tokens': 5,
+          'promptfoo.test.index': 7,
+          'promptfoo.usage.total_tokens': 10,
+        });
+      } finally {
+        getTracer.mockRestore();
+      }
+    });
+
+    it('records completion request parameters after passthrough overrides are applied', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const attributes: Record<string, unknown> = {};
+      const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+        startActiveSpan: (
+          _name: string,
+          options: { attributes: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          Object.assign(attributes, options.attributes);
+          return callback({
+            setAttribute: vi.fn(),
+            setStatus: vi.fn(),
+            recordException: vi.fn(),
+            end: vi.fn(),
+          });
+        },
+      } as any);
+
+      try {
+        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+          config: {
+            max_tokens: 50,
+            temperature: 0.2,
+            passthrough: { max_tokens: 120, temperature: 0.8, top_p: 0.6 },
+          },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(attributes).toMatchObject({
+          'gen_ai.request.max_tokens': 120,
+          'gen_ai.request.temperature': 0.8,
+          'gen_ai.request.top_p': 0.6,
+        });
+      } finally {
+        getTracer.mockRestore();
+      }
     });
 
     it.each([

@@ -6,13 +6,6 @@ import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  buildChatSpanContext,
-  emitTurnMarkerSpan,
-  extractProviderResponseAttributes,
-  getGenAITracer,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
-import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -26,6 +19,14 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import {
+  buildChatSpanContext,
+  emitTurnMarkerSpan,
+  extractProviderResponseAttributes,
+  GenAIAttributes,
+  getGenAITracer,
+  withGenAISpan,
+} from '../tracing';
+import {
   formatContentFilterResponse,
   isContentFilterError,
   isRateLimitError,
@@ -34,6 +35,7 @@ import {
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
+import type { Span } from '@opentelemetry/api';
 import type {
   Response as OpenAIResponse,
   ResponseCreateParamsNonStreaming,
@@ -50,6 +52,9 @@ import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 type FoundryAgent = Agent;
+type CachedFoundryAgentResponse = ProviderResponse & {
+  __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
+};
 type FoundryResponse = OpenAIResponse;
 type ResponseFunctionCallItem = ResponseFunctionToolCall;
 type EffectiveFoundryConfig = AzureAssistantOptions & Record<string, any>;
@@ -545,21 +550,27 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): Promise<ProviderResponse> {
     const spanContext = buildChatSpanContext({
       system: 'azure',
-      model: this.deploymentName,
+      model: this.assistantConfig.modelName || this.deploymentName,
       providerId: this.id(),
       prompt,
       context,
     });
 
     return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, callApiOptions),
+      {
+        ...spanContext,
+        operationName: 'invoke_agent',
+        agentName: this.resolvedAgent?.name ?? this.deploymentName,
+        agentId: this.resolvedAgent?.id,
+      },
+      (span) => this.callApiInternal(prompt, span, context, callApiOptions),
       extractProviderResponseAttributes,
     );
   }
 
   private async callApiInternal(
     prompt: string,
+    span: Span,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -570,13 +581,37 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     if (isCacheEnabled()) {
       try {
         const cache = await getCache();
-        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+        const cachedResult = await cache.get<CachedFoundryAgentResponse>(cacheKey);
         if (cachedResult) {
           logger.debug('Cache hit for Foundry agent response', {
             deploymentName: this.deploymentName,
             cacheKey,
           });
-          return { ...cachedResult, cached: true };
+          const { __promptfooFoundryAgent: cachedAgent, ...response } = cachedResult;
+          if (cachedAgent) {
+            span.setAttribute(GenAIAttributes.AGENT_ID, cachedAgent.id);
+            span.setAttribute(GenAIAttributes.AGENT_NAME, cachedAgent.name);
+            span.updateName(`invoke_agent ${cachedAgent.name}`);
+          }
+
+          const tokenUsage = response.tokenUsage;
+          return {
+            ...response,
+            ...(tokenUsage && {
+              tokenUsage: {
+                ...tokenUsage,
+                ...(tokenUsage.total !== undefined && { cached: tokenUsage.total }),
+                ...(tokenUsage.cached !== undefined &&
+                  tokenUsage.completionDetails?.cacheReadInputTokens === undefined && {
+                    completionDetails: {
+                      ...tokenUsage.completionDetails,
+                      cacheReadInputTokens: tokenUsage.cached,
+                    },
+                  }),
+              },
+            }),
+            cached: true,
+          };
         }
       } catch (error) {
         logger.warn(`Error checking cache for Azure Foundry agent response: ${error}`);
@@ -586,6 +621,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     try {
       const client = await this.initializeClient();
       const agent = await this.resolveAgent(client);
+      span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
+      span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
+      span.updateName(`invoke_agent ${agent.name}`);
       const openAIClient = client.getOpenAIClient();
       const responseOptions = this.getAgentReference(agent);
       const maxLoopTimeMs = this.assistantConfig.maxPollTimeMs || 300000;
@@ -600,7 +638,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           index: turnCount,
           startTime: callStartedAt,
           endTime: callEndedAt,
-          attributes: { 'gen_ai.turn.index': turnCount, 'gen_ai.system': 'azure' },
+          attributes: {
+            'gen_ai.turn.index': turnCount,
+            [GenAIAttributes.PROVIDER_NAME]: 'azure.ai.openai',
+          },
           errorMessage,
           logLabel: 'AzureFoundryAgent',
         });
@@ -678,7 +719,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       if (isCacheEnabled() && !result.error) {
         try {
           const cache = await getCache();
-          await cache.set(cacheKey, result);
+          await cache.set(cacheKey, {
+            ...result,
+            __promptfooFoundryAgent: { id: agent.id, name: agent.name },
+          } satisfies CachedFoundryAgentResponse);
         } catch (error) {
           logger.warn(`Error caching Azure Foundry agent response: ${error}`);
         }
