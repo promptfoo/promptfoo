@@ -40,6 +40,7 @@ vi.mock('@opentelemetry/api', async () => {
     trace: {
       getTracer: vi.fn(() => mockTracer),
       getActiveSpan: vi.fn(() => mockSpan),
+      getSpan: vi.fn(() => undefined),
     },
     SpanKind: {
       CLIENT: 2,

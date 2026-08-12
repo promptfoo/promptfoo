@@ -10,6 +10,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import logger from '../logger';
+import { getActiveSpanRole, SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 import type { TokenUsage } from '../types/shared';
@@ -172,6 +173,12 @@ export function getGenAITracer(): Tracer {
   return trace.getTracer(TRACER_NAME, TRACER_VERSION);
 }
 
+/** Preserve whether provider-created spans belong to the target or the grader. */
+export function addActiveSpanRoleAttribute(attributes: Attributes): Attributes {
+  const role = getActiveSpanRole();
+  return role ? { ...attributes, [SPAN_ROLE_ATTRIBUTE]: role } : attributes;
+}
+
 /**
  * Execute a function within a GenAI span.
  *
@@ -222,7 +229,9 @@ export async function withGenAISpan<T>(
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
   let parentContext = context.active();
-  if (ctx.traceparent) {
+  const activeSpan = trace.getSpan(parentContext);
+  const explicitTraceId = ctx.traceparent?.split('-')[1]?.toLowerCase();
+  if (ctx.traceparent && activeSpan?.spanContext().traceId.toLowerCase() !== explicitTraceId) {
     const carrier = { traceparent: ctx.traceparent };
     parentContext = propagation.extract(ROOT_CONTEXT, carrier);
   }
@@ -290,6 +299,11 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
     // Promptfoo attributes
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
+
+  const spanRole = getActiveSpanRole();
+  if (spanRole) {
+    attrs[SPAN_ROLE_ATTRIBUTE] = spanRole;
+  }
 
   // Optional request parameters
   if (ctx.maxTokens !== undefined) {
