@@ -474,11 +474,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   // through the Anthropic wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {
-    if (this.constructor === AnthropicMessagesProvider) {
-      return 'anthropic';
-    }
-    const providerId = this.id();
-    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'anthropic';
+    return 'anthropic';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
