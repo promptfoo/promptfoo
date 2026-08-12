@@ -844,7 +844,8 @@ Promptfoo automatically selects spans that describe model calls, tool executions
 decisions, or errors. It recognizes OpenTelemetry `gen_ai.*` attributes, common tool and
 guardrail attributes, and older `llm.*` attributes. Useful spans are included even when the
 instrumentation marks them as internal, while ordinary HTTP requests and framework handlers
-stay out of the attack context.
+stay out of the attack context. Set `includeInternalSpans: true` to include the full trace
+instead.
 
 To focus on operations with particular names, add an optional `spanFilter`. Filters are
 case-insensitive and support `*` and `?` wildcards:

@@ -140,7 +140,6 @@ describe('TraceStore span persistence', () => {
 
     const selected = await traceStore.getSpans('semantic-selection', {
       includeInternalSpans: false,
-      semanticOnly: true,
     });
 
     expect(selected.map((span) => span.name)).toEqual([
@@ -150,6 +149,9 @@ describe('TraceStore span persistence', () => {
       'POST /remote-api',
     ]);
     await expect(traceStore.getSpans('semantic-selection')).resolves.toHaveLength(spans.length);
+    await expect(
+      traceStore.getSpans('semantic-selection', { includeInternalSpans: true }),
+    ).resolves.toHaveLength(spans.length);
   });
 
   it('applies semantic filtering before the red-team span limit', async () => {
@@ -184,7 +186,6 @@ describe('TraceStore span persistence', () => {
     const spans = await traceStore.getSpans('semantic-limit', {
       includeInternalSpans: false,
       maxSpans: 2,
-      semanticOnly: true,
     });
 
     expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
@@ -215,7 +216,6 @@ describe('TraceStore span persistence', () => {
 
     const modelAndTool = await traceStore.getSpans('wildcard-selection', {
       includeInternalSpans: false,
-      semanticOnly: true,
       spanFilter: ['chat*', '*tool*'],
     });
     expect(modelAndTool.map((span) => span.name)).toEqual([
@@ -225,7 +225,6 @@ describe('TraceStore span persistence', () => {
 
     const explicitHttp = await traceStore.getSpans('wildcard-selection', {
       includeInternalSpans: false,
-      semanticOnly: true,
       spanFilter: ['POST*'],
     });
     expect(explicitHttp.map((span) => span.name)).toEqual(['POST /chat']);

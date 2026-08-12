@@ -38,7 +38,6 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
   maxSpans?: number;
   maxDepth?: number;
   includeInternalSpans?: boolean;
-  semanticOnly?: boolean;
   spanFilter?: string[];
 }
 
@@ -111,19 +110,6 @@ function computeDepth(
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
-}
-
-function deriveSpanKind(span: SpanData): string {
-  const attributes = span.attributes || {};
-  const attributeKind = (attributes['span.kind'] ||
-    attributes['otel.span.kind'] ||
-    attributes['spanKind']) as string | undefined;
-
-  if (typeof attributeKind === 'string') {
-    return attributeKind.toLowerCase();
-  }
-
-  return 'internal';
 }
 
 export class TraceStore {
@@ -368,7 +354,6 @@ export class TraceStore {
       maxSpans,
       maxDepth,
       includeInternalSpans = true,
-      semanticOnly = false,
       spanFilter,
       sanitizeAttributes: shouldSanitize = true,
     } = options;
@@ -404,25 +389,17 @@ export class TraceStore {
           statusMessage: row.statusMessage ?? undefined,
         };
 
-        const spanKind = deriveSpanKind({
-          ...spanData,
-          attributes: rawAttributes,
-        });
-        const relevant = isRelevantSpan({
-          attributes: rawAttributes,
-          statusCode: spanData.statusCode,
-        });
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
         if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
           continue;
         }
 
-        if (!includeInternalSpans && spanKind === 'internal' && !relevant && !hasExplicitFilter) {
-          continue;
-        }
-
-        if (semanticOnly && !relevant && !hasExplicitFilter) {
+        if (
+          !includeInternalSpans &&
+          !hasExplicitFilter &&
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+        ) {
           continue;
         }
 

@@ -21,6 +21,7 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
 
 import { TraceProviderError } from '../../src/tracing/providers/types';
 import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
 import type { SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
@@ -47,14 +48,12 @@ describe('fetchTraceContext', () => {
         if (options.earliestStartTime && span.startTime < options.earliestStartTime) {
           return false;
         }
-        if (!options.includeInternalSpans && span.attributes?.['otel.span.kind'] === 'internal') {
-          return false;
+        if (options.spanFilter?.length) {
+          return matchesSpanFilter(span.name, options.spanFilter);
         }
         return (
-          !options.spanFilter?.length ||
-          options.spanFilter.some((filter) =>
-            span.name.toLowerCase().includes(filter.toLowerCase()),
-          )
+          options.includeInternalSpans !== false ||
+          isRelevantSpan({ attributes: span.attributes, statusCode: span.statusCode })
         );
       });
       if (options.maxSpans !== undefined) {
@@ -107,6 +106,77 @@ describe('fetchTraceContext', () => {
       spanFilter: ['target'],
     });
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
+  });
+
+  it('keeps meaningful internal external spans before applying the span limit', async () => {
+    const spans = [
+      {
+        spanId: 'http',
+        name: 'POST /chat',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'server', 'http.request.method': 'POST' },
+      },
+      {
+        spanId: 'handler',
+        name: 'request handler',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'internal' },
+      },
+      {
+        spanId: 'model',
+        name: 'chat gpt-4.1-mini',
+        startTime: 3,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 4,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
+      },
+    ];
+    mockExternalTrace(spans);
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      includeInternalSpans: false,
+      maxSpans: 2,
+    });
+
+    expect(storedSpans).toEqual(spans);
+    expect(result?.spans.map((span) => span.name)).toEqual([
+      'chat gpt-4.1-mini',
+      'execute_tool search',
+    ]);
+  });
+
+  it('applies wildcard filters to externally fetched spans', async () => {
+    mockExternalTrace([
+      {
+        spanId: 'model',
+        name: 'chat gpt-4.1-mini',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
+      },
+    ]);
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      includeInternalSpans: false,
+      spanFilter: ['*tool*'],
+    });
+
+    expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
   });
 
   it('uses the trace store time window to isolate a red-team turn', async () => {
