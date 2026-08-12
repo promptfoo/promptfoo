@@ -360,6 +360,50 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.USAGE_OUTPUT_TOKENS, 50);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(GenAIAttributes.RESPONSE_ID, 'resp-123');
     });
+
+    it('preserves response-cache status omitted by a legacy result extractor', async () => {
+      await withGenAISpan(
+        baseContext,
+        async () => ({
+          output: 'cached output',
+          cached: true,
+          tokenUsage: { cached: 150, total: 150 },
+        }),
+        (response) => ({ tokenUsage: response.tokenUsage }),
+      );
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, true);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        expect.anything(),
+      );
+    });
+
+    it('preserves an explicit cache classification from the result extractor', async () => {
+      await withGenAISpan(
+        baseContext,
+        async () => ({
+          output: 'provider-cached output',
+          cached: true,
+          tokenUsage: { cached: 20 },
+        }),
+        (response) => ({ tokenUsage: response.tokenUsage, cacheHit: false }),
+      );
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(PromptfooAttributes.CACHE_HIT, false);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        20,
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
+        PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
+        expect.anything(),
+      );
+    });
   });
 
   describe('setGenAIResponseAttributes', () => {

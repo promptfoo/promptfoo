@@ -287,6 +287,15 @@ export async function withGenAISpan<T>(
       // Set response attributes if extractor provided
       if (resultExtractor) {
         const result = resultExtractor(value);
+        if (
+          result.cacheHit === undefined &&
+          value !== null &&
+          typeof value === 'object' &&
+          'cached' in value &&
+          typeof value.cached === 'boolean'
+        ) {
+          result.cacheHit = value.cached;
+        }
         setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
       }
 
