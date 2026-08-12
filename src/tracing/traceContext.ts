@@ -1,5 +1,7 @@
 import logger from '../logger';
-import { sleep } from '../util/time';
+import { createTraceProvider, isExternalTraceProvider } from './providers';
+import { type TraceProviderConfig, TraceProviderError } from './providers/types';
+import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './store';
 import { getToolNameFromAttributes } from './toolAttributes';
 
@@ -39,10 +41,24 @@ export interface FetchTraceContextOptions
   sanitizeAttributes?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
+  /** External trace provider configuration (Tempo, Jaeger, etc.) */
+  providerConfig?: TraceProviderConfig;
+  /** Delay in ms before querying external provider (allows spans to arrive). Default: 3000 */
+  queryDelay?: number;
+  /** Additional evaluation-specific attribute names to redact before persistence. */
+  redactAttributes?: string[];
+  /** Abort signal for the evaluation that requested these spans. */
+  abortSignal?: AbortSignal;
 }
 
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 500;
+const DEFAULT_QUERY_DELAY_MS = 3000;
+const EXTERNAL_SPAN_BATCH_SIZE = 500;
+const inFlightExternalFetches = new WeakMap<
+  TraceProviderConfig,
+  Map<string, Promise<TraceContextData | null>>
+>();
 
 const SPAN_KIND_MAP: Record<number, string> = {
   0: 'unspecified',
@@ -85,26 +101,14 @@ function mapStatusCode(span: SpanData): 'unset' | 'ok' | 'error' {
 
 function buildSpanTree(spans: SpanData[]): Map<string, number> {
   const depthMap = new Map<string, number>();
-
   const spansById = new Map(spans.map((span) => [span.spanId, span]));
-
-  const computeDepth = (span: SpanData): number => {
-    if (depthMap.has(span.spanId)) {
-      return depthMap.get(span.spanId)!;
+  const depthCache = new Map<string, number | null>();
+  for (const span of spans) {
+    const depth = computeSpanDepth(span, spansById, depthCache);
+    if (depth !== null) {
+      depthMap.set(span.spanId, depth);
     }
-
-    if (!span.parentSpanId || !spansById.has(span.parentSpanId)) {
-      depthMap.set(span.spanId, 0);
-      return 0;
-    }
-
-    const parentDepth = computeDepth(spansById.get(span.parentSpanId)!);
-    const depth = parentDepth + 1;
-    depthMap.set(span.spanId, depth);
-    return depth;
-  };
-
-  spans.forEach((span) => computeDepth(span));
+  }
 
   return depthMap;
 }
@@ -175,34 +179,340 @@ export function extractTraceIdFromTraceparent(traceparent: string): string | nul
   }
 
   const parts = traceparent.split('-');
-  if (parts.length < 2) {
+  const [version, traceId, parentSpanId, flags] = parts;
+  const validPartCount = version?.toLowerCase() === '00' ? parts.length === 4 : parts.length >= 4;
+  if (
+    !/^[0-9a-f]{2}$/i.test(version) ||
+    version.toLowerCase() === 'ff' ||
+    !validPartCount ||
+    !/^[0-9a-f]{32}$/i.test(traceId) ||
+    /^0+$/.test(traceId) ||
+    !/^[0-9a-f]{16}$/i.test(parentSpanId) ||
+    /^0+$/.test(parentSpanId) ||
+    !/^[0-9a-f]{2}$/i.test(flags)
+  ) {
+    return null;
+  }
+  return traceId.toLowerCase();
+}
+
+/**
+ * Compute the depth of a span in the span tree, rejecting cyclic parent chains.
+ */
+function computeSpanDepth(
+  span: SpanData,
+  spanMap: Map<string, SpanData>,
+  depthCache: Map<string, number | null>,
+): number | null {
+  const ancestors: SpanData[] = [];
+  const visited = new Set<string>();
+  let current: SpanData | undefined = span;
+  let depth = -1;
+
+  while (current) {
+    const cachedDepth = depthCache.get(current.spanId);
+    if (cachedDepth !== undefined) {
+      if (cachedDepth === null) {
+        for (const ancestor of ancestors) {
+          depthCache.set(ancestor.spanId, null);
+        }
+        return null;
+      }
+      depth = cachedDepth;
+      break;
+    }
+
+    if (visited.has(current.spanId)) {
+      for (const ancestor of ancestors) {
+        depthCache.set(ancestor.spanId, null);
+      }
+      return null;
+    }
+
+    visited.add(current.spanId);
+    ancestors.push(current);
+    current = current.parentSpanId ? spanMap.get(current.parentSpanId) : undefined;
+  }
+
+  for (let index = ancestors.length - 1; index >= 0; index--) {
+    depth += 1;
+    depthCache.set(ancestors[index].spanId, depth);
+  }
+
+  return depth;
+}
+
+/**
+ * Drop malformed parent cycles before persisting or processing external spans.
+ */
+function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
+  const spanMap = new Map(spans.map((span) => [span.spanId, span]));
+  const depthCache = new Map<string, number | null>();
+  const cyclicSpanIds = new Set<string>();
+
+  const validSpans = spans.filter((span) => {
+    const depth = computeSpanDepth(span, spanMap, depthCache);
+    if (depth === null) {
+      cyclicSpanIds.add(span.spanId);
+      return false;
+    }
+
+    return true;
+  });
+
+  if (cyclicSpanIds.size > 0) {
+    logger.warn(
+      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
+    );
+  }
+
+  return validSpans;
+}
+
+/**
+ * Store spans fetched from an external provider in the local database.
+ * This allows the spans to be displayed in the UI and persisted.
+ */
+async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<boolean> {
+  try {
+    const traceStore = getTraceStore();
+    for (let index = 0; index < spans.length; index += EXTERNAL_SPAN_BATCH_SIZE) {
+      const result = await traceStore.addSpans(
+        traceId,
+        spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
+        {
+          warnIfMissingTrace: false,
+          ...(index > 0 && { skipTraceCheck: true }),
+        },
+      );
+      if (!result.stored) {
+        return false;
+      }
+    }
+    logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
+    return true;
+  } catch (error) {
+    logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
+    return false;
+  }
+}
+
+function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanData {
+  const attributes = span.attributes ?? {};
+  const sanitizedAttributes = sanitizeTraceAttributes(attributes, {
+    redactAttributes,
+    sanitizeSensitiveAttributes: false,
+    truncateValues: false,
+  });
+  const redactedValues = new Set<string>();
+  const pendingValues: Array<{ original: unknown; sanitized: unknown }> = [
+    { original: attributes, sanitized: sanitizedAttributes },
+  ];
+  while (pendingValues.length > 0) {
+    const { original, sanitized } = pendingValues.pop()!;
+    if (typeof original !== 'object') {
+      if (original !== undefined && sanitized === '[REDACTED]') {
+        const value = String(original);
+        if (value.length > 0) {
+          redactedValues.add(value);
+        }
+      }
+      continue;
+    }
+    if (!original) {
+      continue;
+    }
+    if (Array.isArray(original)) {
+      for (let index = 0; index < original.length; index++) {
+        pendingValues.push({
+          original: original[index],
+          sanitized: sanitized === '[REDACTED]' ? sanitized : (sanitized as unknown[])?.[index],
+        });
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(original)) {
+      pendingValues.push({
+        original: value,
+        sanitized:
+          sanitized === '[REDACTED]' ? sanitized : (sanitized as Record<string, unknown>)?.[key],
+      });
+    }
+  }
+  const orderedRedactedValues = [...redactedValues].sort(
+    (left, right) => right.length - left.length,
+  );
+  const scrubEcho = <T extends string | undefined>(value: T): T => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    let sanitizedValue: string = value;
+    for (const redactedValue of orderedRedactedValues) {
+      sanitizedValue = sanitizedValue.split(redactedValue).join('[REDACTED]');
+    }
+
+    return sanitizedValue as T;
+  };
+
+  return {
+    ...span,
+    name: scrubEcho(span.name),
+    statusMessage: scrubEcho(span.statusMessage),
+    attributes: sanitizedAttributes,
+  };
+}
+
+/**
+ * Fetch trace context from an external provider (Tempo, Jaeger, etc.)
+ */
+async function fetchFromExternalProvider(
+  traceId: string,
+  providerConfig: TraceProviderConfig,
+  options: {
+    queryDelay: number;
+    maxRetries: number;
+    retryDelayMs: number;
+    includeInternalSpans: boolean;
+    sanitizeAttributes: boolean;
+    earliestStartTime?: number;
+    maxSpans?: number;
+    maxDepth?: number;
+    spanFilter?: string[];
+    redactAttributes?: string[];
+    abortSignal?: AbortSignal;
+  },
+): Promise<TraceContextData | null> {
+  const { queryDelay, maxRetries, retryDelayMs, redactAttributes, abortSignal, ...spanOptions } =
+    options;
+
+  let provider: ReturnType<typeof createTraceProvider>;
+  try {
+    provider = createTraceProvider(providerConfig);
+  } catch (error) {
+    logger.warn(`[TraceContext] Failed to initialize trace provider: ${error}`);
     return null;
   }
 
-  return parts[1];
+  if (queryDelay > 0) {
+    logger.debug(`[TraceContext] Waiting ${queryDelay}ms for spans to arrive at external backend`);
+    await waitForRetry(queryDelay, abortSignal);
+  }
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (abortSignal?.aborted) {
+      throw createTraceAbortError(abortSignal);
+    }
+    try {
+      const result = await provider.fetchTrace(traceId, abortSignal ? { abortSignal } : undefined);
+      const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
+
+      if (!result || validSpans.length === 0) {
+        if (attempt === maxRetries) {
+          logger.debug(
+            `[TraceContext] No spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
+          );
+          return null;
+        }
+        logger.debug(
+          `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
+        );
+        await waitForRetry(retryDelayMs, abortSignal);
+        continue;
+      }
+
+      const storedSpans = redactAttributes?.length
+        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
+        : validSpans;
+
+      if (!(await storeExternalSpans(traceId, storedSpans))) {
+        return null;
+      }
+
+      const spans = await getTraceStore().getSpans(traceId, spanOptions);
+      if (spans.length === 0) {
+        return null;
+      }
+
+      const traceSpans = createTraceSpans(spans);
+      const insights = deriveInsights(traceSpans);
+
+      logger.debug(
+        `[TraceContext] Resolved ${traceSpans.length} spans for trace ${traceId} from ${provider.id} with ${insights.length} insights`,
+      );
+
+      return {
+        traceId,
+        spans: traceSpans,
+        insights,
+        fetchedAt: result.fetchedAt,
+      };
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        throw createTraceAbortError(abortSignal);
+      }
+      logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
+      if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
+        return null;
+      }
+      await waitForRetry(retryDelayMs, abortSignal);
+    }
+  }
+
+  return null;
 }
 
-export async function fetchTraceContext(
-  traceId: string,
-  options: FetchTraceContextOptions = {},
-): Promise<TraceContextData | null> {
-  const {
-    includeInternalSpans = true,
-    sanitizeAttributes = true,
-    maxRetries = DEFAULT_MAX_RETRIES,
-    retryDelayMs = DEFAULT_RETRY_DELAY_MS,
-    ...spanOptions
-  } = options;
+function createTraceAbortError(signal?: AbortSignal): Error {
+  const error = new Error('cancelled by user') as Error & { cause?: unknown };
+  error.cause = signal?.reason;
+  error.name = 'AbortError';
+  return error;
+}
 
+async function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    throw createTraceAbortError(signal);
+  }
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(createTraceAbortError(signal));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, delay);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Fetch trace context from local TraceStore (SQLite)
+ */
+async function fetchFromLocalStore(
+  traceId: string,
+  options: {
+    maxRetries: number;
+    retryDelayMs: number;
+    includeInternalSpans: boolean;
+    sanitizeAttributes: boolean;
+    earliestStartTime?: number;
+    maxSpans?: number;
+    maxDepth?: number;
+    spanFilter?: string[];
+    redactAttributes?: string[];
+    abortSignal?: AbortSignal;
+  },
+): Promise<TraceContextData | null> {
+  const { maxRetries, retryDelayMs, abortSignal, redactAttributes, ...spanOptions } = options;
   const traceStore = getTraceStore();
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (abortSignal?.aborted) {
+      throw createTraceAbortError(abortSignal);
+    }
     try {
-      const spans = await traceStore.getSpans(traceId, {
-        includeInternalSpans,
-        sanitizeAttributes,
-        ...spanOptions,
-      });
+      const spans = await traceStore.getSpans(traceId, spanOptions);
 
       if (spans.length === 0) {
         if (attempt === maxRetries) {
@@ -214,11 +524,21 @@ export async function fetchTraceContext(
         logger.debug(
           `[TraceContext] No spans yet for trace ${traceId}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
         );
-        await sleep(retryDelayMs);
+        await waitForRetry(retryDelayMs, abortSignal);
         continue;
       }
 
-      const traceSpans = createTraceSpans(spans);
+      const traceSpans = createTraceSpans(
+        redactAttributes?.length
+          ? spans.map((span) => ({
+              ...span,
+              attributes: sanitizeTraceAttributes(span.attributes, {
+                redactAttributes,
+                sanitizeSensitiveAttributes: spanOptions.sanitizeAttributes,
+              }),
+            }))
+          : spans,
+      );
       const insights = deriveInsights(traceSpans);
 
       const context: TraceContextData = {
@@ -234,13 +554,81 @@ export async function fetchTraceContext(
 
       return context;
     } catch (error) {
+      if (abortSignal?.aborted) {
+        throw createTraceAbortError(abortSignal);
+      }
       logger.error(`[TraceContext] Failed to fetch spans for trace ${traceId}: ${error}`);
       if (attempt === maxRetries) {
         return null;
       }
-      await sleep(retryDelayMs);
+      await waitForRetry(retryDelayMs, abortSignal);
     }
   }
 
   return null;
+}
+
+/**
+ * Fetch trace context for a given trace ID.
+ *
+ * If an external provider is configured (Tempo, Jaeger, etc.), fetches from that backend.
+ * Otherwise, fetches from the local TraceStore (SQLite).
+ *
+ * @param traceId - The W3C trace ID (32 hex chars)
+ * @param options - Fetch options including provider config
+ * @returns TraceContextData or null if not found
+ */
+export async function fetchTraceContext(
+  traceId: string,
+  options: FetchTraceContextOptions = {},
+): Promise<TraceContextData | null> {
+  const {
+    includeInternalSpans = true,
+    sanitizeAttributes = true,
+    maxRetries = DEFAULT_MAX_RETRIES,
+    retryDelayMs = DEFAULT_RETRY_DELAY_MS,
+    providerConfig,
+    queryDelay = DEFAULT_QUERY_DELAY_MS,
+    ...spanOptions
+  } = options;
+
+  const fetchOptions = {
+    maxRetries,
+    retryDelayMs,
+    includeInternalSpans,
+    sanitizeAttributes,
+    ...spanOptions,
+  };
+
+  // If external provider is configured, use it
+  if (isExternalTraceProvider(providerConfig)) {
+    const externalConfig = providerConfig!;
+    const requestOptions = {
+      queryDelay,
+      ...fetchOptions,
+    };
+    // Calls with an abort signal retain independent cancellation ownership.
+    if (requestOptions.abortSignal) {
+      return fetchFromExternalProvider(traceId, externalConfig, requestOptions);
+    }
+
+    const key = JSON.stringify({ traceId, ...requestOptions });
+    let pending = inFlightExternalFetches.get(externalConfig);
+    if (!pending) {
+      pending = new Map();
+      inFlightExternalFetches.set(externalConfig, pending);
+    }
+    const existing = pending.get(key);
+    if (existing) {
+      return existing;
+    }
+    const request = fetchFromExternalProvider(traceId, externalConfig, requestOptions).finally(() =>
+      pending.delete(key),
+    );
+    pending.set(key, request);
+    return request;
+  }
+
+  // Otherwise, use local TraceStore
+  return fetchFromLocalStore(traceId, fetchOptions);
 }

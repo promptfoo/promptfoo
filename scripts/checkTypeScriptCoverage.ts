@@ -3,8 +3,6 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
-
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/'];
@@ -50,30 +48,19 @@ export function getTrackedTypeScriptFiles(): string[] {
 }
 
 export function getRootProjectFiles(): Set<string> {
-  const configPath = ts.findConfigFile(repoRoot, ts.sys.fileExists, 'tsconfig.json');
-  if (!configPath) {
-    throw new Error('Could not find root tsconfig.json');
-  }
-
-  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
-  if (configFile.error) {
-    throw new Error(ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n'));
-  }
-
-  const parsedConfig = ts.parseJsonConfigFileContent(
-    configFile.config,
-    ts.sys,
-    path.dirname(configPath),
+  const compilerPath = fileURLToPath(
+    new URL('./bin/tsc', import.meta.resolve('typescript/package.json')),
   );
-  if (parsedConfig.errors.length > 0) {
-    const message = parsedConfig.errors
-      .map((error) => ts.flattenDiagnosticMessageText(error.messageText, '\n'))
-      .join('\n');
-    throw new Error(message);
-  }
+  const compilerOutput = execFileSync(process.execPath, [compilerPath, '--showConfig'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  const config: { files: string[] } = JSON.parse(compilerOutput);
 
   return new Set(
-    parsedConfig.fileNames.map((filePath) => normalizePath(path.relative(repoRoot, filePath))),
+    config.files.map((filePath) =>
+      normalizePath(path.relative(repoRoot, path.resolve(repoRoot, filePath))),
+    ),
   );
 }
 
