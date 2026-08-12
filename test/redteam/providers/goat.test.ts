@@ -5,6 +5,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import * as traceContext from '../../../src/tracing/traceContext';
 import { createMockProvider } from '../../factories/provider';
 
 import type {
@@ -172,6 +173,31 @@ describe('RedteamGoatProvider', () => {
     await provider.callApi('test prompt', context);
 
     expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('skips trace retrieval when a GOAT target response came from cache', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      tracing: { enabled: true },
+    });
+    const targetProvider = createMockTargetProvider('cached target response', {}, { cached: true });
+    const context = {
+      ...createMockContext(targetProvider),
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+    };
+    const fetchTraceContextSpy = vi
+      .spyOn(traceContext, 'fetchTraceContext')
+      .mockResolvedValue(null);
+
+    try {
+      await provider.callApi('test prompt', context);
+
+      expect(targetProvider.callApi).toHaveBeenCalledOnce();
+      expect(fetchTraceContextSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchTraceContextSpy.mockRestore();
+    }
   });
 
   it('should preserve an explicit maxTurns value of 0', async () => {

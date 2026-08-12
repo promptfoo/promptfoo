@@ -29,4 +29,29 @@ describe('sanitizeTraceAttributes', () => {
       ),
     ).toEqual({ authorization: 'visible', private_field: '[REDACTED]' });
   });
+
+  it('can apply explicit storage redactions without truncating other attribute values', () => {
+    const longToolArguments = 'argument-value '.repeat(40);
+
+    expect(
+      sanitizeTraceAttributes(
+        {
+          authorization: 'visible',
+          private_field: 'secret',
+          'gen_ai.tool.call.arguments': longToolArguments,
+          nested: { customer_email: 'private@example.com', full_input: longToolArguments },
+        },
+        {
+          redactAttributes: ['private', 'email'],
+          sanitizeSensitiveAttributes: false,
+          truncateValues: false,
+        },
+      ),
+    ).toEqual({
+      authorization: 'visible',
+      private_field: '[REDACTED]',
+      'gen_ai.tool.call.arguments': longToolArguments,
+      nested: { customer_email: '[REDACTED]', full_input: longToolArguments },
+    });
+  });
 });

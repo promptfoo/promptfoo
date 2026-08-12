@@ -5,19 +5,21 @@ description: Implement OpenTelemetry tracing in your LLM evaluations to monitor 
 
 # Tracing
 
-Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the internal operations of your LLM providers during evaluations.
+Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did behind each response and bring that information into your evals.
 
-This feature allows you to collect detailed performance metrics and debug complex provider implementations.
+Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
 ![traces in promptfoo](/img/docs/trace.png)
 
 ## Overview
 
-Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing.
+Promptfoo can receive traces directly from your application or pull them from a tracing service you already use. Those traces give your evals more context about what your application actually did. The built-in receiver works without additional infrastructure during development and testing.
 
 Tracing provides visibility into:
 
 - **Provider execution flow**: See how your providers process requests internally
+- **Tool calls and agent actions**: Check which tools ran, in what order, and with which inputs
+- **Grading and red teaming**: Evaluate the steps behind a response and use them to guide attacks
 - **Performance bottlenecks**: Identify slow operations in RAG pipelines or multi-step workflows
 - **Error tracking**: Trace failures to specific operations
 - **Resource usage**: Monitor external API calls, database queries, and other operations
@@ -26,9 +28,12 @@ Tracing provides visibility into:
 
 - **Standard OpenTelemetry support**: Use any OpenTelemetry SDK in any language
 - **Built-in OTLP receiver**: No external collector required for basic usage
+- **Trace-aware assertions**: Check tool usage, execution paths, timing, and errors
+- **Trace-informed grading and attacks**: Give graders and red-team strategies more context
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
+- **Existing tracing services**: Pull traces from the service your application already uses
 
 ## Built-in Provider Instrumentation
 
@@ -324,13 +329,13 @@ secrets in test variables when traces are retained.
 :::warning Scope of `redactAttributes`
 
 `redactAttributes` is applied by the **OTLP HTTP receiver** as spans are ingested over
-`/v1/traces` and `/v1/logs`. Spans emitted by Promptfoo's **built-in provider
-instrumentation** are exported in-process (not over HTTP) and are **not** filtered by
-`redactAttributes`; values like `promptfoo.request.body` and request headers can therefore
-be stored in the local trace DB. A built-in sanitizer still masks common credential-shaped
-keys (`authorization`, `api_key`, `token`, `password`, `cookie`, …) when traces are read,
-but custom keys you add to `redactAttributes` are only enforced on the HTTP ingest path.
-Don't rely on `redactAttributes` alone to keep secrets out of the at-rest trace database.
+`/v1/traces` and `/v1/logs`, and to traces fetched through a configured **trace provider**
+before they are saved. Spans emitted by Promptfoo's **built-in provider instrumentation**
+are exported in-process and are **not** filtered by `redactAttributes`; values like
+`promptfoo.request.body` and request headers can therefore be stored in the local trace DB.
+A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_key`,
+`token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
+from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
 :::
 
@@ -402,6 +407,45 @@ tracing:
     headers:
       'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
 ```
+
+### Pulling Traces From Another Service
+
+If your application already sends traces to another service, you do not need to change where they go. Promptfoo can look up the trace for each request and bring those steps into your eval.
+
+Here's how it works:
+
+1. Promptfoo includes a `traceparent` header when it calls your application.
+2. Your application adds its own steps to that trace and sends them to its usual tracing service.
+3. After the response, Promptfoo pulls the matching trace from that service.
+4. Promptfoo uses the trace in assertions, grading, and red-team strategies, and shows it alongside your results.
+
+To pull traces from your tracing service, add it under `tracing.provider` in your configuration. The provider ID identifies the service, and its settings tell Promptfoo how to connect.
+
+#### Grafana Tempo
+
+Use the `tempo` trace provider to pull traces from Grafana Tempo:
+
+```yaml
+tracing:
+  enabled: true
+  queryDelay: 3000 # Allow spans to reach Tempo before looking up the trace
+  provider:
+    id: tempo
+    endpoint: 'http://tempo:3200'
+    auth:
+      token: '{{ env.TEMPO_API_TOKEN }}'
+    headers:
+      X-Scope-OrgID: '{{ env.TEMPO_TENANT_ID }}'
+    timeout: 10000
+```
+
+After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
+
+Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
+
+Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
+
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
 ## Provider Implementation Guide
 
