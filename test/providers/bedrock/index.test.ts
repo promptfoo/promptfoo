@@ -703,6 +703,20 @@ describe('AwsBedrockGenericProvider', () => {
       }
     });
 
+    it.each(['claude-prod-5', 'claude-prod-25'])(
+      'keeps temperature for custom application inference profile alias %s',
+      async (profileName) => {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${profileName}`,
+        );
+
+        expect(params.temperature).toBe(0.5);
+      },
+    );
+
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
       // `thinking` field, so the bare 1024 default would truncate ordinary answers.

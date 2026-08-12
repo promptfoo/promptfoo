@@ -1627,7 +1627,10 @@ export const BEDROCK_MODEL = {
       // so we normalize silently here; the Anthropic Messages provider surfaces
       // the one-time heads-up and the provider docs document the behavior.
       const samplingParamsDeprecated = modelName
-        ? isSamplingParamsDeprecatedClaudeModel(modelName)
+        ? isSamplingParamsDeprecatedClaudeModel(modelName, {
+            // Application inference profile names are user-defined aliases, not model IDs.
+            allowUnknownFamilyFallback: !modelName.includes(':application-inference-profile/'),
+          })
         : false;
       if (!samplingParamsDeprecated) {
         addConfigParam(params, 'temperature', config?.temperature, undefined, 0);

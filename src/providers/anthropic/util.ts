@@ -385,6 +385,11 @@ export function normalizeAnthropicModelName(modelName: string): string {
   return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
 }
 
+interface SamplingParamsDeprecationOptions {
+  /** Apply the forward-looking Claude 5+ family matcher to values known to be model IDs. */
+  allowUnknownFamilyFallback?: boolean;
+}
+
 /**
  * Claude Opus 4.7/4.8 and Claude 5+ models deprecate manual sampling controls at the model
  * level — `temperature`, `top_p`, and `top_k` return 400 `invalid_request_error` (including
@@ -392,10 +397,13 @@ export function normalizeAnthropicModelName(modelName: string): string {
  * and Azure providers. Known families use the capability table above; the generation fallback
  * keeps newly released Claude 5+ family names safe before their model-specific rows land.
  */
-export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
+export function isSamplingParamsDeprecatedClaudeModel(
+  modelId: string,
+  { allowUnknownFamilyFallback = true }: SamplingParamsDeprecationOptions = {},
+): boolean {
   return (
     hasClaudeCapability(modelId, 'samplingParamsDeprecated') ||
-    CLAUDE_5_OR_LATER_PATTERN.test(modelId)
+    (allowUnknownFamilyFallback && CLAUDE_5_OR_LATER_PATTERN.test(modelId))
   );
 }
 

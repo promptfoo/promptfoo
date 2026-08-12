@@ -2045,6 +2045,22 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('can disable the unknown-family fallback for alias-based providers', () => {
+      for (const alias of ['claude-prod-5', 'claude-prod-25']) {
+        expect(
+          isSamplingParamsDeprecatedClaudeModel(alias, {
+            allowUnknownFamilyFallback: false,
+          }),
+        ).toBe(false);
+      }
+
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-opus-5', {
+          allowUnknownFamilyFallback: false,
+        }),
+      ).toBe(true);
+    });
+
     it('does not mistake legacy or lookalike model IDs for Claude 5+', () => {
       for (const id of [
         'claude-3-5-sonnet-20241022',

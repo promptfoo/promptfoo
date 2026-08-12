@@ -1894,6 +1894,37 @@ Third line`;
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 
+    it.each(['claude-prod-5', 'claude-prod-25'])(
+      'keeps sampling params for custom application inference profile alias %s',
+      async (profileName) => {
+        const provider = new AwsBedrockConverseProvider(
+          `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${profileName}`,
+          {
+            config: {
+              region: 'us-east-1',
+              max_tokens: 1024,
+              temperature: 0.5,
+              topP: 0.9,
+            },
+          },
+        );
+
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+        await provider.callApi('Test');
+
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+          -1,
+        )?.[0] as { inferenceConfig?: Record<string, unknown> };
+        expect(call?.inferenceConfig?.temperature).toBe(0.5);
+        expect(call?.inferenceConfig?.topP).toBe(0.9);
+        expect(call?.inferenceConfig?.maxTokens).toBe(1024);
+      },
+    );
+
     it.each(['any', { tool: { name: 'test_tool' } }])(
       'omits forced tool choice for Claude Fable 5 while preserving tools: %j',
       async (toolChoice) => {
