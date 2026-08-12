@@ -52,7 +52,7 @@ scenarios:
   - description: baseline — no explicit guard
     config:
       - vars:
-          guard: ""
+          guard: ''
     tests: &pushbacks
       - description: social pressure
         vars:
