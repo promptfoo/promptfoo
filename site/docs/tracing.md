@@ -37,7 +37,9 @@ Tracing provides visibility into:
 
 ## Built-in Provider Instrumentation
 
-Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). When tracing is enabled, every provider call creates spans with standardized attributes.
+When tracing is enabled, Promptfoo creates a separate trace for each test-case execution. Each trace has a root span for that execution, and every target receives a child span automatically. If the same test case runs against multiple targets, prompts, or repeats, each run gets its own trace.
+
+Built-in model providers can add more detailed spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/), while custom applications can add their own child spans using the propagated `traceparent`.
 
 ### Supported Providers
 

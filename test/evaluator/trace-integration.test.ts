@@ -479,6 +479,30 @@ describe('evaluator trace integration', () => {
       );
     });
 
+    it('attributes the trace to the provider override that handles the test', async () => {
+      const configuredProvider = createMockProvider({ id: 'configured-provider' });
+      const overrideProvider = createMockProvider({
+        id: 'override-provider',
+        response: { output: 'Override response' },
+      });
+      const options = createRunOptions(configuredProvider);
+      options.test.provider = overrideProvider;
+
+      const [result] = await runEval(options);
+
+      expect(result.response?.output).toBe('Override response');
+      expect(overrideProvider.callApi).toHaveBeenCalledOnce();
+      expect(configuredProvider.callApi).not.toHaveBeenCalled();
+      expect(evaluatorTracing.generateTraceContextIfNeeded).toHaveBeenCalledWith(
+        options.test,
+        undefined,
+        options.testIdx,
+        options.promptIdx,
+        options.testSuite,
+        expect.objectContaining({ providerId: 'override-provider' }),
+      );
+    });
+
     it('renders trace-provider credentials and suite environment overrides for programmatic evals', async () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });
       const programmaticSuite: TestSuite = {
