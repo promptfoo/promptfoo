@@ -216,6 +216,7 @@ describe('genaiTracer', () => {
     });
 
     it.each([
+      ['alibaba', 'alibaba_cloud'],
       ['bedrock', 'aws.bedrock'],
       ['azure', 'azure.ai.openai'],
       ['vertex:anthropic', 'gcp.vertex_ai'],

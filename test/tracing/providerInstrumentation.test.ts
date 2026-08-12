@@ -494,6 +494,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
   describe('Provider Systems Coverage', () => {
     // Test all Category A providers (directly instrumented)
     const categoryAProviders = [
+      { system: 'alibaba', model: 'qwen-max', providerName: 'alibaba_cloud' },
       { system: 'openai', model: 'gpt-4', providerName: 'openai' },
       { system: 'anthropic', model: 'claude-3-opus', providerName: 'anthropic' },
       { system: 'azure', model: 'gpt-4-deployment', providerName: 'azure.ai.openai' },

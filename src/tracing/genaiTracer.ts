@@ -81,6 +81,7 @@ export const PromptfooAttributes = {
 type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings' | 'invoke_agent';
 
 const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
+  alibaba: 'alibaba_cloud',
   aws_bedrock: 'aws.bedrock',
   azure: 'azure.ai.openai',
   azure_ai_inference: 'azure.ai.inference',
