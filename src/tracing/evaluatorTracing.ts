@@ -136,8 +136,11 @@ export async function startOtlpReceiverIfNeeded(
   testSuite: TestSuite,
   evaluationId?: string,
 ): Promise<boolean> {
+  const tracing = testSuite.tracing?.provider
+    ? { ...testSuite.tracing, provider: { id: testSuite.tracing.provider.id } }
+    : testSuite.tracing;
   logger.debug('[EvaluatorTracing] Checking tracing configuration', {
-    tracing: testSuite.tracing,
+    tracing,
     testSuiteKeys: Object.keys(testSuite),
   });
 

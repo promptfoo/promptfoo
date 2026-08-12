@@ -230,6 +230,31 @@ describe('TraceStore span persistence', () => {
     });
     expect(explicitHttp.map((span) => span.name)).toEqual(['POST /chat']);
   });
+
+  it('orders equal start times by span ID before applying maxSpans', async () => {
+    const traceStore = await createTrace('stable-ordering');
+
+    await traceStore.addSpans('stable-ordering', [
+      { spanId: 'bbbbbbbbbbbbbbbb', name: 'second tied span', startTime: 1_000 },
+      { spanId: 'aaaaaaaaaaaaaaaa', name: 'first tied span', startTime: 1_000 },
+      { spanId: 'cccccccccccccccc', name: 'earliest span', startTime: 999 },
+      { spanId: '0000000000000001', name: 'latest span', startTime: 1_001 },
+    ]);
+
+    const spans = await traceStore.getSpans('stable-ordering');
+    expect(spans.map((span) => span.spanId)).toEqual([
+      'cccccccccccccccc',
+      'aaaaaaaaaaaaaaaa',
+      'bbbbbbbbbbbbbbbb',
+      '0000000000000001',
+    ]);
+
+    const limitedSpans = await traceStore.getSpans('stable-ordering', { maxSpans: 2 });
+    expect(limitedSpans.map((span) => span.spanId)).toEqual([
+      'cccccccccccccccc',
+      'aaaaaaaaaaaaaaaa',
+    ]);
+  });
 });
 
 describe('span uniqueness migration', () => {

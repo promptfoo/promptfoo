@@ -381,7 +381,7 @@ export class TraceStore {
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
-        .orderBy(asc(spansTable.startTime));
+        .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();

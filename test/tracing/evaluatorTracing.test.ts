@@ -329,6 +329,43 @@ describe('evaluatorTracing', () => {
       ).toBe(false);
     });
 
+    it('omits rendered trace-provider credentials and custom headers from debug logs', async () => {
+      const tracing = {
+        enabled: true,
+        queryDelay: 1_000,
+        provider: {
+          id: 'tempo' as const,
+          endpoint: 'https://tempo.example.com?opaque=endpoint-secret',
+          auth: { token: 'runtime-token', password: 'runtime-password' },
+          headers: {
+            'X-Tempo-Reader': 'tiny',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      };
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing,
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        '[EvaluatorTracing] Checking tracing configuration',
+        {
+          tracing: { enabled: true, queryDelay: 1_000, provider: { id: 'tempo' } },
+          testSuiteKeys: ['providers', 'prompts', 'tracing'],
+        },
+      );
+      const debugOutput = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(debugOutput).not.toContain('endpoint-secret');
+      expect(debugOutput).not.toContain('runtime-token');
+      expect(debugOutput).not.toContain('runtime-password');
+      expect(debugOutput).not.toContain('tiny');
+      expect(testSuite.tracing?.provider).toEqual(tracing.provider);
+    });
+
     it('should pass configured acceptFormats to the OTLP receiver', async () => {
       const testSuite = {
         providers: [],

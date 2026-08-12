@@ -1033,6 +1033,47 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const TRACE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
+
+const TraceProviderConfigSchema = z.object({
+  id: z.literal('tempo'),
+  endpoint: z.url().refine((endpoint) => {
+    const url = new URL(endpoint);
+    const hasCredentialPath = url.pathname.split('/').some((segment) => {
+      try {
+        return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+      } catch {
+        return true;
+      }
+    });
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      !hasCredentialPath
+    );
+  }, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments'),
+  auth: z
+    .object({
+      token: z.string().min(1).optional(),
+      username: z.string().min(1).optional(),
+      password: z.string().min(1).optional(),
+    })
+    .refine(
+      ({ token, username, password }) =>
+        !(token && (username || password)) && Boolean(username) === Boolean(password),
+      'Configure either a bearer token or both basic-auth credentials',
+    )
+    .optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  timeout: z.number().int().positive().max(300_000).optional(),
+});
+
+const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1154,6 +1195,8 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
@@ -1311,6 +1354,9 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
