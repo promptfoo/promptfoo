@@ -285,8 +285,3 @@ export async function withGraderSpan<T>(ctx: GraderSpanContext, fn: () => Promis
     },
   );
 }
-
-/** Prefer an existing active span when it already belongs to the evaluation trace. */
-export function getActiveTargetTraceparent(fallback: string): string {
-  return getActiveTraceparent() || fallback;
-}
