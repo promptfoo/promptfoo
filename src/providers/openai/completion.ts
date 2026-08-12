@@ -42,14 +42,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  protected getGenAISystem(): string {
-    if (this.constructor === OpenAiCompletionProvider) {
-      return 'openai';
-    }
-    const providerId = this.id();
-    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,

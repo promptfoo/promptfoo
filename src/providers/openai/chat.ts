@@ -233,14 +233,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  protected getGenAISystem(): string {
-    if (this.constructor === OpenAiChatCompletionProvider) {
-      return 'openai';
-    }
-    const providerId = this.id();
-    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
-  }
-
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
