@@ -1,5 +1,6 @@
 import { AlwaysOffSampler, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import {
   generateSpanId,
@@ -805,6 +806,51 @@ describe('evaluatorTracing', () => {
       });
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
+      expect(cliState.activeOtlpReceiver).toEqual({
+        host: '127.0.0.1',
+        port: 4318,
+        acceptFormats: ['json'],
+      });
+    });
+
+    it('keeps the first receiver endpoint and formats until the final lease ends', async () => {
+      const firstLease = await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              host: '127.0.0.2',
+              port: 14318,
+              acceptFormats: ['protobuf'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+      const secondLease = await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+          },
+        },
+      } as unknown as TestSuite);
+
+      expect(cliState.activeOtlpReceiver).toEqual({
+        host: '127.0.0.2',
+        port: 14318,
+        acceptFormats: ['protobuf'],
+      });
+
+      await stopOtlpReceiverIfNeeded(firstLease);
+      expect(cliState.activeOtlpReceiver?.port).toBe(14318);
+
+      await stopOtlpReceiverIfNeeded(secondLease);
+      expect(cliState.activeOtlpReceiver).toBeUndefined();
     });
 
     it('should keep the receiver live until every overlapping evaluation releases its lease', async () => {
@@ -886,10 +932,12 @@ describe('evaluatorTracing', () => {
       await expect(restarting).resolves.toBe(true);
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(isOtlpReceiverStarted()).toBe(true);
+      expect(cliState.activeOtlpReceiver?.port).toBe(4318);
 
       await stopOtlpReceiverIfNeeded(true);
       expect(mockStopOTLPReceiver).toHaveBeenCalledTimes(2);
       expect(isOtlpReceiverStarted()).toBe(false);
+      expect(cliState.activeOtlpReceiver).toBeUndefined();
     });
   });
 });
