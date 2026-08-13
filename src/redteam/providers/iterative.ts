@@ -471,13 +471,14 @@ export async function runRedteamConversation({
     }
 
     let traceContext: TraceContextData | null = null;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent =
         iterationContext?.traceparent ?? context?.traceparent ?? test?.metadata?.traceparent;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,

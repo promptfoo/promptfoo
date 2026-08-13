@@ -54,6 +54,7 @@ export interface FetchTraceContextOptions
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_QUERY_DELAY_MS = 3000;
+const EXTERNAL_SPAN_BATCH_SIZE = 500;
 const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
@@ -100,26 +101,14 @@ function mapStatusCode(span: SpanData): 'unset' | 'ok' | 'error' {
 
 function buildSpanTree(spans: SpanData[]): Map<string, number> {
   const depthMap = new Map<string, number>();
-
   const spansById = new Map(spans.map((span) => [span.spanId, span]));
-
-  const computeDepth = (span: SpanData): number => {
-    if (depthMap.has(span.spanId)) {
-      return depthMap.get(span.spanId)!;
+  const depthCache = new Map<string, number | null>();
+  for (const span of spans) {
+    const depth = computeSpanDepth(span, spansById, depthCache);
+    if (depth !== null) {
+      depthMap.set(span.spanId, depth);
     }
-
-    if (!span.parentSpanId || !spansById.has(span.parentSpanId)) {
-      depthMap.set(span.spanId, 0);
-      return 0;
-    }
-
-    const parentDepth = computeDepth(spansById.get(span.parentSpanId)!);
-    const depth = parentDepth + 1;
-    depthMap.set(span.spanId, depth);
-    return depth;
-  };
-
-  spans.forEach((span) => computeDepth(span));
+  }
 
   return depthMap;
 }
@@ -189,126 +178,189 @@ export function extractTraceIdFromTraceparent(traceparent: string): string | nul
     return null;
   }
 
-  const match = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i.exec(traceparent);
-  if (!match || /^0+$/.test(match[1]) || /^0+$/.test(match[2])) {
+  const parts = traceparent.split('-');
+  const [version, traceId, parentSpanId, flags] = parts;
+  const validPartCount = version?.toLowerCase() === '00' ? parts.length === 4 : parts.length >= 4;
+  if (
+    !/^[0-9a-f]{2}$/i.test(version) ||
+    version.toLowerCase() === 'ff' ||
+    !validPartCount ||
+    !/^[0-9a-f]{32}$/i.test(traceId) ||
+    /^0+$/.test(traceId) ||
+    !/^[0-9a-f]{16}$/i.test(parentSpanId) ||
+    /^0+$/.test(parentSpanId) ||
+    !/^[0-9a-f]{2}$/i.test(flags)
+  ) {
     return null;
   }
-  return match[1].toLowerCase();
+  return traceId.toLowerCase();
 }
 
 /**
- * Compute the depth of a span in the span tree
+ * Compute the depth of a span in the span tree, rejecting cyclic parent chains.
  */
 function computeSpanDepth(
   span: SpanData,
   spanMap: Map<string, SpanData>,
-  depthCache: Map<string, number>,
-): number {
-  if (depthCache.has(span.spanId)) {
-    return depthCache.get(span.spanId)!;
+  depthCache: Map<string, number | null>,
+): number | null {
+  const ancestors: SpanData[] = [];
+  const visited = new Set<string>();
+  let current: SpanData | undefined = span;
+  let depth = -1;
+
+  while (current) {
+    const cachedDepth = depthCache.get(current.spanId);
+    if (cachedDepth !== undefined) {
+      if (cachedDepth === null) {
+        for (const ancestor of ancestors) {
+          depthCache.set(ancestor.spanId, null);
+        }
+        return null;
+      }
+      depth = cachedDepth;
+      break;
+    }
+
+    if (visited.has(current.spanId)) {
+      for (const ancestor of ancestors) {
+        depthCache.set(ancestor.spanId, null);
+      }
+      return null;
+    }
+
+    visited.add(current.spanId);
+    ancestors.push(current);
+    current = current.parentSpanId ? spanMap.get(current.parentSpanId) : undefined;
   }
 
-  if (!span.parentSpanId || !spanMap.has(span.parentSpanId)) {
-    depthCache.set(span.spanId, 0);
-    return 0;
+  for (let index = ancestors.length - 1; index >= 0; index--) {
+    depth += 1;
+    depthCache.set(ancestors[index].spanId, depth);
   }
 
-  const parentDepth = computeSpanDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache);
-  const currentDepth = parentDepth + 1;
-  depthCache.set(span.spanId, currentDepth);
-  return currentDepth;
+  return depth;
 }
 
 /**
- * Post-process spans from external providers to apply filtering and sanitization.
- * This ensures consistent behavior with the local TraceStore.
+ * Drop malformed parent cycles before persisting or processing external spans.
  */
-function postProcessExternalSpans(
-  spans: SpanData[],
-  options: {
-    includeInternalSpans: boolean;
-    sanitizeAttributes: boolean;
-    maxDepth?: number;
-    maxSpans?: number;
-    spanFilter?: string[];
-    redactAttributes?: string[];
-  },
-): SpanData[] {
-  const { includeInternalSpans, sanitizeAttributes, maxDepth, maxSpans, spanFilter } = options;
+function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
+  const spanMap = new Map(spans.map((span) => [span.spanId, span]));
+  const depthCache = new Map<string, number | null>();
+  const cyclicSpanIds = new Set<string>();
 
-  // Build span map for depth calculation
-  const spanMap = new Map<string, SpanData>();
-  for (const span of spans) {
-    spanMap.set(span.spanId, span);
-  }
-  const depthCache = new Map<string, number>();
-
-  let filtered = spans.filter((span) => {
-    // Filter by internal spans
-    if (!includeInternalSpans) {
-      const kind = resolveSpanKind(span);
-      if (kind === 'internal') {
-        return false;
-      }
-    }
-
-    // Filter by span name (substring match, case-insensitive - matches local store behavior)
-    if (spanFilter && spanFilter.length > 0) {
-      const matchesFilter = spanFilter.some((filterName) =>
-        span.name.toLowerCase().includes(filterName.toLowerCase()),
-      );
-      if (!matchesFilter) {
-        return false;
-      }
-    }
-
-    // Filter by depth
-    if (maxDepth !== undefined) {
-      const depth = computeSpanDepth(span, spanMap, depthCache);
-      if (depth >= maxDepth) {
-        return false;
-      }
+  const validSpans = spans.filter((span) => {
+    const depth = computeSpanDepth(span, spanMap, depthCache);
+    if (depth === null) {
+      cyclicSpanIds.add(span.spanId);
+      return false;
     }
 
     return true;
   });
 
-  // Apply maxSpans limit
-  if (maxSpans !== undefined && filtered.length > maxSpans) {
-    filtered = filtered.slice(0, maxSpans);
+  if (cyclicSpanIds.size > 0) {
+    logger.warn(
+      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
+    );
   }
 
-  // Sanitize attributes if requested
-  if (sanitizeAttributes || options.redactAttributes?.length) {
-    filtered = filtered.map((span) => ({
-      ...span,
-      attributes: sanitizeTraceAttributes(span.attributes, {
-        redactAttributes: options.redactAttributes,
-        sanitizeSensitiveAttributes: sanitizeAttributes,
-      }),
-    }));
-  }
-
-  return filtered;
+  return validSpans;
 }
 
 /**
  * Store spans fetched from an external provider in the local database.
  * This allows the spans to be displayed in the UI and persisted.
  */
-async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<void> {
+async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<boolean> {
   try {
     const traceStore = getTraceStore();
-    const result = await traceStore.addSpans(traceId, spans, {
-      warnIfMissingTrace: false,
-    });
-    if (result.stored) {
-      logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
+    for (let index = 0; index < spans.length; index += EXTERNAL_SPAN_BATCH_SIZE) {
+      const result = await traceStore.addSpans(
+        traceId,
+        spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
+        {
+          warnIfMissingTrace: false,
+          ...(index > 0 && { skipTraceCheck: true }),
+        },
+      );
+      if (!result.stored) {
+        return false;
+      }
     }
+    logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
+    return true;
   } catch (error) {
-    // Non-fatal - continue with in-memory data
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
+    return false;
   }
+}
+
+function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanData {
+  const attributes = span.attributes ?? {};
+  const sanitizedAttributes = sanitizeTraceAttributes(attributes, {
+    redactAttributes,
+    sanitizeSensitiveAttributes: false,
+    truncateValues: false,
+  });
+  const redactedValues = new Set<string>();
+  const pendingValues: Array<{ original: unknown; sanitized: unknown }> = [
+    { original: attributes, sanitized: sanitizedAttributes },
+  ];
+  while (pendingValues.length > 0) {
+    const { original, sanitized } = pendingValues.pop()!;
+    if (typeof original !== 'object') {
+      if (original !== undefined && sanitized === '[REDACTED]') {
+        const value = String(original);
+        if (value.length > 0) {
+          redactedValues.add(value);
+        }
+      }
+      continue;
+    }
+    if (!original) {
+      continue;
+    }
+    if (Array.isArray(original)) {
+      for (let index = 0; index < original.length; index++) {
+        pendingValues.push({
+          original: original[index],
+          sanitized: sanitized === '[REDACTED]' ? sanitized : (sanitized as unknown[])?.[index],
+        });
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(original)) {
+      pendingValues.push({
+        original: value,
+        sanitized:
+          sanitized === '[REDACTED]' ? sanitized : (sanitized as Record<string, unknown>)?.[key],
+      });
+    }
+  }
+  const orderedRedactedValues = [...redactedValues].sort(
+    (left, right) => right.length - left.length,
+  );
+  const scrubEcho = <T extends string | undefined>(value: T): T => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    let sanitizedValue: string = value;
+    for (const redactedValue of orderedRedactedValues) {
+      sanitizedValue = sanitizedValue.split(redactedValue).join('[REDACTED]');
+    }
+
+    return sanitizedValue as T;
+  };
+
+  return {
+    ...span,
+    name: scrubEcho(span.name),
+    statusMessage: scrubEcho(span.statusMessage),
+    attributes: sanitizedAttributes,
+  };
 }
 
 /**
@@ -331,7 +383,8 @@ async function fetchFromExternalProvider(
     abortSignal?: AbortSignal;
   },
 ): Promise<TraceContextData | null> {
-  const { queryDelay, maxRetries, retryDelayMs, ...fetchOptions } = options;
+  const { queryDelay, maxRetries, retryDelayMs, redactAttributes, abortSignal, ...spanOptions } =
+    options;
 
   let provider: ReturnType<typeof createTraceProvider>;
   try {
@@ -341,52 +394,47 @@ async function fetchFromExternalProvider(
     return null;
   }
 
+  if (queryDelay > 0) {
+    logger.debug(`[TraceContext] Waiting ${queryDelay}ms for spans to arrive at external backend`);
+    await waitForRetry(queryDelay, abortSignal);
+  }
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (fetchOptions.abortSignal?.aborted) {
-      throw new Error('cancelled by user');
+    if (abortSignal?.aborted) {
+      throw createTraceAbortError(abortSignal);
     }
     try {
-      const providerOptions = {
-        ...(fetchOptions.earliestStartTime !== undefined && {
-          earliestStartTime: fetchOptions.earliestStartTime,
-        }),
-        ...(fetchOptions.abortSignal && { abortSignal: fetchOptions.abortSignal }),
-      };
-      const result = await provider.fetchTrace(
-        traceId,
-        Object.keys(providerOptions).length > 0 ? providerOptions : undefined,
-      );
+      const result = await provider.fetchTrace(traceId, abortSignal ? { abortSignal } : undefined);
+      const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
 
-      if (!result || result.spans.length === 0) {
+      if (!result || validSpans.length === 0) {
         if (attempt === maxRetries) {
           logger.debug(
             `[TraceContext] No spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
           );
           return null;
         }
-        const delay = attempt === 0 ? queryDelay : retryDelayMs;
         logger.debug(
-          `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
+          `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
         );
-        await waitForRetry(delay, fetchOptions.abortSignal);
+        await waitForRetry(retryDelayMs, abortSignal);
         continue;
       }
 
-      // Apply post-processing to match local TraceStore behavior
-      const processedSpans = postProcessExternalSpans(result.spans, {
-        includeInternalSpans: fetchOptions.includeInternalSpans,
-        sanitizeAttributes: fetchOptions.sanitizeAttributes,
-        maxDepth: fetchOptions.maxDepth,
-        maxSpans: fetchOptions.maxSpans,
-        spanFilter: fetchOptions.spanFilter,
-        redactAttributes: fetchOptions.redactAttributes,
-      });
+      const storedSpans = redactAttributes?.length
+        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
+        : validSpans;
 
-      // Store fetched spans in local database for persistence and UI display
-      await storeExternalSpans(traceId, processedSpans);
+      if (!(await storeExternalSpans(traceId, storedSpans))) {
+        return null;
+      }
 
-      // Transform to TraceContextData format
-      const traceSpans = createTraceSpans(processedSpans);
+      const spans = await getTraceStore().getSpans(traceId, spanOptions);
+      if (spans.length === 0) {
+        return null;
+      }
+
+      const traceSpans = createTraceSpans(spans);
       const insights = deriveInsights(traceSpans);
 
       logger.debug(
@@ -400,28 +448,35 @@ async function fetchFromExternalProvider(
         fetchedAt: result.fetchedAt,
       };
     } catch (error) {
-      if (fetchOptions.abortSignal?.aborted) {
-        throw new Error('cancelled by user');
+      if (abortSignal?.aborted) {
+        throw createTraceAbortError(abortSignal);
       }
       logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
       if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
         return null;
       }
-      await waitForRetry(attempt === 0 ? queryDelay : retryDelayMs, fetchOptions.abortSignal);
+      await waitForRetry(retryDelayMs, abortSignal);
     }
   }
 
   return null;
 }
 
+function createTraceAbortError(signal?: AbortSignal): Error {
+  const error = new Error('cancelled by user') as Error & { cause?: unknown };
+  error.cause = signal?.reason;
+  error.name = 'AbortError';
+  return error;
+}
+
 async function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
-    throw new Error('cancelled by user');
+    throw createTraceAbortError(signal);
   }
   await new Promise<void>((resolve, reject) => {
     const onAbort = () => {
       clearTimeout(timeout);
-      reject(new Error('cancelled by user'));
+      reject(createTraceAbortError(signal));
     };
     const timeout = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort);
@@ -454,7 +509,7 @@ async function fetchFromLocalStore(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
-      throw new Error('cancelled by user');
+      throw createTraceAbortError(abortSignal);
     }
     try {
       const spans = await traceStore.getSpans(traceId, spanOptions);
@@ -500,7 +555,7 @@ async function fetchFromLocalStore(
       return context;
     } catch (error) {
       if (abortSignal?.aborted) {
-        throw new Error('cancelled by user');
+        throw createTraceAbortError(abortSignal);
       }
       logger.error(`[TraceContext] Failed to fetch spans for trace ${traceId}: ${error}`);
       if (attempt === maxRetries) {

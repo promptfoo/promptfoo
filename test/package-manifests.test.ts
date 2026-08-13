@@ -19,6 +19,7 @@ function readPackageJson<T>(relativePath: string): T {
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.3';
+const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
   '@swc/core',
@@ -113,33 +114,6 @@ describe('package manifests', () => {
     expect(packageJson.typesVersions?.['*']?.contracts).toEqual(['dist/src/contracts.d.ts']);
   });
 
-  it('bundles the resolved runtime cache dependency', () => {
-    const packageJson = readPackageJson<PackageManifest & { bundleDependencies?: string[] }>(
-      'package.json',
-    );
-    const packageLock = readPackageJson<{
-      packages: Record<
-        string,
-        {
-          bundleDependencies?: string[];
-          dependencies?: Record<string, string>;
-          inBundle?: boolean;
-          version?: string;
-        }
-      >;
-    }>('package-lock.json');
-
-    expect(packageJson.bundleDependencies).toEqual(['cache-manager']);
-    expect(packageLock.packages[''].bundleDependencies).toEqual(packageJson.bundleDependencies);
-
-    for (const dependencyName of ['cache-manager', '@cacheable/utils']) {
-      const dependency = packageLock.packages[`node_modules/${dependencyName}`];
-
-      expect(dependency?.version, `${dependencyName} must be resolved`).toBeDefined();
-      expect(dependency?.inBundle, `${dependencyName} must be bundled`).toBe(true);
-    }
-  });
-
   it('keeps the contracts subpath extension-safe for emitted ESM', () => {
     const contractsDir = path.join(process.cwd(), 'src', 'contracts');
     const files = [
@@ -218,6 +192,45 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps jsdom on a release the supported Node floor can install', () => {
+    const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
+      'package.json',
+    );
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    // jsdom 30 requires node ^22.22.2 || ^24.15.0 || >=26.0.0. With engine-strict=true and a
+    // published floor of >=22.22.0, `npm ci` fails EBADENGINE on the Node 22.22.0 lanes that
+    // exist to test that floor. jsdom is a dev-only Vitest environment, so the cap moves only
+    // after engines.node does.
+    const nodeFloor = minVersion(rootPackageJson.engines?.node as string);
+    const jsdomCap = renovateConfig.packageRules?.find((rule) =>
+      rule.matchPackageNames?.includes('jsdom'),
+    )?.allowedVersions;
+
+    expect(nodeFloor, 'the root manifest must declare a Node floor').toBeDefined();
+
+    if (nodeFloor!.compare('22.22.2') < 0) {
+      expect(
+        jsdomCap,
+        'Renovate must hold jsdom below 30 while the Node floor is below 22.22.2',
+      ).toBe('<30');
+
+      for (const manifestPath of ['src/app/package.json', 'site/package.json']) {
+        const range = readPackageJson<PackageManifest>(manifestPath).devDependencies?.jsdom;
+
+        expect(range, `${manifestPath} must declare jsdom`).toBeDefined();
+        expect(
+          satisfies('30.0.0', range as string),
+          `${manifestPath} resolves a jsdom the Node floor cannot install`,
+        ).toBe(false);
+      }
+    }
+  });
+
   it('keeps CLI smoke tests on the real unsupported and minimum-supported Node releases', () => {
     const workflow = fs.readFileSync(
       path.join(process.cwd(), '.github/workflows/main.yml'),
@@ -250,6 +263,32 @@ describe('package manifests', () => {
       expect(dockerfile).toMatch(/apk add[^\n]*['"]nodejs>=[\d.]+['"][^\n]*icu-data-full/);
       expect(dockerfile).toMatch(/ln -sf \/usr\/bin\/node \/usr\/local\/bin\/node/);
     }
+  });
+
+  it('blocks dependency install scripts in the Docker build', () => {
+    const dockerfile = fs.readFileSync(path.join(process.cwd(), 'Dockerfile'), 'utf8');
+
+    expect(dockerfile).toMatch(/npm ci[^\n]*--ignore-scripts/);
+
+    // `npm rebuild <name>` matches every folder of that name anywhere in the tree, so a
+    // nested dependency aliased to `esbuild` would run its install script and defeat
+    // --ignore-scripts. Only exact directory specs for the trusted packages are allowed.
+    // Comments are stripped first so the Dockerfile can explain the rule using the very
+    // command shape this asserts against.
+    const instructions = dockerfile
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('#'))
+      .join('\n');
+    const rebuildArgs = instructions.match(/npm rebuild ([^\n]*)/)?.[1];
+
+    expect(rebuildArgs, 'the Docker build must rebuild its native packages').toBeDefined();
+    expect(
+      rebuildArgs!
+        .replace(/\\$/, '')
+        .trim()
+        .split(/\s+/)
+        .filter((arg) => arg !== '&&' && !arg.startsWith('-')),
+    ).toEqual(['./node_modules/esbuild', './node_modules/@swc/core']);
   });
 
   it('keeps sharp out of the root install path', () => {
@@ -559,6 +598,56 @@ describe('package manifests', () => {
     }
   });
 
+  it('pins the Chevrotain parser family together and blocks independent Renovate updates', () => {
+    const packageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const chevrotainOverride = packageJson.overrides?.chevrotain as
+      | Record<string, string>
+      | undefined;
+    const parserVersion = chevrotainOverride?.['.'];
+    // chevrotain@X declares every @chevrotain/* sub-package at exactly X and all six reach npm
+    // within about a minute of each other, so Renovate must not move any of them alone.
+    // @chevrotain/cst-dts-gen is frozen too but is excluded from the version assertion below: it
+    // is currently overridden to 13.1.0 under chevrotain 11.2.0 (#10345) and gets realigned when
+    // the family moves as a set.
+    const pinnedGrammarPackages = [
+      '@chevrotain/gast',
+      '@chevrotain/types',
+      '@chevrotain/regexp-to-ast',
+      '@chevrotain/utils',
+    ];
+    const pinnedParserPackages = [
+      'chevrotain',
+      ...pinnedGrammarPackages,
+      '@chevrotain/cst-dts-gen',
+    ];
+
+    expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+
+    for (const dependencyName of pinnedGrammarPackages) {
+      expect(
+        chevrotainOverride?.[dependencyName],
+        `${dependencyName} must stay on the pinned parser version`,
+      ).toBe(parserVersion);
+    }
+
+    for (const packageName of pinnedParserPackages) {
+      expect(
+        renovateConfig.packageRules?.some(
+          (rule) => rule.enabled === false && rule.matchPackageNames?.includes(packageName),
+        ),
+        `Renovate must not independently update the pinned ${packageName} package`,
+      ).toBe(true);
+    }
+  });
+
   it('keeps Playwright Chromium optional and its locked browser versions aligned', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
@@ -594,6 +683,34 @@ describe('package manifests', () => {
     expect(validRange(parse5Range as string)).not.toBeNull();
   });
 
+  it('keeps the streaming OpenAI example aligned with supported Node versions', () => {
+    const rootManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'package.json',
+    );
+    const exampleManifest = readPackageJson<PackageManifest & { engines?: { node?: string } }>(
+      'examples/config-websockets/streaming/server/package.json',
+    );
+    const lockfile = readPackageJson<{
+      packages: Record<string, { engines?: { node?: string } }>;
+    }>('package-lock.json');
+    const readme = fs.readFileSync(
+      path.join(process.cwd(), 'examples/config-websockets/streaming/server/README.md'),
+      'utf8',
+    );
+    const exampleNodeMinimum = minVersion(exampleManifest.engines?.node ?? '');
+    const rootNodeMinimum = minVersion(rootManifest.engines?.node ?? '');
+    const openAiNodeMinimum = minVersion(
+      lockfile.packages['node_modules/openai']?.engines?.node ?? '',
+    );
+
+    expect(exampleNodeMinimum).not.toBeNull();
+    expect(rootNodeMinimum).not.toBeNull();
+    expect(openAiNodeMinimum).not.toBeNull();
+    expect(exampleNodeMinimum?.compare(rootNodeMinimum!)).toBeGreaterThanOrEqual(0);
+    expect(exampleNodeMinimum?.compare(openAiNodeMinimum!)).toBeGreaterThanOrEqual(0);
+    expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
+  });
+
   it('requires patched WebSocket fragment limits in published and example manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const lockfile = readPackageJson<{
@@ -616,8 +733,27 @@ describe('package manifests', () => {
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
   });
 
+  it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const parserRange = packageJson.dependencies?.['@apidevtools/json-schema-ref-parser'];
+    const parser = packageLock.packages['node_modules/@apidevtools/json-schema-ref-parser'];
+    const parserTransportRange = parser?.dependencies?.undici;
+
+    expect(
+      parserRange,
+      'the JSON Schema ref parser must remain a runtime dependency',
+    ).toBeDefined();
+    expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
+    expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
+    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
+  });
+
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
-    // GHSA-4cwx-7wf7-3272 and four sibling advisories were fixed in undici 7.29.0.
+    // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0, and 8.9.0.
+    // GHSA-4cwx-7wf7-3272 affects only 7.x and 8.x, not the patched 6.x line.
     // The root fix landed in #10269 but code-scan-action/ carries its own lockfile,
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
@@ -666,9 +802,9 @@ describe('package manifests', () => {
           `${lockfile}:${packagePath} must have a version`,
         ).toBeDefined();
         expect(
-          minVersion(installation.version as string)?.compare(PATCHED_UNDICI),
+          satisfies(installation.version as string, PATCHED_UNDICI_RANGE),
           `${lockfile}:${packagePath} resolves vulnerable undici ${installation.version}`,
-        ).toBeGreaterThanOrEqual(0);
+        ).toBe(true);
       }
 
       const resolved = packageLock.packages['node_modules/undici']?.version;

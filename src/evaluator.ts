@@ -50,6 +50,7 @@ import {
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import { isExternalTraceProvider } from './tracing/providers';
+import { withTestCaseSpan, withTracedProviderCall } from './tracing/targetTracer';
 import { fetchTraceContext } from './tracing/traceContext';
 import { isCliEventSource } from './types/eventSource';
 import {
@@ -860,6 +861,8 @@ async function callProviderForRunEval({
   renderedPrompt,
   repeatIndex,
   test,
+  testIndex,
+  testSuite,
   traceContext,
   vars,
 }: Pick<
@@ -871,63 +874,165 @@ async function callProviderForRunEval({
   | 'rateLimitRegistry'
   | 'repeatIndex'
   | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
+  testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
   const startTime = Date.now();
-  const response = test.providerOutput
-    ? {
+  let response: ProviderResponse | undefined;
+  let providerInvoked = false;
+  let providerFailed = false;
+
+  try {
+    if (test.providerOutput) {
+      response = {
         output: test.providerOutput,
         tokenUsage: createEmptyTokenUsage(),
         cost: 0,
         cached: false,
-      }
-    : await callActiveProvider({
+      };
+    } else {
+      response = await callActiveProvider({
         abortSignal,
         evalId,
         filters,
+        onProviderInvoked: () => {
+          providerInvoked = true;
+        },
         promptForRender,
         provider,
         rateLimitRegistry,
         renderedPrompt,
         repeatIndex,
         test,
+        testIndex,
+        testSuite,
         traceContext,
         vars,
       });
+    }
 
-  sanitizeResponseMetadata(response);
+    sanitizeResponseMetadata(response);
 
-  return {
-    latencyMs: Date.now() - startTime,
-    response,
-    traceContext,
-  };
+    return {
+      latencyMs: Date.now() - startTime,
+      response,
+      traceContext,
+    };
+  } catch (error) {
+    providerFailed = true;
+    throw error;
+  } finally {
+    if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
+      await collectExternalTraceAfterProviderCall({
+        abortSignal,
+        providerFailed,
+        response,
+        test,
+        testSuite,
+        traceContext,
+      });
+    }
+  }
+}
+
+async function collectExternalTraceAfterProviderCall({
+  abortSignal,
+  providerFailed,
+  response,
+  test,
+  testSuite,
+  traceContext,
+}: {
+  abortSignal?: AbortSignal;
+  providerFailed: boolean;
+  response?: ProviderResponse;
+  test: AtomicTestCase;
+  testSuite?: TestSuite;
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
+}): Promise<void> {
+  const traceId = getTraceId(traceContext);
+  if (!traceId || abortSignal?.aborted) {
+    return;
+  }
+
+  if (response?.cached) {
+    logger.debug(
+      `[Evaluator] Skipping external trace fetch for cached response traceId=${traceId}`,
+    );
+    return;
+  }
+
+  const tracingConfig = testSuite?.tracing;
+  const needsTraceForGrading =
+    !providerFailed &&
+    !response?.error &&
+    response?.output !== null &&
+    response?.output !== undefined &&
+    hasTraceAwareAssertions(test.assert);
+
+  try {
+    if (needsTraceForGrading) {
+      await flushOtel();
+    }
+
+    logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
+    const trace = await fetchTraceContext(traceId, {
+      providerConfig: tracingConfig?.provider,
+      queryDelay: tracingConfig?.queryDelay,
+      maxRetries: needsTraceForGrading ? 5 : 0,
+      retryDelayMs: 1000,
+      includeInternalSpans: true,
+      sanitizeAttributes: true,
+      redactAttributes: tracingConfig?.otlp?.http?.redactAttributes,
+      abortSignal,
+    });
+
+    if (trace) {
+      logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
+    } else {
+      logger.debug(`[Evaluator] No external traces found for traceId=${traceId}`);
+    }
+  } catch (error) {
+    if (abortSignal?.aborted) {
+      if (!providerFailed) {
+        throw error;
+      }
+      return;
+    }
+    logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
+  }
 }
 
 async function callActiveProvider({
   abortSignal,
   evalId,
   filters,
+  onProviderInvoked,
   promptForRender,
   provider,
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
   test,
+  testIndex,
+  testSuite,
   traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
+  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
+  onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
+  testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
@@ -945,12 +1050,31 @@ async function callActiveProvider({
     promptForRender,
     repeatIndex,
     test,
+    testIndex,
     traceContext,
     vars,
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
 
-  const callApi = () => activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+  const callApi = () => {
+    onProviderInvoked();
+    const invoke = () =>
+      traceContext?.traceparent
+        ? withTracedProviderCall(
+            {
+              provider: activeProvider,
+              callContext: callApiContext,
+              promptLabel: promptForRender.label,
+              evalId: callApiContext.evaluationId,
+              testIndex,
+            },
+            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+          )
+        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+    return testSuite?.tracing
+      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+      : invoke();
+  };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
@@ -967,6 +1091,7 @@ function buildCallApiContext({
   promptForRender,
   repeatIndex,
   test,
+  testIndex,
   traceContext,
   vars,
 }: {
@@ -976,6 +1101,7 @@ function buildCallApiContext({
   promptForRender: Prompt;
   repeatIndex: number;
   test: AtomicTestCase;
+  testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -988,6 +1114,7 @@ function buildCallApiContext({
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
+    testIdx: testIndex,
   };
 
   if (evalId) {
@@ -1256,30 +1383,12 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
-  if (traceId && hasTraceAwareAssertions(test.assert)) {
+  if (
+    traceId &&
+    hasTraceAwareAssertions(test.assert) &&
+    !isExternalTraceProvider(testSuite?.tracing?.provider)
+  ) {
     await flushOtel();
-  }
-  const tracingConfig = testSuite?.tracing;
-  if (traceId && isExternalTraceProvider(tracingConfig?.provider)) {
-    try {
-      logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
-      await fetchTraceContext(traceId, {
-        providerConfig: tracingConfig?.provider,
-        queryDelay: tracingConfig?.queryDelay,
-        maxRetries: hasTraceAwareAssertions(test.assert) ? 5 : 0,
-        retryDelayMs: 1000,
-        includeInternalSpans: true,
-        sanitizeAttributes: true,
-        redactAttributes: tracingConfig?.otlp?.http?.redactAttributes,
-        abortSignal,
-      });
-      logger.debug(`[Evaluator] Successfully fetched traces for traceId=${traceId}`);
-    } catch (error) {
-      if (abortSignal?.aborted) {
-        throw error;
-      }
-      logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
-    }
   }
 
   const assertionProviderResponse = {
@@ -1518,99 +1627,115 @@ async function runEvalInternal({
           testIndex,
           promptIndex,
           testSuite,
+          {
+            providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
+            promptLabel: state.promptForRender.label,
+            repeatIndex,
+          },
         );
-    const providerCall = await callProviderForRunEval({
-      abortSignal,
-      evalId,
-      filters,
-      promptForRender: {
-        ...state.promptForRender,
-        config: rendered.setup.prompt.config,
-      },
-      provider,
-      rateLimitRegistry,
-      renderedPrompt: rendered.renderedPrompt,
-      repeatIndex,
-      test,
-      traceContext,
-      vars: state.vars,
-    });
-    const { response } = providerCall;
-    latencyMs = providerCall.latencyMs;
+    const executionTraceContext = traceContext;
+    const runExecution = () =>
+      withTestCaseSpan(
+        executionTraceContext?.rootSpan,
+        async () => {
+          const providerCall = await callProviderForRunEval({
+            abortSignal,
+            evalId,
+            filters,
+            promptForRender: {
+              ...state.promptForRender,
+              config: rendered.setup.prompt.config,
+            },
+            provider,
+            rateLimitRegistry,
+            renderedPrompt: rendered.renderedPrompt,
+            repeatIndex,
+            test,
+            testIndex,
+            testSuite,
+            traceContext: executionTraceContext,
+            vars: state.vars,
+          });
+          const { response } = providerCall;
+          latencyMs = providerCall.latencyMs;
 
-    updateConversationHistory({
-      conversationKey: state.conversationKey,
-      conversations,
-      renderedJson: rendered.renderedJson,
-      renderedPrompt: rendered.renderedPrompt,
-      response,
-    });
+          updateConversationHistory({
+            conversationKey: state.conversationKey,
+            conversations,
+            renderedJson: rendered.renderedJson,
+            renderedPrompt: rendered.renderedPrompt,
+            response,
+          });
 
-    logger.debug('Evaluator response', {
-      responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-    });
-    logger.debug(
-      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-    );
+          logger.debug('Evaluator response', {
+            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+          });
+          logger.debug(
+            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+          );
 
-    await applyProviderDelayIfNeeded(provider, response);
+          await applyProviderDelayIfNeeded(provider, response);
 
-    // The __eval* runtime vars were exposed to prompt/provider rendering above.
-    // Build a copy without them for the persisted result, assertions, and
-    // graders. state.vars itself is left intact — it is shared by reference
-    // with the provider call context.
-    const persistedVars = omitEvalRuntimeVars(state.vars);
+          // The __eval* runtime vars were exposed to prompt/provider rendering above.
+          // Build a copy without them for the persisted result, assertions, and
+          // graders. state.vars itself is left intact — it is shared by reference
+          // with the provider call context.
+          const persistedVars = omitEvalRuntimeVars(state.vars);
 
-    const ret = createEvaluateResult({
-      fileMetadata: state.fileMetadata,
-      latencyMs,
-      prompt,
-      promptIdx: promptIndex,
-      rendered,
-      response,
-      setup,
-      test,
-      testIdx: testIndex,
-      traceContext,
-      evalId,
-      vars: persistedVars,
-    });
+          const ret = createEvaluateResult({
+            fileMetadata: state.fileMetadata,
+            latencyMs,
+            prompt,
+            promptIdx: promptIndex,
+            rendered,
+            response,
+            setup,
+            test,
+            testIdx: testIndex,
+            traceContext: executionTraceContext,
+            evalId,
+            vars: persistedVars,
+          });
 
-    invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+          invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-    trackProviderUsage(provider, response);
-    await applyRunEvalResponseOutcome({
-      abortSignal,
-      deferGrading,
-      evalId,
-      isRedteam,
-      latencyMs,
-      prompt,
-      promptIdx: promptIndex,
-      provider,
-      providerCallQueue,
-      rateLimitRegistry,
-      renderedPrompt: rendered.renderedPrompt,
-      response,
-      ret,
-      test,
-      testIdx: testIndex,
-      testSuite,
-      traceContext,
-      vars: persistedVars,
-    });
+          trackProviderUsage(provider, response);
+          await applyRunEvalResponseOutcome({
+            abortSignal,
+            deferGrading,
+            evalId,
+            isRedteam,
+            latencyMs,
+            prompt,
+            promptIdx: promptIndex,
+            provider,
+            providerCallQueue,
+            rateLimitRegistry,
+            renderedPrompt: rendered.renderedPrompt,
+            response,
+            ret,
+            test,
+            testIdx: testIndex,
+            testSuite,
+            traceContext: executionTraceContext,
+            vars: persistedVars,
+          });
 
-    // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsage(ret.tokenUsage, response);
-    }
+          // Update token usage stats
+          if (response.tokenUsage) {
+            accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
 
-    if (test.options?.storeOutputAs && ret.response?.output && registers) {
-      // Save the output in a register for later use
-      registers[test.options.storeOutputAs] = ret.response.output;
-    }
+          if (test.options?.storeOutputAs && ret.response?.output && registers) {
+            // Save the output in a register for later use
+            registers[test.options.storeOutputAs] = ret.response.output;
+          }
 
-    return [ret];
+          return [ret];
+        },
+        (rows) => deferredGradingPromises.get(rows[0]),
+      );
+    return await runExecution();
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
@@ -4930,7 +5055,11 @@ export function evaluate<
 ): Promise<TEvaluation> {
   const resolvedRuntime =
     runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+  const runtimeTestSuite =
+    resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+    nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+    testSuite;
   const store = resolvedRuntime.createEvaluationStore(evalRecord);
-  const ev = new Evaluator(testSuite, store, options, resolvedRuntime);
+  const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
   return ev.evaluate();
 }

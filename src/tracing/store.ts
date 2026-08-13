@@ -3,6 +3,7 @@ import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 
 import type { TraceData } from '../types/tracing';
 
@@ -109,19 +110,6 @@ function computeDepth(
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
-}
-
-function deriveSpanKind(span: SpanData): string {
-  const attributes = span.attributes || {};
-  const attributeKind = (attributes['span.kind'] ||
-    attributes['otel.span.kind'] ||
-    attributes['spanKind']) as string | undefined;
-
-  if (typeof attributeKind === 'string') {
-    return attributeKind.toLowerCase();
-  }
-
-  return 'internal';
 }
 
 export class TraceStore {
@@ -378,7 +366,7 @@ export class TraceStore {
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
-        .orderBy(asc(spansTable.startTime));
+        .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
@@ -401,22 +389,18 @@ export class TraceStore {
           statusMessage: row.statusMessage ?? undefined,
         };
 
-        const spanKind = deriveSpanKind({
-          ...spanData,
-          attributes: rawAttributes,
-        });
+        const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (!includeInternalSpans && spanKind === 'internal') {
+        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
           continue;
         }
 
-        if (spanFilter && spanFilter.length > 0) {
-          const matchesFilter = spanFilter.some((filterName) =>
-            spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-          );
-          if (!matchesFilter) {
-            continue;
-          }
+        if (
+          !includeInternalSpans &&
+          !hasExplicitFilter &&
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+        ) {
+          continue;
         }
 
         spanMap.set(spanData.spanId, spanData);

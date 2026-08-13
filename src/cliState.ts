@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setEnvOverridesProvider } from './envOverrides';
 
-import type { UnifiedConfig } from './types/index';
+import type { TestSuite, UnifiedConfig } from './types/index';
 
 interface CliState {
   basePath?: string;
@@ -50,11 +50,19 @@ interface CliState {
 
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
+  readonly requestTracingConfig?: TestSuite['tracing'];
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withRequestTracingConfig<T>(
+    tracingConfig: NonNullable<TestSuite['tracing']>,
+    fn: () => Promise<T>,
+  ): Promise<T>;
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const requestTracingConfigContext = new AsyncLocalStorage<{
+  tracingConfig: NonNullable<TestSuite['tracing']>;
+}>();
 let globalMaxConcurrency: number | undefined;
 
 const state: CliState = {
@@ -75,6 +83,15 @@ const state: CliState = {
   },
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
+  },
+  get requestTracingConfig() {
+    return requestTracingConfigContext.getStore()?.tracingConfig;
+  },
+  withRequestTracingConfig<T>(
+    tracingConfig: NonNullable<TestSuite['tracing']>,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    return requestTracingConfigContext.run({ tracingConfig }, fn);
   },
 };
 

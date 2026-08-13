@@ -44,7 +44,13 @@ interface TempoTraceResponse {
 
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
+const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
+const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
+const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
+const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
+const TRACE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 function nanoToMs(value: string): number {
   const milliseconds = BigInt(value) / 1_000_000n;
@@ -88,14 +94,54 @@ function attributesToRecord(
   );
 }
 
-function decodeId(id: string | undefined): string | undefined {
+function decodeSpanId(id: string | undefined): string | undefined {
   if (!id) {
     return undefined;
   }
-  if (/^[0-9a-f]+$/i.test(id)) {
-    return id.toLowerCase();
+
+  if (SPAN_ID_PATTERN.test(id)) {
+    return /^0+$/.test(id) ? undefined : id.toLowerCase();
   }
-  return Buffer.from(id, 'base64').toString('hex').toLowerCase();
+
+  if (!BASE64_SPAN_ID_PATTERN.test(id)) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(id, 'base64');
+  if (
+    decoded.length !== 8 ||
+    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
+  ) {
+    return undefined;
+  }
+
+  const spanId = decoded.toString('hex');
+  return /^0+$/.test(spanId) ? undefined : spanId;
+}
+
+function decodeTraceId(id: string | undefined): string | undefined {
+  if (!id) {
+    return undefined;
+  }
+
+  if (TRACE_ID_PATTERN.test(id)) {
+    return /^0+$/.test(id) ? undefined : id.toLowerCase();
+  }
+
+  if (!BASE64_TRACE_ID_PATTERN.test(id)) {
+    return undefined;
+  }
+
+  const decoded = Buffer.from(id, 'base64');
+  if (
+    decoded.length !== 16 ||
+    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
+  ) {
+    return undefined;
+  }
+
+  const traceId = decoded.toString('hex');
+  return /^0+$/.test(traceId) ? undefined : traceId;
 }
 
 function normalizeStatusCode(code: number | string | undefined): number | undefined {
@@ -124,38 +170,54 @@ function normalizeStatusCode(code: number | string | undefined): number | undefi
   }
 }
 
-function matchesSpanFilter(name: string, patterns: string[]): boolean {
-  return patterns.some((pattern) => {
-    const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-    return new RegExp(`^${escaped.replace(/\*/g, '.*').replace(/\\\?/g, '.')}$`, 'i').test(name);
-  });
-}
-
 function transformSpan(
   span: TempoSpan,
+  traceId: string,
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
-  options?: FetchTraceOptions,
 ): SpanData | null {
-  const startTime = nanoToMs(span.startTimeUnixNano);
-  if (options?.earliestStartTime !== undefined && startTime < options.earliestStartTime) {
-    return null;
+  if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
+    throw new Error('Span trace ID must match the requested trace');
   }
-  if (options?.spanFilter?.length && !matchesSpanFilter(span.name, options.spanFilter)) {
-    return null;
+
+  const spanId = decodeSpanId(span.spanId);
+  if (!spanId) {
+    throw new Error('Span ID must be a valid nonzero eight-byte identifier');
+  }
+
+  const parentSpanId = decodeSpanId(span.parentSpanId);
+  if (span.parentSpanId && !parentSpanId) {
+    throw new Error('Parent span ID must be a valid nonzero eight-byte identifier');
+  }
+
+  if (typeof span.name !== 'string' || span.name.trim().length === 0) {
+    throw new Error('Span name must be a nonempty string');
+  }
+  if (span.status?.message !== undefined && typeof span.status.message !== 'string') {
+    throw new Error('Span status message must be a string');
+  }
+
+  const startTime = nanoToMs(span.startTimeUnixNano);
+  const endTimeUnixNano = span.endTimeUnixNano;
+  const endTime = endTimeUnixNano ? nanoToMs(endTimeUnixNano) : undefined;
+  if (endTimeUnixNano && BigInt(endTimeUnixNano) < BigInt(span.startTimeUnixNano)) {
+    throw new Error('Span end time must not precede its start time');
   }
 
   return {
-    spanId: decodeId(span.spanId) ?? span.spanId,
-    parentSpanId: decodeId(span.parentSpanId),
+    spanId,
+    parentSpanId,
     name: span.name,
     startTime,
-    endTime: span.endTimeUnixNano ? nanoToMs(span.endTimeUnixNano) : undefined,
+    endTime,
     attributes: {
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
       ...(scopeName && { 'otel.scope.name': scopeName }),
-      ...(typeof span.kind === 'number' && { 'otel.span.kind_code': span.kind }),
+      ...(typeof span.kind === 'number' && {
+        'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',
+        'otel.span.kind_code': span.kind,
+      }),
       ...(typeof span.kind === 'string' && {
         'otel.span.kind': span.kind.replace(/^SPAN_KIND_/i, '').toLowerCase(),
       }),
@@ -163,6 +225,39 @@ function transformSpan(
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
   };
+}
+
+async function releaseResponse(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch (error) {
+    logger.debug(`[TempoProvider] Failed to release response body: ${error}`);
+  }
+}
+
+async function readLimitedResponse(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return '';
+  }
+
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let body = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return body + decoder.decode();
+    }
+
+    byteLength += value.byteLength;
+    if (byteLength > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+    }
+    body += decoder.decode(value, { stream: true });
+  }
 }
 
 export class TempoProvider implements TraceProvider {
@@ -180,12 +275,24 @@ export class TempoProvider implements TraceProvider {
     } catch {
       throw new Error('Tempo provider endpoint must be a valid HTTP or HTTPS URL');
     }
+    const hasCredentialPath = endpoint.pathname.split('/').some((segment) => {
+      try {
+        return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+      } catch {
+        return true;
+      }
+    });
     if (
       !['http:', 'https:'].includes(endpoint.protocol) ||
       endpoint.username ||
-      endpoint.password
+      endpoint.password ||
+      endpoint.search ||
+      endpoint.hash ||
+      hasCredentialPath
     ) {
-      throw new Error('Tempo provider endpoint must be an HTTP or HTTPS URL without credentials');
+      throw new Error(
+        'Tempo provider endpoint must be an HTTP or HTTPS URL without credentials, query parameters, or fragments',
+      );
     }
     if (
       config.timeout !== undefined &&
@@ -197,10 +304,20 @@ export class TempoProvider implements TraceProvider {
   }
 
   private buildHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      ...this.config.headers,
-    };
+    const headers: Record<string, string> = { ...this.config.headers };
+    const hasConfiguredAuthentication = Boolean(
+      this.config.auth?.token || (this.config.auth?.username && this.config.auth?.password),
+    );
+    for (const header of Object.keys(headers)) {
+      const normalizedHeader = header.toLowerCase();
+      if (
+        normalizedHeader === 'accept' ||
+        (hasConfiguredAuthentication && normalizedHeader === 'authorization')
+      ) {
+        delete headers[header];
+      }
+    }
+    headers.Accept = 'application/json';
     if (this.config.auth?.token) {
       headers.Authorization = `Bearer ${this.config.auth.token}`;
     } else if (this.config.auth?.username && this.config.auth?.password) {
@@ -212,33 +329,49 @@ export class TempoProvider implements TraceProvider {
     return headers;
   }
 
-  private transformSpans(data: TempoTraceResponse, options?: FetchTraceOptions): SpanData[] {
+  private transformSpans(data: TempoTraceResponse, traceId: string): SpanData[] {
     const spans: SpanData[] = [];
-    const limit = Math.min(options?.maxSpans ?? MAX_SPANS, MAX_SPANS);
+    const seenSpanIds = new Set<string>();
+    let malformedSpans = 0;
 
     for (const batch of data.batches ?? []) {
+      if (!batch || !Array.isArray(batch.scopeSpans)) {
+        malformedSpans++;
+        continue;
+      }
       const resourceAttributes = attributesToRecord(batch.resource?.attributes);
-      for (const scopeSpan of batch.scopeSpans ?? []) {
-        for (const span of scopeSpan.spans ?? []) {
-          if (spans.length >= limit) {
+      for (const scopeSpan of batch.scopeSpans) {
+        if (!scopeSpan || !Array.isArray(scopeSpan.spans)) {
+          malformedSpans++;
+          continue;
+        }
+        for (const span of scopeSpan.spans) {
+          if (spans.length >= MAX_SPANS) {
             return spans;
           }
+
           try {
             const normalizedSpan = transformSpan(
               span,
+              traceId,
               resourceAttributes,
               scopeSpan.scope?.name,
-              options,
             );
-            if (normalizedSpan) {
+            if (normalizedSpan && !seenSpanIds.has(normalizedSpan.spanId)) {
+              seenSpanIds.add(normalizedSpan.spanId);
               spans.push(normalizedSpan);
             }
-          } catch (error) {
-            logger.warn(`[TempoProvider] Skipping malformed span: ${error}`);
+          } catch {
+            malformedSpans++;
           }
         }
       }
     }
+
+    if (malformedSpans > 0) {
+      logger.warn(`[TempoProvider] Skipped ${malformedSpans} malformed spans`);
+    }
+
     return spans;
   }
 
@@ -252,37 +385,40 @@ export class TempoProvider implements TraceProvider {
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
     const response = await fetchWithProxy(`${this.baseUrl}/api/traces/${traceId}`, {
+      disableTransientRetries: true,
       method: 'GET',
       headers: this.buildHeaders(),
+      redirect: 'error',
       signal,
     });
 
     if (response.status === 404) {
+      await releaseResponse(response);
       return null;
     }
     if (!response.ok) {
+      await releaseResponse(response);
       throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
         statusCode: response.status,
-        retryable: response.status === 429 || response.status >= 500,
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
       });
     }
 
     const contentLength = Number(response.headers.get('content-length'));
     if (contentLength > MAX_RESPONSE_BYTES) {
+      await releaseResponse(response);
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
-    }
+    const body = await readLimitedResponse(response);
     const data = JSON.parse(body) as TempoTraceResponse;
     if (!Array.isArray(data.batches)) {
       throw new TraceProviderError('Tempo returned an invalid trace response');
     }
 
+    const spans = this.transformSpans(data, traceId);
     const services = new Set<string>();
-    for (const batch of data.batches) {
-      const service = attributesToRecord(batch.resource?.attributes)['service.name'];
+    for (const span of spans) {
+      const service = span.attributes?.['service.name'];
       if (typeof service === 'string') {
         services.add(service);
       }
@@ -290,7 +426,7 @@ export class TempoProvider implements TraceProvider {
 
     return {
       traceId,
-      spans: this.transformSpans(data, options),
+      spans,
       services: [...services],
       fetchedAt: Date.now(),
     };
@@ -300,8 +436,10 @@ export class TempoProvider implements TraceProvider {
     try {
       const response = await fetchWithProxy(`${this.baseUrl}/ready`, {
         headers: this.buildHeaders(),
+        redirect: 'error',
         signal: AbortSignal.timeout(5_000),
       });
+      await releaseResponse(response);
       return response.ok;
     } catch {
       return false;

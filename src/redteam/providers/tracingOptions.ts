@@ -135,7 +135,7 @@ export function resolveTracingOptions({
   );
 
   // Read provider and queryDelay from root tracing config (not redteam config)
-  const rootTracingConfig = cliState.config?.tracing as
+  const rootTracingConfig = (cliState.requestTracingConfig ?? cliState.config?.tracing) as
     | {
         provider?: TraceProviderConfig;
         queryDelay?: number;

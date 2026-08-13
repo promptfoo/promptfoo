@@ -1033,10 +1033,27 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const TRACE_CREDENTIAL_PATH_SEGMENT =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
+
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
-  return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password;
-}, 'Trace provider endpoint must use HTTP or HTTPS without embedded credentials');
+  const hasCredentialPath = url.pathname.split('/').some((segment) => {
+    try {
+      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+    } catch {
+      return true;
+    }
+  });
+  return (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    !hasCredentialPath
+  );
+}, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments');
 
 const TraceProviderAuthSchema = z
   .object({
