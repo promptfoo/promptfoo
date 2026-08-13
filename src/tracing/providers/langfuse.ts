@@ -243,6 +243,14 @@ function getNextPage(response: LangfuseObservationsResponse): number | undefined
     return undefined;
   }
   if (
+    page === 1 &&
+    totalPages === 0 &&
+    Array.isArray(response.data) &&
+    response.data.length === 0
+  ) {
+    return undefined;
+  }
+  if (
     typeof page !== 'number' ||
     !Number.isSafeInteger(page) ||
     page < 1 ||
@@ -300,6 +308,7 @@ export class LangfuseProvider implements TraceProvider {
 
     const normalizedTraceId = traceId.toLowerCase();
     const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
+    const pageSize = Math.min(maxSpans, MAX_PAGE_SIZE);
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
     const signal = options?.abortSignal
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
@@ -315,7 +324,7 @@ export class LangfuseProvider implements TraceProvider {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
       url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
-      url.searchParams.set('limit', String(Math.min(maxSpans - spans.length, MAX_PAGE_SIZE)));
+      url.searchParams.set('limit', String(pageSize));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
       }

@@ -249,6 +249,28 @@ describe('LangfuseProvider', () => {
     expect(new URL(String(mockedFetch.mock.calls[1][0])).searchParams.get('page')).toBe('2');
   });
 
+  it('keeps a stable page size while fetching a partial final page', async () => {
+    const firstPage = Array.from({ length: 1_000 }, (_, index) => ({
+      ...observations[0],
+      id: `span-${index}`,
+    }));
+    mockedFetch
+      .mockResolvedValueOnce(response({ data: firstPage, meta: { page: 1, totalPages: 2 } }))
+      .mockResolvedValueOnce(
+        response({
+          data: [{ ...observations[0], id: 'span-1000' }],
+          meta: { page: 2, totalPages: 2 },
+        }),
+      );
+
+    const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID, { maxSpans: 1_001 });
+
+    expect(result?.spans).toHaveLength(1_001);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(new URL(String(mockedFetch.mock.calls[0][0])).searchParams.get('limit')).toBe('1000');
+    expect(new URL(String(mockedFetch.mock.calls[1][0])).searchParams.get('limit')).toBe('1000');
+  });
+
   it('follows pagination cursors and deduplicates observations across pages', async () => {
     mockedFetch
       .mockResolvedValueOnce(response({ data: [observations[0]], meta: { cursor: 'next-page' } }))
@@ -278,6 +300,13 @@ describe('LangfuseProvider', () => {
     mockedFetch.mockResolvedValue(response({ data: [], meta: {} }));
 
     expect(await new LangfuseProvider(config).fetchTrace(TRACE_ID)).toBeNull();
+  });
+
+  it('accepts zero-page pagination metadata for an empty trace lookup', async () => {
+    mockedFetch.mockResolvedValue(response({ data: [], meta: { page: 1, totalPages: 0 } }));
+
+    expect(await new LangfuseProvider(config).fetchTrace(TRACE_ID)).toBeNull();
+    expect(mockedFetch).toHaveBeenCalledOnce();
   });
 
   it('returns null when Langfuse does not recognize the requested endpoint', async () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { BaseTokenUsageSchema } from '../contracts/shared';
+import { BaseTokenUsageSchema, TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/shared';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
@@ -1032,9 +1032,6 @@ export const DerivedMetricSchema = z.object({
   ]),
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
-
-const TRACE_CREDENTIAL_PATH_SEGMENT =
-  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
