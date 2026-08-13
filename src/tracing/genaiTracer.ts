@@ -541,10 +541,14 @@ function buildRequestAttributes(
  * Redacts API keys, secrets, tokens, and other sensitive patterns.
  */
 export function sanitizeBody(body: string): string {
+  const replace = String.prototype.replace as (
+    this: string,
+    pattern: RegExp,
+    replacement: (typeof SENSITIVE_PATTERNS)[number]['replacement'],
+  ) => string;
   let sanitized = body;
   for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
-    // Both replacement types are valid, but TypeScript models them as separate overloads.
-    sanitized = sanitized.replace(pattern, replacement as string);
+    sanitized = replace.call(sanitized, pattern, replacement);
   }
   return sanitized;
 }

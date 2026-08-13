@@ -380,7 +380,7 @@ describe('OpenAI Provider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      expect(result.error).toEqual(expect.stringMatching(/\S/));
+      expect(result.error).toMatch(/^API call error:/);
     });
 
     it('should pass custom headers from config', async () => {
