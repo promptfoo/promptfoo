@@ -474,8 +474,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   // through the Anthropic wire format override this so traces attribute to the
   // actual provider system.
   protected getGenAISystem(): string {
-    const providerId = this.id();
-    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'anthropic';
+    return 'anthropic';
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -520,7 +519,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
       // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,

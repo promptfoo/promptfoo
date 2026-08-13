@@ -80,7 +80,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       topP: this.config.top_p,
       maxTokens: this.config.max_tokens,
       stopSequences: this.config.stop,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,

@@ -30,6 +30,10 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   // Code OAuth session — that would send an Anthropic OAuth token to the
   // Bedrock mantle host.
   static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = false;
+
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(

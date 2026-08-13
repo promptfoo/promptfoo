@@ -865,6 +865,7 @@ async function callProviderForRunEval({
   renderedPrompt,
   repeatIndex,
   test,
+  testIndex,
   testSuite,
   traceContext,
   vars,
@@ -882,6 +883,7 @@ async function callProviderForRunEval({
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
+  testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
@@ -912,6 +914,7 @@ async function callProviderForRunEval({
         renderedPrompt,
         repeatIndex,
         test,
+        testIndex,
         testSuite,
         traceContext,
         vars,
@@ -1021,6 +1024,7 @@ async function callActiveProvider({
   renderedPrompt,
   repeatIndex,
   test,
+  testIndex,
   testSuite,
   traceContext,
   vars,
@@ -1032,6 +1036,7 @@ async function callActiveProvider({
   onProviderInvoked: () => void;
   promptForRender: Prompt;
   renderedPrompt: string;
+  testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
@@ -1049,6 +1054,7 @@ async function callActiveProvider({
     promptForRender,
     repeatIndex,
     test,
+    testIndex,
     traceContext,
     vars,
   });
@@ -1064,7 +1070,7 @@ async function callActiveProvider({
               callContext: callApiContext,
               promptLabel: promptForRender.label,
               evalId: callApiContext.evaluationId,
-              testIndex: test.vars?.__testIdx as number | undefined,
+              testIndex,
             },
             async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
           )
@@ -1089,6 +1095,7 @@ function buildCallApiContext({
   promptForRender,
   repeatIndex,
   test,
+  testIndex,
   traceContext,
   vars,
 }: {
@@ -1098,6 +1105,7 @@ function buildCallApiContext({
   promptForRender: Prompt;
   repeatIndex: number;
   test: AtomicTestCase;
+  testIndex: number;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): CallApiContextParams {
@@ -1110,6 +1118,7 @@ function buildCallApiContext({
     logger: logger as unknown as winston.Logger,
     getCache,
     repeatIndex,
+    testIdx: testIndex,
   };
 
   if (evalId) {
@@ -1623,7 +1632,7 @@ async function runEvalInternal({
           promptIndex,
           testSuite,
           {
-            providerId: provider.id(),
+            providerId: (isApiProvider(test.provider) ? test.provider : provider).id(),
             promptLabel: state.promptForRender.label,
             repeatIndex,
           },
@@ -1646,6 +1655,7 @@ async function runEvalInternal({
             renderedPrompt: rendered.renderedPrompt,
             repeatIndex,
             test,
+            testIndex,
             testSuite,
             traceContext: executionTraceContext,
             vars: state.vars,

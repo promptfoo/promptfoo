@@ -70,6 +70,10 @@ export function getBedrockMantleBaseUrl(region: string): string {
  * uses OpenAI regional-processing rates, which are 10% above first-party rates.
  */
 export class BedrockOpenAiResponsesProvider extends OpenAiResponsesProvider {
+  protected override getGenAISystem(): string {
+    return 'bedrock';
+  }
+
   /**
    * Strip the Bedrock `openai.` prefix so the base provider's GPT-5 / o-series capability
    * detection and the OpenAI billing tables match. The request still sends the real

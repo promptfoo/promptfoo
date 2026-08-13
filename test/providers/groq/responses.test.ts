@@ -37,6 +37,15 @@ describe('GroqResponsesProvider', () => {
       expect(provider['getGenAISystem']()).toBe('groq');
     });
 
+    it('keeps Groq telemetry independent of a customer-defined provider ID', () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        id: 'customer:custom-label',
+      });
+
+      expect(provider.id()).toBe('customer:custom-label');
+      expect(provider['getGenAISystem']()).toBe('groq');
+    });
+
     it('should return correct string representation', () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
       expect(provider.toString()).toBe('[Groq Responses Provider openai/gpt-oss-120b]');

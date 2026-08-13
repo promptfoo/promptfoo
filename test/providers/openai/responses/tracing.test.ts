@@ -69,6 +69,15 @@ const successResponse = {
 };
 
 describe('OpenAiResponsesProvider tracing', () => {
+  it('keeps OpenAI provider identity when a custom ID has an unrelated prefix', () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      id: 'customer:reviewer',
+      config: { apiKey: 'test-key' },
+    });
+
+    expect(provider['getGenAISystem']()).toBe('openai');
+  });
+
   it('emits a chat <model> span with request and response attributes', async () => {
     const spans = installTracerSpy();
     vi.mocked(cache.fetchWithCache).mockResolvedValue({

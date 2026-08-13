@@ -120,6 +120,51 @@ describe('test-case execution trace hierarchy', () => {
     expect(modelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('target');
   });
 
+  it('honors an explicitly selected parent within the active trace', async () => {
+    const root = getGenAITracer().startSpan('test case explicit parent');
+
+    await withTestCaseSpan(root, async () => {
+      await getGenAITracer().startActiveSpan('requested parent', async (requestedParent) => {
+        const parentContext = requestedParent.spanContext();
+        const explicitTraceparent = `00-${parentContext.traceId}-${parentContext.spanId}-01`;
+
+        try {
+          await getGenAITracer().startActiveSpan(
+            'different active parent',
+            async (activeParent) => {
+              try {
+                await withGenAISpan(
+                  {
+                    system: 'openai',
+                    operationName: 'chat',
+                    model: 'gpt-4.1',
+                    providerId: 'openai:gpt-4.1',
+                    traceparent: explicitTraceparent,
+                  },
+                  async () => ({ output: 'done' }),
+                );
+              } finally {
+                activeParent.end();
+              }
+            },
+          );
+        } finally {
+          requestedParent.end();
+        }
+      });
+
+      return [{ score: 1, success: true }];
+    });
+
+    const spans = exporter.getFinishedSpans();
+    const requestedParent = spans.find((span) => span.name === 'requested parent')!;
+    const activeParent = spans.find((span) => span.name === 'different active parent')!;
+    const modelSpan = spans.find((span) => span.name === 'chat gpt-4.1')!;
+
+    expect(modelSpan.parentSpanContext?.spanId).toBe(requestedParent.spanContext().spanId);
+    expect(modelSpan.parentSpanContext?.spanId).not.toBe(activeParent.spanContext().spanId);
+  });
+
   it('parents target and grading branches beneath the same test-case root', async () => {
     const root = getGenAITracer().startSpan('test case shared');
     const targetProvider: ApiProvider = {

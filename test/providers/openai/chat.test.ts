@@ -72,6 +72,12 @@ describe('OpenAI Provider', () => {
       expect(provider['getGenAISystem']()).toBe('openai');
     });
 
+    it('keeps OpenAI provider identity when a custom ID has an unrelated prefix', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', { id: 'customer:judge' });
+
+      expect(provider['getGenAISystem']()).toBe('openai');
+    });
+
     it('should reject a per-prompt Codex-only chat model override before dispatch', async () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { apiKey: 'test-key' },
