@@ -51,6 +51,7 @@ import {
 } from './prompts';
 import {
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -200,7 +201,7 @@ export async function evaluateResponse(
       `,
     },
   ]);
-  const judgeResp = await provider.callApi(judgeBody, {
+  const judgeResp = await callGradingProvider(provider, judgeBody, {
     prompt: {
       raw: judgeBody,
       label: 'judge',

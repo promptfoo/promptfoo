@@ -42,6 +42,7 @@ import {
 } from './prompts';
 import {
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -645,7 +646,8 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(
+    const judgeResp = await callGradingProvider(
+      gradingProvider,
       judgeBody,
       {
         prompt: {

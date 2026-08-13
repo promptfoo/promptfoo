@@ -8,6 +8,7 @@ import {
 import {
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
+  callGradingProvider,
   callTargetProvider,
   createIterationContext,
   formatRedteamHistoryAsTranscript,
@@ -1322,6 +1323,92 @@ describe('shared redteam provider utilities', () => {
       ).toBeUndefined();
       expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
       expect(getGraderAssertionValue(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('callGradingProvider', () => {
+    it('preserves the provider request when tracing is disabled', async () => {
+      const response = { output: 'judge response' };
+      const provider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'judge' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callGradingProvider(provider, 'judge prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', context, options);
+    });
+
+    it('places direct judge calls beneath grader and grader-provider spans', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'refusal' },
+        vars: {},
+        evaluationId: 'eval-123',
+        testIdx: 4,
+      };
+      const options: CallApiOptionsParams = {};
+      const graderSpan = vi.fn();
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: providerSpan,
+        },
+        () => callGradingProvider(provider, 'judge prompt', context, options),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'refusal',
+        evalId: 'eval-123',
+        testIndex: 4,
+      });
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider, callContext: context, role: 'grader' },
+        expect.any(Function),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        'judge prompt',
+        { ...context, traceparent },
+        options,
+      );
+    });
+
+    it('uses a judge grader span when no provider context was supplied', async () => {
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const graderSpan = vi.fn();
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () => callGradingProvider(provider, 'judge prompt'),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'judge',
+        evalId: undefined,
+        testIndex: undefined,
+      });
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', undefined);
     });
   });
 

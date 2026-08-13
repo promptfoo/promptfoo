@@ -487,6 +487,32 @@ export function callTargetProvider(
   );
 }
 
+/** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
+export function callGradingProvider(
+  provider: ApiProvider,
+  prompt: string,
+  callContext?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const invoke = (context?: CallApiContextParams) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke(callContext);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: callContext?.prompt.label ?? 'judge',
+      evalId: callContext?.evaluationId,
+      testIndex: callContext?.testIdx,
+    },
+    () => tracingContext.withProviderSpan({ provider, callContext, role: 'grader' }, invoke),
+  );
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.

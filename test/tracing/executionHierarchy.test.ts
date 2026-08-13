@@ -3,8 +3,11 @@ import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-tr
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
+import { callGradingProvider } from '../../src/redteam/providers/shared';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
 import { GenAIAttributes, getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
+import { isRelevantSpan } from '../../src/tracing/spanFilter';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import {
   withGraderSpan,
@@ -224,6 +227,52 @@ describe('test-case execution trace hierarchy', () => {
       [SPAN_ROLE_ATTRIBUTE]: 'grader',
     });
     expect(gradingModelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+  });
+
+  it('keeps direct judge-provider spans out of target-only trace selection', async () => {
+    const root = getGenAITracer().startSpan('test case direct judge');
+    const provider: ApiProvider = {
+      id: () => 'openai:judge',
+      callApi: async (_prompt, callContext) =>
+        withGenAISpan(
+          {
+            system: 'openai',
+            operationName: 'chat',
+            model: 'judge-model',
+            providerId: 'openai:judge',
+            traceparent: callContext?.traceparent,
+          },
+          async () => ({ output: 'judge response' }),
+        ),
+    };
+    const callContext: CallApiContextParams = {
+      prompt: { raw: 'evaluate the response', label: 'judge' },
+      vars: {},
+    };
+
+    await withProviderCallTracingContext(
+      {
+        getActiveTraceparent,
+        withGraderSpan,
+        withProviderSpan: withTracedProviderCall,
+      },
+      () =>
+        withTestCaseSpan(root, async () => {
+          await callGradingProvider(provider, 'evaluate the response', callContext);
+          return [{ score: 1, success: true }];
+        }),
+    );
+
+    const spans = exporter.getFinishedSpans();
+    const graderSpan = spans.find((span) => span.name === 'grader judge')!;
+    const providerSpan = spans.find((span) => span.name === 'grader provider openai:judge')!;
+    const modelSpan = spans.find((span) => span.name === 'chat judge-model')!;
+
+    expect(providerSpan.parentSpanContext?.spanId).toBe(graderSpan.spanContext().spanId);
+    expect(modelSpan.parentSpanContext?.spanId).toBe(providerSpan.spanContext().spanId);
+    expect(providerSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+    expect(modelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
+    expect(isRelevantSpan({ attributes: modelSpan.attributes })).toBe(false);
   });
 
   it('records HTTP target execution without inventing a model-inference span', async () => {

@@ -26,6 +26,7 @@ import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
 import { isBasicRefusal } from '../../util';
 import {
+  callGradingProvider,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
@@ -415,7 +416,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
       response,
     });
 
-    const evalResponse = await scoringProvider.callApi(
+    const evalResponse = await callGradingProvider(
+      scoringProvider,
       JSON.stringify([
         { role: 'system', content: evalPrompt },
         { role: 'user', content: 'Evaluate the response.' },
