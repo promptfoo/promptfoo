@@ -585,6 +585,12 @@ describe('package manifests', () => {
 
     const parserVersion = chevrotainOverride?.['.'];
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+    expect(generatorVersion, `${generatorName} must match the pinned parser version`).toBe(
+      parserVersion,
+    );
+    expect(packageLock.packages['node_modules/chevrotain']?.dependencies?.[generatorName]).toBe(
+      parserVersion,
+    );
 
     for (const dependencyName of ['@chevrotain/gast', '@chevrotain/types']) {
       expect(
@@ -592,6 +598,9 @@ describe('package manifests', () => {
         `${generatorName} must share the parser's ${dependencyName} version`,
       ).toBe(parserVersion);
       expect(packageLock.packages[`node_modules/${dependencyName}`]?.version).toBe(parserVersion);
+      expect(
+        packageLock.packages[`node_modules/${generatorName}`]?.dependencies?.[dependencyName],
+      ).toBe(parserVersion);
       expect(
         packageLock.packages[`node_modules/${generatorName}/node_modules/${dependencyName}`],
       ).toBeUndefined();
@@ -614,20 +623,14 @@ describe('package manifests', () => {
     const parserVersion = chevrotainOverride?.['.'];
     // chevrotain@X declares every @chevrotain/* sub-package at exactly X and all six reach npm
     // within about a minute of each other, so Renovate must not move any of them alone.
-    // @chevrotain/cst-dts-gen is frozen too but is excluded from the version assertion below: it
-    // is currently overridden to 13.1.0 under chevrotain 11.2.0 (#10345) and gets realigned when
-    // the family moves as a set.
     const pinnedGrammarPackages = [
+      '@chevrotain/cst-dts-gen',
       '@chevrotain/gast',
       '@chevrotain/types',
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
-    const pinnedParserPackages = [
-      'chevrotain',
-      ...pinnedGrammarPackages,
-      '@chevrotain/cst-dts-gen',
-    ];
+    const pinnedParserPackages = ['chevrotain', ...pinnedGrammarPackages];
 
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
