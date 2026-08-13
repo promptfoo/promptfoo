@@ -1,5 +1,10 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import {
+  fetchWithProxy,
+  MAX_TRACE_RESPONSE_BYTES,
+  readLimitedResponse,
+  releaseResponse,
+} from './fetch';
 import { TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
@@ -42,7 +47,6 @@ interface TempoTraceResponse {
   }>;
 }
 
-const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
@@ -227,39 +231,6 @@ function transformSpan(
   };
 }
 
-async function releaseResponse(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch (error) {
-    logger.debug(`[TempoProvider] Failed to release response body: ${error}`);
-  }
-}
-
-async function readLimitedResponse(response: Response): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return '';
-  }
-
-  const decoder = new TextDecoder();
-  let byteLength = 0;
-  let body = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      return body + decoder.decode();
-    }
-
-    byteLength += value.byteLength;
-    if (byteLength > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
-    }
-    body += decoder.decode(value, { stream: true });
-  }
-}
-
 export class TempoProvider implements TraceProvider {
   readonly id = 'tempo';
   private readonly baseUrl: string;
@@ -393,11 +364,11 @@ export class TempoProvider implements TraceProvider {
     });
 
     if (response.status === 404) {
-      await releaseResponse(response);
+      await releaseResponse(response, 'Tempo');
       return null;
     }
     if (!response.ok) {
-      await releaseResponse(response);
+      await releaseResponse(response, 'Tempo');
       throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
         statusCode: response.status,
         retryable: response.status === 408 || response.status === 429 || response.status >= 500,
@@ -405,11 +376,11 @@ export class TempoProvider implements TraceProvider {
     }
 
     const contentLength = Number(response.headers.get('content-length'));
-    if (contentLength > MAX_RESPONSE_BYTES) {
-      await releaseResponse(response);
+    if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
+      await releaseResponse(response, 'Tempo');
       throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
-    const body = await readLimitedResponse(response);
+    const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;
     if (!Array.isArray(data.batches)) {
       throw new TraceProviderError('Tempo returned an invalid trace response');
@@ -439,7 +410,7 @@ export class TempoProvider implements TraceProvider {
         redirect: 'error',
         signal: AbortSignal.timeout(5_000),
       });
-      await releaseResponse(response);
+      await releaseResponse(response, 'Tempo');
       return response.ok;
     } catch {
       return false;

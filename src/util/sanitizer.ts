@@ -341,9 +341,13 @@ export function preserveTracingCredentialReferences(
     env: new Map(),
   };
 
-  for (const key of ['token', 'password'] as const) {
-    const template = sourceProvider.auth?.[key];
-    const renderedValue = renderedProvider.auth?.[key];
+  for (const [key, template] of Object.entries(sourceProvider.auth ?? {})) {
+    if (key !== 'token' && key !== 'password') {
+      continue;
+    }
+    const renderedValue = Object.entries(renderedProvider.auth ?? {}).find(
+      ([renderedKey]) => renderedKey === key,
+    )?.[1];
     if (isSafeTracingCredentialTemplate(template) && typeof renderedValue === 'string') {
       references.auth.set(key, { template, renderedValue });
     }
@@ -506,17 +510,19 @@ export function sanitizeTracingConfigForPersistence(
       )
     : undefined;
 
+  const sanitizedProvider = {
+    ...provider,
+    endpoint: sanitizedEndpoint,
+    ...(provider.auth && { auth: sanitizedAuth }),
+    ...(provider.headers && { headers: sanitizedHeaders }),
+  } as typeof provider;
+
   return {
     ...config,
     ...(config.env && { env: sanitizedEnv }),
     tracing: {
       ...config.tracing!,
-      provider: {
-        ...provider,
-        endpoint: sanitizedEndpoint,
-        ...(provider.auth && { auth: sanitizedAuth }),
-        ...(provider.headers && { headers: sanitizedHeaders }),
-      },
+      provider: sanitizedProvider,
     },
   };
 }

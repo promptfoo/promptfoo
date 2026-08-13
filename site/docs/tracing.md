@@ -462,6 +462,23 @@ Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. T
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
+#### Braintrust
+
+Promptfoo can retrieve application spans from a Braintrust project's logs:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: braintrust
+    endpoint: 'https://api.braintrust.dev'
+    projectId: '12345678-1234-4123-8123-123456789abc'
+    auth:
+      token: '{{ env.BRAINTRUST_API_KEY }}'
+```
+
+Braintrust's native trace identifiers are not necessarily the same as OpenTelemetry trace IDs. Your application must copy the trace ID from Promptfoo's `traceparent` into Braintrust span metadata as `trace_id`, `promptfoo_trace_id`, or `promptfoo.trace_id`. Promptfoo then queries the Braintrust project's recent traces and imports all spans belonging to the matching trace.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript

@@ -1,3 +1,4 @@
+import { BraintrustProvider } from './braintrust';
 import { TempoProvider } from './tempo';
 
 import type { TraceProvider, TraceProviderConfig } from './types';
@@ -18,6 +19,8 @@ export type {
  */
 export function createTraceProvider(config: TraceProviderConfig): TraceProvider {
   switch (config.id) {
+    case 'braintrust':
+      return new BraintrustProvider(config);
     case 'tempo':
       return new TempoProvider(config);
     // Future providers:
