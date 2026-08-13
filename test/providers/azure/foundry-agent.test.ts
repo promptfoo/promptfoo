@@ -107,6 +107,9 @@ function installSpanRecorder(): RecordedSpan[] {
       setStatus: vi.fn((status: { code: number; message?: string }) => {
         entry.status = status;
       }),
+      updateName: vi.fn((updatedName: string) => {
+        entry.name = updatedName;
+      }),
     };
   };
 
@@ -493,15 +496,37 @@ describe('AzureFoundryAgentProvider', () => {
       expect(agentSpan?.attributes).toMatchObject({
         'gen_ai.provider.name': 'azure.ai.openai',
         'gen_ai.operation.name': 'invoke_agent',
+        'gen_ai.agent.id': 'agent_123',
         'gen_ai.agent.name': 'weather-agent',
       });
       expect(agentSpan?.attributes).not.toHaveProperty('gen_ai.request.model');
     });
 
+    it('records the resolved agent identity when configured with a legacy agent ID', async () => {
+      const spans = installSpanRecorder();
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce(createMessageResponse('Hello'));
+
+      const provider = new AzureFoundryAgentProvider('agent_123', {
+        config: { projectUrl },
+      });
+
+      await provider.callApi('test prompt');
+
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.agent.id': 'agent_123',
+        'gen_ai.agent.name': 'weather-agent',
+      });
+    });
+
     it('emits an agent invocation span but no gen_ai.turn spans on a cache hit', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue({ output: 'cached response' }),
+        get: vi.fn().mockResolvedValue({
+          output: 'cached response',
+          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+        }),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -514,13 +539,131 @@ describe('AzureFoundryAgentProvider', () => {
       const result = await provider.callApi('weather in Paris');
 
       // A cache hit performs no LLM round, so no gen_ai.turn marker is emitted,
-      // but the request is still wrapped in a chat span (with cache_hit set).
+      // but the request is still wrapped in an agent span (with cache_hit set).
       expect(result.cached).toBe(true);
+      expect(result).not.toHaveProperty('__promptfooFoundryAgent');
+      expect(mockGetAgent).not.toHaveBeenCalled();
       expect(mockResponsesCreate).not.toHaveBeenCalled();
       expect(spans.filter((span) => span.name.startsWith('gen_ai.turn '))).toHaveLength(0);
       const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
       expect(agentSpan).toBeDefined();
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.agent.id': 'agent_123',
+        'gen_ai.agent.name': 'weather-agent',
+      });
       expect(agentSpan?.attributes['promptfoo.cache_hit']).toBe(true);
+    });
+
+    it('restores the resolved agent identity from cache for a new legacy-ID provider', async () => {
+      const spans = installSpanRecorder();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue({
+          output: 'cached response',
+          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+        }),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+
+      const provider = new AzureFoundryAgentProvider('agent_123', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('weather in Paris');
+
+      expect(result).toEqual({ output: 'cached response', cached: true });
+      expect(mockGetAgent).not.toHaveBeenCalled();
+      const agentSpan = spans.find((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpan?.attributes).toMatchObject({
+        'gen_ai.agent.id': 'agent_123',
+        'gen_ai.agent.name': 'weather-agent',
+      });
+    });
+
+    it('preserves provider prompt-cache usage when replaying a cached response', async () => {
+      const spans = installSpanRecorder();
+      let storedResponse: unknown;
+      const mockCache = {
+        get: vi.fn(async () => storedResponse),
+        set: vi.fn(async (_key: string, value: unknown) => {
+          storedResponse = value;
+        }),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse('cached result'),
+        usage: {
+          input_tokens: 2_000,
+          output_tokens: 1_000,
+          total_tokens: 3_000,
+          input_tokens_details: { cached_tokens: 500 },
+        },
+      });
+
+      const firstProvider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+      const freshResult = await firstProvider.callApi('weather in Paris');
+
+      expect(freshResult.tokenUsage).toMatchObject({
+        cached: 500,
+        total: 3_000,
+        completionDetails: { cacheReadInputTokens: 500 },
+      });
+
+      const secondProvider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+      const cachedResult = await secondProvider.callApi('weather in Paris');
+
+      expect(cachedResult).toMatchObject({
+        cached: true,
+        tokenUsage: {
+          cached: 3_000,
+          total: 3_000,
+          completionDetails: { cacheReadInputTokens: 500 },
+        },
+      });
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
+
+      const agentSpans = spans.filter((span) => span.name === 'invoke_agent weather-agent');
+      expect(agentSpans).toHaveLength(2);
+      expect(agentSpans[0].attributes).toMatchObject({
+        'gen_ai.usage.cache_read.input_tokens': 500,
+      });
+      expect(agentSpans[0].attributes).not.toHaveProperty('promptfoo.usage.cached_response_tokens');
+      expect(agentSpans[1].attributes).toMatchObject({
+        'gen_ai.usage.cache_read.input_tokens': 500,
+        'promptfoo.usage.cached_response_tokens': 3_000,
+      });
+    });
+
+    it('stores resolved agent identity alongside a cacheable response', async () => {
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce(createMessageResponse('Hello'));
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).not.toHaveProperty('__promptfooFoundryAgent');
+      expect(mockCache.set).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+        }),
+      );
     });
 
     it('marks a resolved-but-failed Responses turn as errored', async () => {

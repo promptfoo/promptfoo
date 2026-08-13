@@ -132,6 +132,12 @@ describe('AnthropicMessagesProvider', () => {
     mcpMocks.instances.length = 0;
   });
 
+  it('keeps Anthropic provider identity when a custom ID has an unrelated prefix', () => {
+    const provider = createProvider('claude-3-5-sonnet-20241022', { id: 'customer:reviewer' });
+
+    expect(provider['getGenAISystem']()).toBe('anthropic');
+  });
+
   describe('callApi', () => {
     const tools: Anthropic.Tool[] = [
       {

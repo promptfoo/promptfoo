@@ -270,6 +270,7 @@ describe('OpenTelemetry Tracing Integration', () => {
       };
 
       const resultExtractor = (): GenAISpanResult => ({
+        cacheHit: true,
         tokenUsage: {
           prompt: 200,
           completion: 100,
