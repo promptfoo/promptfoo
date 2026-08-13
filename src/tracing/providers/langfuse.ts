@@ -1,5 +1,12 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { getNormalizedToolAttributes } from '../toolAttributes';
+import {
+  fetchWithProxy,
+  MAX_TRACE_RESPONSE_BYTES,
+  readLimitedResponse,
+  releaseResponse,
+  validateTraceProviderEndpoint,
+} from './fetch';
 import { TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
@@ -29,6 +36,10 @@ interface LangfuseObservation {
   inputUsage?: unknown;
   outputUsage?: unknown;
   totalUsage?: unknown;
+  costDetails?: unknown;
+  calculatedInputCost?: unknown;
+  calculatedOutputCost?: unknown;
+  calculatedTotalCost?: unknown;
   inputCost?: unknown;
   outputCost?: unknown;
   totalCost?: unknown;
@@ -36,15 +47,12 @@ interface LangfuseObservation {
 
 interface LangfuseObservationsResponse {
   data?: unknown;
-  meta?: { cursor?: unknown };
+  meta?: { cursor?: unknown; page?: unknown; totalPages?: unknown };
 }
 
-const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const MAX_PAGE_SIZE = 1_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
-const TRACE_CREDENTIAL_PATH_SEGMENT =
-  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth|sk|sk-proj|sk-ant)[-_][a-z0-9._-]{8,}|AKIA[A-Z0-9]{16}|AIza[a-zA-Z0-9_-]{35}|[a-zA-Z0-9+/=_-]{64,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 function parseJsonValue(value: unknown): unknown {
   if (typeof value !== 'string') {
@@ -59,12 +67,27 @@ function parseJsonValue(value: unknown): unknown {
 }
 
 function observationAttributes(observation: LangfuseObservation): Record<string, unknown> {
-  const metadata =
+  const rawMetadata =
     observation.metadata &&
     typeof observation.metadata === 'object' &&
     !Array.isArray(observation.metadata)
       ? (observation.metadata as Record<string, unknown>)
       : {};
+  const metadata = Object.fromEntries(
+    Object.entries(rawMetadata).filter(
+      ([key]) => key !== '__proto__' && key !== 'constructor' && key !== 'prototype',
+    ),
+  );
+  const costDetails =
+    observation.costDetails &&
+    typeof observation.costDetails === 'object' &&
+    !Array.isArray(observation.costDetails)
+      ? (observation.costDetails as Record<string, unknown>)
+      : {};
+  const inputCost = costDetails.input ?? observation.calculatedInputCost ?? observation.inputCost;
+  const outputCost =
+    costDetails.output ?? observation.calculatedOutputCost ?? observation.outputCost;
+  const totalCost = costDetails.total ?? observation.calculatedTotalCost ?? observation.totalCost;
 
   return {
     ...metadata,
@@ -72,6 +95,10 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
     ...(observation.input !== undefined && {
       'langfuse.input': parseJsonValue(observation.input),
     }),
+    ...(observation.type === 'TOOL' &&
+      typeof observation.name === 'string' &&
+      observation.name.trim() &&
+      getNormalizedToolAttributes(observation.name, parseJsonValue(observation.input))),
     ...(observation.output !== undefined && {
       'langfuse.output': parseJsonValue(observation.output),
     }),
@@ -95,14 +122,14 @@ function observationAttributes(observation: LangfuseObservation): Record<string,
     ...(typeof observation.totalUsage === 'number' && {
       'langfuse.usage.total_tokens': observation.totalUsage,
     }),
-    ...(typeof observation.inputCost === 'number' && {
-      'langfuse.cost.input': observation.inputCost,
+    ...(typeof inputCost === 'number' && {
+      'langfuse.cost.input': inputCost,
     }),
-    ...(typeof observation.outputCost === 'number' && {
-      'langfuse.cost.output': observation.outputCost,
+    ...(typeof outputCost === 'number' && {
+      'langfuse.cost.output': outputCost,
     }),
-    ...(typeof observation.totalCost === 'number' && {
-      'langfuse.cost.total': observation.totalCost,
+    ...(typeof totalCost === 'number' && {
+      'langfuse.cost.total': totalCost,
     }),
   };
 }
@@ -163,39 +190,6 @@ function transformObservation(
   };
 }
 
-async function releaseResponse(response: Response): Promise<void> {
-  try {
-    await response.body?.cancel();
-  } catch (error) {
-    logger.debug(`[LangfuseProvider] Failed to release response body: ${error}`);
-  }
-}
-
-async function readLimitedResponse(response: Response, remainingBytes: number): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return '';
-  }
-
-  const decoder = new TextDecoder();
-  let byteLength = 0;
-  let body = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) {
-      return body + decoder.decode();
-    }
-
-    byteLength += value.byteLength;
-    if (byteLength > remainingBytes) {
-      await reader.cancel();
-      throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
-    }
-    body += decoder.decode(value, { stream: true });
-  }
-}
-
 function addObservations(
   observations: unknown[],
   spans: SpanData[],
@@ -243,6 +237,25 @@ function getNextCursor(
   return cursor;
 }
 
+function getNextPage(response: LangfuseObservationsResponse): number | undefined {
+  const { page, totalPages } = response.meta ?? {};
+  if (page == null && totalPages == null) {
+    return undefined;
+  }
+  if (
+    typeof page !== 'number' ||
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    typeof totalPages !== 'number' ||
+    !Number.isSafeInteger(totalPages) ||
+    totalPages < page
+  ) {
+    throw new TraceProviderError('Langfuse returned invalid pagination metadata');
+  }
+
+  return page < totalPages ? page + 1 : undefined;
+}
+
 /** Retrieve trace observations from Langfuse's public v2 Observations API. */
 export class LangfuseProvider implements TraceProvider {
   readonly id = 'langfuse';
@@ -259,31 +272,7 @@ export class LangfuseProvider implements TraceProvider {
       );
     }
 
-    let endpoint: URL;
-    try {
-      endpoint = new URL(config.endpoint);
-    } catch {
-      throw new Error('Langfuse provider endpoint must be a valid HTTP or HTTPS URL');
-    }
-    const hasCredentialPath = endpoint.pathname.split('/').some((segment) => {
-      try {
-        return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
-      } catch {
-        return true;
-      }
-    });
-    if (
-      !['http:', 'https:'].includes(endpoint.protocol) ||
-      endpoint.username ||
-      endpoint.password ||
-      endpoint.search ||
-      endpoint.hash ||
-      hasCredentialPath
-    ) {
-      throw new Error(
-        'Langfuse provider endpoint must be an HTTP or HTTPS URL without credentials, query parameters, or fragments',
-      );
-    }
+    validateTraceProviderEndpoint(config.endpoint, 'Langfuse');
     if (
       config.timeout !== undefined &&
       (!Number.isSafeInteger(config.timeout) || config.timeout <= 0)
@@ -318,8 +307,9 @@ export class LangfuseProvider implements TraceProvider {
     const spans: SpanData[] = [];
     const seenSpanIds = new Set<string>();
     const seenCursors = new Set<string>();
+    let page: number | undefined;
     let cursor: string | undefined;
-    let remainingBytes = MAX_RESPONSE_BYTES;
+    let remainingBytes = MAX_TRACE_RESPONSE_BYTES;
 
     do {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
@@ -332,6 +322,9 @@ export class LangfuseProvider implements TraceProvider {
       if (cursor) {
         url.searchParams.set('cursor', cursor);
       }
+      if (page) {
+        url.searchParams.set('page', String(page));
+      }
 
       const response = await fetchWithProxy(url.toString(), {
         disableTransientRetries: true,
@@ -342,11 +335,11 @@ export class LangfuseProvider implements TraceProvider {
       });
 
       if (response.status === 404) {
-        await releaseResponse(response);
+        await releaseResponse(response, 'Langfuse');
         return null;
       }
       if (!response.ok) {
-        await releaseResponse(response);
+        await releaseResponse(response, 'Langfuse');
         throw new TraceProviderError(`Langfuse returned HTTP ${response.status}`, {
           statusCode: response.status,
           retryable: response.status === 408 || response.status === 429 || response.status >= 500,
@@ -355,10 +348,10 @@ export class LangfuseProvider implements TraceProvider {
 
       const contentLength = Number(response.headers.get('content-length'));
       if (contentLength > remainingBytes) {
-        await releaseResponse(response);
+        await releaseResponse(response, 'Langfuse');
         throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
       }
-      const body = await readLimitedResponse(response, remainingBytes);
+      const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
       const result = JSON.parse(body) as LangfuseObservationsResponse;
       if (!Array.isArray(result.data)) {
@@ -366,8 +359,9 @@ export class LangfuseProvider implements TraceProvider {
       }
 
       addObservations(result.data, spans, seenSpanIds, normalizedTraceId, maxSpans, options);
-      cursor = getNextCursor(result, seenCursors);
-    } while (cursor && spans.length < maxSpans);
+      page = getNextPage(result);
+      cursor = page ? undefined : getNextCursor(result, seenCursors);
+    } while ((page || cursor) && spans.length < maxSpans);
 
     if (spans.length === 0) {
       return null;

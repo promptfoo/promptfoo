@@ -10,6 +10,8 @@ vi.mock('../../../src/logger', () => ({
 
 import { LangfuseProvider } from '../../../src/tracing/providers/langfuse';
 import { TraceProviderError } from '../../../src/tracing/providers/types';
+import { isRelevantSpan } from '../../../src/tracing/spanFilter';
+import { getToolNameFromAttributes } from '../../../src/tracing/toolAttributes';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedFetch = vi.mocked(fetchWithProxy);
@@ -169,6 +171,84 @@ describe('LangfuseProvider', () => {
     });
   });
 
+  it('normalizes Langfuse tool observations for trajectory assertions', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        data: [
+          {
+            id: 'tool-span',
+            traceId: TRACE_ID,
+            name: 'search',
+            type: 'TOOL',
+            startTime: '2024-01-01T00:00:00.000Z',
+            input: '{"query":"customer orders"}',
+          },
+        ],
+      }),
+    );
+
+    const span = (await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0];
+
+    expect(span?.attributes).toMatchObject({
+      'langfuse.observation.type': 'TOOL',
+      'gen_ai.tool.name': 'search',
+      'tool.name': 'search',
+      'tool.arguments': '{"query":"customer orders"}',
+    });
+    expect(getToolNameFromAttributes(span?.attributes)).toBe('search');
+    expect(isRelevantSpan(span!)).toBe(true);
+  });
+
+  it('omits reserved keys from untrusted observation metadata', async () => {
+    const metadata = JSON.parse(
+      '{"__proto__":{"polluted":true},"constructor":"unsafe","prototype":"unsafe","tenant":"west"}',
+    );
+    mockedFetch.mockResolvedValue(response({ data: [{ ...observations[0], metadata }] }));
+
+    const attributes = (await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0]
+      .attributes;
+
+    expect(attributes).toMatchObject({ tenant: 'west' });
+    expect(Object.hasOwn(attributes!, '__proto__')).toBe(false);
+    expect(Object.hasOwn(attributes!, 'constructor')).toBe(false);
+    expect(Object.hasOwn(attributes!, 'prototype')).toBe(false);
+  });
+
+  it('normalizes current Langfuse observation cost details', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        data: [
+          {
+            ...observations[1],
+            costDetails: { input: 0.001, output: 0.002, total: 0.003 },
+          },
+        ],
+      }),
+    );
+
+    expect((await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0].attributes).toEqual(
+      expect.objectContaining({
+        'langfuse.cost.input': 0.001,
+        'langfuse.cost.output': 0.002,
+        'langfuse.cost.total': 0.003,
+      }),
+    );
+  });
+
+  it('follows Langfuse page-based pagination and deduplicates observations', async () => {
+    mockedFetch
+      .mockResolvedValueOnce(
+        response({ data: [observations[0]], meta: { page: 1, totalPages: 2 } }),
+      )
+      .mockResolvedValueOnce(response({ data: observations, meta: { page: 2, totalPages: 2 } }));
+
+    const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID);
+
+    expect(result?.spans).toHaveLength(2);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(new URL(String(mockedFetch.mock.calls[1][0])).searchParams.get('page')).toBe('2');
+  });
+
   it('follows pagination cursors and deduplicates observations across pages', async () => {
     mockedFetch
       .mockResolvedValueOnce(response({ data: [observations[0]], meta: { cursor: 'next-page' } }))
@@ -271,16 +351,18 @@ describe('LangfuseProvider', () => {
     ]);
   });
 
-  it.each([{ result: 'not observations' }, { data: observations, meta: { cursor: 123 } }])(
-    'rejects malformed Langfuse response payloads: %o',
-    async (payload) => {
-      mockedFetch.mockResolvedValue(response(payload));
+  it.each([
+    { result: 'not observations' },
+    { data: observations, meta: { cursor: 123 } },
+    { data: observations, meta: { page: 0, totalPages: 2 } },
+    { data: observations, meta: { page: 2, totalPages: 1 } },
+  ])('rejects malformed Langfuse response payloads: %o', async (payload) => {
+    mockedFetch.mockResolvedValue(response(payload));
 
-      await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-        TraceProviderError,
-      );
-    },
-  );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
+      TraceProviderError,
+    );
+  });
 
   it('rejects responses larger than the configured safety bound', async () => {
     mockedFetch.mockResolvedValue(
@@ -290,6 +372,39 @@ describe('LangfuseProvider', () => {
     await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
       'maximum response size',
     );
+  });
+
+  it('applies the response size limit across paginated observation requests', async () => {
+    const firstPage = response({
+      data: [observations[0]],
+      meta: { page: 1, totalPages: 2 },
+    });
+    const secondPage = new Response('{}', {
+      headers: { 'content-length': String(10 * 1024 * 1024) },
+    });
+    const cancel = vi.spyOn(secondPage.body!, 'cancel');
+    mockedFetch.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(secondPage);
+
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
+      'maximum response size',
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('cancels oversized streamed responses before buffering their contents', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(10 * 1024 * 1024 + 1));
+      },
+      cancel,
+    });
+    mockedFetch.mockResolvedValue(new Response(body, { headers: { 'content-length': '1' } }));
+
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
+      'maximum response size',
+    );
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('forwards evaluation cancellation to the external request', async () => {

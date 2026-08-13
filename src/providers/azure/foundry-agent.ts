@@ -25,6 +25,7 @@ import {
   GenAIAttributes,
   getGenAITracer,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../tracing';
 import {
   formatContentFilterResponse,
@@ -277,41 +278,44 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     args: string,
     context?: CallbackContext,
     callbacks?: FunctionToolCallbacks,
+    callId?: string,
   ): Promise<string> {
     try {
-      let callback = this.loadedFunctionCallbacks[functionName];
-      const effectiveCallbacks = callbacks || this.assistantConfig.functionToolCallbacks;
+      return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
+        let callback = this.loadedFunctionCallbacks[functionName];
+        const effectiveCallbacks = callbacks || this.assistantConfig.functionToolCallbacks;
 
-      if (!callback) {
-        const callbackRef = effectiveCallbacks?.[functionName];
+        if (!callback) {
+          const callbackRef = effectiveCallbacks?.[functionName];
 
-        if (callbackRef && typeof callbackRef === 'string') {
-          if (callbackRef.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackRef);
-          } else {
-            callback = new Function('return ' + callbackRef)();
+          if (callbackRef && typeof callbackRef === 'string') {
+            if (callbackRef.startsWith('file://')) {
+              callback = await this.loadExternalFunction(callbackRef);
+            } else {
+              callback = new Function('return ' + callbackRef)();
+            }
+          } else if (typeof callbackRef === 'function') {
+            callback = callbackRef;
           }
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
+
+          if (callback) {
+            this.loadedFunctionCallbacks[functionName] = callback;
+          }
         }
 
-        if (callback) {
-          this.loadedFunctionCallbacks[functionName] = callback;
+        if (!callback) {
+          throw new Error(`No callback found for function '${functionName}'`);
         }
-      }
 
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      const result = await callback(args, context);
-      if (result === undefined || result === null) {
-        return '';
-      }
-      if (typeof result === 'object') {
-        return JSON.stringify(result);
-      }
-      return String(result);
+        const result = await callback(args, context);
+        if (result === undefined || result === null) {
+          return '';
+        }
+        if (typeof result === 'object') {
+          return JSON.stringify(result);
+        }
+        return String(result);
+      });
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       return JSON.stringify({
@@ -495,6 +499,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           call.arguments,
           callbackContext,
           callbacks,
+          call.call_id,
         ),
       })),
     );

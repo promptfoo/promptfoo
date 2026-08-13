@@ -8,6 +8,8 @@ import {
 import {
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
+  callGradingProvider,
+  callTargetProvider,
   createIterationContext,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
@@ -16,14 +18,18 @@ import {
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
+  runRedteamGrader,
   setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
+import { withProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import type { ProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
 import type {
   ApiProvider,
   Assertion,
@@ -898,6 +904,54 @@ describe('shared redteam provider utilities', () => {
       expect(mockCallApi).toHaveBeenCalledWith('test prompt', context, options);
     });
 
+    it('traces target calls and forwards the target span traceparent', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const mockProvider = createMockProvider({ response: { output: 'test response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: 'target' },
+        vars: {},
+      };
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => getTargetResponse(mockProvider, 'test prompt', context),
+      );
+
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider: mockProvider, callContext: context },
+        expect.any(Function),
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledWith(
+        'test prompt',
+        { ...context, traceparent },
+        undefined,
+      );
+    });
+
+    it('keeps direct strategy target calls unmodified when tracing is disabled', async () => {
+      const response = { output: 'test response', metadata: { strategy: 'goat' } };
+      const mockProvider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: 'target' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callTargetProvider(mockProvider, 'test prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledWith('test prompt', context, options);
+    });
+
     it('stringifies non-string output', async () => {
       const mockProvider = createMockProvider({
         response: {
@@ -1269,6 +1323,134 @@ describe('shared redteam provider utilities', () => {
       ).toBeUndefined();
       expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
       expect(getGraderAssertionValue(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('callGradingProvider', () => {
+    it('preserves the provider request when tracing is disabled', async () => {
+      const response = { output: 'judge response' };
+      const provider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'judge' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callGradingProvider(provider, 'judge prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', context, options);
+    });
+
+    it('places direct judge calls beneath grader and grader-provider spans', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'refusal' },
+        vars: {},
+        evaluationId: 'eval-123',
+        testIdx: 4,
+      };
+      const options: CallApiOptionsParams = {};
+      const graderSpan = vi.fn();
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          testIndex: 9,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: providerSpan,
+        },
+        () => callGradingProvider(provider, 'judge prompt', context, options),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'refusal',
+        evalId: 'eval-123',
+        testIndex: 4,
+      });
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider, callContext: context, role: 'grader' },
+        expect.any(Function),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        'judge prompt',
+        { ...context, traceparent },
+        options,
+      );
+    });
+
+    it('uses the evaluation test index when no provider context was supplied', async () => {
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const graderSpan = vi.fn();
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 7,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () => callGradingProvider(provider, 'judge prompt'),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'judge',
+        evalId: undefined,
+        testIndex: 7,
+      });
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', undefined);
+    });
+  });
+
+  describe('runRedteamGrader', () => {
+    it('instruments graders that override the base implementation', async () => {
+      const grade = { pass: false, score: 0, reason: 'unsafe' };
+      const getResult = vi.fn().mockResolvedValue({ grade, rubric: 'custom rubric' });
+      const grader = { id: 'custom-override', getResult } as unknown as RedteamGraderBase;
+      const graderSpan = vi.fn();
+      const test = {
+        metadata: { evaluationId: 'eval-123' },
+        vars: { userInput: 'normal evaluation variable' },
+      };
+
+      const result = await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 7,
+          withGraderSpan: async (options, invoke) => {
+            graderSpan(options, invoke);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () =>
+          runRedteamGrader(grader, 'attack prompt', 'target output', test, undefined, undefined),
+      );
+
+      expect(result).toEqual({ grade, rubric: 'custom rubric' });
+      expect(graderSpan).toHaveBeenCalledWith(
+        { graderId: 'custom-override', evalId: 'eval-123', testIndex: 7 },
+        expect.any(Function),
+      );
+      expect(getResult).toHaveBeenCalledWith(
+        'attack prompt',
+        'target output',
+        test,
+        undefined,
+        undefined,
+      );
     });
   });
 

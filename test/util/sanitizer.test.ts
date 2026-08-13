@@ -138,6 +138,36 @@ describe('sanitizeTracingConfigForPersistence', () => {
 
     expect(sanitizeTracingConfigForPersistence(config).env).toEqual(config.env);
   });
+
+  it('preserves Braintrust token references without exposing resolved credentials', () => {
+    const sourceConfig = {
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'braintrust' as const,
+          endpoint: 'https://api.braintrust.dev',
+          projectId: '12345678-1234-4123-8123-123456789abc',
+          auth: { token: '{{ env.BRAINTRUST_API_KEY }}' },
+        },
+      },
+    };
+    const renderedConfig = {
+      ...sourceConfig,
+      tracing: {
+        ...sourceConfig.tracing,
+        provider: {
+          ...sourceConfig.tracing.provider,
+          auth: { token: 'private-braintrust-secret' },
+        },
+      },
+    };
+
+    preserveTracingCredentialReferences(sourceConfig, renderedConfig);
+    const persistedConfig = sanitizeTracingConfigForPersistence(renderedConfig);
+
+    expect(persistedConfig.tracing?.provider?.auth?.token).toBe('{{ env.BRAINTRUST_API_KEY }}');
+    expect(JSON.stringify(persistedConfig)).not.toContain('private-braintrust-secret');
+  });
 });
 
 describe('sanitizeObject', () => {

@@ -51,12 +51,14 @@ import {
 } from './prompts';
 import {
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -199,7 +201,7 @@ export async function evaluateResponse(
       `,
     },
   ]);
-  const judgeResp = await provider.callApi(judgeBody, {
+  const judgeResp = await callGradingProvider(provider, judgeBody, {
     prompt: {
       raw: judgeBody,
       label: 'judge',
@@ -943,7 +945,8 @@ async function runRedteamConversation({
               };
             }
 
-            const { grade, rubric } = await grader.getResult(
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
               newInjectVar,
               targetResponse.output,
               iterationTest,

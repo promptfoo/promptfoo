@@ -42,12 +42,14 @@ import {
 } from './prompts';
 import {
   buildGraderResultAssertion,
+  callGradingProvider,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -609,7 +611,8 @@ export async function runRedteamConversation({
           };
         }
 
-        const { grade, rubric } = await grader.getResult(
+        const { grade, rubric } = await runRedteamGrader(
+          grader,
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -643,7 +646,8 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(
+    const judgeResp = await callGradingProvider(
+      gradingProvider,
       judgeBody,
       {
         prompt: {
