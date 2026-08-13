@@ -1,3 +1,4 @@
+import { LangfuseProvider } from './langfuse';
 import { TempoProvider } from './tempo';
 
 import type { TraceProvider, TraceProviderConfig } from './types';
@@ -18,6 +19,8 @@ export type {
  */
 export function createTraceProvider(config: TraceProviderConfig): TraceProvider {
   switch (config.id) {
+    case 'langfuse':
+      return new LangfuseProvider(config);
     case 'tempo':
       return new TempoProvider(config);
     // Future providers:

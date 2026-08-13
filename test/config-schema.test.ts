@@ -190,9 +190,9 @@ describe('config-schema.json', () => {
       );
       const provider = resolveRef(tracingConfig.properties.provider);
 
-      expect(provider.properties.id.const).toBe('tempo');
+      expect(resolveRef(provider.properties.id).enum).toEqual(['tempo', 'langfuse']);
       expect(provider.required).toEqual(expect.arrayContaining(['id', 'endpoint']));
-      expect(provider.properties.timeout.exclusiveMinimum).toBe(0);
+      expect(resolveRef(provider.properties.timeout).exclusiveMinimum).toBe(0);
       expect(tracingConfig.properties.queryDelay.minimum).toBe(0);
     });
 

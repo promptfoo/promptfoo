@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { createTraceProvider, isExternalTraceProvider } from '../../../src/tracing/providers';
+import { LangfuseProvider } from '../../../src/tracing/providers/langfuse';
 import { TempoProvider } from '../../../src/tracing/providers/tempo';
 
 describe('tracing/providers', () => {
   describe('createTraceProvider', () => {
+    it('should create LangfuseProvider for id "langfuse"', () => {
+      const provider = createTraceProvider({
+        id: 'langfuse',
+        endpoint: 'https://cloud.langfuse.com',
+        auth: { username: 'public-key', password: 'secret-key' },
+      });
+
+      expect(provider).toBeInstanceOf(LangfuseProvider);
+      expect(provider.id).toBe('langfuse');
+    });
+
     it('should create TempoProvider for id "tempo"', () => {
       const provider = createTraceProvider({
         id: 'tempo',
@@ -59,6 +71,15 @@ describe('tracing/providers', () => {
         isExternalTraceProvider({
           id: 'tempo',
           endpoint: 'http://tempo:3200',
+        }),
+      ).toBe(true);
+    });
+
+    it('should return true for langfuse with endpoint', () => {
+      expect(
+        isExternalTraceProvider({
+          id: 'langfuse',
+          endpoint: 'https://cloud.langfuse.com',
         }),
       ).toBe(true);
     });

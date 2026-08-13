@@ -39,6 +39,20 @@ describe.each(schemas)('$name tracing provider configuration', ({ schema }) => {
     ).toBe(true);
   });
 
+  it('accepts a Langfuse endpoint and public and secret keys', () => {
+    expect(
+      schema.safeParse(
+        config({
+          provider: {
+            id: 'langfuse',
+            endpoint: 'https://cloud.langfuse.com',
+            auth: { username: 'public-key', password: 'secret-key' },
+          },
+        }),
+      ).success,
+    ).toBe(true);
+  });
+
   it.each([
     { id: 'jaeger', endpoint: 'https://jaeger.example.com' },
     { id: 'tempo' },
@@ -58,6 +72,10 @@ describe.each(schemas)('$name tracing provider configuration', ({ schema }) => {
     { id: 'tempo', endpoint: 'https://tempo.example.com', timeout: -1 },
     { id: 'tempo', endpoint: 'https://tempo.example.com', timeout: 1.5 },
     { id: 'tempo', endpoint: 'https://tempo.example.com', auth: { username: 'user' } },
+    { id: 'langfuse', endpoint: 'https://cloud.langfuse.com' },
+    { id: 'langfuse', endpoint: 'https://cloud.langfuse.com', auth: { token: 'secret' } },
+    { id: 'langfuse', endpoint: 'https://cloud.langfuse.com', auth: { username: 'public-key' } },
+    { id: 'langfuse', endpoint: 'https://cloud.langfuse.com', auth: { password: 'secret-key' } },
     {
       id: 'tempo',
       endpoint: 'https://tempo.example.com',
