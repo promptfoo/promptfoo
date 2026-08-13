@@ -439,9 +439,9 @@ export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
+Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo records the overall run as `invoke_agent` and normalizes Responses API model calls into `chat` spans with their model, token usage, and `openai.api.type: responses`. SDK tool spans become `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans become command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
 
-When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
+When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. The exporter follows the evaluation's configured HTTP receiver, including IPv6 hosts and JSON- or protobuf-only receivers. Passing a trace context by itself does not enable export unless a receiver or explicit `otlpEndpoint` is available. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
 Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 
