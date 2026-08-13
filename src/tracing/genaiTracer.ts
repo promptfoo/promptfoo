@@ -543,11 +543,8 @@ function buildRequestAttributes(
 export function sanitizeBody(body: string): string {
   let sanitized = body;
   for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
-    if (typeof replacement === 'function') {
-      sanitized = sanitized.replace(pattern, replacement);
-    } else {
-      sanitized = sanitized.replace(pattern, replacement);
-    }
+    // Both replacement types are valid, but TypeScript models them as separate overloads.
+    sanitized = sanitized.replace(pattern, replacement as string);
   }
   return sanitized;
 }
