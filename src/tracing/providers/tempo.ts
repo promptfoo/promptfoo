@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithProxy } from './fetch';
 import { TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
