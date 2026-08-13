@@ -287,7 +287,7 @@
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
-    "@googleapis/sheets": "^13.0.1",
+    "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
