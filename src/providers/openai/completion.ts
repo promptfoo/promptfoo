@@ -51,7 +51,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    let stop: string;
+    let stop: unknown;
     try {
       stop = getEnvString('OPENAI_STOP')
         ? JSON.parse(getEnvString('OPENAI_STOP') || '')
@@ -80,8 +80,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     const stopSequences =
       typeof body.stop === 'string'
         ? [body.stop]
-        : Array.isArray(body.stop) && body.stop.every((item) => typeof item === 'string')
-          ? (body.stop as string[])
+        : Array.isArray(body.stop) &&
+            body.stop.every((item): item is string => typeof item === 'string')
+          ? body.stop
           : undefined;
 
     return withGenAISpan(

@@ -211,6 +211,23 @@ describe('OpenAI Provider', () => {
       }
     });
 
+    it('does not record completion stop sequences containing non-string values', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+      const { attributes, restore } = recordSpanAttributes();
+
+      try {
+        await new OpenAiCompletionProvider('text-davinci-003', {
+          config: { passthrough: { stop: ['valid-stop', 123] } },
+        }).callApi('Test prompt');
+
+        const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(requestBody.stop).toEqual(['valid-stop', 123]);
+        expect(attributes).not.toHaveProperty('gen_ai.request.stop_sequences');
+      } finally {
+        restore();
+      }
+    });
+
     it.each([
       ['babbage-002', 0.4, 0.4],
       ['davinci-002', 2, 2],
