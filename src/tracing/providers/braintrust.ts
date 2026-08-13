@@ -1,5 +1,10 @@
 import logger from '../../logger';
-import { fetchWithProxy } from './fetch';
+import {
+  fetchWithProxy,
+  MAX_TRACE_RESPONSE_BYTES,
+  readLimitedResponse,
+  releaseResponse,
+} from './fetch';
 import { TraceProviderError } from './types';
 
 import type { SpanData } from '../store';
@@ -29,7 +34,6 @@ interface BraintrustQueryResponse {
   data?: BraintrustSpan[];
 }
 
-const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_SPANS = 10_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const PROJECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,9 +59,13 @@ function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanDa
     return null;
   }
 
-  const parentSpanId = row.span_parents?.find((parent) => parent && parent !== spanId);
+  const parentSpanId = row.span_parents
+    ?.slice()
+    .reverse()
+    .find((parent) => parent && parent !== spanId);
   const name =
     typeof row.span_attributes?.name === 'string' ? row.span_attributes.name : 'braintrust.span';
+  const isToolSpan = row.span_attributes?.type === 'tool';
   const attributes: Record<string, unknown> = {
     ...row.metadata,
     ...row.span_attributes,
@@ -66,6 +74,13 @@ function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanDa
     ...(row.output !== undefined && { 'braintrust.output': row.output }),
     ...(typeof row.span_attributes?.type === 'string' && {
       'braintrust.span.type': row.span_attributes.type,
+    }),
+    ...(isToolSpan && {
+      'gen_ai.tool.name': name,
+      'tool.name': name,
+      ...(row.input !== undefined && {
+        'tool.arguments': typeof row.input === 'string' ? row.input : JSON.stringify(row.input),
+      }),
     }),
   };
 
@@ -128,6 +143,22 @@ export class BraintrustProvider implements TraceProvider {
     this.token = config.auth.token;
   }
 
+  private buildHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { ...this.config.headers };
+    for (const header of Object.keys(headers)) {
+      if (['accept', 'authorization', 'content-type'].includes(header.toLowerCase())) {
+        delete headers[header];
+      }
+    }
+
+    return {
+      ...headers,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${this.token}`,
+    };
+  }
+
   async fetchTrace(traceId: string, options?: FetchTraceOptions): Promise<FetchTraceResult | null> {
     if (!TRACE_ID_PATTERN.test(traceId) || /^0+$/.test(traceId)) {
       throw new TraceProviderError('Trace ID must contain 32 hexadecimal characters');
@@ -156,34 +187,34 @@ export class BraintrustProvider implements TraceProvider {
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
       : timeoutSignal;
     const response = await fetchWithProxy(`${this.baseUrl}/btql`, {
+      disableTransientRetries: true,
       method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        ...this.config.headers,
-        Authorization: `Bearer ${this.token}`,
-      },
+      headers: this.buildHeaders(),
       body: JSON.stringify({ query, fmt: 'json' }),
+      redirect: 'error',
       signal,
     });
 
     if (response.status === 404) {
-      return null;
+      await releaseResponse(response, 'Braintrust');
+      throw new TraceProviderError(
+        'Braintrust BTQL endpoint returned HTTP 404; check the endpoint and project configuration',
+        { statusCode: response.status },
+      );
     }
     if (!response.ok) {
+      await releaseResponse(response, 'Braintrust');
       throw new TraceProviderError(`Braintrust returned HTTP ${response.status}`, {
         statusCode: response.status,
-        retryable: response.status === 429 || response.status >= 500,
+        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
       });
     }
 
-    if (Number(response.headers.get('content-length')) > MAX_RESPONSE_BYTES) {
+    if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
+      await releaseResponse(response, 'Braintrust');
       throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
     }
-    const body = await response.text();
-    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
-    }
+    const body = await readLimitedResponse(response, 'Braintrust');
 
     const result = JSON.parse(body) as BraintrustQueryResponse;
     const rows = result.rows ?? result.data;
