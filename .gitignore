@@ -54,3 +54,6 @@ code-scan-action/dist/test.mp4
 
 *storybook.log
 storybook-static
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
