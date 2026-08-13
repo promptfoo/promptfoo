@@ -777,8 +777,25 @@ describe('contains-sql assertion', () => {
     ['a four-backtick fence', '````sql\nSELECT `id` FROM `users`;\n````'],
     ['a tilde fence', '~~~sql\nSELECT 1;\n~~~'],
     ['a longer closing fence', '```sql\nSELECT 1;\n````'],
+    ['an unlabeled fence', '```\nSELECT 1;\n```'],
+    ['a case-insensitive SQL label', '``` SQL \nSELECT 1;\n```'],
+    ['a three-space indentation', '   ```sql\nSELECT 1;\n   ```'],
+    ['tab-padded fence labels', '```\t\tsql\t\nSELECT 1;\n```\t\t'],
   ])('should extract SQL from %s', async (_description, outputString) => {
     await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('parses fence labels with long whitespace runs in linear time', async () => {
+    const padding = '\t'.repeat(50_000);
+    const outputString = `\`\`\`${padding}sql\nSELECT 1;\n\`\`\`${padding}`;
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: true, score: 1 });
+  });
+
+  it('does not close a fence with a different character or a shorter fence', async () => {
+    const outputString = '````sql\nSELECT 1;\n~~~\n```\n````';
+
+    await expect(runContainsSql(outputString)).resolves.toMatchObject({ pass: false, score: 0 });
   });
 
   it.each([
@@ -789,6 +806,8 @@ describe('contains-sql assertion', () => {
     ['an unclosed fenced block', `${fence}sql\nSELECT 1;`],
     ['a non-SQL fenced block', `${fence}python\nprint('hello')\n${fence}`],
     ['a tag that merely starts with sql', `${fence}sqlSELECT\nSELECT 1;\n${fence}`],
+    ['a four-space indentation', `    ${fence}sql\nSELECT 1;\n    ${fence}`],
+    ['a closing fence with an info string', `${fence}sql\nSELECT 1;\n${fence}sql`],
   ])('should reject %s', async (_description, outputString) => {
     const result = await runContainsSql(outputString);
 
