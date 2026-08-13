@@ -469,9 +469,19 @@ describe('genaiTracer', () => {
     });
 
     it('does not classify arbitrary callback error fields as execution failures', async () => {
-      const result = { content: 'account found', error: '' };
+      const result = { content: 'account found', error: 'business-domain error detail' };
 
       expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
+    it('does not classify empty MCP error fields as execution failures', async () => {
+      const result = { content: 'account found', error: '' };
+
+      expect(
+        await withGenAIToolSpan({ name: 'lookup_account', resultFormat: 'mcp' }, () => result),
+      ).toBe(result);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
     });
@@ -484,6 +494,21 @@ describe('genaiTracer', () => {
       ).toBe(failure);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('marks caught MCP SDK failures as errors without changing the returned result', async () => {
+      const failure = { content: '', error: 'MCP transport disconnected' };
+
+      expect(
+        await withGenAIToolSpan({ name: 'search', resultFormat: 'mcp' }, async () => failure),
+      ).toBe(failure);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'tool_error');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'MCP transport disconnected',
+      });
       expect(mockSpan.end).toHaveBeenCalledOnce();
     });
 

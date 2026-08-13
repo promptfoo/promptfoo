@@ -260,7 +260,11 @@ export async function withGenAIToolSpan<T>(
           span.setAttribute('tool.output', output);
         }
 
-        if (resultRecord?.isError === true) {
+        if (
+          resultRecord &&
+          (resultRecord.isError === true ||
+            (tool.resultFormat === 'mcp' && Boolean(resultRecord.error)))
+        ) {
           span.setAttribute('tool.is_error', true);
           span.setAttribute('error.type', 'tool_error');
           span.setStatus({

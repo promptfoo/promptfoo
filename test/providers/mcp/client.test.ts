@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { trace } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
@@ -688,6 +688,47 @@ describe('MCPClient', () => {
           expect.any(Function),
         );
         expect(span.setAttribute).toHaveBeenCalledWith('tool.output', 'result');
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it('marks caught MCP transport failures as tool execution errors', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockRejectedValueOnce(new Error('MCP transport disconnected'));
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'npm', args: ['start'] },
+      });
+      await mcpClient.initialize();
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        expect(await mcpClient.callTool('tool1', {})).toEqual({
+          content: '',
+          error: 'MCP transport disconnected',
+        });
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setAttribute).toHaveBeenCalledWith('error.type', 'tool_error');
+        expect(span.setStatus).toHaveBeenCalledWith({
+          code: SpanStatusCode.ERROR,
+          message: 'MCP transport disconnected',
+        });
+        expect(span.end).toHaveBeenCalledOnce();
       } finally {
         activeSpanSpy.mockRestore();
         tracerSpy.mockRestore();
