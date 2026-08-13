@@ -1134,7 +1134,7 @@ assert:
 
 ## Tracing
 
-When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+When [tracing](/docs/tracing/) is enabled, every provider call emits an `invoke_agent` span using the GenAI semantic conventions (`gen_ai.provider.name`, `gen_ai.agent.name`, and `gen_ai.usage.*`) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, and `tool.is_error`). The `gen_ai.request.model` attribute is included only when a specific model is configured. These spans join the eval trace, where they can inform assertions, grading, and the trace timeline.
 
 The provider also emits a `gen_ai.turn N` marker span per LLM round-trip (one per `assistant` message from the SDK stream). Each tool span is tagged with the `gen_ai.turn.index` of the assistant message that emitted it. This lets you assert on agent batching with [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count):
 
@@ -1147,7 +1147,7 @@ assert:
       max: 3
 ```
 
-Turn spans include `gen_ai.turn.index`, `gen_ai.system`, `gen_ai.response.model`, and token usage attributes when available. Subagent turns also carry `gen_ai.turn.is_subagent`, `gen_ai.turn.parent_tool_use_id`, and `gen_ai.turn.subagent_type`.
+Turn spans include `gen_ai.turn.index`, `gen_ai.provider.name`, `gen_ai.response.model`, and token usage attributes when available. Subagent turns also carry `gen_ai.turn.is_subagent`, `gen_ai.turn.parent_tool_use_id`, and `gen_ai.turn.subagent_type`.
 
 The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
 
@@ -1170,7 +1170,22 @@ tracing:
 
 ### Deep tracing (SDK-internal events)
 
-To also capture Claude Code's internal events — API requests, tool decisions, tool results — set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
+Set `deep_tracing: true` to capture the Claude SDK's own model, tool, and subagent spans. Enable the OTLP HTTP receiver so Promptfoo can ingest native spans, select a supported export format, and avoid duplicating its own turn and tool spans. If no receiver is running, Promptfoo keeps its own spans. Prompt and tool-content logging remains off unless you explicitly enable it.
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      deep_tracing: true
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+```
+
+To also capture Claude Code's internal log events, set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
 
 ```yaml
 config:

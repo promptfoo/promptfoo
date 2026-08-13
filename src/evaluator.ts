@@ -37,7 +37,10 @@ import {
   createRateLimitRegistry,
   type RateLimitRegistry,
 } from './scheduler';
-import { withProviderCallExecutionContext } from './scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from './scheduler/providerCallExecutionContext';
 import { type ProviderCallQueue, ProviderGroupedCallQueue } from './scheduler/providerCallQueue';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
@@ -50,7 +53,8 @@ import {
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import { isExternalTraceProvider } from './tracing/providers';
-import { withTestCaseSpan, withTracedProviderCall } from './tracing/targetTracer';
+import { getActiveTraceparent } from './tracing/spanRoles';
+import { withGraderSpan, withTestCaseSpan, withTracedProviderCall } from './tracing/targetTracer';
 import { fetchTraceContext } from './tracing/traceContext';
 import { isCliEventSource } from './types/eventSource';
 import {
@@ -1735,7 +1739,17 @@ async function runEvalInternal({
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
-    return await runExecution();
+    return executionTraceContext
+      ? await withProviderCallTracingContext(
+          {
+            getActiveTraceparent,
+            testIndex,
+            withGraderSpan,
+            withProviderSpan: withTracedProviderCall,
+          },
+          runExecution,
+        )
+      : await runExecution();
   } catch (err) {
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,

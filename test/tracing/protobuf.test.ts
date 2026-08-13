@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   bytesToHex,
   decodeExportTraceServiceRequest,
+  encodeExportTraceServiceRequest,
   initializeProtobuf,
   longToNumber,
 } from '../../src/tracing/protobuf';
@@ -113,6 +114,47 @@ describe('Protobuf decoding', () => {
   });
 
   describe('decodeExportTraceServiceRequest', () => {
+    it('round-trips OTLP JSON payloads through the shared protobuf encoder', async () => {
+      const request = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'promptfoo' } }],
+            },
+            scopeSpans: [
+              {
+                scope: { name: 'openai-agents-js' },
+                spans: [
+                  {
+                    traceId: Buffer.from('0123456789abcdef0123456789abcdef', 'hex').toString(
+                      'base64',
+                    ),
+                    spanId: Buffer.from('0123456789abcdef', 'hex').toString('base64'),
+                    name: 'chat gpt-4.1',
+                    kind: 3,
+                    startTimeUnixNano: '1715000000000000000',
+                    attributes: [
+                      { key: 'gen_ai.request.model', value: { stringValue: 'gpt-4.1' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encoded = await encodeExportTraceServiceRequest(request);
+      const decoded = await decodeExportTraceServiceRequest(encoded);
+      const span = decoded.resourceSpans[0].scopeSpans[0].spans[0];
+
+      expect(Buffer.isBuffer(encoded)).toBe(true);
+      expect(bytesToHex(span.traceId, 32)).toBe('0123456789abcdef0123456789abcdef');
+      expect(bytesToHex(span.spanId, 16)).toBe('0123456789abcdef');
+      expect(span.name).toBe('chat gpt-4.1');
+      expect(span.attributes).toEqual([expect.objectContaining({ key: 'gen_ai.request.model' })]);
+    });
+
     it('should decode a simple protobuf trace request', async () => {
       const traceIdBytes = new Uint8Array([
         0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,

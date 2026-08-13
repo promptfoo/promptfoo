@@ -3,6 +3,7 @@ import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
+import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
@@ -514,6 +515,23 @@ describe('evaluator trace integration', () => {
         expect.objectContaining({ testIdx: 7 }),
         undefined,
       );
+    });
+
+    it('scopes the real evaluation test index to grading without adding user variables', async () => {
+      let activeTestIndex: number | undefined;
+      const provider = createMockProvider({
+        callApi: async () => {
+          activeTestIndex = getProviderCallTracingContext()?.testIndex;
+          return { output: 'Target output' };
+        },
+      });
+      const options = createRunOptions(provider, { testIdx: 7 });
+      options.test.vars = { input: 'ordinary user variable' };
+
+      await runEval(options);
+
+      expect(activeTestIndex).toBe(7);
+      expect(options.test.vars).toEqual({ input: 'ordinary user variable' });
     });
 
     it('renders trace-provider credentials and suite environment overrides for programmatic evals', async () => {

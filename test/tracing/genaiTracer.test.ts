@@ -1,4 +1,4 @@
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
@@ -10,6 +10,7 @@ import {
   PromptfooAttributes,
   setGenAIResponseAttributes,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../../src/tracing/genaiTracer';
 
 // Mock @opentelemetry/api
@@ -402,6 +403,180 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).not.toHaveBeenCalledWith(
         PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS,
         expect.anything(),
+      );
+    });
+  });
+
+  describe('withGenAIToolSpan', () => {
+    beforeEach(() => {
+      vi.mocked(trace.getActiveSpan).mockReturnValue(mockSpan as any);
+    });
+
+    it('records standard tool attributes and sanitizes inputs and output', async () => {
+      const result = await withGenAIToolSpan(
+        {
+          name: 'lookup_account',
+          arguments: { apiKey: 'sk-abcdefghijklmnopqrstuvwxyz' },
+          callId: 'call-123',
+        },
+        async () => ({ token: 'secret-token-value-12345678901234567890' }),
+      );
+
+      expect(result).toEqual({ token: 'secret-token-value-12345678901234567890' });
+      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+        'execute_tool lookup_account',
+        expect.objectContaining({
+          kind: SpanKind.INTERNAL,
+          attributes: expect.objectContaining({
+            'gen_ai.operation.name': 'execute_tool',
+            'gen_ai.tool.name': 'lookup_account',
+            'gen_ai.tool.call.id': 'call-123',
+            'tool.name': 'lookup_account',
+            'tool.arguments': '{"apiKey":"<REDACTED_API_KEY>"}',
+          }),
+        }),
+        expect.any(Function),
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', '{"token":"<REDACTED>"}');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('does not create orphan tool spans when no parent span is active', async () => {
+      vi.mocked(trace.getActiveSpan).mockReturnValue(undefined);
+
+      expect(await withGenAIToolSpan({ name: 'search' }, async () => 'found')).toBe('found');
+      expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
+    });
+
+    it('records complete callback objects even when they contain a content property', async () => {
+      const result = {
+        content: 'account found',
+        metadata: { destination: 'audit-log', attempt: 2 },
+      };
+
+      expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', JSON.stringify(result));
+    });
+
+    it('extracts model-visible content only for MCP results', async () => {
+      const result = { content: 'account found', metadata: { requestId: 'request-123' } };
+
+      expect(
+        await withGenAIToolSpan({ name: 'lookup_account', resultFormat: 'mcp' }, () => result),
+      ).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', 'account found');
+    });
+
+    it('does not classify arbitrary callback error fields as execution failures', async () => {
+      const result = { content: 'account found', error: 'business-domain error detail' };
+
+      expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
+    it('does not classify empty MCP error fields as execution failures', async () => {
+      const result = { content: 'account found', error: '' };
+
+      expect(
+        await withGenAIToolSpan({ name: 'lookup_account', resultFormat: 'mcp' }, () => result),
+      ).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
+    it('marks MCP error results as failed without changing the returned result', async () => {
+      const failure = { content: 'denied', isError: true };
+
+      expect(
+        await withGenAIToolSpan({ name: 'search', resultFormat: 'mcp' }, async () => failure),
+      ).toBe(failure);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('marks caught MCP SDK failures as errors without changing the returned result', async () => {
+      const failure = { content: '', error: 'MCP transport disconnected' };
+
+      expect(
+        await withGenAIToolSpan({ name: 'search', resultFormat: 'mcp' }, async () => failure),
+      ).toBe(failure);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('error.type', 'tool_error');
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'MCP transport disconnected',
+      });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('records thrown errors and preserves the original exception', async () => {
+      const error = new Error('Tool failed');
+
+      await expect(
+        withGenAIToolSpan({ name: 'search' }, async () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      expect(mockSpan.recordException).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Error', message: 'Tool failed' }),
+      );
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Tool failed',
+      });
+      expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('sanitizes exception event messages and stacks without replacing the thrown error', async () => {
+      const secret = 'sk-abcdefghijklmnopqrstuvwxyz';
+      const error = new Error(`Authentication failed for ${secret}`);
+      error.stack = `Error: Authentication failed for ${secret}\n    at executeTool (${secret})`;
+
+      await expect(
+        withGenAIToolSpan({ name: 'lookup_account' }, () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      const recordedError = mockSpan.recordException.mock.calls[0][0] as Error;
+      expect(recordedError).not.toBe(error);
+      expect(recordedError.message).toBe('Authentication failed for <REDACTED_API_KEY>');
+      expect(recordedError.stack).toContain('<REDACTED_API_KEY>');
+      expect(recordedError.stack).not.toContain(secret);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Authentication failed for <REDACTED_API_KEY>',
+      });
+    });
+
+    it('does not fail tool execution when attributes cannot be serialized', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+
+      expect(await withGenAIToolSpan({ name: 'search', arguments: circular }, () => circular)).toBe(
+        circular,
+      );
+      expect(mockTracer.startActiveSpan.mock.calls[0][1].attributes).not.toHaveProperty(
+        'tool.arguments',
+      );
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith('tool.output', expect.anything());
+    });
+
+    it('limits large tool attributes', async () => {
+      const largeValue = 'x'.repeat(5000);
+
+      await withGenAIToolSpan({ name: 'search', arguments: largeValue }, () => largeValue);
+
+      const attributes = mockTracer.startActiveSpan.mock.calls[0][1].attributes;
+      expect(attributes['tool.arguments']).toHaveLength(4096);
+      expect(attributes['tool.arguments']).toContain('[truncated]');
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        'tool.output',
+        expect.stringContaining('[truncated]'),
       );
     });
   });

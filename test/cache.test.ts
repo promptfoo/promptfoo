@@ -863,6 +863,89 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
+    it('should reuse cached responses across trace contexts without removing outgoing trace headers', async () => {
+      const firstTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const secondTraceparent = '00-fedcba9876543210fedcba9876543210-fedcba9876543210-01';
+      mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
+
+      const firstOptions = {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer shared-token',
+          traceparent: firstTraceparent,
+          tracestate: 'vendor=first',
+        },
+        body: JSON.stringify({ task: 'same-task' }),
+      };
+      const secondOptions = {
+        ...firstOptions,
+        headers: {
+          Authorization: 'Bearer shared-token',
+          traceparent: secondTraceparent,
+          tracestate: 'vendor=second',
+        },
+      };
+
+      const firstResult = await fetchWithCache(url, firstOptions, 1000);
+      const secondResult = await fetchWithCache(url, secondOptions, 1000);
+
+      expect(firstResult.cached).toBe(false);
+      expect(secondResult.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(url, firstOptions, 1000, undefined);
+    });
+
+    it('should keep authorization and team isolation when trace contexts change', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'first identity' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'second identity' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'third identity' }));
+
+      const requestOptions = {
+        method: 'POST',
+        body: JSON.stringify({ task: 'same-task' }),
+      };
+
+      await fetchWithCache(
+        url,
+        {
+          ...requestOptions,
+          headers: {
+            Authorization: 'Bearer first-token',
+            'x-promptfoo-team-id': 'first-team',
+            traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+          },
+        },
+        1000,
+      );
+      await fetchWithCache(
+        url,
+        {
+          ...requestOptions,
+          headers: {
+            Authorization: 'Bearer second-token',
+            'x-promptfoo-team-id': 'first-team',
+            traceparent: '00-fedcba9876543210fedcba9876543210-fedcba9876543210-01',
+          },
+        },
+        1000,
+      );
+      await fetchWithCache(
+        url,
+        {
+          ...requestOptions,
+          headers: {
+            Authorization: 'Bearer second-token',
+            'x-promptfoo-team-id': 'second-team',
+            traceparent: '00-11111111111111111111111111111111-1111111111111111-01',
+          },
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
+    });
+
     it('should not cache opaque FormData request bodies', async () => {
       const cache = getCache();
       const firstFormData = new FormData();

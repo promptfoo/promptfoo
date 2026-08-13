@@ -199,6 +199,15 @@ export interface GenAISpanResult {
   additionalAttributes?: Record<string, string | number | boolean>;
 }
 
+/** Details shared by function callbacks and MCP tool executions. */
+export interface GenAIToolSpanContext {
+  name: string;
+  arguments?: unknown;
+  callId?: string;
+  /** MCP wraps its model-visible output in a protocol-specific content field. */
+  resultFormat?: 'mcp';
+}
+
 /**
  * Get the tracer instance for GenAI operations.
  */
@@ -210,6 +219,99 @@ export function getGenAITracer(): Tracer {
 export function addActiveSpanRoleAttribute(attributes: Attributes): Attributes {
   const role = getActiveSpanRole();
   return role ? { ...attributes, [SPAN_ROLE_ATTRIBUTE]: role } : attributes;
+}
+
+/** Record tool execution beneath its existing target or grader span. */
+export async function withGenAIToolSpan<T>(
+  tool: GenAIToolSpanContext,
+  fn: () => T | Promise<T>,
+): Promise<T> {
+  if (!trace.getActiveSpan()) {
+    return await fn();
+  }
+
+  const attributes: Attributes = addActiveSpanRoleAttribute({
+    [GenAIAttributes.OPERATION_NAME]: 'execute_tool',
+    'gen_ai.tool.name': tool.name,
+    'tool.name': tool.name,
+  });
+  if (tool.callId) {
+    attributes['gen_ai.tool.call.id'] = tool.callId;
+  }
+  const toolArguments = serializeToolAttribute(tool.arguments);
+  if (toolArguments !== undefined) {
+    attributes['tool.arguments'] = toolArguments;
+  }
+
+  return getGenAITracer().startActiveSpan(
+    `execute_tool ${tool.name}`,
+    { kind: SpanKind.INTERNAL, attributes },
+    async (span) => {
+      try {
+        const result = await fn();
+        const resultRecord =
+          result && typeof result === 'object' ? (result as Record<string, unknown>) : undefined;
+        const output = serializeToolAttribute(
+          tool.resultFormat === 'mcp' && resultRecord && 'content' in resultRecord
+            ? resultRecord.content
+            : result,
+        );
+        if (output !== undefined) {
+          span.setAttribute('tool.output', output);
+        }
+
+        if (
+          resultRecord &&
+          (resultRecord.isError === true ||
+            (tool.resultFormat === 'mcp' && Boolean(resultRecord.error)))
+        ) {
+          span.setAttribute('tool.is_error', true);
+          span.setAttribute('error.type', 'tool_error');
+          span.setStatus({
+            code: SpanStatusCode.ERROR,
+            ...(typeof resultRecord.error === 'string'
+              ? { message: truncateBody(resultRecord.error) }
+              : {}),
+          });
+        } else {
+          span.setAttribute('tool.is_error', false);
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+        return result;
+      } catch (error) {
+        span.setAttribute('tool.is_error', true);
+        span.setAttribute('error.type', error instanceof Error ? error.name : '_OTHER');
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: truncateBody(error instanceof Error ? error.message : String(error)),
+        });
+        if (error instanceof Error) {
+          const sanitizedError = new Error(truncateBody(error.message));
+          sanitizedError.name = error.name;
+          if (error.stack) {
+            sanitizedError.stack = truncateBody(error.stack);
+          }
+          span.recordException(sanitizedError);
+        }
+        throw error;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+function serializeToolAttribute(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  try {
+    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    return serialized === undefined ? undefined : truncateBody(serialized);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
