@@ -399,7 +399,10 @@ describe('OTLPTracingExporter', () => {
       const callback = `https://host/callback?access_token=${accessToken}&token_count=12`;
       const colonToken = 'colon-opaque/value';
       const colonCookie = 'colon-cookie-session';
-      const logDetails = `access_token: ${colonToken}; Cookie: session=${colonCookie}`;
+      const headerCredential = 'header-opaque.value/with+arbitrary=chars';
+      const logDetails =
+        `access_token: ${colonToken}; Cookie: session=${colonCookie}; ` +
+        `Authorization: Bearer ${headerCredential}`;
       const evaluationId = 'a'.repeat(64);
       const testCaseId = 'b'.repeat(64);
       const span = {
@@ -419,6 +422,7 @@ describe('OTLPTracingExporter', () => {
             authorization: [authorization],
             token_count: 12,
             token_type: 'Bearer',
+            token_ids: [101, 102],
             secretary: 'Alice',
             logDetails,
             nested: [{ refreshToken }],
@@ -468,6 +472,7 @@ describe('OTLPTracingExporter', () => {
       expect(serializedPayload).not.toContain(cookie);
       expect(serializedPayload).not.toContain(colonToken);
       expect(serializedPayload).not.toContain(colonCookie);
+      expect(serializedPayload).not.toContain(headerCredential);
 
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
       const attributes = getAttributes(exportedSpan);
@@ -481,8 +486,9 @@ describe('OTLPTracingExporter', () => {
         authorization: '<redacted>',
         token_count: 12,
         token_type: 'Bearer',
+        token_ids: [101, 102],
         secretary: 'Alice',
-        logDetails: 'access_token: <redacted>; Cookie: <redacted>',
+        logDetails: 'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>',
         nested: [{ refreshToken: '<redacted>' }],
       });
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
@@ -500,7 +506,7 @@ describe('OTLPTracingExporter', () => {
         'Authentication failed for <REDACTED_API_KEY>: ' +
           '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
           'https://host/callback?access_token=<redacted>&token_count=12; ' +
-          'access_token: <redacted>; Cookie: <redacted>',
+          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>',
       );
     },
   );

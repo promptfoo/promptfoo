@@ -626,7 +626,7 @@ function sanitizeCredentialText(value: string): string {
           : match,
     )
     .replace(
-      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*:\s*)([^\s;,"'{}\]]+)/g,
+      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
       (match, prefix: string, key: string, separator: string) =>
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
@@ -654,9 +654,23 @@ function isCredentialAttributeKey(key: string): boolean {
   return parts.some((part, index) => {
     if (part === 'token' || part === 'tokens') {
       return (
-        !['count', 'counts', 'usage', 'limit', 'budget', 'length', 'type'].includes(
-          parts[index + 1],
-        ) &&
+        ![
+          'count',
+          'counts',
+          'usage',
+          'limit',
+          'budget',
+          'length',
+          'type',
+          'id',
+          'ids',
+          'index',
+          'indices',
+          'position',
+          'positions',
+          'mask',
+          'masks',
+        ].includes(parts[index + 1]) &&
         ![
           'usage',
           'input',
