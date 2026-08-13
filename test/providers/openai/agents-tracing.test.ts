@@ -403,10 +403,17 @@ describe('OTLPTracingExporter', () => {
       const encodedCredential = 'encoded-query-opaque/value';
       const secondaryCookie = 'csrf-cookie-opaque/value';
       const equalsCredential = 'equals-header-opaque/value';
+      const digestCredential = 'digest-response-opaque/value';
+      const negotiateCredential = 'negotiate-opaque/value';
+      const awsCredential = 'aws-signature-opaque/value';
       const encodedCallback = `https://host/callback?%61ccess_token=${encodedCredential}`;
       const logDetails =
         `access_token: ${colonToken}; Cookie: session=${colonCookie}; csrf=${secondaryCookie}; ` +
-        `Authorization: Bearer ${headerCredential}; Authorization=Basic ${equalsCredential}`;
+        `Authorization: Bearer ${headerCredential}; Authorization=Basic ${equalsCredential}; ` +
+        `Authorization: Digest realm="accounts;production", response="${digestCredential}"; ` +
+        `Authorization=Negotiate ${negotiateCredential}; ` +
+        `Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, ` +
+        `Signature=${awsCredential}`;
       const evaluationId = 'a'.repeat(64);
       const testCaseId = 'b'.repeat(64);
       const span = {
@@ -483,6 +490,9 @@ describe('OTLPTracingExporter', () => {
       expect(serializedPayload).not.toContain(encodedCredential);
       expect(serializedPayload).not.toContain(secondaryCookie);
       expect(serializedPayload).not.toContain(equalsCredential);
+      expect(serializedPayload).not.toContain(digestCredential);
+      expect(serializedPayload).not.toContain(negotiateCredential);
+      expect(serializedPayload).not.toContain(awsCredential);
 
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
       const attributes = getAttributes(exportedSpan);
@@ -502,7 +512,9 @@ describe('OTLPTracingExporter', () => {
         token_url: 'https://issuer.example.com/token',
         secretary: 'Alice',
         logDetails:
-          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; Authorization=<redacted>',
+          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; ' +
+          'Authorization=<redacted>; Authorization: <redacted>; Authorization=<redacted>; ' +
+          'Authorization: <redacted>',
         nested: [{ refreshToken: '<redacted>' }],
       });
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
@@ -520,7 +532,9 @@ describe('OTLPTracingExporter', () => {
         'Authentication failed for <REDACTED_API_KEY>: ' +
           '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
           'https://host/callback?access_token=<redacted>&token_count=12; ' +
-          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; Authorization=<redacted>',
+          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; ' +
+          'Authorization=<redacted>; Authorization: <redacted>; Authorization=<redacted>; ' +
+          'Authorization: <redacted>',
       );
     },
   );

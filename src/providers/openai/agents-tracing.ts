@@ -619,6 +619,10 @@ function parseStructuredJson(value: string): unknown {
 function sanitizeCredentialText(value: string): string {
   return sanitizeBody(value)
     .replace(
+      /(\bAuthorization\s*[:=]\s*)(?!\s*<redacted>(?=\s*(?:[;\r\n&#"'\\]|$)))(?:(?!;\s*(?:Authorization\s*[:=]|Cookie\s*:)|[\r\n&#]).)+/gi,
+      (_match, prefix: string) => `${prefix}<redacted>`,
+    )
+    .replace(
       /(\bCookie\s*:\s*)[^\s;,"']+(?:;\s*(?!Authorization\s*[:=]|Cookie\s*:)[^\s;,"']+=[^\s;,"']+)*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
