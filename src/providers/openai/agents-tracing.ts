@@ -1,9 +1,7 @@
 import logger from '../../logger';
-import { sanitizeBody } from '../../tracing/genaiTracer';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
-import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getTracingServiceName } from '../tracing';
+import { getTracingServiceName, sanitizeBody } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
 
 import type { TracingExportFormat } from '../tracing';
@@ -11,6 +9,8 @@ import type { TracingExportFormat } from '../tracing';
 const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
 const OTLP_SPAN_KIND_INTERNAL = 1;
 const OTLP_SPAN_KIND_CLIENT = 3;
+const MAX_STRUCTURED_ATTRIBUTE_DEPTH = 32;
+const MAX_STRUCTURED_ATTRIBUTE_NODES = 10_000;
 const INTERNAL_TRACE_METADATA_KEYS = new Set([
   'promptfoo.otlp_endpoint',
   'promptfoo.otlp_format',
@@ -186,7 +186,7 @@ export class OTLPTracingExporter implements TracingExporter {
     if (span.error) {
       return {
         code: 2,
-        message: sanitizeBody(span.error.message || String(span.error)),
+        message: sanitizeSerializedAttribute(span.error.message || String(span.error)),
       };
     }
 
@@ -363,11 +363,11 @@ export class OTLPTracingExporter implements TracingExporter {
   }
 
   private attributesToOTLP(attributes: Record<string, unknown>): any[] {
-    return Object.entries(sanitizeTraceAttributes(attributes, { truncateValues: false }))
+    return Object.entries(attributes)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => ({
         key,
-        value: this.valueToOTLP(value),
+        value: this.valueToOTLP(sanitizeAttributeByKey(key, value)),
       }));
   }
 
@@ -397,7 +397,7 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     if (typeof value === 'object') {
-      return { stringValue: sanitizeBody(safeJsonStringify(value)) };
+      return { stringValue: sanitizeSerializedAttribute(safeJsonStringify(value)) };
     }
 
     return { stringValue: String(value) };
@@ -563,15 +563,106 @@ function sanitizeSerializedAttribute(value: string): string {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       if (isRecord(parsed) || Array.isArray(parsed)) {
-        const sanitized = sanitizeTraceAttributes({ value: parsed }, { truncateValues: false });
-        return sanitizeBody(JSON.stringify(sanitized.value));
+        return sanitizeCredentialText(JSON.stringify(sanitizeStructuredAttribute(parsed)));
       }
     } catch {
       // Non-JSON strings still need the existing free-text credential redaction.
     }
   }
 
-  return sanitizeBody(value);
+  return sanitizeCredentialText(value);
+}
+
+function sanitizeCredentialText(value: string): string {
+  return sanitizeBody(value).replace(
+    /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"']*)\4/g,
+    (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
+      isCredentialAttributeKey(key)
+        ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
+        : match,
+  );
+}
+
+function isCredentialAttributeKey(key: string): boolean {
+  const parts = key
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z\d]+/)
+    .filter(Boolean);
+
+  return parts.some((part, index) => {
+    if (part === 'token') {
+      return !['count', 'counts', 'usage', 'limit', 'budget', 'length'].includes(parts[index + 1]);
+    }
+    if (
+      [
+        'authorization',
+        'cookie',
+        'password',
+        'passwd',
+        'passphrase',
+        'secret',
+        'credential',
+      ].includes(part)
+    ) {
+      return true;
+    }
+    return part === 'key' && ['api', 'access', 'private'].includes(parts[index - 1]);
+  });
+}
+
+function sanitizeAttributeByKey(key: string, value: unknown): unknown {
+  if (typeof value === 'string' && isCredentialAttributeKey(key)) {
+    return '<redacted>';
+  }
+  if (isRecord(value) || Array.isArray(value)) {
+    return sanitizeStructuredAttribute(value);
+  }
+  return value;
+}
+
+function sanitizeStructuredAttribute(
+  value: Record<string, unknown> | unknown[],
+): Record<string, unknown> | unknown[] | string {
+  type StructuredValue = Record<string, unknown> | unknown[];
+  const root: StructuredValue = Array.isArray(value) ? [] : {};
+  const stack: Array<{ source: StructuredValue; target: StructuredValue; depth: number }> = [
+    { source: value, target: root, depth: 0 },
+  ];
+  let visitedNodes = 0;
+
+  while (stack.length > 0) {
+    const { source, target, depth } = stack.pop()!;
+    for (const [key, entry] of Object.entries(source)) {
+      if (++visitedNodes > MAX_STRUCTURED_ATTRIBUTE_NODES) {
+        return '<redacted>';
+      }
+
+      let sanitized: unknown;
+      if (typeof entry === 'string' && isCredentialAttributeKey(key)) {
+        sanitized = '<redacted>';
+      } else if (isRecord(entry) || Array.isArray(entry)) {
+        if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
+          sanitized = '<redacted>';
+        } else {
+          const child: StructuredValue = Array.isArray(entry) ? [] : {};
+          stack.push({ source: entry, target: child, depth: depth + 1 });
+          sanitized = child;
+        }
+      } else {
+        sanitized = typeof entry === 'string' ? sanitizeCredentialText(entry) : entry;
+      }
+
+      Object.defineProperty(target, key, {
+        configurable: true,
+        enumerable: true,
+        value: sanitized,
+        writable: true,
+      });
+    }
+  }
+
+  return root;
 }
 
 function sanitizeAttributeValue(value: unknown): unknown {

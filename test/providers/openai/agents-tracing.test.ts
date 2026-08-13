@@ -401,12 +401,19 @@ describe('OTLPTracingExporter', () => {
             apiKey,
             accountId: 'account-123',
             access_token: accessToken,
+            token_count: 12,
+            secretary: 'Alice',
             nested: [{ refreshToken }],
           }),
           output: JSON.stringify({ token: sessionToken, client_secret: clientSecret }),
         },
         traceMetadata: { customerApiKey: metadataSecret, 'promptfoo.otlp_format': format },
-        error: new Error(`Authentication failed for ${apiKey}`),
+        error: new Error(
+          `Authentication failed for ${apiKey}: ${JSON.stringify({
+            client_secret: clientSecret,
+            access_token: accessToken,
+          })}`,
+        ),
       };
 
       await exporter.export([span as any]);
@@ -430,6 +437,8 @@ describe('OTLPTracingExporter', () => {
         apiKey: '<redacted>',
         accountId: 'account-123',
         access_token: '<redacted>',
+        token_count: 12,
+        secretary: 'Alice',
         nested: [{ refreshToken: '<redacted>' }],
       });
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
@@ -437,7 +446,52 @@ describe('OTLPTracingExporter', () => {
         client_secret: '<redacted>',
       });
       expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
-      expect(exportedSpan.status.message).toBe('Authentication failed for <REDACTED_API_KEY>');
+      expect(exportedSpan.status.message).toBe(
+        'Authentication failed for <REDACTED_API_KEY>: ' +
+          '{"client_secret":"<redacted>","access_token":"<redacted>"}',
+      );
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'keeps %s span batches exportable when tool data exceeds the safe nesting depth',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      const deeplyNestedSecret = 'deeply-nested-credential';
+      const deeplyNestedInput =
+        '['.repeat(5000) + JSON.stringify({ access_token: deeplyNestedSecret }) + ']'.repeat(5000);
+      const spans = [
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcde0',
+          spanData: { type: 'function', name: 'nested_tool', input: deeplyNestedInput },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        },
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcde1',
+          spanData: { type: 'function', name: 'healthy_tool', input: '{"accountId":"123"}' },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        },
+      ];
+
+      await exporter.export(spans as any);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledOnce();
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const exportedSpans = payload.resourceSpans[0].scopeSpans[0].spans;
+      expect(exportedSpans).toHaveLength(2);
+      expect(JSON.stringify(exportedSpans)).not.toContain(deeplyNestedSecret);
+      expect(getAttributes(exportedSpans[0])['tool.arguments']).toContain('<redacted>');
+      expect(getAttributes(exportedSpans[1])['tool.arguments']).toBe('{"accountId":"123"}');
     },
   );
 
