@@ -7,11 +7,16 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
+import {
+  getProviderCallTracingContext,
+  type RateLimitRegistry,
+  wrapProviderWithRateLimiting,
+} from '../../scheduler';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionOrSet,
+  type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
   isApiProvider,
@@ -464,6 +469,50 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
+/** Invoke a red-team target with the same tracing behavior across every strategy. */
+export function callTargetProvider(
+  targetProvider: ApiProvider,
+  targetPrompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return targetProvider.callApi(targetPrompt, context, options);
+  }
+
+  return tracingContext.withProviderSpan(
+    { provider: targetProvider, callContext: context },
+    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+  );
+}
+
+/** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
+export function callGradingProvider(
+  provider: ApiProvider,
+  prompt: string,
+  callContext?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const invoke = (context?: CallApiContextParams) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke(callContext);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: callContext?.prompt.label ?? 'judge',
+      evalId: callContext?.evaluationId,
+      testIndex: callContext?.testIdx ?? tracingContext.testIndex,
+    },
+    () => tracingContext.withProviderSpan({ provider, callContext, role: 'grader' }, invoke),
+  );
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -480,7 +529,7 @@ export async function getTargetResponse(
 
   try {
     throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
-    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
+    targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
@@ -555,6 +604,40 @@ export async function getTargetResponse(
 
     Note: Empty strings are valid output values.
     `,
+  );
+}
+
+interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
+  id: string;
+  getResult: (
+    prompt: string,
+    output: string,
+    test: AtomicTestCase,
+    ...args: TArgs
+  ) => Promise<TResult>;
+}
+
+/** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
+export function runRedteamGrader<TResult, TArgs extends unknown[]>(
+  grader: TraceableRedteamGrader<TResult, TArgs>,
+  prompt: string,
+  output: string,
+  test: AtomicTestCase,
+  ...args: TArgs
+): Promise<TResult> {
+  const invoke = () => grader.getResult(prompt, output, test, ...args);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke();
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: grader.id,
+      evalId: test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    invoke,
   );
 }
 
