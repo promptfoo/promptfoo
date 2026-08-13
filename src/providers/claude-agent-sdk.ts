@@ -15,13 +15,11 @@ import {
   GenAIAttributes,
   getGenAITracer,
   getTraceparent,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
-import {
-  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
-  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
-} from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -32,7 +30,11 @@ import {
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
-import { getConfiguredTracingExport, isActiveTracingExport } from './tracing';
+import {
+  getConfiguredTracingExport,
+  isActiveTracingExport,
+  waitForNativeTraceExport,
+} from './tracing';
 import type {
   AgentDefinition,
   CanUseTool,
@@ -1554,6 +1556,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Tool spans are tagged with the active turn index via `toolTurnIndex`.
           let turnCount = 0;
           const toolTurnIndex = new Map<string, number>();
+          const deferredSyntheticSpans: Array<() => void> = [];
+          const emitOrDeferSyntheticSpan = (emit: () => void): void => {
+            if (sdkExportsNativeSpans) {
+              deferredSyntheticSpans.push(emit);
+            } else {
+              emit();
+            }
+          };
           const emitTurnSpan = (msg: SDKAssistantMessage): number => {
             const index = turnCount + 1;
             turnCount = index;
@@ -1589,7 +1599,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             }
             // A turn marker is a point-in-time event, so start and end at the same instant.
             const now = Date.now();
-            if (!sdkExportsNativeSpans) {
+            emitOrDeferSyntheticSpan(() => {
               emitTurnMarkerSpan({
                 tracer: getGenAITracer(),
                 index,
@@ -1599,7 +1609,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 errorMessage: msg.error,
                 logLabel: 'ClaudeAgentSDK',
               });
-            }
+            });
             return index;
           };
 
@@ -1612,15 +1622,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             const endedAt = Date.now();
             for (const [toolUseId, startMs] of toolStartTimes) {
               const entry = toolCallsMap.get(toolUseId);
-              if (entry && !sdkExportsNativeSpans) {
-                emitToolSpan(
-                  entry,
-                  startMs,
-                  endedAt,
-                  false,
-                  /* incomplete */ true,
-                  toolTurnIndex.get(toolUseId),
-                );
+              if (entry) {
+                const turnIndex = toolTurnIndex.get(toolUseId);
+                emitOrDeferSyntheticSpan(() => {
+                  emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true, turnIndex);
+                });
               }
             }
             toolStartTimes.clear();
@@ -1688,16 +1694,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {
-                        if (!sdkExportsNativeSpans) {
-                          emitToolSpan(
-                            entry,
-                            startMs,
-                            Date.now(),
-                            entry.is_error,
-                            false,
-                            toolTurnIndex.get(block.tool_use_id),
-                          );
-                        }
+                        const endedAt = Date.now();
+                        const turnIndex = toolTurnIndex.get(block.tool_use_id);
+                        emitOrDeferSyntheticSpan(() => {
+                          emitToolSpan(entry, startMs, endedAt, entry.is_error, false, turnIndex);
+                        });
                         toolStartTimes.delete(block.tool_use_id);
                         toolTurnIndex.delete(block.tool_use_id);
                       }
@@ -1731,6 +1732,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           if (!finalMsg) {
             return { error: "Claude Agent SDK call didn't return a result" };
+          }
+
+          if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
+            let nativeSpansArrived = false;
+            try {
+              nativeSpansArrived = await waitForNativeTraceExport(
+                tpTraceId,
+                tpSpanId,
+                env,
+                callOptions?.abortSignal,
+              );
+            } catch (error) {
+              logger.debug('[ClaudeAgentSDK] Unable to inspect native trace export', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+
+            if (!nativeSpansArrived && !callOptions?.abortSignal?.aborted) {
+              logger.warn(
+                '[ClaudeAgentSDK] Native trace spans did not reach the receiver before grading; emitting synthetic turn and tool spans.',
+              );
+              for (const emit of deferredSyntheticSpans) {
+                emit();
+              }
+            }
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a

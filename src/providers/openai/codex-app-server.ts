@@ -726,6 +726,18 @@ function getCodexTraceExporterSettings(config: unknown): CodexTraceExporterSetti
   return undefined;
 }
 
+function getCodexTraceExporterValue(config: unknown): unknown {
+  if (!isPlainObject(config)) {
+    return undefined;
+  }
+  if ('otel.trace_exporter' in config) {
+    return config['otel.trace_exporter'];
+  }
+
+  const otel = config.otel;
+  return isPlainObject(otel) ? otel.trace_exporter : undefined;
+}
+
 function getCodexConfigOriginType(origins: unknown, key: string): string | undefined {
   if (!isPlainObject(origins)) {
     return undefined;
@@ -1756,9 +1768,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     const effectiveExporter = getCodexTraceExporterSettings(effectiveConfig.config);
+    const effectiveExporterValue = getCodexTraceExporterValue(effectiveConfig.config);
     if (
-      !effectiveExporter ||
-      (effectiveExporter.endpoint === requestedExporter.endpoint &&
+      (!effectiveExporter && effectiveExporterValue === undefined) ||
+      (effectiveExporter &&
+        effectiveExporter.endpoint === requestedExporter.endpoint &&
         (!effectiveExporter.protocol ||
           !requestedExporter.protocol ||
           effectiveExporter.protocol === requestedExporter.protocol))
@@ -1767,17 +1781,26 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     const configOrigin =
-      getCodexConfigOriginType(effectiveConfig.origins, effectiveExporter.endpointConfigKey) ??
-      getCodexConfigOriginType(effectiveConfig.origins, effectiveExporter.protocolConfigKey);
+      (effectiveExporter &&
+        (getCodexConfigOriginType(effectiveConfig.origins, effectiveExporter.endpointConfigKey) ??
+          getCodexConfigOriginType(
+            effectiveConfig.origins,
+            effectiveExporter.protocolConfigKey,
+          ))) ??
+      getCodexConfigOriginType(effectiveConfig.origins, 'otel.trace_exporter');
     const managedOverride = configOrigin !== undefined && /managed|mdm/i.test(configOrigin);
+    const exporterState =
+      typeof effectiveExporterValue === 'string' ? effectiveExporterValue : 'unsupported';
     this.traceExporterOverrideWarningShown = true;
     logger.warn(
       `[CodexAppServer] ${managedOverride ? 'Enterprise-managed' : 'Effective'} Codex configuration overrides the requested trace exporter. Native spans will not reach the configured trace receiver.`,
       {
         requestedOrigin: getSafeTraceExporterOrigin(requestedExporter.endpoint),
-        effectiveOrigin: getSafeTraceExporterOrigin(effectiveExporter.endpoint),
+        ...(effectiveExporter
+          ? { effectiveOrigin: getSafeTraceExporterOrigin(effectiveExporter.endpoint) }
+          : { effectiveExporter: exporterState }),
         requestedProtocol: requestedExporter.protocol,
-        effectiveProtocol: effectiveExporter.protocol,
+        effectiveProtocol: effectiveExporter?.protocol,
         ...(configOrigin && { configOrigin }),
       },
     );

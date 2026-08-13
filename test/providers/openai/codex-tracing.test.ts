@@ -115,6 +115,29 @@ describe('withCodexTraceExporter', () => {
     });
   });
 
+  it.each([
+    [
+      'https://collector.example.com/otlp?api-version=1',
+      'https://collector.example.com/otlp/v1/traces?api-version=1',
+    ],
+    [
+      'https://collector.example.com/otlp/?api-version=1#trace',
+      'https://collector.example.com/otlp/v1/traces?api-version=1#trace',
+    ],
+    [
+      'https://collector.example.com/v1/traces?api-version=1',
+      'https://collector.example.com/v1/traces?api-version=1',
+    ],
+  ])('appends trace paths before query parameters in %s', (endpoint, expectedEndpoint) => {
+    expect(withCodexTraceExporter({}, { OTEL_EXPORTER_OTLP_ENDPOINT: endpoint }, true)).toEqual({
+      otel: {
+        trace_exporter: {
+          'otlp-http': { endpoint: expectedEndpoint, protocol: 'json' },
+        },
+      },
+    });
+  });
+
   it('matches the active receiver format when a later evaluation requests another format', async () => {
     cliState.setActiveOtlpReceiver({
       host: '127.0.0.2',

@@ -30,6 +30,24 @@ export function getCodexTraceShutdownGraceMs(env: Record<string, string>): numbe
   return DEFAULT_OTLP_EXPORT_TIMEOUT_MS;
 }
 
+function appendTracePath(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    const pathname = url.pathname.replace(/\/+$/, '');
+    if (pathname.endsWith('/v1/traces')) {
+      return endpoint;
+    }
+
+    url.pathname = `${pathname}/v1/traces`;
+    return url.toString();
+  } catch {
+    const trimmedEndpoint = endpoint.replace(/\/+$/, '');
+    return trimmedEndpoint.endsWith('/v1/traces')
+      ? trimmedEndpoint
+      : `${trimmedEndpoint}/v1/traces`;
+  }
+}
+
 /** Configure Codex's own trace exporter; standard OTEL environment variables do not select it. */
 export function withCodexTraceExporter(
   cliConfig: Record<string, unknown>,
@@ -64,10 +82,7 @@ export function withCodexTraceExporter(
     getCodexTraceProtocol();
   const signalEndpoint = env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
   const endpoint = signalEndpoint ?? env.OTEL_EXPORTER_OTLP_ENDPOINT ?? getCodexTraceEndpoint();
-  const genericEndpoint = endpoint.replace(/\/+$/, '');
-  const httpEndpoint =
-    signalEndpoint ??
-    (genericEndpoint.endsWith('/v1/traces') ? genericEndpoint : `${genericEndpoint}/v1/traces`);
+  const httpEndpoint = signalEndpoint ?? appendTracePath(endpoint);
   const traceExporter =
     protocol === 'grpc'
       ? { 'otlp-grpc': { endpoint } }

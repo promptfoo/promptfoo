@@ -16,6 +16,7 @@ import {
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
+import * as traceStore from '../../src/tracing/store';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { mockProcessEnv } from '../util/utils';
 import type {
@@ -5277,6 +5278,12 @@ describe('ClaudeCodeSDKProvider', () => {
           expectSyntheticSpans: true,
         },
         {
+          description: 'preserves synthetic spans when another evaluation owns the receiver',
+          configureReceiver: false,
+          activateReceiver: true,
+          expectSyntheticSpans: true,
+        },
+        {
           description: 'preserves synthetic spans when the configured receiver failed to start',
           configureReceiver: true,
           activateReceiver: false,
@@ -5398,6 +5405,150 @@ describe('ClaudeCodeSDKProvider', () => {
           ]);
         },
       );
+
+      it('waits for native Claude spans before returning a traced response', async () => {
+        const { emittedSpans } = installTracerSpy();
+        const traceId = '0af7651916cd43dd8448eb211c80319c';
+        const parentSpanId = 'b7ad6b7169203331';
+        const getTrace = vi
+          .fn()
+          .mockResolvedValueOnce({
+            spans: [{ spanId: 'test-case', parentSpanId: undefined }],
+          })
+          .mockResolvedValueOnce({
+            spans: [{ spanId: 'native-claude-span', parentSpanId }],
+          });
+        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+          getTrace,
+        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([{ type: 'text', text: 'native turn' }]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+        cliState.setActiveOtlpReceiver({
+          host: '127.0.0.1',
+          port: 4318,
+          acceptFormats: ['json'],
+        });
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: { deep_tracing: true },
+        });
+        const result = await cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+          () =>
+            provider.callApi('prompt', {
+              traceparent: `00-${traceId}-${parentSpanId}-01`,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            }),
+        );
+
+        expect(result.output).toBe('ok');
+        expect(getTrace).toHaveBeenCalledTimes(2);
+        expect(emittedSpans.some((span) => span.name.startsWith('gen_ai.turn '))).toBe(false);
+      });
+
+      it('restores synthetic evidence when native Claude spans do not arrive', async () => {
+        const { emittedSpans } = installTracerSpy();
+        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+          getTrace: vi.fn().mockResolvedValue({ spans: [] }),
+        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                { type: 'tool_use', id: 'tool-fallback', name: 'Read', input: { path: '/tmp/x' } },
+              ]),
+              session_id: 'test-session',
+            },
+            {
+              type: 'user',
+              message: {
+                role: 'user',
+                content: [
+                  {
+                    type: 'tool_result',
+                    tool_use_id: 'tool-fallback',
+                    content: 'file contents',
+                    is_error: false,
+                  },
+                ],
+              },
+              session_id: 'test-session',
+            },
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'test-session',
+              uuid: '12345678-1234-1234-1234-123456789abc',
+              result: 'ok',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+          ]),
+        );
+        cliState.setActiveOtlpReceiver({
+          host: '127.0.0.1',
+          port: 4318,
+          acceptFormats: ['json'],
+        });
+        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          config: {
+            deep_tracing: true,
+            env: {
+              OTEL_TRACES_EXPORT_INTERVAL: '1',
+              OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '1',
+            },
+          },
+        });
+        const result = await cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+          () =>
+            provider.callApi('prompt', {
+              traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            }),
+        );
+
+        expect(result.output).toBe('ok');
+        expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('Native trace spans did not reach the receiver'),
+        );
+      });
 
       it('marks tool spans as ERROR when the tool_result reports an error', async () => {
         const { emittedSpans } = installTracerSpy();

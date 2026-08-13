@@ -5222,6 +5222,56 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(server.messages().some((message) => message.method === 'config/read')).toBe(true);
   });
 
+  it.each([
+    ['none', 'none'],
+    [{ console: {} }, 'unsupported'],
+  ])('warns when managed Codex tracing is %s', async (traceExporter, expectedExporter) => {
+    const server = createMockAppServer({
+      configReadResult: {
+        config: { otel: { trace_exporter: traceExporter } },
+        origins: {
+          'otel.trace_exporter': { name: { type: 'legacyManagedConfigTomlFromMdm' } },
+        },
+      },
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Inspect disabled managed tracing');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_disabled_tracing' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_disabled_tracing', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_disabled_tracing',
+        turn: { id: 'turn_disabled_tracing', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await resultPromise;
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Enterprise-managed Codex configuration overrides'),
+      expect.objectContaining({
+        effectiveExporter: expectedExporter,
+        configOrigin: 'legacyManagedConfigTomlFromMdm',
+      }),
+    );
+  });
+
   it('waits beyond one second for a deep-tracing app-server to finish flushing', async () => {
     vi.useFakeTimers();
     const server = createMockAppServer();
