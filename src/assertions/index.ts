@@ -696,7 +696,7 @@ export async function runAssertion(
     {
       graderId: options.assertion.type,
       evalId: options.test.metadata?.evaluationId as string | undefined,
-      testIndex: options.test.vars?.__testIdx as number | undefined,
+      testIndex: tracingContext.testIndex,
     },
     () => runAssertionInternal(options),
   );

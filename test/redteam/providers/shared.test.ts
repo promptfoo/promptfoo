@@ -1362,6 +1362,7 @@ describe('shared redteam provider utilities', () => {
       await withProviderCallTracingContext(
         {
           getActiveTraceparent: () => traceparent,
+          testIndex: 9,
           withGraderSpan: async (spanOptions, invoke) => {
             graderSpan(spanOptions);
             return invoke();
@@ -1387,13 +1388,14 @@ describe('shared redteam provider utilities', () => {
       );
     });
 
-    it('uses a judge grader span when no provider context was supplied', async () => {
+    it('uses the evaluation test index when no provider context was supplied', async () => {
       const provider = createMockProvider({ response: { output: 'judge response' } });
       const graderSpan = vi.fn();
 
       await withProviderCallTracingContext(
         {
           getActiveTraceparent: () => undefined,
+          testIndex: 7,
           withGraderSpan: async (spanOptions, invoke) => {
             graderSpan(spanOptions);
             return invoke();
@@ -1406,7 +1408,7 @@ describe('shared redteam provider utilities', () => {
       expect(graderSpan).toHaveBeenCalledWith({
         graderId: 'judge',
         evalId: undefined,
-        testIndex: undefined,
+        testIndex: 7,
       });
       expect(provider.callApi).toHaveBeenCalledWith('judge prompt', undefined);
     });
@@ -1420,12 +1422,13 @@ describe('shared redteam provider utilities', () => {
       const graderSpan = vi.fn();
       const test = {
         metadata: { evaluationId: 'eval-123' },
-        vars: { __testIdx: 7 },
+        vars: { userInput: 'normal evaluation variable' },
       };
 
       const result = await withProviderCallTracingContext(
         {
           getActiveTraceparent: () => undefined,
+          testIndex: 7,
           withGraderSpan: async (options, invoke) => {
             graderSpan(options, invoke);
             return invoke();

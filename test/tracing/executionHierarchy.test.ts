@@ -6,7 +6,12 @@ import { HttpProvider } from '../../src/providers/http';
 import { callGradingProvider } from '../../src/redteam/providers/shared';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
-import { GenAIAttributes, getGenAITracer, withGenAISpan } from '../../src/tracing/genaiTracer';
+import {
+  GenAIAttributes,
+  getGenAITracer,
+  PromptfooAttributes,
+  withGenAISpan,
+} from '../../src/tracing/genaiTracer';
 import { isRelevantSpan } from '../../src/tracing/spanFilter';
 import { getActiveTraceparent, SPAN_ROLE_ATTRIBUTE } from '../../src/tracing/spanRoles';
 import {
@@ -253,6 +258,7 @@ describe('test-case execution trace hierarchy', () => {
     await withProviderCallTracingContext(
       {
         getActiveTraceparent,
+        testIndex: 6,
         withGraderSpan,
         withProviderSpan: withTracedProviderCall,
       },
@@ -270,6 +276,7 @@ describe('test-case execution trace hierarchy', () => {
 
     expect(providerSpan.parentSpanContext?.spanId).toBe(graderSpan.spanContext().spanId);
     expect(modelSpan.parentSpanContext?.spanId).toBe(providerSpan.spanContext().spanId);
+    expect(graderSpan.attributes[PromptfooAttributes.TEST_INDEX]).toBe(6);
     expect(providerSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
     expect(modelSpan.attributes[SPAN_ROLE_ATTRIBUTE]).toBe('grader');
     expect(isRelevantSpan({ attributes: modelSpan.attributes })).toBe(false);

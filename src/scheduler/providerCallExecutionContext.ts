@@ -41,6 +41,7 @@ interface TracedGraderOptions {
 /** Runtime-only instrumentation hooks injected by the evaluator for one traced execution. */
 export interface ProviderCallTracingContext {
   getActiveTraceparent: () => string | undefined;
+  testIndex?: number;
   withGraderSpan: <T>(options: TracedGraderOptions, fn: () => Promise<T>) => Promise<T>;
   withProviderSpan: (
     options: TracedProviderCallOptions,

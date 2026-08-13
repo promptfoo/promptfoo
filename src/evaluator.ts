@@ -1743,6 +1743,7 @@ async function runEvalInternal({
       ? await withProviderCallTracingContext(
           {
             getActiveTraceparent,
+            testIndex,
             withGraderSpan,
             withProviderSpan: withTracedProviderCall,
           },

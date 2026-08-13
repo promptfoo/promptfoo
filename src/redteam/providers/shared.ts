@@ -507,7 +507,7 @@ export function callGradingProvider(
     {
       graderId: callContext?.prompt.label ?? 'judge',
       evalId: callContext?.evaluationId,
-      testIndex: callContext?.testIdx,
+      testIndex: callContext?.testIdx ?? tracingContext.testIndex,
     },
     () => tracingContext.withProviderSpan({ provider, callContext, role: 'grader' }, invoke),
   );
@@ -635,7 +635,7 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
     {
       graderId: grader.id,
       evalId: test.metadata?.evaluationId as string | undefined,
-      testIndex: test.vars?.__testIdx as number | undefined,
+      testIndex: tracingContext.testIndex,
     },
     invoke,
   );
