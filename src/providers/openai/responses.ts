@@ -1043,14 +1043,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  // The `gen_ai.provider.name` span attribute. Subclasses serving a different vendor
-  // through the Responses wire format override this so traces attribute to the
-  // actual provider system.
-  protected getGenAISystem(): string {
-    const providerId = this.id();
-    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
-  }
-
   async callApi(
     prompt: string,
     context?: CallApiContextParams,

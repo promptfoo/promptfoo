@@ -78,6 +78,17 @@ describe('tokenUsageCompat', () => {
       expect(extractUsageFromSpan(span)).toBeUndefined();
     });
 
+    it('does not count unsupported numeric usage attributes as model requests', () => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: { 'gen_ai.usage.unsupported_tokens': 17 },
+      };
+
+      expect(extractUsageFromSpan(span)).toBeUndefined();
+    });
+
     it('should extract input tokens', () => {
       const span: SpanData = {
         spanId: 'span-1',
@@ -110,6 +121,48 @@ describe('tokenUsageCompat', () => {
         numRequests: 1,
         completion: 50,
       });
+    });
+
+    it.each([
+      ['gen_ai.usage.reasoning.output_tokens', { completionDetails: { reasoning: 17 } }],
+      ['gen_ai.usage.cache_read.input_tokens', { completionDetails: { cacheReadInputTokens: 17 } }],
+      [
+        'gen_ai.usage.cache_creation.input_tokens',
+        { completionDetails: { cacheCreationInputTokens: 17 } },
+      ],
+      ['promptfoo.usage.cached_response_tokens', { cached: 17 }],
+      [
+        'promptfoo.usage.accepted_prediction_tokens',
+        { completionDetails: { acceptedPrediction: 17 } },
+      ],
+      [
+        'promptfoo.usage.rejected_prediction_tokens',
+        { completionDetails: { rejectedPrediction: 17 } },
+      ],
+      ['gen_ai.usage.cached_tokens', { cached: 17 }],
+      ['gen_ai.usage.reasoning_tokens', { completionDetails: { reasoning: 17 } }],
+      ['gen_ai.usage.cache_read_input_tokens', { completionDetails: { cacheReadInputTokens: 17 } }],
+      [
+        'gen_ai.usage.cache_creation_input_tokens',
+        { completionDetails: { cacheCreationInputTokens: 17 } },
+      ],
+      [
+        'gen_ai.usage.accepted_prediction_tokens',
+        { completionDetails: { acceptedPrediction: 17 } },
+      ],
+      [
+        'gen_ai.usage.rejected_prediction_tokens',
+        { completionDetails: { rejectedPrediction: 17 } },
+      ],
+    ])('extracts detail-only token usage from %s', (attribute, expectedUsage) => {
+      const span: SpanData = {
+        spanId: 'span-1',
+        name: 'test',
+        startTime: 0,
+        attributes: { [attribute]: 17 },
+      };
+
+      expect(extractUsageFromSpan(span)).toEqual({ numRequests: 1, ...expectedUsage });
     });
 
     it('reads current OpenTelemetry and Promptfoo token-usage attributes', () => {

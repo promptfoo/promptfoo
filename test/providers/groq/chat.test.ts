@@ -35,6 +35,15 @@ describe('GroqProvider', () => {
       expect(provider['getGenAISystem']()).toBe('groq');
     });
 
+    it('keeps Groq telemetry independent of a customer-defined provider ID', () => {
+      const provider = new GroqProvider('mixtral-8x7b-32768', {
+        id: 'customer:custom-label',
+      });
+
+      expect(provider.id()).toBe('customer:custom-label');
+      expect(provider['getGenAISystem']()).toBe('groq');
+    });
+
     it('should return correct string representation', () => {
       const provider = new GroqProvider('mixtral-8x7b-32768', {});
       expect(provider.toString()).toBe('[Groq Provider mixtral-8x7b-32768]');

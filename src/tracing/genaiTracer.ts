@@ -81,6 +81,7 @@ export const PromptfooAttributes = {
 type GenAIOperationName = 'chat' | 'text_completion' | 'embeddings' | 'invoke_agent';
 
 const GEN_AI_PROVIDER_NAMES: Record<string, string> = {
+  alibaba: 'alibaba_cloud',
   aws_bedrock: 'aws.bedrock',
   azure: 'azure.ai.openai',
   azure_ai_inference: 'azure.ai.inference',
@@ -356,9 +357,13 @@ export async function withGenAISpan<T>(
   // Extract parent context from traceparent if provided
   // This allows spans to be linked to the evaluation's trace
   let parentContext = context.active();
-  const activeSpan = trace.getSpan(parentContext);
-  const explicitTraceId = ctx.traceparent?.split('-')[1]?.toLowerCase();
-  if (ctx.traceparent && activeSpan?.spanContext().traceId.toLowerCase() !== explicitTraceId) {
+  const activeSpanContext = trace.getSpan(parentContext)?.spanContext();
+  const [, explicitTraceId, explicitSpanId] = ctx.traceparent?.split('-') ?? [];
+  if (
+    ctx.traceparent &&
+    (activeSpanContext?.traceId.toLowerCase() !== explicitTraceId?.toLowerCase() ||
+      activeSpanContext?.spanId.toLowerCase() !== explicitSpanId?.toLowerCase())
+  ) {
     const carrier = { traceparent: ctx.traceparent };
     parentContext = propagation.extract(ROOT_CONTEXT, carrier);
   }
@@ -371,6 +376,15 @@ export async function withGenAISpan<T>(
       // Set response attributes if extractor provided
       if (resultExtractor) {
         const result = resultExtractor(value);
+        if (
+          result.cacheHit === undefined &&
+          value !== null &&
+          typeof value === 'object' &&
+          'cached' in value &&
+          typeof value.cached === 'boolean'
+        ) {
+          result.cacheHit = value.cached;
+        }
         setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
       }
 
@@ -569,7 +583,11 @@ export function setGenAIResponseAttributes(
       span.setAttribute(PromptfooAttributes.USAGE_TOTAL_TOKENS, usage.total);
     }
     if (usage.cached !== undefined) {
-      span.setAttribute(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS, usage.cached);
+      if (result.cacheHit === true) {
+        span.setAttribute(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS, usage.cached);
+      } else if (usage.completionDetails?.cacheReadInputTokens === undefined) {
+        span.setAttribute(GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS, usage.cached);
+      }
     }
 
     // Completion details (reasoning tokens, etc.)
@@ -703,7 +721,7 @@ export function buildChatSpanContext(args: {
     model,
     providerId,
     evalId: context?.evaluationId || (context?.test?.metadata?.evaluationId as string | undefined),
-    testIndex: context?.test?.vars?.__testIdx as number | undefined,
+    testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
     promptLabel: context?.prompt?.label,
     traceparent: context?.traceparent,
     requestBody: prompt,
