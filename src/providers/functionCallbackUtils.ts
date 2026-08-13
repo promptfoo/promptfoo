@@ -175,32 +175,31 @@ export class FunctionCallbackHandler {
     context?: any,
     callId?: string,
   ): Promise<string> {
-    // Get or load the callback
-    let callback = this.loadedCallbacks[functionName];
+    return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
+      // Get or load the callback
+      let callback = this.loadedCallbacks[functionName];
 
-    if (!callback) {
-      const callbackConfig = callbacks[functionName];
+      if (!callback) {
+        const callbackConfig = callbacks[functionName];
 
-      if (typeof callbackConfig === 'string') {
-        // String callback - either file reference or inline code
-        if (callbackConfig.startsWith('file://')) {
-          callback = await this.loadExternalFunction(callbackConfig);
+        if (typeof callbackConfig === 'string') {
+          // String callback - either file reference or inline code
+          if (callbackConfig.startsWith('file://')) {
+            callback = await this.loadExternalFunction(callbackConfig);
+          } else {
+            // Inline function string
+            callback = new Function('return ' + callbackConfig)() as FunctionCallback;
+          }
+        } else if (typeof callbackConfig === 'function') {
+          callback = callbackConfig;
         } else {
-          // Inline function string
-          callback = new Function('return ' + callbackConfig)() as FunctionCallback;
+          throw new Error(`Invalid callback configuration for ${functionName}`);
         }
-      } else if (typeof callbackConfig === 'function') {
-        callback = callbackConfig;
-      } else {
-        throw new Error(`Invalid callback configuration for ${functionName}`);
+
+        // Cache for future use
+        this.loadedCallbacks[functionName] = callback;
       }
 
-      // Cache for future use
-      this.loadedCallbacks[functionName] = callback;
-    }
-
-    // Execute the callback
-    return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
       const result = await callback(args, context);
       return typeof result === 'string' ? result : JSON.stringify(result);
     });

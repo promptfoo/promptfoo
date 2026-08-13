@@ -179,6 +179,62 @@ describe('FunctionCallbackHandler', () => {
       }
     });
 
+    it.each([
+      {
+        description: 'a missing callback module',
+        callback: 'file://nonexistent/function.js',
+        errorMessage: 'Module not found',
+      },
+      {
+        description: 'malformed inline callback code',
+        callback: '(() =>',
+        errorMessage: 'Unexpected',
+      },
+      {
+        description: 'an invalid callback configuration',
+        callback: 123,
+        errorMessage: 'Invalid callback configuration for lookup_order',
+      },
+    ])('records $description as a failed tool execution', async ({ callback, errorMessage }) => {
+      if (typeof callback === 'string' && callback.startsWith('file://')) {
+        mockImportModule.mockRejectedValueOnce(new Error('Module not found'));
+      }
+
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+      const call = { id: 'call-123', name: 'lookup_order', arguments: '{}' };
+
+      try {
+        const result = await handler.processCall(call, {
+          lookup_order: callback as FunctionCallbackConfig[string],
+        });
+
+        expect(result).toEqual({ output: JSON.stringify(call), isError: true });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool lookup_order',
+          expect.objectContaining({
+            attributes: expect.objectContaining({ 'gen_ai.tool.call.id': 'call-123' }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setStatus).toHaveBeenCalledWith(
+          expect.objectContaining({ code: 2, message: expect.stringContaining(errorMessage) }),
+        );
+        expect(span.end).toHaveBeenCalledOnce();
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
     it('should pass context to callback', async () => {
       const mockCallback = vi.fn().mockResolvedValue('callback result');
       const callbacks: FunctionCallbackConfig = {
