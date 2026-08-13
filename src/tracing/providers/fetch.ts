@@ -1,4 +1,4 @@
-import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../../contracts/shared';
+import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../../contracts/traceProviderEndpoint';
 import logger from '../../logger';
 import { TraceProviderError } from './types';
 

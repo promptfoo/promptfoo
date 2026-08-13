@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { BaseTokenUsageSchema, TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/shared';
+import {
+  BaseTokenUsageSchema,
+  type NunjucksFilterMap,
+  type TokenUsage,
+  type VarValue,
+} from '../contracts/shared';
+import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
@@ -21,7 +27,6 @@ export {
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptFunction } from '../contracts/prompts';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
