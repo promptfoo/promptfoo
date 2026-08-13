@@ -47,49 +47,11 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const providerId = this.id();
-    const requestParameters = {
-      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
-      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
-      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
-    };
-    const effectiveParameters = {
-      ...requestParameters,
-      ...(this.config.passthrough || {}),
-    };
-    const effectiveModel = (this.config.passthrough as { model?: unknown } | undefined)?.model;
-
-    return withGenAISpan(
-      {
-        system: this.getGenAISystem(),
-        operationName: 'text_completion',
-        model: typeof effectiveModel === 'string' ? effectiveModel : this.modelName,
-        providerId,
-        maxTokens: effectiveParameters.max_tokens,
-        temperature: effectiveParameters.temperature,
-        topP: effectiveParameters.top_p,
-        evalId: context?.evaluationId,
-        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
-        promptLabel: context?.prompt?.label,
-        traceparent: context?.traceparent,
-        requestBody: prompt,
-      },
-      () => this.callApiInternal(prompt, requestParameters, context, callApiOptions),
-      extractProviderResponseAttributes,
-    );
-  }
-
-  private async callApiInternal(
-    prompt: string,
-    requestParameters: { max_tokens: number; temperature: number; top_p: number },
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    let stop: string;
+    let stop: unknown;
     try {
       stop = getEnvString('OPENAI_STOP')
         ? JSON.parse(getEnvString('OPENAI_STOP') || '')
@@ -101,7 +63,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       prompt,
       seed: this.config.seed,
-      ...requestParameters,
+      max_tokens: this.config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024),
+      temperature: this.config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+      top_p: this.config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
       presence_penalty: this.config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
@@ -111,7 +75,43 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
+    const asNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' ? value : undefined;
+    const stopSequences =
+      typeof body.stop === 'string'
+        ? [body.stop]
+        : Array.isArray(body.stop) &&
+            body.stop.every((item): item is string => typeof item === 'string')
+          ? body.stop
+          : undefined;
 
+    return withGenAISpan(
+      {
+        system: this.getGenAISystem(),
+        operationName: 'text_completion',
+        model: body.model,
+        providerId: this.id(),
+        maxTokens: asNumber(body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        presencePenalty: asNumber(body.presence_penalty),
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        evalId: context?.evaluationId,
+        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
+        promptLabel: context?.prompt?.label,
+        traceparent: context?.traceparent,
+        requestBody: prompt,
+      },
+      () => this.callApiInternal(body, context),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    body: Record<string, unknown>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     let data,
       cached = false,
       latencyMs: number | undefined;
