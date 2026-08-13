@@ -466,6 +466,21 @@ describe('normalizeFilePath', () => {
     expect(normalizeFilePath(input)).toBe(expected);
   });
 
+  it.each([
+    // Empty authority, so it is not the relative shorthand. POSIX resolves it directly;
+    // on Windows fileURLToPath rejects the leading `//` and the fallback yields the same
+    // string, which path.win32.isAbsolute accepts as a UNC path either way.
+    ['file:////server/share/report.pdf', '//server/share/report.pdf'],
+    // No scheme at all, so it is returned untouched and stays absolute on win32.
+    ['\\\\server\\share\\report.pdf', '\\\\server\\share\\report.pdf'],
+  ])('keeps %s usable as a UNC path', (input, expected) => {
+    expect(normalizeFilePath(input)).toBe(expected);
+  });
+
+  it('falls back to the shorthand when the file URL cannot be parsed', () => {
+    expect(normalizeFilePath('file://[')).toBe('[');
+  });
+
   it('keeps the shorthand relative when fileURLToPath converts it, as it does on Windows', async () => {
     // fileURLToPath disagrees with itself across platforms for a non-empty
     // authority: POSIX throws ERR_INVALID_FILE_URL_HOST, but Windows returns a
