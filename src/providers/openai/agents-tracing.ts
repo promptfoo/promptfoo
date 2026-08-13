@@ -9,6 +9,7 @@ import type { TracingExportFormat } from '../tracing';
 const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
 const OTLP_SPAN_KIND_INTERNAL = 1;
 const OTLP_SPAN_KIND_CLIENT = 3;
+const MAX_STRUCTURED_ATTRIBUTE_BYTES = 64 * 1024;
 const MAX_STRUCTURED_ATTRIBUTE_DEPTH = 32;
 const MAX_STRUCTURED_ATTRIBUTE_NODES = 10_000;
 const INTERNAL_TRACE_METADATA_KEYS = new Set([
@@ -560,10 +561,20 @@ function sanitizeSerializedAttribute(value: string): string {
     (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
     (trimmed.startsWith('[') && trimmed.endsWith(']'))
   ) {
+    if (
+      trimmed.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
+      Buffer.byteLength(trimmed, 'utf8') > MAX_STRUCTURED_ATTRIBUTE_BYTES
+    ) {
+      return '<redacted>';
+    }
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       if (isRecord(parsed) || Array.isArray(parsed)) {
-        return sanitizeCredentialText(JSON.stringify(sanitizeStructuredAttribute(parsed)));
+        const state = { changed: false };
+        const sanitized = sanitizeStructuredAttribute(parsed, state);
+        return state.changed
+          ? sanitizeCredentialText(JSON.stringify(sanitized))
+          : sanitizeCredentialText(value);
       }
     } catch {
       // Non-JSON strings still need the existing free-text credential redaction.
@@ -574,13 +585,26 @@ function sanitizeSerializedAttribute(value: string): string {
 }
 
 function sanitizeCredentialText(value: string): string {
-  return sanitizeBody(value).replace(
-    /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"']*)\4/g,
-    (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
-      isCredentialAttributeKey(key)
-        ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
-        : match,
-  );
+  return sanitizeBody(value)
+    .replace(
+      /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"']*)\4/g,
+      (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
+        isCredentialAttributeKey(key)
+          ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
+          : match,
+    )
+    .replace(
+      /(^|[?&#;\s])([A-Za-z][A-Za-z\d_.%-]*)=([^&#;\s"',}\]]+)/g,
+      (match, prefix: string, key: string) => {
+        let decodedKey = key;
+        try {
+          decodedKey = decodeURIComponent(key);
+        } catch {
+          // Preserve malformed query parameters while still checking their literal key.
+        }
+        return isCredentialAttributeKey(decodedKey) ? `${prefix}${key}=<redacted>` : match;
+      },
+    );
 }
 
 function isCredentialAttributeKey(key: string): boolean {
@@ -591,8 +615,24 @@ function isCredentialAttributeKey(key: string): boolean {
     .filter(Boolean);
 
   return parts.some((part, index) => {
-    if (part === 'token') {
-      return !['count', 'counts', 'usage', 'limit', 'budget', 'length'].includes(parts[index + 1]);
+    if (part === 'token' || part === 'tokens') {
+      return (
+        !['count', 'counts', 'usage', 'limit', 'budget', 'length'].includes(parts[index + 1]) &&
+        ![
+          'usage',
+          'input',
+          'output',
+          'total',
+          'cached',
+          'reasoning',
+          'prompt',
+          'completion',
+          'prediction',
+          'response',
+          'max',
+          'min',
+        ].includes(parts[index - 1])
+      );
     }
     if (
       [
@@ -601,8 +641,12 @@ function isCredentialAttributeKey(key: string): boolean {
         'password',
         'passwd',
         'passphrase',
+        'passphrases',
         'secret',
+        'secrets',
         'credential',
+        'credentials',
+        'apikey',
       ].includes(part)
     ) {
       return true;
@@ -612,7 +656,7 @@ function isCredentialAttributeKey(key: string): boolean {
 }
 
 function sanitizeAttributeByKey(key: string, value: unknown): unknown {
-  if (typeof value === 'string' && isCredentialAttributeKey(key)) {
+  if (isCredentialAttributeKey(key)) {
     return '<redacted>';
   }
   if (isRecord(value) || Array.isArray(value)) {
@@ -623,6 +667,7 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
 
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
+  state: { changed: boolean } = { changed: false },
 ): Record<string, unknown> | unknown[] | string {
   type StructuredValue = Record<string, unknown> | unknown[];
   const root: StructuredValue = Array.isArray(value) ? [] : {};
@@ -633,17 +678,20 @@ function sanitizeStructuredAttribute(
 
   while (stack.length > 0) {
     const { source, target, depth } = stack.pop()!;
-    for (const [key, entry] of Object.entries(source)) {
+    for (const [key, entry] of structuredAttributeEntries(source)) {
       if (++visitedNodes > MAX_STRUCTURED_ATTRIBUTE_NODES) {
+        state.changed = true;
         return '<redacted>';
       }
 
       let sanitized: unknown;
-      if (typeof entry === 'string' && isCredentialAttributeKey(key)) {
+      if (isCredentialAttributeKey(key)) {
         sanitized = '<redacted>';
+        state.changed = true;
       } else if (isRecord(entry) || Array.isArray(entry)) {
         if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
           sanitized = '<redacted>';
+          state.changed = true;
         } else {
           const child: StructuredValue = Array.isArray(entry) ? [] : {};
           stack.push({ source: entry, target: child, depth: depth + 1 });
@@ -651,6 +699,7 @@ function sanitizeStructuredAttribute(
         }
       } else {
         sanitized = typeof entry === 'string' ? sanitizeCredentialText(entry) : entry;
+        state.changed ||= sanitized !== entry;
       }
 
       Object.defineProperty(target, key, {
@@ -663,6 +712,16 @@ function sanitizeStructuredAttribute(
   }
 
   return root;
+}
+
+function* structuredAttributeEntries(
+  value: Record<string, unknown> | unknown[],
+): Generator<[string, unknown]> {
+  for (const key in value) {
+    if (Object.hasOwn(value, key)) {
+      yield [key, Reflect.get(value, key)];
+    }
+  }
 }
 
 function sanitizeAttributeValue(value: unknown): unknown {

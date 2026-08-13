@@ -390,6 +390,13 @@ describe('OTLPTracingExporter', () => {
       const accessToken = 'opaque.value/with+arbitrary=chars';
       const clientSecret = 'tiny';
       const refreshToken = 'renew?credential/value';
+      const credentials = 'opaque-credential-bundle';
+      const clientCredentials = 'oauth-client-bundle';
+      const secrets = 'opaque-secret-bundle';
+      const tokens = 'opaque-token-bundle';
+      const authorization = 'Bearer opaque/container-value';
+      const cookie = 'opaque-cookie-session';
+      const callback = `https://host/callback?access_token=${accessToken}&token_count=12`;
       const span = {
         type: 'trace.span',
         traceId: 'trace_0123456789abcdef0123456789abcdef',
@@ -401,18 +408,32 @@ describe('OTLPTracingExporter', () => {
             apiKey,
             accountId: 'account-123',
             access_token: accessToken,
+            callback,
+            credentials,
+            clientCredentials,
+            authorization: [authorization],
             token_count: 12,
             secretary: 'Alice',
             nested: [{ refreshToken }],
           }),
-          output: JSON.stringify({ token: sessionToken, client_secret: clientSecret }),
+          output: JSON.stringify({
+            token: sessionToken,
+            client_secret: clientSecret,
+            secrets,
+            tokens,
+            cookie: { session: cookie },
+          }),
         },
-        traceMetadata: { customerApiKey: metadataSecret, 'promptfoo.otlp_format': format },
+        traceMetadata: {
+          customerApiKey: metadataSecret,
+          clientCredentials,
+          'promptfoo.otlp_format': format,
+        },
         error: new Error(
           `Authentication failed for ${apiKey}: ${JSON.stringify({
             client_secret: clientSecret,
             access_token: accessToken,
-          })}`,
+          })}; ${callback}`,
         ),
       };
 
@@ -430,6 +451,12 @@ describe('OTLPTracingExporter', () => {
       expect(serializedPayload).not.toContain(accessToken);
       expect(serializedPayload).not.toContain(clientSecret);
       expect(serializedPayload).not.toContain(refreshToken);
+      expect(serializedPayload).not.toContain(credentials);
+      expect(serializedPayload).not.toContain(clientCredentials);
+      expect(serializedPayload).not.toContain(secrets);
+      expect(serializedPayload).not.toContain(tokens);
+      expect(serializedPayload).not.toContain(authorization);
+      expect(serializedPayload).not.toContain(cookie);
 
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
       const attributes = getAttributes(exportedSpan);
@@ -437,6 +464,10 @@ describe('OTLPTracingExporter', () => {
         apiKey: '<redacted>',
         accountId: 'account-123',
         access_token: '<redacted>',
+        callback: 'https://host/callback?access_token=<redacted>&token_count=12',
+        credentials: '<redacted>',
+        clientCredentials: '<redacted>',
+        authorization: '<redacted>',
         token_count: 12,
         secretary: 'Alice',
         nested: [{ refreshToken: '<redacted>' }],
@@ -444,28 +475,71 @@ describe('OTLPTracingExporter', () => {
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
         token: '<redacted>',
         client_secret: '<redacted>',
+        secrets: '<redacted>',
+        tokens: '<redacted>',
+        cookie: '<redacted>',
       });
       expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
+      expect(attributes['trace.metadata.clientCredentials']).toBe('<redacted>');
       expect(exportedSpan.status.message).toBe(
         'Authentication failed for <REDACTED_API_KEY>: ' +
-          '{"client_secret":"<redacted>","access_token":"<redacted>"}',
+          '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
+          'https://host/callback?access_token=<redacted>&token_count=12',
       );
     },
   );
 
   it.each(['json', 'protobuf'] as const)(
-    'keeps %s span batches exportable when tool data exceeds the safe nesting depth',
+    'preserves large integer identifiers in benign %s tool arguments',
     async (format) => {
       const exporter = new OTLPTracingExporter();
+      const input = '{"order_id":9223372036854775807,"token_count":12}';
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: { type: 'function', name: 'lookup_order', input },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+      ]);
+
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(exportedSpan)['tool.arguments']).toBe(input);
+    },
+  );
+
+  it.each([
+    { format: 'json', shape: 'deeply nested' },
+    { format: 'protobuf', shape: 'deeply nested' },
+    { format: 'json', shape: 'oversized' },
+    { format: 'protobuf', shape: 'oversized' },
+  ] as const)(
+    'keeps $format span batches exportable when tool data is $shape',
+    async ({ format, shape }) => {
+      const exporter = new OTLPTracingExporter();
       const deeplyNestedSecret = 'deeply-nested-credential';
-      const deeplyNestedInput =
-        '['.repeat(5000) + JSON.stringify({ access_token: deeplyNestedSecret }) + ']'.repeat(5000);
+      const oversizedInput = `[${'0,'.repeat(50_000)}${JSON.stringify({
+        access_token: deeplyNestedSecret,
+      })}]`;
+      const unsafeInput =
+        shape === 'oversized'
+          ? oversizedInput
+          : '['.repeat(5000) +
+            JSON.stringify({ access_token: deeplyNestedSecret }) +
+            ']'.repeat(5000);
       const spans = [
         {
           type: 'trace.span',
           traceId: 'trace_0123456789abcdef0123456789abcdef',
           spanId: 'span_0123456789abcde0',
-          spanData: { type: 'function', name: 'nested_tool', input: deeplyNestedInput },
+          spanData: { type: 'function', name: 'nested_tool', input: unsafeInput },
           traceMetadata: { 'promptfoo.otlp_format': format },
           error: null,
         },
@@ -479,7 +553,15 @@ describe('OTLPTracingExporter', () => {
         },
       ];
 
-      await exporter.export(spans as any);
+      const parseSpy = shape === 'oversized' ? vi.spyOn(JSON, 'parse') : undefined;
+      try {
+        await exporter.export(spans as any);
+        if (parseSpy) {
+          expect(parseSpy).not.toHaveBeenCalledWith(unsafeInput);
+        }
+      } finally {
+        parseSpy?.mockRestore();
+      }
 
       expect(mockFetchWithProxy).toHaveBeenCalledOnce();
       const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
