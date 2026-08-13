@@ -77,11 +77,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     assertOpenAiApiModel(body.model, this.getApiUrl());
     const asNumber = (value: unknown): number | undefined =>
       typeof value === 'number' ? value : undefined;
-    const stopSequences = Array.isArray(body.stop)
-      ? body.stop
-      : typeof body.stop === 'string'
+    const stopSequences =
+      typeof body.stop === 'string'
         ? [body.stop]
-        : undefined;
+        : Array.isArray(body.stop) && body.stop.every((item) => typeof item === 'string')
+          ? (body.stop as string[])
+          : undefined;
 
     return withGenAISpan(
       {
