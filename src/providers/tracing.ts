@@ -10,6 +10,7 @@ export {
   type GenAISpanContext,
   getGenAITracer,
   withGenAISpan,
+  withGenAIToolSpan,
 } from '../tracing/genaiTracer';
 
 /** Keep optional SDK telemetry disabled when there is no usable parent span. */

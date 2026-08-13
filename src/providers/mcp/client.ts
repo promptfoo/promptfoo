@@ -5,6 +5,7 @@ import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -419,6 +420,15 @@ export class MCPClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
+      this.callToolInternal(name, args),
+    );
+  }
+
+  private async callToolInternal(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
     const disconnectedServers: string[] = [];
 

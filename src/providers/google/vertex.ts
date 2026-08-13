@@ -935,6 +935,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
                     : structured_output.functionCall.args,
                 ),
                 config,
+                structured_output.functionCall.id,
               );
               results.push(functionResult);
             } catch (error) {
