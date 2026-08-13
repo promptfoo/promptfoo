@@ -377,7 +377,7 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     if (typeof value === 'string') {
-      return { stringValue: sanitizeBody(value) };
+      return { stringValue: sanitizeSerializedAttribute(value) };
     }
 
     if (typeof value === 'number') {
@@ -552,6 +552,26 @@ function commandToString(value: unknown): string | undefined {
   }
 
   return String(value).trim() || undefined;
+}
+
+function sanitizeSerializedAttribute(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (isRecord(parsed) || Array.isArray(parsed)) {
+        const sanitized = sanitizeTraceAttributes({ value: parsed }, { truncateValues: false });
+        return sanitizeBody(JSON.stringify(sanitized.value));
+      }
+    } catch {
+      // Non-JSON strings still need the existing free-text credential redaction.
+    }
+  }
+
+  return sanitizeBody(value);
 }
 
 function sanitizeAttributeValue(value: unknown): unknown {

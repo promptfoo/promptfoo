@@ -387,6 +387,9 @@ describe('OTLPTracingExporter', () => {
       const apiKey = 'sk-abcdefghijklmnopqrstuvwxyz';
       const sessionToken = 'agent-session-token-value-123456789012345';
       const metadataSecret = 'customer-credential-without-a-known-prefix';
+      const accessToken = 'opaque.value/with+arbitrary=chars';
+      const clientSecret = 'tiny';
+      const refreshToken = 'renew?credential/value';
       const span = {
         type: 'trace.span',
         traceId: 'trace_0123456789abcdef0123456789abcdef',
@@ -394,8 +397,13 @@ describe('OTLPTracingExporter', () => {
         spanData: {
           type: 'function',
           name: 'lookup_account',
-          input: JSON.stringify({ apiKey }),
-          output: JSON.stringify({ token: sessionToken }),
+          input: JSON.stringify({
+            apiKey,
+            accountId: 'account-123',
+            access_token: accessToken,
+            nested: [{ refreshToken }],
+          }),
+          output: JSON.stringify({ token: sessionToken, client_secret: clientSecret }),
         },
         traceMetadata: { customerApiKey: metadataSecret, 'promptfoo.otlp_format': format },
         error: new Error(`Authentication failed for ${apiKey}`),
@@ -412,13 +420,23 @@ describe('OTLPTracingExporter', () => {
       expect(serializedPayload).not.toContain(apiKey);
       expect(serializedPayload).not.toContain(sessionToken);
       expect(serializedPayload).not.toContain(metadataSecret);
+      expect(serializedPayload).not.toContain(accessToken);
+      expect(serializedPayload).not.toContain(clientSecret);
+      expect(serializedPayload).not.toContain(refreshToken);
 
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
-      expect(getAttributes(exportedSpan)).toMatchObject({
-        'tool.arguments': '{"apiKey":"<REDACTED_API_KEY>"}',
-        'tool.output': '{"token":"<REDACTED>"}',
-        'trace.metadata.customerApiKey': '<redacted>',
+      const attributes = getAttributes(exportedSpan);
+      expect(JSON.parse(attributes['tool.arguments'] as string)).toEqual({
+        apiKey: '<redacted>',
+        accountId: 'account-123',
+        access_token: '<redacted>',
+        nested: [{ refreshToken: '<redacted>' }],
       });
+      expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
+        token: '<redacted>',
+        client_secret: '<redacted>',
+      });
+      expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
       expect(exportedSpan.status.message).toBe('Authentication failed for <REDACTED_API_KEY>');
     },
   );
