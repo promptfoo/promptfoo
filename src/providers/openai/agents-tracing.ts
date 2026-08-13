@@ -12,6 +12,11 @@ const OTLP_SPAN_KIND_CLIENT = 3;
 const MAX_STRUCTURED_ATTRIBUTE_BYTES = 64 * 1024;
 const MAX_STRUCTURED_ATTRIBUTE_DEPTH = 32;
 const MAX_STRUCTURED_ATTRIBUTE_NODES = 10_000;
+const TRACE_LINKAGE_ATTRIBUTE_KEYS = new Set(['evaluation.id', 'test.case.id']);
+const losslessJson = JSON as typeof JSON & {
+  rawJSON?: (source: string) => unknown;
+  isRawJSON?: (value: unknown) => boolean;
+};
 const INTERNAL_TRACE_METADATA_KEYS = new Set([
   'promptfoo.otlp_endpoint',
   'promptfoo.otlp_format',
@@ -368,17 +373,20 @@ export class OTLPTracingExporter implements TracingExporter {
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => ({
         key,
-        value: this.valueToOTLP(sanitizeAttributeByKey(key, value)),
+        value: this.valueToOTLP(
+          sanitizeAttributeByKey(key, value),
+          TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key),
+        ),
       }));
   }
 
-  private valueToOTLP(value: unknown): any {
+  private valueToOTLP(value: unknown, preserveTraceLinkage = false): any {
     if (value === null || value === undefined) {
       return { stringValue: '' };
     }
 
     if (typeof value === 'string') {
-      return { stringValue: sanitizeSerializedAttribute(value) };
+      return { stringValue: preserveTraceLinkage ? value : sanitizeSerializedAttribute(value) };
     }
 
     if (typeof value === 'number') {
@@ -568,7 +576,7 @@ function sanitizeSerializedAttribute(value: string): string {
       return '<redacted>';
     }
     try {
-      const parsed = JSON.parse(trimmed) as unknown;
+      const parsed = parseStructuredJson(trimmed);
       if (isRecord(parsed) || Array.isArray(parsed)) {
         const state = { changed: false };
         const sanitized = sanitizeStructuredAttribute(parsed, state);
@@ -584,6 +592,30 @@ function sanitizeSerializedAttribute(value: string): string {
   return sanitizeCredentialText(value);
 }
 
+function parseStructuredJson(value: string): unknown {
+  if (!/-?\d{16,}/.test(value) || typeof losslessJson.rawJSON !== 'function') {
+    return JSON.parse(value);
+  }
+
+  try {
+    return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
+      if (
+        typeof parsed === 'number' &&
+        !Number.isSafeInteger(parsed) &&
+        typeof context?.source === 'string'
+      ) {
+        return losslessJson.rawJSON!(context.source);
+      }
+      return parsed;
+    });
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return JSON.parse(value);
+    }
+    throw error;
+  }
+}
+
 function sanitizeCredentialText(value: string): string {
   return sanitizeBody(value)
     .replace(
@@ -592,6 +624,11 @@ function sanitizeCredentialText(value: string): string {
         isCredentialAttributeKey(key)
           ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
           : match,
+    )
+    .replace(
+      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*:\s*)([^\s;,"'{}\]]+)/g,
+      (match, prefix: string, key: string, separator: string) =>
+        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
       /(^|[?&#;\s])([A-Za-z][A-Za-z\d_.%-]*)=([^&#;\s"',}\]]+)/g,
@@ -617,7 +654,9 @@ function isCredentialAttributeKey(key: string): boolean {
   return parts.some((part, index) => {
     if (part === 'token' || part === 'tokens') {
       return (
-        !['count', 'counts', 'usage', 'limit', 'budget', 'length'].includes(parts[index + 1]) &&
+        !['count', 'counts', 'usage', 'limit', 'budget', 'length', 'type'].includes(
+          parts[index + 1],
+        ) &&
         ![
           'usage',
           'input',
@@ -688,7 +727,9 @@ function sanitizeStructuredAttribute(
       if (isCredentialAttributeKey(key)) {
         sanitized = '<redacted>';
         state.changed = true;
-      } else if (isRecord(entry) || Array.isArray(entry)) {
+      } else if (losslessJson.isRawJSON?.(entry)) {
+        sanitized = entry;
+      } else if (isStructuredContainer(entry)) {
         if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
           sanitized = '<redacted>';
           state.changed = true;
@@ -712,6 +753,10 @@ function sanitizeStructuredAttribute(
   }
 
   return root;
+}
+
+function isStructuredContainer(value: unknown): value is Record<string, unknown> | unknown[] {
+  return isRecord(value) || Array.isArray(value);
 }
 
 function* structuredAttributeEntries(

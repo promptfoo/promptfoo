@@ -397,6 +397,11 @@ describe('OTLPTracingExporter', () => {
       const authorization = 'Bearer opaque/container-value';
       const cookie = 'opaque-cookie-session';
       const callback = `https://host/callback?access_token=${accessToken}&token_count=12`;
+      const colonToken = 'colon-opaque/value';
+      const colonCookie = 'colon-cookie-session';
+      const logDetails = `access_token: ${colonToken}; Cookie: session=${colonCookie}`;
+      const evaluationId = 'a'.repeat(64);
+      const testCaseId = 'b'.repeat(64);
       const span = {
         type: 'trace.span',
         traceId: 'trace_0123456789abcdef0123456789abcdef',
@@ -413,7 +418,9 @@ describe('OTLPTracingExporter', () => {
             clientCredentials,
             authorization: [authorization],
             token_count: 12,
+            token_type: 'Bearer',
             secretary: 'Alice',
+            logDetails,
             nested: [{ refreshToken }],
           }),
           output: JSON.stringify({
@@ -427,13 +434,15 @@ describe('OTLPTracingExporter', () => {
         traceMetadata: {
           customerApiKey: metadataSecret,
           clientCredentials,
+          'evaluation.id': evaluationId,
+          'test.case.id': testCaseId,
           'promptfoo.otlp_format': format,
         },
         error: new Error(
           `Authentication failed for ${apiKey}: ${JSON.stringify({
             client_secret: clientSecret,
             access_token: accessToken,
-          })}; ${callback}`,
+          })}; ${callback}; ${logDetails}`,
         ),
       };
 
@@ -457,6 +466,8 @@ describe('OTLPTracingExporter', () => {
       expect(serializedPayload).not.toContain(tokens);
       expect(serializedPayload).not.toContain(authorization);
       expect(serializedPayload).not.toContain(cookie);
+      expect(serializedPayload).not.toContain(colonToken);
+      expect(serializedPayload).not.toContain(colonCookie);
 
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
       const attributes = getAttributes(exportedSpan);
@@ -469,7 +480,9 @@ describe('OTLPTracingExporter', () => {
         clientCredentials: '<redacted>',
         authorization: '<redacted>',
         token_count: 12,
+        token_type: 'Bearer',
         secretary: 'Alice',
+        logDetails: 'access_token: <redacted>; Cookie: <redacted>',
         nested: [{ refreshToken: '<redacted>' }],
       });
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
@@ -481,19 +494,29 @@ describe('OTLPTracingExporter', () => {
       });
       expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
       expect(attributes['trace.metadata.clientCredentials']).toBe('<redacted>');
+      expect(attributes['evaluation.id']).toBe(evaluationId);
+      expect(attributes['test.case.id']).toBe(testCaseId);
       expect(exportedSpan.status.message).toBe(
         'Authentication failed for <REDACTED_API_KEY>: ' +
           '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
-          'https://host/callback?access_token=<redacted>&token_count=12',
+          'https://host/callback?access_token=<redacted>&token_count=12; ' +
+          'access_token: <redacted>; Cookie: <redacted>',
       );
     },
   );
 
-  it.each(['json', 'protobuf'] as const)(
-    'preserves large integer identifiers in benign %s tool arguments',
-    async (format) => {
+  it.each([
+    { format: 'json', includesCredential: false },
+    { format: 'protobuf', includesCredential: false },
+    { format: 'json', includesCredential: true },
+    { format: 'protobuf', includesCredential: true },
+  ] as const)(
+    'preserves large integer identifiers in $format tool arguments when credential redaction is $includesCredential',
+    async ({ format, includesCredential }) => {
       const exporter = new OTLPTracingExporter();
-      const input = '{"order_id":9223372036854775807,"token_count":12}';
+      const input = includesCredential
+        ? '{"access_token":"tiny","order_id":9223372036854775807}'
+        : '{"order_id":9223372036854775807,"token_count":12}';
       await exporter.export([
         {
           type: 'trace.span',
@@ -511,7 +534,9 @@ describe('OTLPTracingExporter', () => {
           ? await decodeExportTraceServiceRequest(body as Uint8Array)
           : JSON.parse(body as string);
       const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
-      expect(getAttributes(exportedSpan)['tool.arguments']).toBe(input);
+      expect(getAttributes(exportedSpan)['tool.arguments']).toBe(
+        includesCredential ? '{"access_token":"<redacted>","order_id":9223372036854775807}' : input,
+      );
     },
   );
 
