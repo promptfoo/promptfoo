@@ -619,6 +619,10 @@ function parseStructuredJson(value: string): unknown {
 function sanitizeCredentialText(value: string): string {
   return sanitizeBody(value)
     .replace(
+      /(\bCookie\s*:\s*)[^\s;,"']+(?:;\s*(?!Authorization\s*[:=]|Cookie\s*:)[^\s;,"']+=[^\s;,"']+)*/gi,
+      (_match, prefix: string) => `${prefix}<redacted>`,
+    )
+    .replace(
       /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"']*)\4/g,
       (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
         isCredentialAttributeKey(key)
@@ -631,7 +635,7 @@ function sanitizeCredentialText(value: string): string {
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;\s])([A-Za-z][A-Za-z\d_.%-]*)=([^&#;\s"',}\]]+)/g,
+      /(^|[?&#;\s])((?:[A-Za-z]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)=((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^&#;\s"',}\]]+)/gi,
       (match, prefix: string, key: string) => {
         let decodedKey = key;
         try {
@@ -670,6 +674,9 @@ function isCredentialAttributeKey(key: string): boolean {
           'positions',
           'mask',
           'masks',
+          'endpoint',
+          'url',
+          'uri',
         ].includes(parts[index + 1]) &&
         ![
           'usage',
