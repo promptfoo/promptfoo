@@ -57,7 +57,8 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
           const header = Buffer.alloc(512);
 
           // File name (100 bytes)
-          Buffer.from(fileName).copy(header, 0, 0, Math.min(fileName.length, 100));
+          const encodedFileName = Buffer.from(fileName);
+          encodedFileName.copy(header, 0, 0, Math.min(encodedFileName.length, 100));
 
           // File mode (8 bytes) - default 644
           Buffer.from('0000644 ').copy(header, 100);
