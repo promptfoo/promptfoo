@@ -718,7 +718,7 @@ function* structuredAttributeEntries(
   value: Record<string, unknown> | unknown[],
 ): Generator<[string, unknown]> {
   for (const key in value) {
-    if (Object.hasOwn(value, key)) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
       yield [key, Reflect.get(value, key)];
     }
   }
