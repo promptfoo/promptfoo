@@ -154,17 +154,37 @@ function createGeneratedFile(
   };
 }
 
-function normalizeFilePath(filePath: string): string {
+export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
     return filePath;
   }
 
+  // Only a file URL with an empty authority (file:///abs/path) names an absolute
+  // local path. Anything else is promptfoo's long-standing shorthand for a
+  // relative path -- file://fixtures/a.pdf, or file://./fixtures/a.pdf once the
+  // var holding it has been rendered.
+  //
+  // The authority has to be checked before handing the URL to fileURLToPath,
+  // because that function disagrees with itself across platforms: POSIX throws
+  // ERR_INVALID_FILE_URL_HOST on a non-empty host, but Windows happily converts
+  // it to a UNC/device path (\\.\fixtures\a.pdf), which is never a valid local
+  // path and reaches the filesystem as an ENOENT.
+  let hasEmptyAuthority = false;
   try {
-    return fileURLToPath(filePath);
+    hasEmptyAuthority = new URL(filePath).host === '';
   } catch {
-    // Preserve promptfoo's long-standing shorthand: file://relative/path.ext
-    return filePath.slice('file://'.length);
+    hasEmptyAuthority = false;
   }
+
+  if (hasEmptyAuthority) {
+    try {
+      return fileURLToPath(filePath);
+    } catch {
+      // Fall through to the relative shorthand below.
+    }
+  }
+
+  return filePath.slice('file://'.length);
 }
 
 function resolvePath(filePath: string): string {
