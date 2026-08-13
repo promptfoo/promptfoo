@@ -7,7 +7,7 @@ import {
   startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
-import { getConfiguredTracingEndpoint } from '../tracing';
+import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
   loadHandoffs,
@@ -145,9 +145,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
    * Setup tracing if enabled
    */
   private async setupTracingIfNeeded(context?: CallApiContextParams): Promise<void> {
+    const hasConfiguredExporter = Boolean(
+      this.agentConfig.otlpEndpoint || getConfiguredTracingExport(),
+    );
     const tracingEnabled =
       this.agentConfig.tracing === true ||
-      Boolean(context?.traceparent) ||
+      Boolean(context?.traceparent && hasConfiguredExporter) ||
       context?.test?.metadata?.tracingEnabled === true ||
       process.env.PROMPTFOO_TRACING_ENABLED === 'true';
 
@@ -203,10 +206,15 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       const traceContext = parseTraceparent(context?.traceparent);
+      const configuredExport = getConfiguredTracingExport();
+      const explicitModel = runOptions.model ?? this.agent?.model;
       const traceMetadata = buildTraceMetadata(
         context,
-        this.agentConfig.otlpEndpoint ?? getConfiguredTracingEndpoint(),
+        this.agentConfig.otlpEndpoint ?? configuredExport?.endpoint,
         traceContext,
+        this.agentConfig.otlpEndpoint ? 'json' : configuredExport?.format,
+        typeof explicitModel === 'string' ? explicitModel : undefined,
+        getModelProviderName(explicitModel),
       );
 
       // Run the agent within the evaluator trace when Promptfoo supplied one so
@@ -494,6 +502,9 @@ function buildTraceMetadata(
   context?: CallApiContextParams,
   otlpEndpoint?: string,
   traceContext?: { traceId: string; parentSpanId: string },
+  otlpFormat?: 'json' | 'protobuf',
+  requestedModel?: string,
+  modelProvider?: string,
 ): Record<string, string> {
   return {
     ...(context?.evaluationId ? { 'evaluation.id': context.evaluationId } : {}),
@@ -502,7 +513,25 @@ function buildTraceMetadata(
       ? { 'promptfoo.parent_span_id': traceContext.parentSpanId }
       : {}),
     ...(otlpEndpoint ? { 'promptfoo.otlp_endpoint': otlpEndpoint } : {}),
+    ...(otlpFormat === 'protobuf' ? { 'promptfoo.otlp_format': otlpFormat } : {}),
+    ...(requestedModel ? { 'promptfoo.request_model': requestedModel } : {}),
+    ...(modelProvider ? { 'promptfoo.model_provider': modelProvider } : {}),
   };
+}
+
+function getModelProviderName(model: unknown): string | undefined {
+  if (!model || typeof model !== 'object') {
+    return undefined;
+  }
+
+  const modelRecord = model as Record<string, unknown>;
+  for (const value of [modelRecord.provider, modelRecord.providerName, modelRecord.providerId]) {
+    if (typeof value === 'string' && value) {
+      return value;
+    }
+  }
+
+  return undefined;
 }
 
 function summarizeUsageDetails(

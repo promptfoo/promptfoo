@@ -2,6 +2,13 @@ import { trace } from '@opentelemetry/api';
 import cliState from '../cliState';
 import { getOtelConfigFromEnv } from '../tracing/otelConfig';
 
+export type TracingExportFormat = 'json' | 'protobuf';
+
+export interface ConfiguredTracingExport {
+  endpoint: string;
+  format: TracingExportFormat;
+}
+
 export {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -20,12 +27,30 @@ export function hasActiveTracingSpan(): boolean {
 
 /** Return the receiver owned by the current evaluation, when one was configured. */
 export function getConfiguredTracingEndpoint(): string | undefined {
+  return getConfiguredTracingExport()?.endpoint;
+}
+
+/** Resolve a running HTTP receiver and an OTLP format it actually accepts. */
+export function getConfiguredTracingExport(): ConfiguredTracingExport | undefined {
   const receiver = cliState.requestTracingConfig?.otlp?.http;
-  if (!receiver) {
+  if (!receiver?.enabled) {
     return undefined;
   }
 
-  return `http://${receiver.host ?? '127.0.0.1'}:${receiver.port ?? 4318}`;
+  const acceptFormats = receiver.acceptFormats;
+  const format =
+    !acceptFormats?.length || acceptFormats.includes('json')
+      ? 'json'
+      : acceptFormats.includes('protobuf')
+        ? 'protobuf'
+        : undefined;
+  if (!format) {
+    return undefined;
+  }
+
+  const host = receiver.host ?? '127.0.0.1';
+  const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+  return { endpoint: `http://${urlHost}:${receiver.port ?? 4318}`, format };
 }
 
 /** Give subprocess SDKs a usable collector even when the receiver uses its defaults. */

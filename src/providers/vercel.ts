@@ -1,5 +1,6 @@
 import { createHmac } from 'crypto';
 
+import { context as otelContext, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -145,6 +146,23 @@ function getSdkTelemetryOptions(providerId: string, context?: CallApiContextPara
       recordOutputs: false,
     },
   };
+}
+
+/** Preserve the evaluation parent when SDK calls are invoked without an active matching span. */
+function withSdkTraceContext<T>(context: CallApiContextParams | undefined, fn: () => T): T {
+  const traceparent = context?.traceparent;
+  if (!traceparent) {
+    return fn();
+  }
+
+  const [, traceId] = traceparent.split('-');
+  const activeSpanContext = trace.getActiveSpan()?.spanContext();
+  if (activeSpanContext?.traceId.toLowerCase() === traceId?.toLowerCase()) {
+    return fn();
+  }
+
+  const parentContext = propagation.extract(ROOT_CONTEXT, { traceparent });
+  return otelContext.with(parentContext, fn);
 }
 
 /**
@@ -406,14 +424,15 @@ export class VercelAiProvider implements ApiProvider {
     const messages = parseChatPrompt<ChatMessage[]>(prompt, [{ role: 'user', content: prompt }]);
 
     // Dispatch to appropriate method based on config
-    let response: ProviderResponse;
-    if (this.config.responseSchema) {
-      response = await this.callApiStructured(messages, context);
-    } else if (this.config.streaming) {
-      response = await this.callApiStreaming(messages, context);
-    } else {
-      response = await this.callApiNonStreaming(messages, context);
-    }
+    const response = await withSdkTraceContext(context, async () => {
+      if (this.config.responseSchema) {
+        return this.callApiStructured(messages, context);
+      }
+      if (this.config.streaming) {
+        return this.callApiStreaming(messages, context);
+      }
+      return this.callApiNonStreaming(messages, context);
+    });
 
     // Cache the response if successful
     if (isCacheEnabled() && !response.error) {
@@ -543,12 +562,14 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
 
       logger.debug('Calling Vercel AI Gateway for embedding', { model: this.modelName });
 
-      const result = await embed({
-        model: gateway.textEmbeddingModel(this.modelName),
-        value: input,
-        ...getSdkTelemetryOptions(this.id(), context),
-        abortSignal: signal,
-      });
+      const result = await withSdkTraceContext(context, () =>
+        embed({
+          model: gateway.textEmbeddingModel(this.modelName),
+          value: input,
+          ...getSdkTelemetryOptions(this.id(), context),
+          abortSignal: signal,
+        }),
+      );
 
       cleanup();
 

@@ -1,14 +1,20 @@
 import logger from '../../logger';
+import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
+
+import type { TracingExportFormat } from '../tracing';
 
 const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
 const OTLP_SPAN_KIND_INTERNAL = 1;
 const OTLP_SPAN_KIND_CLIENT = 3;
 const INTERNAL_TRACE_METADATA_KEYS = new Set([
   'promptfoo.otlp_endpoint',
+  'promptfoo.otlp_format',
+  'promptfoo.model_provider',
   'promptfoo.parent_span_id',
+  'promptfoo.request_model',
   'promptfoo.service_name',
 ]);
 
@@ -36,29 +42,34 @@ export class OTLPTracingExporter implements TracingExporter {
     });
 
     await Promise.all(
-      [...spansByEndpoint.entries()].map(async ([otlpEndpoint, endpointSpans]) => {
+      [...spansByEndpoint.values()].map(async ({ endpoint: otlpEndpoint, format, spans }) => {
         try {
-          const otlpPayload = this.transformToOTLP(endpointSpans);
+          const otlpPayload = this.transformToOTLP(spans);
           const url = `${otlpEndpoint}/v1/traces`;
+          const body =
+            format === 'protobuf'
+              ? new Uint8Array(await encodeExportTraceServiceRequest(otlpPayload))
+              : JSON.stringify(otlpPayload);
 
           logger.debug('[AgentsTracing] Sending OTLP payload', {
             url,
-            spanCount: endpointSpans.length,
+            format,
+            spanCount: spans.length,
           });
 
           const response = await fetchWithProxy(url, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': format === 'protobuf' ? 'application/x-protobuf' : 'application/json',
             },
-            body: JSON.stringify(otlpPayload),
+            body,
             signal,
           });
 
           if (response.ok) {
             logger.debug('[AgentsTracing] Successfully exported traces to OTLP', {
               otlpEndpoint,
-              spanCount: endpointSpans.length,
+              spanCount: spans.length,
             });
           } else {
             logger.error(
@@ -220,7 +231,7 @@ export class OTLPTracingExporter implements TracingExporter {
         break;
       case 'generation':
         attributes['gen_ai.operation.name'] = 'chat';
-        attributes['gen_ai.provider.name'] = 'openai';
+        setGenerationProviderAttribute(data, span, attributes);
         attributes['gen_ai.request.model'] = data.model;
         if (data.usage?.input_tokens !== undefined) {
           attributes['gen_ai.usage.input_tokens'] = data.usage.input_tokens;
@@ -233,7 +244,7 @@ export class OTLPTracingExporter implements TracingExporter {
         }
         break;
       case 'response':
-        this.applyResponseSpanAttributes(data, attributes);
+        this.applyResponseSpanAttributes(data, span, attributes);
         break;
       case 'guardrail':
         attributes['guardrail.name'] = data.name;
@@ -264,6 +275,7 @@ export class OTLPTracingExporter implements TracingExporter {
 
   private applyResponseSpanAttributes(
     data: Extract<SpanData, { type: 'response' }>,
+    span: Span<any>,
     attributes: Record<string, unknown>,
   ): void {
     const response = isRecord(data._response) ? data._response : undefined;
@@ -276,8 +288,11 @@ export class OTLPTracingExporter implements TracingExporter {
     attributes['openai.api.type'] = 'responses';
 
     if (model) {
-      attributes['gen_ai.request.model'] = model;
       attributes['gen_ai.response.model'] = model;
+    }
+    const requestedModel = getStringTraceMetadata(span, 'promptfoo.request_model');
+    if (requestedModel) {
+      attributes['gen_ai.request.model'] = requestedModel;
     }
     if (responseId) {
       attributes['gen_ai.response.id'] = responseId;
@@ -447,18 +462,69 @@ function setNumericAttribute(
   }
 }
 
-function groupSpansByEndpoint(spans: Span<any>[]): Map<string, Span<any>[]> {
-  const grouped = new Map<string, Span<any>[]>();
+interface SpanExportDestination {
+  endpoint: string;
+  format: TracingExportFormat;
+  spans: Span<any>[];
+}
+
+function groupSpansByEndpoint(spans: Span<any>[]): Map<string, SpanExportDestination> {
+  const grouped = new Map<string, SpanExportDestination>();
 
   for (const span of spans) {
-    const otlpEndpoint =
+    const endpoint =
       getStringTraceMetadata(span, 'promptfoo.otlp_endpoint') ?? DEFAULT_OTLP_ENDPOINT;
-    const endpointSpans = grouped.get(otlpEndpoint) ?? [];
-    endpointSpans.push(span);
-    grouped.set(otlpEndpoint, endpointSpans);
+    const format =
+      getStringTraceMetadata(span, 'promptfoo.otlp_format') === 'protobuf' ? 'protobuf' : 'json';
+    const destinationKey = `${format}:${endpoint}`;
+    const destination = grouped.get(destinationKey) ?? { endpoint, format, spans: [] };
+    destination.spans.push(span);
+    grouped.set(destinationKey, destination);
   }
 
   return grouped;
+}
+
+function setGenerationProviderAttribute(
+  data: Extract<SpanData, { type: 'generation' }>,
+  span: Span<any>,
+  attributes: Record<string, unknown>,
+): void {
+  const modelConfig = isRecord(data.model_config) ? data.model_config : undefined;
+  const provider =
+    getStringValue(modelConfig?.provider) ??
+    getStringValue(modelConfig?.provider_name) ??
+    getStringValue(modelConfig?.providerName) ??
+    getStringTraceMetadata(span, 'promptfoo.model_provider') ??
+    inferProviderFromModel(data.model);
+
+  if (provider) {
+    attributes['gen_ai.provider.name'] = provider;
+  }
+}
+
+function inferProviderFromModel(model: string | undefined): string | undefined {
+  if (!model) {
+    return undefined;
+  }
+
+  const explicitProvider = model.match(
+    /^(openai|anthropic|azure|google|vertex|bedrock|litellm)[/:]/i,
+  );
+  if (explicitProvider) {
+    return explicitProvider[1].toLowerCase();
+  }
+  if (/^(gpt-|chatgpt-|o[134]-|text-embedding-|dall-e-|whisper-|tts-)/i.test(model)) {
+    return 'openai';
+  }
+  if (/^claude-/i.test(model)) {
+    return 'anthropic';
+  }
+  if (/^gemini-/i.test(model)) {
+    return 'google';
+  }
+
+  return undefined;
 }
 
 function getStringTraceMetadata(span: Span<any>, key: string): string | undefined {

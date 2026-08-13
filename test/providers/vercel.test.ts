@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { context as otelContext, propagation, trace } from '@opentelemetry/api';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
   createVercelProvider,
@@ -33,6 +35,24 @@ vi.mock('ai', () => {
     jsonSchema: vi.fn((schema: unknown) => schema),
   };
 });
+
+const testTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+const testTracerProvider = new NodeTracerProvider();
+
+beforeAll(() => {
+  testTracerProvider.register();
+});
+
+afterAll(async () => {
+  await testTracerProvider.shutdown();
+});
+
+function expectActiveEvaluationParent(): void {
+  expect(trace.getActiveSpan()?.spanContext()).toMatchObject({
+    traceId: '0123456789abcdef0123456789abcdef',
+    spanId: '0123456789abcdef',
+  });
+}
 
 describe('VercelAiProvider', () => {
   let mockCache: {
@@ -159,16 +179,19 @@ describe('VercelAiProvider', () => {
   describe('callApi() - non-streaming', () => {
     it('enables native SDK telemetry without recording content when an eval trace is active', async () => {
       const { generateText } = await import('ai');
-      vi.mocked(generateText).mockResolvedValueOnce({
-        text: 'Traced response',
-        usage: { promptTokens: 10, completionTokens: 20 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateText).mockImplementationOnce(async () => {
+        expectActiveEvaluationParent();
+        return {
+          text: 'Traced response',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          finishReason: 'stop',
+        } as any;
+      });
 
       const provider = new VercelAiProvider('openai/gpt-4o-mini');
       await provider.callApi('Sensitive prompt', {
         prompt: { raw: 'Sensitive prompt', label: 'test' },
-        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        traceparent: testTraceparent,
         vars: {},
       });
 
@@ -182,6 +205,56 @@ describe('VercelAiProvider', () => {
           },
         }),
       );
+    });
+
+    it('keeps a matching active child span instead of flattening the trace hierarchy', async () => {
+      const { generateText } = await import('ai');
+      const evaluatorContext = propagation.extract(otelContext.active(), {
+        traceparent: testTraceparent,
+      });
+      const activeProviderSpan = trace
+        .getTracer('vercel-provider-test')
+        .startSpan('active provider span', undefined, evaluatorContext);
+
+      vi.mocked(generateText).mockImplementationOnce(async () => {
+        expect(trace.getActiveSpan()?.spanContext().spanId).toBe(
+          activeProviderSpan.spanContext().spanId,
+        );
+        return { text: 'Traced response', usage: {}, finishReason: 'stop' } as any;
+      });
+
+      try {
+        await otelContext.with(trace.setSpan(evaluatorContext, activeProviderSpan), () =>
+          new VercelAiProvider('openai/gpt-4o-mini').callApi('prompt', {
+            prompt: { raw: 'prompt', label: 'test' },
+            traceparent: testTraceparent,
+            vars: {},
+          }),
+        );
+      } finally {
+        activeProviderSpan.end();
+      }
+    });
+
+    it('replaces an unrelated active trace with the explicitly supplied evaluation parent', async () => {
+      const { generateText } = await import('ai');
+      const unrelatedSpan = trace.getTracer('vercel-provider-test').startSpan('unrelated parent');
+      vi.mocked(generateText).mockImplementationOnce(async () => {
+        expectActiveEvaluationParent();
+        return { text: 'Traced response', usage: {}, finishReason: 'stop' } as any;
+      });
+
+      try {
+        await otelContext.with(trace.setSpan(otelContext.active(), unrelatedSpan), () =>
+          new VercelAiProvider('openai/gpt-4o-mini').callApi('prompt', {
+            prompt: { raw: 'prompt', label: 'test' },
+            traceparent: testTraceparent,
+            vars: {},
+          }),
+        );
+      } finally {
+        unrelatedSpan.end();
+      }
     });
 
     it('does not enable native SDK telemetry for untraced calls', async () => {
@@ -324,20 +397,24 @@ describe('VercelAiProvider', () => {
     it('enables native SDK telemetry for traced streaming calls', async () => {
       const { streamText } = await import('ai');
       async function* textStream() {
+        expectActiveEvaluationParent();
         yield 'response';
       }
-      vi.mocked(streamText).mockReturnValueOnce({
-        textStream: textStream(),
-        usage: Promise.resolve({ promptTokens: 1, completionTokens: 2 }),
-        finishReason: Promise.resolve('stop'),
-      } as any);
+      vi.mocked(streamText).mockImplementationOnce(() => {
+        expectActiveEvaluationParent();
+        return {
+          textStream: textStream(),
+          usage: Promise.resolve({ promptTokens: 1, completionTokens: 2 }),
+          finishReason: Promise.resolve('stop'),
+        } as any;
+      });
 
       const provider = new VercelAiProvider('openai/gpt-4o', {
         config: { streaming: true },
       });
       await provider.callApi('prompt', {
         prompt: { raw: 'prompt', label: 'test' },
-        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        traceparent: testTraceparent,
         vars: {},
       });
 
@@ -801,18 +878,21 @@ describe('VercelAiProvider', () => {
   describe('callApi() - structured output', () => {
     it('enables native SDK telemetry for traced structured output calls', async () => {
       const { generateObject } = await import('ai');
-      vi.mocked(generateObject).mockResolvedValueOnce({
-        object: { value: 'result' },
-        usage: { promptTokens: 1, completionTokens: 2 },
-        finishReason: 'stop',
-      } as any);
+      vi.mocked(generateObject).mockImplementationOnce(async () => {
+        expectActiveEvaluationParent();
+        return {
+          object: { value: 'result' },
+          usage: { promptTokens: 1, completionTokens: 2 },
+          finishReason: 'stop',
+        } as any;
+      });
 
       const provider = new VercelAiProvider('openai/gpt-4o', {
         config: { responseSchema: { type: 'object' } },
       });
       await provider.callApi('prompt', {
         prompt: { raw: 'prompt', label: 'test' },
-        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        traceparent: testTraceparent,
         vars: {},
       });
 
@@ -1014,15 +1094,18 @@ describe('VercelAiEmbeddingProvider', () => {
   describe('callEmbeddingApi()', () => {
     it('enables native SDK telemetry for traced embedding calls', async () => {
       const { embed } = await import('ai');
-      vi.mocked(embed).mockResolvedValueOnce({
-        embedding: [0.1, 0.2],
-        usage: { tokens: 2 },
-      } as any);
+      vi.mocked(embed).mockImplementationOnce(async () => {
+        expectActiveEvaluationParent();
+        return {
+          embedding: [0.1, 0.2],
+          usage: { tokens: 2 },
+        } as any;
+      });
 
       const provider = new VercelAiEmbeddingProvider('openai/text-embedding-3-small');
       await provider.callEmbeddingApi('prompt', {
         prompt: { raw: 'prompt', label: 'test' },
-        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        traceparent: testTraceparent,
         vars: {},
       });
 

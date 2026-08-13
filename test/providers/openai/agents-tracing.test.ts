@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
+import { decodeExportTraceServiceRequest } from '../../../src/tracing/protobuf';
+
+const mockFetchWithProxy = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithProxy: mockFetchWithProxy,
+}));
 
 function getAttributes(span: any): Record<string, unknown> {
   return Object.fromEntries(
@@ -23,6 +30,11 @@ function getAttributes(span: any): Record<string, unknown> {
 }
 
 describe('OTLPTracingExporter', () => {
+  beforeEach(() => {
+    mockFetchWithProxy.mockReset();
+    mockFetchWithProxy.mockResolvedValue({ ok: true });
+  });
+
   it('keeps provider token counts standard and namespaces Promptfoo totals', () => {
     const exporter = new OTLPTracingExporter() as any;
     const payload = exporter.transformToOTLP([
@@ -94,7 +106,6 @@ describe('OTLPTracingExporter', () => {
     expect(getAttributes(spans[0])).toMatchObject({
       'gen_ai.operation.name': 'chat',
       'gen_ai.provider.name': 'openai',
-      'gen_ai.request.model': 'gpt-4.1',
       'gen_ai.response.model': 'gpt-4.1',
       'gen_ai.response.id': 'resp_123',
       'gen_ai.usage.input_tokens': 120,
@@ -106,6 +117,143 @@ describe('OTLPTracingExporter', () => {
       'openai.response_id': 'resp_123',
       'promptfoo.usage.total_tokens': 155,
     });
+    expect(getAttributes(spans[0])).not.toHaveProperty('gen_ai.request.model');
+  });
+
+  it('keeps requested model aliases distinct from returned deployment identifiers', () => {
+    const exporter = new OTLPTracingExporter() as any;
+    const payload = exporter.transformToOTLP([
+      {
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: 'span_0123456789abcdef',
+        spanData: {
+          type: 'response',
+          response_id: 'resp_123',
+          _response: { id: 'resp_123', model: 'gpt-4.1-2025-04-14' },
+        },
+        traceMetadata: { 'promptfoo.request_model': 'support-agent-alias' },
+        error: null,
+      },
+    ]);
+
+    const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+    expect(attributes).toMatchObject({
+      'gen_ai.request.model': 'support-agent-alias',
+      'gen_ai.response.model': 'gpt-4.1-2025-04-14',
+    });
+    expect(attributes).not.toHaveProperty('trace.metadata.promptfoo.request_model');
+  });
+
+  it.each([
+    {
+      description: 'explicit custom provider metadata',
+      model: 'production-deployment',
+      modelConfig: { provider: 'azure' },
+      metadata: {},
+      expectedProvider: 'azure',
+    },
+    {
+      description: 'provider-prefixed custom models',
+      model: 'anthropic/claude-sonnet-4-5',
+      modelConfig: undefined,
+      metadata: {},
+      expectedProvider: 'anthropic',
+    },
+    {
+      description: 'provider metadata propagated from a custom model object',
+      model: 'custom-deployment',
+      modelConfig: undefined,
+      metadata: { 'promptfoo.model_provider': 'litellm' },
+      expectedProvider: 'litellm',
+    },
+  ])(
+    'preserves $description on generation spans',
+    ({ model, modelConfig, metadata, expectedProvider }) => {
+      const exporter = new OTLPTracingExporter() as any;
+      const payload = exporter.transformToOTLP([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: { type: 'generation', model, model_config: modelConfig },
+          traceMetadata: metadata,
+          error: null,
+        },
+      ]);
+
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      expect(attributes['gen_ai.provider.name']).toBe(expectedProvider);
+      expect(attributes).not.toHaveProperty('trace.metadata.promptfoo.model_provider');
+    },
+  );
+
+  it('omits provider attribution when a custom model backend cannot be identified', () => {
+    const exporter = new OTLPTracingExporter() as any;
+    const payload = exporter.transformToOTLP([
+      {
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: 'span_0123456789abcdef',
+        spanData: { type: 'generation', model: 'private-customer-deployment' },
+        traceMetadata: {},
+        error: null,
+      },
+    ]);
+
+    expect(getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0])).not.toHaveProperty(
+      'gen_ai.provider.name',
+    );
+  });
+
+  it('exports protobuf to protobuf-only receivers', async () => {
+    const exporter = new OTLPTracingExporter();
+    const span = {
+      type: 'trace.span',
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      spanId: 'span_0123456789abcdef',
+      spanData: { type: 'generation', model: 'gpt-4.1' },
+      traceMetadata: {
+        'promptfoo.otlp_endpoint': 'http://127.0.0.1:14318',
+        'promptfoo.otlp_format': 'protobuf',
+      },
+      error: null,
+    };
+
+    await exporter.export([span as any]);
+
+    expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      'http://127.0.0.1:14318/v1/traces',
+      expect.objectContaining({
+        headers: { 'Content-Type': 'application/x-protobuf' },
+        body: expect.any(Uint8Array),
+      }),
+    );
+    const request = mockFetchWithProxy.mock.calls[0][1];
+    const decoded = await decodeExportTraceServiceRequest(request.body);
+    expect(decoded.resourceSpans[0].scopeSpans[0].spans[0].name).toBe('chat gpt-4.1');
+  });
+
+  it('keeps explicitly configured and default destinations on JSON', async () => {
+    const exporter = new OTLPTracingExporter();
+    const span = {
+      type: 'trace.span',
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      spanId: 'span_0123456789abcdef',
+      spanData: { type: 'generation', model: 'gpt-4.1' },
+      traceMetadata: { 'promptfoo.otlp_endpoint': 'https://collector.example.com:4318' },
+      error: null,
+    };
+
+    await exporter.export([span as any]);
+
+    expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      'https://collector.example.com:4318/v1/traces',
+      expect.objectContaining({
+        headers: { 'Content-Type': 'application/json' },
+        body: expect.any(String),
+      }),
+    );
   });
 
   it('keeps Responses API spans useful when the SDK exposes only a response identifier', () => {

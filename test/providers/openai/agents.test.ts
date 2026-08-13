@@ -882,6 +882,147 @@ describe('OpenAiAgentsProvider', () => {
     });
   });
 
+  it('does not register the SDK exporter for a traceparent without an OTLP destination', async () => {
+    vi.resetModules();
+    const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
+      '../../../src/providers/openai/agents'
+    );
+    const provider = new IsolatedOpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(addTraceProcessor).not.toHaveBeenCalled();
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: { 'promptfoo.parent_span_id': '0123456789abcdef' },
+    });
+  });
+
+  it('preserves explicitly configured OTLP endpoints without a local receiver', async () => {
+    vi.resetModules();
+    const { OpenAiAgentsProvider: IsolatedOpenAiAgentsProvider } = await import(
+      '../../../src/providers/openai/agents'
+    );
+    const provider = new IsolatedOpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+        otlpEndpoint: 'https://collector.example.com:4318',
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(addTraceProcessor).toHaveBeenCalledOnce();
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.otlp_endpoint': 'https://collector.example.com:4318',
+      },
+    });
+  });
+
+  it('routes SDK spans to protobuf-only evaluation receivers', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: { name: 'Inline Support Agent', instructions: 'Help the user.' },
+      },
+    });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.2', port: 14318, acceptFormats: ['protobuf'] },
+        },
+      },
+      async () =>
+        provider.callApi('Where is my order?', {
+          prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+          vars: {},
+        }),
+    );
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.otlp_endpoint': 'http://127.0.0.2:14318',
+        'promptfoo.otlp_format': 'protobuf',
+      },
+    });
+  });
+
+  it('preserves requested model aliases in trace metadata', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: 'customer-model-alias',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.request_model': 'customer-model-alias',
+      },
+    });
+  });
+
+  it('preserves provider identity exposed by custom SDK model objects', async () => {
+    const customModel = {
+      provider: 'anthropic',
+      getResponse: vi.fn(),
+      getStreamedResponse: vi.fn(),
+    };
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+          model: customModel,
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?', {
+      prompt: { raw: 'Where is my order?', label: 'prompt' } as any,
+      traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      vars: {},
+    });
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'promptfoo.parent_span_id': '0123456789abcdef',
+        'promptfoo.model_provider': 'anthropic',
+      },
+    });
+  });
+
   it('passes structured multimodal JSON prompts to the SDK as agent input items', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {

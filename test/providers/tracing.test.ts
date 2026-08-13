@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   getConfiguredTracingEndpoint,
+  getConfiguredTracingExport,
   getTracingEndpoint,
   getTracingServiceName,
   hasActiveTracingSpan,
@@ -66,6 +67,55 @@ describe('provider tracing integration', () => {
       { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
       async () => {
         expect(getConfiguredTracingEndpoint()).toBe('http://127.0.0.1:4318');
+      },
+    );
+  });
+
+  it('does not expose disabled HTTP receivers as configured export destinations', async () => {
+    await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: false, port: 4318 } } },
+      async () => {
+        expect(getConfiguredTracingEndpoint()).toBeUndefined();
+        expect(getConfiguredTracingExport()).toBeUndefined();
+      },
+    );
+  });
+
+  it('selects protobuf for receivers that do not accept JSON', async () => {
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: { http: { enabled: true, port: 14318, acceptFormats: ['protobuf'] } },
+      },
+      async () => {
+        expect(getConfiguredTracingExport()).toEqual({
+          endpoint: 'http://127.0.0.1:14318',
+          format: 'protobuf',
+        });
+      },
+    );
+  });
+
+  it('prefers JSON when receivers accept both export formats', async () => {
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: { http: { enabled: true, port: 4318, acceptFormats: ['protobuf', 'json'] } },
+      },
+      async () => {
+        expect(getConfiguredTracingExport()).toEqual({
+          endpoint: 'http://127.0.0.1:4318',
+          format: 'json',
+        });
+      },
+    );
+  });
+
+  it.each(['::1', '[::1]'])('formats IPv6 receiver host %s as a valid URL', async (host) => {
+    await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: true, host, port: 14318 } } },
+      async () => {
+        expect(getConfiguredTracingEndpoint()).toBe('http://[::1]:14318');
       },
     );
   });
