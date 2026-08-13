@@ -19,6 +19,11 @@ vi.mock('../../../../src/logger', () => ({
 }));
 
 vi.mock('../../../../src/redteam/providers/shared', () => ({
+  callGradingProvider: vi.fn((provider, prompt, context, options) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options),
+  ),
   redteamProviderManager: {
     getProvider: vi.fn(),
     getGradingProvider: vi.fn(),

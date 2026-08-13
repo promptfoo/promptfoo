@@ -23,6 +23,7 @@ import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts'
 import { getGoalRubric } from '../prompts';
 import {
   buildGraderResultAssertion,
+  callGradingProvider,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
@@ -30,6 +31,7 @@ import {
   isConversationEndedResponse,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -552,7 +554,8 @@ export class CustomProvider implements ApiProvider {
               providerResponse: lastResponse,
               ...(lastResponse.images?.length ? { imageOutputs: lastResponse.images } : {}),
             };
-            const { grade, rubric } = await grader.getResult(
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
               attackPrompt,
               lastResponse.output,
               test,
@@ -967,7 +970,8 @@ export class CustomProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(
+    const refusalResponse = await callGradingProvider(
+      scoringProvider,
       refusalBody,
       {
         prompt: {
@@ -1028,7 +1032,8 @@ export class CustomProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(
+    const evalResponse = await callGradingProvider(
+      scoringProvider,
       evalBody,
       {
         prompt: {
