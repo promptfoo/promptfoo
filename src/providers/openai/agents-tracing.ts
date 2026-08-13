@@ -1,5 +1,7 @@
 import logger from '../../logger';
+import { sanitizeBody } from '../../tracing/genaiTracer';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
+import { sanitizeTraceAttributes } from '../../tracing/sanitizeAttributes';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
@@ -184,7 +186,7 @@ export class OTLPTracingExporter implements TracingExporter {
     if (span.error) {
       return {
         code: 2,
-        message: span.error.message || String(span.error),
+        message: sanitizeBody(span.error.message || String(span.error)),
       };
     }
 
@@ -361,7 +363,7 @@ export class OTLPTracingExporter implements TracingExporter {
   }
 
   private attributesToOTLP(attributes: Record<string, unknown>): any[] {
-    return Object.entries(attributes)
+    return Object.entries(sanitizeTraceAttributes(attributes, { truncateValues: false }))
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => ({
         key,
@@ -375,7 +377,7 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     if (typeof value === 'string') {
-      return { stringValue: value };
+      return { stringValue: sanitizeBody(value) };
     }
 
     if (typeof value === 'number') {
@@ -395,7 +397,7 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     if (typeof value === 'object') {
-      return { stringValue: safeJsonStringify(value) };
+      return { stringValue: sanitizeBody(safeJsonStringify(value)) };
     }
 
     return { stringValue: String(value) };

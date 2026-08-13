@@ -380,6 +380,49 @@ describe('OTLPTracingExporter', () => {
     expect(span.parentSpanId).toBe(Buffer.from('fedcba9876543210', 'hex').toString('base64'));
   });
 
+  it.each(['json', 'protobuf'] as const)(
+    'redacts credentials from tool data, metadata, and error messages in %s exports',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      const apiKey = 'sk-abcdefghijklmnopqrstuvwxyz';
+      const sessionToken = 'agent-session-token-value-123456789012345';
+      const metadataSecret = 'customer-credential-without-a-known-prefix';
+      const span = {
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: 'span_0123456789abcdef',
+        spanData: {
+          type: 'function',
+          name: 'lookup_account',
+          input: JSON.stringify({ apiKey }),
+          output: JSON.stringify({ token: sessionToken }),
+        },
+        traceMetadata: { customerApiKey: metadataSecret, 'promptfoo.otlp_format': format },
+        error: new Error(`Authentication failed for ${apiKey}`),
+      };
+
+      await exporter.export([span as any]);
+
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const serializedPayload = JSON.stringify(payload);
+      expect(serializedPayload).not.toContain(apiKey);
+      expect(serializedPayload).not.toContain(sessionToken);
+      expect(serializedPayload).not.toContain(metadataSecret);
+
+      const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(exportedSpan)).toMatchObject({
+        'tool.arguments': '{"apiKey":"<REDACTED_API_KEY>"}',
+        'tool.output': '{"token":"<REDACTED>"}',
+        'trace.metadata.customerApiKey': '<redacted>',
+      });
+      expect(exportedSpan.status.message).toBe('Authentication failed for <REDACTED_API_KEY>');
+    },
+  );
+
   it('turns sandbox custom spans into command-aware spans', () => {
     const exporter = new OTLPTracingExporter() as any;
     const payload = exporter.transformToOTLP([
