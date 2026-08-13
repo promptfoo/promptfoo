@@ -2,8 +2,37 @@ import { afterEach, describe, expect, it } from 'vitest';
 import cliState from '../../../src/cliState';
 import {
   getCodexTraceProtocol,
+  getCodexTraceShutdownGraceMs,
   withCodexTraceExporter,
 } from '../../../src/providers/openai/codex-tracing';
+
+describe('getCodexTraceShutdownGraceMs', () => {
+  it('matches the default OTLP exporter timeout', () => {
+    expect(getCodexTraceShutdownGraceMs({})).toBe(10_000);
+  });
+
+  it('prefers the trace-specific exporter timeout', () => {
+    expect(
+      getCodexTraceShutdownGraceMs({
+        OTEL_EXPORTER_OTLP_TIMEOUT: '12_000',
+        OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '15000',
+      }),
+    ).toBe(15_000);
+  });
+
+  it('honors a valid generic exporter timeout when the trace-specific value is invalid', () => {
+    expect(
+      getCodexTraceShutdownGraceMs({
+        OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '-1',
+        OTEL_EXPORTER_OTLP_TIMEOUT: '20000',
+      }),
+    ).toBe(20_000);
+  });
+
+  it('always gives the exporter at least five seconds to flush', () => {
+    expect(getCodexTraceShutdownGraceMs({ OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: '250' })).toBe(5_000);
+  });
+});
 
 describe('withCodexTraceExporter', () => {
   afterEach(() => {

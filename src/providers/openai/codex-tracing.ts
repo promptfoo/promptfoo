@@ -1,5 +1,8 @@
 import { getConfiguredTracingExport, getTracingEndpoint } from '../tracing';
 
+const DEFAULT_OTLP_EXPORT_TIMEOUT_MS = 10_000;
+const MINIMUM_CODEX_TRACE_SHUTDOWN_GRACE_MS = 5_000;
+
 /** Point Codex subprocess telemetry at the receiver associated with the current eval. */
 export function getCodexTraceEndpoint(): string {
   return getTracingEndpoint();
@@ -8,6 +11,23 @@ export function getCodexTraceEndpoint(): string {
 /** Select an OTLP protocol accepted by the receiver currently serving this evaluation. */
 export function getCodexTraceProtocol(): string {
   return getConfiguredTracingExport()?.format === 'protobuf' ? 'http/protobuf' : 'http/json';
+}
+
+/** Allow Codex's batch processor at least one complete OTLP export attempt during shutdown. */
+export function getCodexTraceShutdownGraceMs(env: Record<string, string>): number {
+  for (const key of ['OTEL_EXPORTER_OTLP_TRACES_TIMEOUT', 'OTEL_EXPORTER_OTLP_TIMEOUT']) {
+    const value = env[key];
+    if (value === undefined || !/^\d+$/.test(value)) {
+      continue;
+    }
+
+    const timeoutMs = Number(value);
+    if (Number.isSafeInteger(timeoutMs) && timeoutMs > 0) {
+      return Math.max(MINIMUM_CODEX_TRACE_SHUTDOWN_GRACE_MS, timeoutMs);
+    }
+  }
+
+  return DEFAULT_OTLP_EXPORT_TIMEOUT_MS;
 }
 
 /** Configure Codex's own trace exporter; standard OTEL environment variables do not select it. */

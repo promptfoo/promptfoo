@@ -29,6 +29,7 @@ import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 import {
   getCodexTraceEndpoint,
   getCodexTraceProtocol,
+  getCodexTraceShutdownGraceMs,
   withCodexTraceExporter,
 } from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
@@ -293,6 +294,13 @@ interface AppServerConnectionOptions {
   onNotification: (message: JsonRpcMessage) => void;
   onServerRequest: (message: JsonRpcMessage) => Promise<unknown>;
   onClose: (error: Error) => void;
+}
+
+interface CodexTraceExporterSettings {
+  endpoint: string;
+  protocol?: string;
+  endpointConfigKey: string;
+  protocolConfigKey: string;
 }
 
 interface Deferred<T> {
@@ -693,6 +701,60 @@ function flattenConfig(
   return entries;
 }
 
+function getCodexTraceExporterSettings(config: unknown): CodexTraceExporterSettings | undefined {
+  if (!isPlainObject(config)) {
+    return undefined;
+  }
+
+  const entries = new Map(flattenConfig(config).map(({ key, value }) => [key, value]));
+  for (const exporter of ['otlp-http', 'otlp-grpc']) {
+    const prefix = `otel.trace_exporter.${exporter}`;
+    const endpoint = entries.get(`${prefix}.endpoint`);
+    if (typeof endpoint !== 'string' || endpoint.length === 0) {
+      continue;
+    }
+
+    const protocol = entries.get(`${prefix}.protocol`);
+    return {
+      endpoint,
+      ...(typeof protocol === 'string' && { protocol }),
+      endpointConfigKey: `${prefix}.endpoint`,
+      protocolConfigKey: `${prefix}.protocol`,
+    };
+  }
+
+  return undefined;
+}
+
+function getCodexConfigOriginType(origins: unknown, key: string): string | undefined {
+  if (!isPlainObject(origins)) {
+    return undefined;
+  }
+
+  const origin = origins[key];
+  if (!isPlainObject(origin)) {
+    return undefined;
+  }
+
+  const name = origin.name;
+  if (typeof name === 'string') {
+    return name;
+  }
+  if (isPlainObject(name) && typeof name.type === 'string') {
+    return name.type;
+  }
+
+  return typeof origin.source === 'string' ? origin.source : undefined;
+}
+
+function getSafeTraceExporterOrigin(endpoint: string): string {
+  try {
+    return new URL(endpoint).origin;
+  } catch {
+    return '[invalid exporter endpoint]';
+  }
+}
+
 function toTomlLiteral(value: unknown): string {
   if (typeof value === 'string') {
     return JSON.stringify(value);
@@ -920,7 +982,7 @@ class CodexAppServerConnection {
         this.process.stdin.end();
         if (options.graceful) {
           // Stdio EOF makes Codex shut down normally and force-flush its batch span processor.
-          terminateTimer = setTimeout(terminate, 1_000);
+          terminateTimer = setTimeout(terminate, getCodexTraceShutdownGraceMs(this.options.env));
         } else {
           terminate();
         }
@@ -1146,6 +1208,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
   private deepTracingWarningShown = false;
+  private traceExporterOverrideWarningShown = false;
 
   constructor(
     options: {
@@ -1646,6 +1709,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           );
         }
       }
+      await this.warnForTraceExporterOverride(connection, config, env);
       return connection;
     } catch (error) {
       await connection.close().catch((closeError) => {
@@ -1657,6 +1721,66 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     } finally {
       this.initializingConnections.delete(connection);
     }
+  }
+
+  private async warnForTraceExporterOverride(
+    connection: CodexAppServerConnection,
+    config: CodexAppServerConfig,
+    env: Record<string, string>,
+  ): Promise<void> {
+    if (!config.deep_tracing || this.traceExporterOverrideWarningShown) {
+      return;
+    }
+
+    const requestedExporter = getCodexTraceExporterSettings(this.getResolvedCliConfig(config, env));
+    if (!requestedExporter) {
+      return;
+    }
+
+    let effectiveConfig: unknown;
+    try {
+      effectiveConfig = await connection.request(
+        'config/read',
+        { includeLayers: false },
+        { timeoutMs: this.getRequestTimeoutMs(config) },
+      );
+    } catch (error) {
+      logger.debug('[CodexAppServer] Unable to inspect the effective Codex trace exporter', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+
+    if (!isPlainObject(effectiveConfig)) {
+      return;
+    }
+
+    const effectiveExporter = getCodexTraceExporterSettings(effectiveConfig.config);
+    if (
+      !effectiveExporter ||
+      (effectiveExporter.endpoint === requestedExporter.endpoint &&
+        (!effectiveExporter.protocol ||
+          !requestedExporter.protocol ||
+          effectiveExporter.protocol === requestedExporter.protocol))
+    ) {
+      return;
+    }
+
+    const configOrigin =
+      getCodexConfigOriginType(effectiveConfig.origins, effectiveExporter.endpointConfigKey) ??
+      getCodexConfigOriginType(effectiveConfig.origins, effectiveExporter.protocolConfigKey);
+    const managedOverride = configOrigin !== undefined && /managed|mdm/i.test(configOrigin);
+    this.traceExporterOverrideWarningShown = true;
+    logger.warn(
+      `[CodexAppServer] ${managedOverride ? 'Enterprise-managed' : 'Effective'} Codex configuration overrides the requested trace exporter. Native spans will not reach the configured trace receiver.`,
+      {
+        requestedOrigin: getSafeTraceExporterOrigin(requestedExporter.endpoint),
+        effectiveOrigin: getSafeTraceExporterOrigin(effectiveExporter.endpoint),
+        requestedProtocol: requestedExporter.protocol,
+        effectiveProtocol: effectiveExporter.protocol,
+        ...(configOrigin && { configOrigin }),
+      },
+    );
   }
 
   private handleConnectionClose(

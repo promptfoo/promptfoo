@@ -4,6 +4,7 @@ import { PassThrough } from 'stream';
 import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -29,7 +30,9 @@ interface MockAppServer {
   messages: () => any[];
 }
 
-function createMockAppServer(): MockAppServer {
+function createMockAppServer(
+  options: { configReadResult?: unknown; configReadError?: unknown } = {},
+): MockAppServer {
   const proc = new EventEmitter() as any;
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -50,6 +53,19 @@ function createMockAppServer(): MockAppServer {
 
   stdin.write = vi.fn((chunk: any) => {
     writes.push(String(chunk));
+    const message = JSON.parse(String(chunk));
+    if (message.method === 'config/read') {
+      queueMicrotask(() => {
+        stdout.write(
+          `${JSON.stringify({
+            id: message.id,
+            ...(options.configReadError
+              ? { error: options.configReadError }
+              : { result: options.configReadResult ?? { config: {} } }),
+          })}\n`,
+        );
+      });
+    }
     return true;
   }) as any;
   stdin.end = vi.fn(() => {
@@ -5105,6 +5121,159 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(server.proc.kill).not.toHaveBeenCalled();
   });
 
+  it('warns when managed Codex configuration overrides the requested trace exporter', async () => {
+    const server = createMockAppServer({
+      configReadResult: {
+        config: {
+          otel: {
+            trace_exporter: {
+              'otlp-http': {
+                endpoint: 'https://managed.example.com/v1/traces?token=sensitive',
+                protocol: 'binary',
+              },
+            },
+          },
+        },
+        origins: {
+          'otel.trace_exporter.otlp-http.endpoint': {
+            name: { type: 'legacyManagedConfigTomlFromMdm' },
+          },
+        },
+      },
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Inspect managed tracing');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_managed_tracing' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_managed_tracing', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_managed_tracing',
+        turn: { id: 'turn_managed_tracing', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await resultPromise;
+
+    expect(server.messages()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: 'config/read', params: { includeLayers: false } }),
+      ]),
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Enterprise-managed Codex configuration overrides'),
+      expect.objectContaining({
+        requestedOrigin: 'http://127.0.0.1:4318',
+        effectiveOrigin: 'https://managed.example.com',
+        requestedProtocol: 'json',
+        effectiveProtocol: 'binary',
+        configOrigin: 'legacyManagedConfigTomlFromMdm',
+      }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('sensitive');
+  });
+
+  it('continues deep tracing when an older app-server does not support config/read', async () => {
+    const server = createMockAppServer({
+      configReadError: { code: -32601, message: 'config/read is not supported' },
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Use legacy app-server');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_legacy_config' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_legacy_config', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_legacy_config',
+        turn: { id: 'turn_legacy_config', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.not.toHaveProperty('error');
+    expect(server.messages().some((message) => message.method === 'config/read')).toBe(true);
+  });
+
+  it('waits beyond one second for a deep-tracing app-server to finish flushing', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    server.proc.stdin.end.mockImplementation(() => {
+      setTimeout(() => {
+        server.proc.exitCode = 0;
+        server.proc.emit('exit', 0, null);
+      }, 2_000);
+      return server.proc.stdin;
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: { deep_tracing: true, thread_cleanup: 'none' },
+    });
+    const resultPromise = provider.callApi('Wait for delayed exporter flush');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_delayed_flush' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_delayed_flush', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_delayed_flush',
+        turn: { id: 'turn_delayed_flush', status: 'completed', items: [], error: null },
+      },
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await resultPromise;
+
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
   it('escalates signals when a deep-tracing app-server ignores graceful shutdown', async () => {
     vi.useFakeTimers();
     const server = createMockAppServer();
@@ -5158,7 +5327,7 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(server.proc.stdin.end).toHaveBeenCalledOnce();
     expect(server.proc.kill).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
 
     await vi.advanceTimersByTimeAsync(1_000);
