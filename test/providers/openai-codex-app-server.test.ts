@@ -52,7 +52,15 @@ function createMockAppServer(): MockAppServer {
     writes.push(String(chunk));
     return true;
   }) as any;
-  stdin.end = vi.fn(() => stdin) as any;
+  stdin.end = vi.fn(() => {
+    queueMicrotask(() => {
+      if (!proc.killed && proc.exitCode === null) {
+        proc.exitCode = 0;
+        proc.emit('exit', 0, null);
+      }
+    });
+    return stdin;
+  }) as any;
 
   return {
     proc,
@@ -165,6 +173,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   afterEach(async () => {
     await providerRegistry.shutdownAll();
+    cliState.setActiveOtlpReceiver();
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -204,6 +213,65 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       },
     });
+  });
+
+  it.each([
+    [['json'], 'http/json', 'json'],
+    [['protobuf'], 'http/protobuf', 'binary'],
+  ])(
+    'matches app-server tracing protocol to receiver formats %j',
+    async (acceptFormats, protocol, exporterProtocol) => {
+      const provider = new OpenAICodexAppServerProvider({ config: { deep_tracing: true } });
+
+      await cliState.withRequestTracingConfig(
+        {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+            },
+          },
+        },
+        async () => {
+          const env = (provider as any).prepareEnvironment({ deep_tracing: true });
+          expect(env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe(protocol);
+          expect((provider as any).getResolvedCliConfig({ deep_tracing: true }, env)).toMatchObject(
+            {
+              otel: {
+                trace_exporter: { 'otlp-http': { protocol: exporterProtocol } },
+              },
+            },
+          );
+        },
+      );
+    },
+  );
+
+  it('routes app-server telemetry to the receiver actually shared by overlapping evals', async () => {
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.2',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+    const provider = new OpenAICodexAppServerProvider({ config: { deep_tracing: true } });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+        },
+      },
+      async () => {
+        const env = (provider as any).prepareEnvironment({ deep_tracing: true });
+        expect(env).toMatchObject({
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.2:14318',
+          OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+        });
+      },
+    );
   });
 
   it('initializes with safe defaults and validates config strictly', () => {
@@ -4997,6 +5065,106 @@ describe('OpenAICodexAppServerProvider', () => {
         source: 'heuristic',
       },
     ]);
+  });
+
+  it('lets deep-tracing app-server processes flush and exit after stdin closes', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        deep_tracing: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Flush native spans');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_flush' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_flush', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_flush',
+        turn: { id: 'turn_flush', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await resultPromise;
+
+    expect(server.proc.stdin.end).toHaveBeenCalledOnce();
+    expect(server.proc.kill).not.toHaveBeenCalled();
+  });
+
+  it('escalates signals when a deep-tracing app-server ignores graceful shutdown', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    server.proc.stdin.end.mockImplementation(() => server.proc.stdin);
+    server.proc.kill.mockImplementation((signal?: NodeJS.Signals) => {
+      server.proc.killed = true;
+      if (signal === 'SIGKILL') {
+        server.proc.exitCode = 0;
+        server.proc.emit('exit', 0, signal);
+      }
+      return true;
+    });
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        deep_tracing: true,
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Escalate stalled shutdown');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_stalled_flush' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_stalled_flush', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_stalled_flush',
+        turn: { id: 'turn_stalled_flush', status: 'completed', items: [], error: null },
+      },
+    });
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(server.proc.stdin.end).toHaveBeenCalledOnce();
+    expect(server.proc.kill).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await resultPromise;
+
+    expect(server.proc.kill).toHaveBeenCalledWith('SIGKILL');
   });
 
   it('kills the app-server process during cleanup', async () => {

@@ -33,11 +33,12 @@ export function getConfiguredTracingEndpoint(): string | undefined {
 
 /** Resolve a running HTTP receiver and an OTLP format it actually accepts. */
 export function getConfiguredTracingExport(): ConfiguredTracingExport | undefined {
-  const receiver = cliState.requestTracingConfig?.otlp?.http;
-  if (!receiver?.enabled) {
+  const requestedReceiver = cliState.requestTracingConfig?.otlp?.http;
+  if (!requestedReceiver?.enabled) {
     return undefined;
   }
 
+  const receiver = cliState.activeOtlpReceiver ?? requestedReceiver;
   const acceptFormats = receiver.acceptFormats;
   const format =
     !acceptFormats?.length || acceptFormats.includes('json')
@@ -52,6 +53,31 @@ export function getConfiguredTracingExport(): ConfiguredTracingExport | undefine
   const host = receiver.host ?? '127.0.0.1';
   const urlHost = host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
   return { endpoint: `http://${urlHost}:${receiver.port ?? 4318}`, format };
+}
+
+/** Only suppress Promptfoo spans when subprocess exports can reach the live receiver. */
+export function isActiveTracingExport(endpoint?: string, protocol?: string): boolean {
+  const receiver = cliState.activeOtlpReceiver;
+  const format =
+    protocol === 'http/json' ? 'json' : protocol === 'http/protobuf' ? 'protobuf' : undefined;
+  if (!receiver || !endpoint || !format || !receiver.acceptFormats.includes(format)) {
+    return false;
+  }
+
+  const urlHost =
+    receiver.host.includes(':') && !receiver.host.startsWith('[')
+      ? `[${receiver.host}]`
+      : receiver.host;
+  try {
+    const exportUrl = new URL(endpoint);
+    const receiverUrl = new URL(`http://${urlHost}:${receiver.port}`);
+    return (
+      exportUrl.origin === receiverUrl.origin &&
+      (exportUrl.pathname === '/' || exportUrl.pathname === '/v1/traces')
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Give subprocess SDKs a usable collector even when the receiver uses its defaults. */

@@ -1,7 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { withCodexTraceExporter } from '../../../src/providers/openai/codex-tracing';
+import { afterEach, describe, expect, it } from 'vitest';
+import cliState from '../../../src/cliState';
+import {
+  getCodexTraceProtocol,
+  withCodexTraceExporter,
+} from '../../../src/providers/openai/codex-tracing';
 
 describe('withCodexTraceExporter', () => {
+  afterEach(() => {
+    cliState.setActiveOtlpReceiver();
+  });
+
   it('leaves ordinary Codex calls unchanged', () => {
     const config = { model_provider: 'amazon-bedrock' };
 
@@ -44,7 +52,7 @@ describe('withCodexTraceExporter', () => {
     });
   });
 
-  it('does not append a traces path when the signal-specific endpoint already includes one', () => {
+  it('preserves signal-specific trace endpoints verbatim', () => {
     expect(
       withCodexTraceExporter(
         {},
@@ -55,12 +63,70 @@ describe('withCodexTraceExporter', () => {
       otel: {
         trace_exporter: {
           'otlp-http': {
-            endpoint: 'https://collector.example.com/v1/traces',
+            endpoint: 'https://collector.example.com/v1/traces/',
             protocol: 'json',
           },
         },
       },
     });
+  });
+
+  it.each([
+    'https://collector.example.com/custom-traces',
+    'https://collector.example.com/custom-traces?token=redacted',
+  ])('does not alter the signal-specific endpoint %s', (endpoint) => {
+    expect(
+      withCodexTraceExporter({}, { OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: endpoint }, true),
+    ).toEqual({
+      otel: {
+        trace_exporter: {
+          'otlp-http': { endpoint, protocol: 'json' },
+        },
+      },
+    });
+  });
+
+  it('matches the active receiver format when a later evaluation requests another format', async () => {
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.2',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+        },
+      },
+      async () => {
+        expect(getCodexTraceProtocol()).toBe('http/protobuf');
+        expect(withCodexTraceExporter({}, {}, true)).toEqual({
+          otel: {
+            trace_exporter: {
+              'otlp-http': {
+                endpoint: 'http://127.0.0.2:14318/v1/traces',
+                protocol: 'binary',
+              },
+            },
+          },
+        });
+      },
+    );
+  });
+
+  it('preserves an explicit trace-specific protocol override', async () => {
+    await cliState.withRequestTracingConfig(
+      { enabled: true, otlp: { http: { enabled: true, port: 4318, acceptFormats: ['protobuf'] } } },
+      async () => {
+        expect(
+          withCodexTraceExporter({}, { OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json' }, true),
+        ).toMatchObject({
+          otel: { trace_exporter: { 'otlp-http': { protocol: 'json' } } },
+        });
+      },
+    );
   });
 
   it('supports gRPC trace exporters', () => {

@@ -1,8 +1,13 @@
-import { getTracingEndpoint } from '../tracing';
+import { getConfiguredTracingExport, getTracingEndpoint } from '../tracing';
 
 /** Point Codex subprocess telemetry at the receiver associated with the current eval. */
 export function getCodexTraceEndpoint(): string {
   return getTracingEndpoint();
+}
+
+/** Select an OTLP protocol accepted by the receiver currently serving this evaluation. */
+export function getCodexTraceProtocol(): string {
+  return getConfiguredTracingExport()?.format === 'protobuf' ? 'http/protobuf' : 'http/json';
 }
 
 /** Configure Codex's own trace exporter; standard OTEL environment variables do not select it. */
@@ -34,19 +39,21 @@ export function withCodexTraceExporter(
   }
 
   const protocol =
-    env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? env.OTEL_EXPORTER_OTLP_PROTOCOL ?? 'http/json';
-  const endpoint =
-    env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ??
-    env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-    getCodexTraceEndpoint();
+    env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ??
+    env.OTEL_EXPORTER_OTLP_PROTOCOL ??
+    getCodexTraceProtocol();
+  const signalEndpoint = env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
+  const endpoint = signalEndpoint ?? env.OTEL_EXPORTER_OTLP_ENDPOINT ?? getCodexTraceEndpoint();
+  const genericEndpoint = endpoint.replace(/\/+$/, '');
+  const httpEndpoint =
+    signalEndpoint ??
+    (genericEndpoint.endsWith('/v1/traces') ? genericEndpoint : `${genericEndpoint}/v1/traces`);
   const traceExporter =
     protocol === 'grpc'
       ? { 'otlp-grpc': { endpoint } }
       : {
           'otlp-http': {
-            endpoint: endpoint.replace(/\/+$/, '').endsWith('/v1/traces')
-              ? endpoint.replace(/\/+$/, '')
-              : `${endpoint.replace(/\/+$/, '')}/v1/traces`,
+            endpoint: httpEndpoint,
             protocol: protocol === 'http/protobuf' ? 'binary' : 'json',
           },
         };

@@ -27,7 +27,11 @@ import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitiz
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
-import { getCodexTraceEndpoint, withCodexTraceExporter } from './codex-tracing';
+import {
+  getCodexTraceEndpoint,
+  getCodexTraceProtocol,
+  withCodexTraceExporter,
+} from './codex-tracing';
 import {
   applyApiKeyToCliEnv,
   shouldInjectApiKey,
@@ -830,7 +834,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = getCodexTraceProtocol();
       }
       if (!sortedEnv.OTEL_SERVICE_NAME) {
         sortedEnv.OTEL_SERVICE_NAME = 'codex-cli';

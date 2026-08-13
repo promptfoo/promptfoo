@@ -7,12 +7,14 @@ import {
   getTracingEndpoint,
   getTracingServiceName,
   hasActiveTracingSpan,
+  isActiveTracingExport,
 } from '../../src/providers/tracing';
 
 describe('provider tracing integration', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+    cliState.setActiveOtlpReceiver();
   });
 
   it('does not enable SDK telemetry without an active span', () => {
@@ -60,6 +62,29 @@ describe('provider tracing integration', () => {
     );
 
     expect(getConfiguredTracingEndpoint()).toBeUndefined();
+  });
+
+  it('uses the active shared receiver when another evaluation requests different settings', async () => {
+    cliState.setActiveOtlpReceiver({
+      host: '127.0.0.2',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+
+    await cliState.withRequestTracingConfig(
+      {
+        enabled: true,
+        otlp: {
+          http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+        },
+      },
+      async () => {
+        expect(getConfiguredTracingExport()).toEqual({
+          endpoint: 'http://127.0.0.2:14318',
+          format: 'protobuf',
+        });
+      },
+    );
   });
 
   it('uses the default receiver host when an evaluation omits it', async () => {
@@ -118,6 +143,20 @@ describe('provider tracing integration', () => {
         expect(getConfiguredTracingEndpoint()).toBe('http://[::1]:14318');
       },
     );
+  });
+
+  it('recognizes only supported exports to the running receiver', () => {
+    cliState.setActiveOtlpReceiver({
+      host: '::1',
+      port: 14318,
+      acceptFormats: ['protobuf'],
+    });
+
+    expect(isActiveTracingExport('http://[::1]:14318', 'http/protobuf')).toBe(true);
+    expect(isActiveTracingExport('http://[::1]:14318/v1/traces', 'http/protobuf')).toBe(true);
+    expect(isActiveTracingExport('http://[::1]:14318', 'http/json')).toBe(false);
+    expect(isActiveTracingExport('https://collector.example.com', 'http/protobuf')).toBe(false);
+    expect(isActiveTracingExport('http://[::1]:14318/custom-traces', 'http/protobuf')).toBe(false);
   });
 
   it('uses the same service name as the Promptfoo OpenTelemetry configuration', () => {

@@ -2394,6 +2394,50 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it.each([
+        [['json'], 'http/json', 'json'],
+        [['protobuf'], 'http/protobuf', 'binary'],
+      ])(
+        'matches Codex SDK tracing protocol to receiver formats %j',
+        async (acceptFormats, protocol, exporterProtocol) => {
+          mockRun.mockResolvedValue(createMockResponse('Response'));
+          const provider = new OpenAICodexSDKProvider({
+            config: { deep_tracing: true },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await cliState.withRequestTracingConfig(
+            {
+              enabled: true,
+              otlp: {
+                http: {
+                  enabled: true,
+                  port: 4318,
+                  acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+                },
+              },
+            },
+            () => provider.callApi('Test prompt'),
+          );
+
+          expect(MockCodex).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({ OTEL_EXPORTER_OTLP_PROTOCOL: protocol }),
+              config: expect.objectContaining({
+                otel: {
+                  trace_exporter: {
+                    'otlp-http': {
+                      endpoint: 'http://127.0.0.1:4318/v1/traces',
+                      protocol: exporterProtocol,
+                    },
+                  },
+                },
+              }),
+            }),
+          );
+        },
+      );
+
       it('should prefer a valid active traceparent over the evaluator trace', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const activeTraceId = '0af7651916cd43dd8448eb211c80319c';

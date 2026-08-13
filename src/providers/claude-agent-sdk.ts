@@ -32,6 +32,7 @@ import {
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
+import { getConfiguredTracingExport, isActiveTracingExport } from './tracing';
 import type {
   AgentDefinition,
   CanUseTool,
@@ -1155,15 +1156,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     if (config.deep_tracing) {
-      const receiver = cliState.requestTracingConfig?.otlp?.http;
-      const receiverHost = receiver?.host ?? '127.0.0.1';
-      const receiverPort = receiver?.port ?? 4318;
+      const receiverExport = getConfiguredTracingExport();
 
       env.CLAUDE_CODE_ENABLE_TELEMETRY ??= '1';
       env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA ??= '1';
       env.OTEL_TRACES_EXPORTER ??= 'otlp';
-      env.OTEL_EXPORTER_OTLP_ENDPOINT ??= `http://${receiverHost}:${receiverPort}`;
-      env.OTEL_EXPORTER_OTLP_PROTOCOL ??= 'http/protobuf';
+      env.OTEL_EXPORTER_OTLP_ENDPOINT ??= receiverExport?.endpoint ?? 'http://127.0.0.1:4318';
+      env.OTEL_EXPORTER_OTLP_PROTOCOL ??=
+        receiverExport?.format === 'json' ? 'http/json' : 'http/protobuf';
       // The SDK's five-second default is longer than Promptfoo's three-second fetch delay.
       env.OTEL_TRACES_EXPORT_INTERVAL ??= '1000';
     }
@@ -1172,7 +1172,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env.CLAUDE_CODE_ENABLE_TELEMETRY === '1' &&
       (env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA === '1' ||
         env.ENABLE_ENHANCED_TELEMETRY_BETA === '1') &&
-      env.OTEL_TRACES_EXPORTER?.split(',').some((exporter) => exporter.trim() === 'otlp');
+      env.OTEL_TRACES_EXPORTER?.split(',').some((exporter) => exporter.trim() === 'otlp') &&
+      isActiveTracingExport(
+        env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? env.OTEL_EXPORTER_OTLP_PROTOCOL,
+      );
 
     const subagentLimits = [
       ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],

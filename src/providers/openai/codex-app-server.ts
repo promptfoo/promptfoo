@@ -26,7 +26,11 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
-import { getCodexTraceEndpoint, withCodexTraceExporter } from './codex-tracing';
+import {
+  getCodexTraceEndpoint,
+  getCodexTraceProtocol,
+  withCodexTraceExporter,
+} from './codex-tracing';
 import { applyApiKeyToCliEnv, shouldInjectApiKey } from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
@@ -865,7 +869,7 @@ class CodexAppServerConnection {
     return this.stderrChunks.join('').slice(-10_000);
   }
 
-  async close(): Promise<void> {
+  async close(options: { graceful?: boolean } = {}): Promise<void> {
     if (this.closePromise !== null) {
       return this.closePromise;
     }
@@ -873,37 +877,55 @@ class CodexAppServerConnection {
     this.closePromise = new Promise<void>((resolve) => {
       this.closed = true;
       this.rejectPending(new Error('codex app-server connection closed'));
-      this.lineInterface.close();
 
-      const finish = () => resolve();
-      const killTimer = setTimeout(() => {
-        try {
-          if (!this.process.killed) {
-            this.process.kill('SIGKILL');
-          }
-        } catch {
-          // Process may have already exited (ESRCH)
+      let terminateTimer: ReturnType<typeof setTimeout> | undefined;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (terminateTimer) {
+          clearTimeout(terminateTimer);
         }
-        finish();
-      }, 1_000);
+        if (killTimer) {
+          clearTimeout(killTimer);
+        }
+        this.lineInterface.close();
+        resolve();
+      };
+      const terminate = () => {
+        killTimer = setTimeout(() => {
+          try {
+            if (this.process.exitCode === null) {
+              this.process.kill('SIGKILL');
+            }
+          } catch {
+            // Process may have already exited (ESRCH).
+          }
+          finish();
+        }, 1_000);
+        try {
+          this.process.kill('SIGTERM');
+        } catch {
+          // Process may have already exited (ESRCH).
+          finish();
+        }
+      };
 
-      this.process.once('exit', () => {
-        clearTimeout(killTimer);
-        finish();
-      });
+      this.process.once('exit', finish);
 
       if (this.process.killed || this.process.exitCode !== null) {
-        clearTimeout(killTimer);
         finish();
         return;
       }
 
       try {
         this.process.stdin.end();
-        this.process.kill('SIGTERM');
+        if (options.graceful) {
+          // Stdio EOF makes Codex shut down normally and force-flush its batch span processor.
+          terminateTimer = setTimeout(terminate, 1_000);
+        } else {
+          terminate();
+        }
       } catch {
         // Process may have already exited (ESRCH)
-        clearTimeout(killTimer);
         finish();
       }
     });
@@ -1406,9 +1428,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return { error: `Error calling OpenAI Codex app-server: ${errorMessage}` };
     } finally {
       if (localConnection) {
-        await localConnection.close().catch((error) => {
-          logger.debug('[CodexAppServer] Error closing local connection', { error });
-        });
+        await localConnection
+          .close({ graceful: resolvedConfig.deep_tracing === true })
+          .catch((error) => {
+            logger.debug('[CodexAppServer] Error closing local connection', { error });
+          });
       }
     }
   }
@@ -1490,7 +1514,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = getCodexTraceProtocol();
       }
       if (!sortedEnv.OTEL_SERVICE_NAME) {
         sortedEnv.OTEL_SERVICE_NAME = 'codex-app-server';
