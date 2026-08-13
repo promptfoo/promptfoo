@@ -257,7 +257,7 @@
     "knip": "^6.0.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.142.0",
+    "oxc-parser": "^0.143.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
