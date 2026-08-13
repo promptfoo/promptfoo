@@ -420,7 +420,7 @@ export class MCPClient {
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
-    return await withGenAIToolSpan({ name, arguments: args }, () =>
+    return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
       this.callToolInternal(name, args),
     );
   }

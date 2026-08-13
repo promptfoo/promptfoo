@@ -449,10 +449,39 @@ describe('genaiTracer', () => {
       expect(mockTracer.startActiveSpan).not.toHaveBeenCalled();
     });
 
+    it('records complete callback objects even when they contain a content property', async () => {
+      const result = {
+        content: 'account found',
+        metadata: { destination: 'audit-log', attempt: 2 },
+      };
+
+      expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', JSON.stringify(result));
+    });
+
+    it('extracts model-visible content only for MCP results', async () => {
+      const result = { content: 'account found', metadata: { requestId: 'request-123' } };
+
+      expect(
+        await withGenAIToolSpan({ name: 'lookup_account', resultFormat: 'mcp' }, () => result),
+      ).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.output', 'account found');
+    });
+
+    it('does not classify arbitrary callback error fields as execution failures', async () => {
+      const result = { content: 'account found', error: '' };
+
+      expect(await withGenAIToolSpan({ name: 'lookup_account' }, () => result)).toBe(result);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', false);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.OK });
+    });
+
     it('marks MCP error results as failed without changing the returned result', async () => {
       const failure = { content: 'denied', isError: true };
 
-      expect(await withGenAIToolSpan({ name: 'search' }, async () => failure)).toBe(failure);
+      expect(
+        await withGenAIToolSpan({ name: 'search', resultFormat: 'mcp' }, async () => failure),
+      ).toBe(failure);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
       expect(mockSpan.setStatus).toHaveBeenCalledWith({ code: SpanStatusCode.ERROR });
       expect(mockSpan.end).toHaveBeenCalledOnce();
@@ -467,12 +496,36 @@ describe('genaiTracer', () => {
         }),
       ).rejects.toBe(error);
 
-      expect(mockSpan.recordException).toHaveBeenCalledWith(error);
+      expect(mockSpan.recordException).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Error', message: 'Tool failed' }),
+      );
       expect(mockSpan.setStatus).toHaveBeenCalledWith({
         code: SpanStatusCode.ERROR,
         message: 'Tool failed',
       });
       expect(mockSpan.end).toHaveBeenCalledOnce();
+    });
+
+    it('sanitizes exception event messages and stacks without replacing the thrown error', async () => {
+      const secret = 'sk-abcdefghijklmnopqrstuvwxyz';
+      const error = new Error(`Authentication failed for ${secret}`);
+      error.stack = `Error: Authentication failed for ${secret}\n    at executeTool (${secret})`;
+
+      await expect(
+        withGenAIToolSpan({ name: 'lookup_account' }, () => {
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      const recordedError = mockSpan.recordException.mock.calls[0][0] as Error;
+      expect(recordedError).not.toBe(error);
+      expect(recordedError.message).toBe('Authentication failed for <REDACTED_API_KEY>');
+      expect(recordedError.stack).toContain('<REDACTED_API_KEY>');
+      expect(recordedError.stack).not.toContain(secret);
+      expect(mockSpan.setStatus).toHaveBeenCalledWith({
+        code: SpanStatusCode.ERROR,
+        message: 'Authentication failed for <REDACTED_API_KEY>',
+      });
     });
 
     it('does not fail tool execution when attributes cannot be serialized', async () => {

@@ -114,6 +114,71 @@ describe('FunctionCallbackHandler', () => {
       }
     });
 
+    it('prefers Responses API call_id over the response item identifier', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+
+      try {
+        const result = await handler.processCall(
+          {
+            id: 'response-item-123',
+            call_id: 'tool-call-456',
+            name: 'lookup_order',
+            arguments: '{}',
+          },
+          { lookup_order: async () => 'shipped' },
+        );
+
+        expect(result).toEqual({ output: 'shipped', isError: false });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool lookup_order',
+          expect.objectContaining({
+            attributes: expect.objectContaining({ 'gen_ai.tool.call.id': 'tool-call-456' }),
+          }),
+          expect.any(Function),
+        );
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
+    it('records callback result serialization failures before ending the tool span', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+      const call = { id: 'call-123', name: 'lookup_order', arguments: '{}' };
+
+      try {
+        const result = await handler.processCall(call, {
+          lookup_order: async () => ({ orderId: 123n }) as any,
+        });
+
+        expect(result).toEqual({ output: JSON.stringify(call), isError: true });
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setStatus).toHaveBeenCalledWith(
+          expect.objectContaining({ code: 2, message: expect.stringContaining('BigInt') }),
+        );
+        expect(span.end).toHaveBeenCalledOnce();
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
     it('should pass context to callback', async () => {
       const mockCallback = vi.fn().mockResolvedValue('callback result');
       const callbacks: FunctionCallbackConfig = {

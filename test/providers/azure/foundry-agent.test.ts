@@ -437,6 +437,52 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.output).toBe('Tool finished');
     });
 
+    it('marks callback formatting errors on the span and preserves the Responses tool call ID', async () => {
+      const span = {
+        setAttribute: vi.fn(),
+        setStatus: vi.fn(),
+        end: vi.fn(),
+        recordException: vi.fn(),
+      };
+      const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
+      const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+      const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({ startActiveSpan } as any);
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      try {
+        const result = await (provider as any).executeFunctionCallback(
+          'get_weather',
+          '{}',
+          undefined,
+          { get_weather: async () => ({ temperature: 72n }) },
+          'call_123',
+        );
+
+        expect(JSON.parse(result)).toEqual({
+          error: expect.stringContaining('Do not know how to serialize a BigInt'),
+        });
+        expect(startActiveSpan).toHaveBeenCalledWith(
+          'execute_tool get_weather',
+          expect.objectContaining({
+            attributes: expect.objectContaining({ 'gen_ai.tool.call.id': 'call_123' }),
+          }),
+          expect.any(Function),
+        );
+        expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+        expect(span.setStatus).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: SpanStatusCode.ERROR,
+            message: expect.stringContaining('BigInt'),
+          }),
+        );
+      } finally {
+        activeSpanSpy.mockRestore();
+        tracerSpy.mockRestore();
+      }
+    });
+
     it('should emit a gen_ai.turn span for each model request in a function loop', async () => {
       const spans = installSpanRecorder();
       mockGetAgent.mockResolvedValue(mockAgent);

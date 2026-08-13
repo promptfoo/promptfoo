@@ -1049,6 +1049,7 @@ export class GoogleLiveProvider implements ApiProvider {
                             : functionCall.args,
                         ),
                         config.functionToolCallbacks,
+                        functionCall.id,
                       );
                     } else if (config.functionToolStatefulApi) {
                       logger.warn(
@@ -1244,6 +1245,7 @@ export class GoogleLiveProvider implements ApiProvider {
     functionName: string,
     args: string,
     callbacks = this.config.functionToolCallbacks,
+    callId?: string,
   ): Promise<any> {
     try {
       const shouldUseSharedCache = callbacks === this.config.functionToolCallbacks;
@@ -1279,7 +1281,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
         callback(args),
       );
 

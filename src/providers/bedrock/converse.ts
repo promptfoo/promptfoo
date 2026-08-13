@@ -865,7 +865,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<string> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callId?: string,
+  ): Promise<string> {
     try {
       // Check if we've already loaded this function
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -896,7 +900,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Execute the callback
       logger.debug(`[Bedrock Converse] Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
         callback(args),
       );
 
@@ -1623,7 +1627,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
               typeof block.toolUse.input === 'string'
                 ? block.toolUse.input
                 : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
+            const result = await this.executeFunctionCallback(
+              functionName,
+              args,
+              block.toolUse.toolUseId,
+            );
             dispatchResults.push(result);
             handledIndexes.add(idx);
           } catch (err) {

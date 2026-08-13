@@ -182,6 +182,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     config: OpenAiCompletionOptions,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -213,7 +214,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
         callback(args),
       );
 
@@ -776,6 +777,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 functionName,
                 functionCall.arguments || functionCall.function?.arguments,
                 config,
+                functionCall.call_id ?? functionCall.id,
               );
               results.push(functionResult);
               hasSuccessfulCallback = true;

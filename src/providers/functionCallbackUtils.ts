@@ -69,7 +69,11 @@ export class FunctionCallbackHandler {
         functionInfo.arguments || '{}',
         callbacks,
         context,
-        typeof call?.id === 'string' ? call.id : undefined,
+        typeof call?.call_id === 'string'
+          ? call.call_id
+          : typeof call?.id === 'string'
+            ? call.id
+            : undefined,
       );
       return {
         output: result,
@@ -196,10 +200,10 @@ export class FunctionCallbackHandler {
     }
 
     // Execute the callback
-    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
-      callback(args, context),
-    );
-    return typeof result === 'string' ? result : JSON.stringify(result);
+    return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
+      const result = await callback(args, context);
+      return typeof result === 'string' ? result : JSON.stringify(result);
+    });
   }
 
   /**

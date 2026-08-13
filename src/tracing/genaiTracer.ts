@@ -204,6 +204,8 @@ export interface GenAIToolSpanContext {
   name: string;
   arguments?: unknown;
   callId?: string;
+  /** MCP wraps its model-visible output in a protocol-specific content field. */
+  resultFormat?: 'mcp';
 }
 
 /**
@@ -250,13 +252,15 @@ export async function withGenAIToolSpan<T>(
         const resultRecord =
           result && typeof result === 'object' ? (result as Record<string, unknown>) : undefined;
         const output = serializeToolAttribute(
-          resultRecord && 'content' in resultRecord ? resultRecord.content : result,
+          tool.resultFormat === 'mcp' && resultRecord && 'content' in resultRecord
+            ? resultRecord.content
+            : result,
         );
         if (output !== undefined) {
           span.setAttribute('tool.output', output);
         }
 
-        if (resultRecord?.isError === true || typeof resultRecord?.error === 'string') {
+        if (resultRecord?.isError === true) {
           span.setAttribute('tool.is_error', true);
           span.setAttribute('error.type', 'tool_error');
           span.setStatus({
@@ -278,7 +282,12 @@ export async function withGenAIToolSpan<T>(
           message: truncateBody(error instanceof Error ? error.message : String(error)),
         });
         if (error instanceof Error) {
-          span.recordException(error);
+          const sanitizedError = new Error(truncateBody(error.message));
+          sanitizedError.name = error.name;
+          if (error.stack) {
+            sanitizedError.stack = truncateBody(error.stack);
+          }
+          span.recordException(sanitizedError);
         }
         throw error;
       } finally {

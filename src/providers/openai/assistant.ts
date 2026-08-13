@@ -151,6 +151,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     context?: CallbackContext,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -195,8 +196,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
         parsedArgs = {};
       }
 
-      const result = await withGenAIToolSpan({ name: functionName, arguments: parsedArgs }, () =>
-        callback(parsedArgs, context),
+      const result = await withGenAIToolSpan(
+        { name: functionName, arguments: parsedArgs, callId },
+        () => callback(parsedArgs, context),
       );
 
       // Format the result
@@ -355,6 +357,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
               toolCall.function.name,
               toolCall.function.arguments,
               callbackContext,
+              toolCall.id,
             );
             return {
               tool_call_id: toolCall.id,

@@ -278,6 +278,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     args: string,
     context?: CallbackContext,
     callbacks?: FunctionToolCallbacks,
+    callId?: string,
   ): Promise<string> {
     try {
       let callback = this.loadedFunctionCallbacks[functionName];
@@ -305,16 +306,16 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         throw new Error(`No callback found for function '${functionName}'`);
       }
 
-      const result = await withGenAIToolSpan({ name: functionName, arguments: args }, () =>
-        callback(args, context),
-      );
-      if (result === undefined || result === null) {
-        return '';
-      }
-      if (typeof result === 'object') {
-        return JSON.stringify(result);
-      }
-      return String(result);
+      return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, async () => {
+        const result = await callback(args, context);
+        if (result === undefined || result === null) {
+          return '';
+        }
+        if (typeof result === 'object') {
+          return JSON.stringify(result);
+        }
+        return String(result);
+      });
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       return JSON.stringify({
@@ -498,6 +499,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
           call.arguments,
           callbackContext,
           callbacks,
+          call.call_id,
         ),
       })),
     );
