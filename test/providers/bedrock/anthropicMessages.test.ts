@@ -69,6 +69,7 @@ describe('Bedrock Anthropic Messages provider', () => {
     });
 
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
+    expect(provider['getGenAISystem']()).toBe('bedrock');
     expect(provider.apiKey).toBe('override-key');
     expect(provider.anthropic.apiKey).toBe('override-key');
     expect(provider.anthropic.authToken).toBeNull();

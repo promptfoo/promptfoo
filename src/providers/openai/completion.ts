@@ -47,37 +47,11 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const providerId = this.id();
-
-    return withGenAISpan(
-      {
-        system: providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai',
-        operationName: 'text_completion',
-        model: this.modelName,
-        providerId,
-        maxTokens: this.config.max_tokens,
-        temperature: this.config.temperature,
-        topP: this.config.top_p,
-        evalId: context?.evaluationId,
-        promptLabel: context?.prompt?.label,
-        traceparent: context?.traceparent,
-        requestBody: prompt,
-      },
-      () => this.callApiInternal(prompt, context, callApiOptions),
-      extractProviderResponseAttributes,
-    );
-  }
-
-  private async callApiInternal(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    let stop: string;
+    let stop: unknown;
     try {
       stop = getEnvString('OPENAI_STOP')
         ? JSON.parse(getEnvString('OPENAI_STOP') || '')
@@ -101,7 +75,43 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
+    const asNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' ? value : undefined;
+    const stopSequences =
+      typeof body.stop === 'string'
+        ? [body.stop]
+        : Array.isArray(body.stop) &&
+            body.stop.every((item): item is string => typeof item === 'string')
+          ? body.stop
+          : undefined;
 
+    return withGenAISpan(
+      {
+        system: this.getGenAISystem(),
+        operationName: 'text_completion',
+        model: body.model,
+        providerId: this.id(),
+        maxTokens: asNumber(body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        presencePenalty: asNumber(body.presence_penalty),
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        evalId: context?.evaluationId,
+        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
+        promptLabel: context?.prompt?.label,
+        traceparent: context?.traceparent,
+        requestBody: prompt,
+      },
+      () => this.callApiInternal(body, context),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    body: Record<string, unknown>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     let data,
       cached = false,
       latencyMs: number | undefined;

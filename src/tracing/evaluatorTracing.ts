@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 
-import { ROOT_CONTEXT, type Span, SpanKind, trace } from '@opentelemetry/api';
+import { ROOT_CONTEXT, type Span, SpanKind, TraceFlags, trace } from '@opentelemetry/api';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
@@ -409,7 +409,11 @@ export async function generateTraceContextIfNeeded(
   const rootSpan = trace.isSpanContextValid(rootSpanContext) ? candidateRootSpan : undefined;
   const traceId = rootSpan ? rootSpanContext.traceId : generateTraceId();
   const spanId = rootSpan ? rootSpanContext.spanId : generateSpanId();
-  const traceparent = generateTraceparent(traceId, spanId);
+  const traceparent = generateTraceparent(
+    traceId,
+    spanId,
+    rootSpan ? (rootSpanContext.traceFlags & TraceFlags.SAMPLED) !== 0 : true,
+  );
   logger.debug(`[EvaluatorTracing] Generated trace context: traceId=${traceId}, spanId=${spanId}`);
 
   // Store trace association in trace store

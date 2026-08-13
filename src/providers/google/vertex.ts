@@ -268,7 +268,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       temperature: this.config.temperature,
       topP: this.config.topP,
       maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,

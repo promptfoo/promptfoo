@@ -31,6 +31,10 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'promptfoo.usage.cached_response_tokens',
   'promptfoo.usage.accepted_prediction_tokens',
   'promptfoo.usage.rejected_prediction_tokens',
+  // Preserve token counts from externally instrumented LLM applications.
+  'llm.usage.prompt_tokens',
+  'llm.usage.completion_tokens',
+  'llm.usage.total_tokens',
   // Keep historical span attributes readable after upgrading.
   'gen_ai.usage.total_tokens',
   'gen_ai.usage.cached_tokens',

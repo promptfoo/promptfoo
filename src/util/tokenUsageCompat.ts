@@ -5,6 +5,25 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 import type { SpanData } from '../tracing/store';
 import type { TokenUsage } from '../types/shared';
 
+const TOKEN_USAGE_ATTRIBUTES = [
+  'gen_ai.usage.input_tokens',
+  'gen_ai.usage.output_tokens',
+  'gen_ai.usage.total_tokens',
+  'gen_ai.usage.cached_tokens',
+  'gen_ai.usage.reasoning_tokens',
+  'gen_ai.usage.reasoning.output_tokens',
+  'gen_ai.usage.cache_read_input_tokens',
+  'gen_ai.usage.cache_read.input_tokens',
+  'gen_ai.usage.cache_creation_input_tokens',
+  'gen_ai.usage.cache_creation.input_tokens',
+  'gen_ai.usage.accepted_prediction_tokens',
+  'gen_ai.usage.rejected_prediction_tokens',
+  'promptfoo.usage.total_tokens',
+  'promptfoo.usage.cached_response_tokens',
+  'promptfoo.usage.accepted_prediction_tokens',
+  'promptfoo.usage.rejected_prediction_tokens',
+] as const;
+
 /**
  * Query options for retrieving token usage from traces.
  */
@@ -149,12 +168,10 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
     return undefined;
   }
 
-  // Check if this span has any GenAI usage attributes
-  const hasUsageAttributes =
-    attrs['gen_ai.usage.input_tokens'] !== undefined ||
-    attrs['gen_ai.usage.output_tokens'] !== undefined ||
-    attrs['promptfoo.usage.total_tokens'] !== undefined ||
-    attrs['gen_ai.usage.total_tokens'] !== undefined;
+  // Detail-only spans are valid too; external exporters may omit aggregate counts.
+  const hasUsageAttributes = TOKEN_USAGE_ATTRIBUTES.some((attribute) => {
+    return typeof attrs[attribute] === 'number';
+  });
 
   if (!hasUsageAttributes) {
     return undefined;
