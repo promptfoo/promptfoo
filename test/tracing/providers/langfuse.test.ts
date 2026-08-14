@@ -144,7 +144,7 @@ describe('LangfuseProvider', () => {
     expect(new URL(String(url)).pathname).toBe('/api/public/v2/observations');
     expect(new URL(String(url)).searchParams.get('traceId')).toBe(TRACE_ID);
     expect(new URL(String(url)).searchParams.get('fields')).toBe(
-      'core,basic,io,metadata,model,usage',
+      'core,basic,io,metadata,model,usage,cost',
     );
     expect(options).toMatchObject({
       method: 'GET',

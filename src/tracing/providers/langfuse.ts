@@ -323,7 +323,7 @@ export class LangfuseProvider implements TraceProvider {
     do {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
-      url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
+      url.searchParams.set('fields', 'core,basic,io,metadata,model,usage,cost');
       url.searchParams.set('limit', String(pageSize));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
