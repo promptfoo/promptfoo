@@ -188,11 +188,15 @@ export async function monkeyPatchFetch(
   // sends the token being validated, not the saved one. The header name itself may
   // be configured to something other than `Authorization` via
   // `promptfoo auth login --auth-header-name` or PROMPTFOO_CLOUD_AUTH_HEADER.
+  // Only resolve the header name once we know a credential will actually be
+  // injected, so non-cloud-bound requests never depend on `getAuthHeaderName`.
   const cloudAuth = getCloudBearerToken(url);
-  const cloudAuthHeaderName = getCloudAuthHeaderName();
-  const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
-  if (cloudAuth && !hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
-    opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
+  if (cloudAuth) {
+    const cloudAuthHeaderName = getCloudAuthHeaderName();
+    const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
+    if (!hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
+      opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
+    }
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);

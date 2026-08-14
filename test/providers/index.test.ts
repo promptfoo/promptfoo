@@ -154,7 +154,6 @@ vi.mock('../../src/globalConfig/cloud', () => {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
       getApiKey: vi.fn().mockReturnValue('test-api-key'),
-      getAuthHeaderName: vi.fn().mockReturnValue('Authorization'),
     },
   };
 });

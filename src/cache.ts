@@ -420,10 +420,14 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   // Mirror monkeyPatchFetch so the cache key reflects the auth header that will
   // actually be sent: fold in the cloud bearer token for cloud-bound requests, under
   // whatever header name is configured, without overriding a caller-supplied header.
+  // Only resolve the header name once we know a credential will actually be
+  // injected, so non-cloud-bound requests never depend on `getAuthHeaderName`.
   const cloudAuth = getCloudBearerToken(url);
-  const cloudAuthHeaderName = getCloudAuthHeaderName();
-  if (cloudAuth && !headers.has(cloudAuthHeaderName)) {
-    headers.set(cloudAuthHeaderName, cloudAuth);
+  if (cloudAuth) {
+    const cloudAuthHeaderName = getCloudAuthHeaderName();
+    if (!headers.has(cloudAuthHeaderName)) {
+      headers.set(cloudAuthHeaderName, cloudAuth);
+    }
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);
