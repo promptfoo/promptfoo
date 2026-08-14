@@ -1,6 +1,7 @@
 import {
   BaseTokenUsageSchema,
   type CompletionTokenDetails,
+  type NormalizedTokenUsage,
   type TokenUsage,
 } from '../types/shared';
 
@@ -46,7 +47,7 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
-export function createEmptyTokenUsage(): Required<TokenUsage> {
+export function createEmptyTokenUsage(): NormalizedTokenUsage {
   return {
     prompt: 0,
     completion: 0,
@@ -155,6 +156,23 @@ export function accumulateTokenUsage(
       );
     }
   }
+
+  if (update.attacker) {
+    target.attacker ??= createEmptyAssertions();
+    accumulateTokenUsage(target.attacker, update.attacker);
+  }
+}
+
+/** Record attacker-model usage separately without inflating target tokens or probes. */
+export function accumulateAttackerTokenUsage(
+  target: TokenUsage,
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (!response) {
+    return;
+  }
+  target.attacker ??= createEmptyAssertions();
+  accumulateResponseTokenUsage(target.attacker, response);
 }
 
 /**
@@ -248,7 +266,12 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     return false;
   }
 
-  const { assertions: _assertions, numRequests: _numRequests, ...tokenTotals } = parsed.data;
+  const {
+    attacker: _attacker,
+    assertions: _assertions,
+    numRequests: _numRequests,
+    ...tokenTotals
+  } = parsed.data;
   const hasTokenTotals =
     Object.values(tokenTotals).some((value) => typeof value === 'number' && value !== 0) ||
     Object.values(tokenTotals.completionDetails ?? {}).some((value) => value !== 0);
@@ -267,7 +290,7 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
  */
 export function normalizeTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
-): Required<TokenUsage> {
+): NormalizedTokenUsage {
   return {
     total: tokenUsage?.total || 0,
     prompt: tokenUsage?.prompt || 0,
@@ -276,5 +299,6 @@ export function normalizeTokenUsage(
     numRequests: tokenUsage?.numRequests || 0,
     completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
+    ...(tokenUsage?.attacker ? { attacker: tokenUsage.attacker } : {}),
   };
 }

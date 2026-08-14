@@ -7,7 +7,11 @@ import { extractFirstJsonObject } from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -310,6 +314,7 @@ async function runRedteamConversation({
       }
 
       TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+      accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
 
       if (redteamResp.error) {
         logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);

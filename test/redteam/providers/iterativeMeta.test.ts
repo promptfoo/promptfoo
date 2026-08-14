@@ -662,8 +662,8 @@ describe('RedteamIterativeMetaProvider', () => {
 
       // Verify token usage is accumulated
       expect(result.tokenUsage).toBeDefined();
-      // Agent (80 + 100) + Target (35 + 43) = 258 total
-      expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(150);
+      expect(result.tokenUsage?.total).toBe(78);
+      expect(result.tokenUsage?.attacker).toMatchObject({ total: 180, numRequests: 2 });
       expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
       expect(result.tokenUsage?.completion).toBeGreaterThan(0);
     });

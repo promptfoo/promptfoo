@@ -23,7 +23,11 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -639,6 +643,7 @@ async function runRedteamConversation({
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
+          tokenUsage: attackerTokenUsage,
         } = await getNewPrompt(
           redteamProvider,
           [...redteamHistory, { role: 'assistant', content: node.prompt }],
@@ -651,6 +656,7 @@ async function runRedteamConversation({
               }
             : undefined,
         );
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },

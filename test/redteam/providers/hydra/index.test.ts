@@ -303,8 +303,8 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraBacktrackCount).toBe(0);
       expect(result.metadata?.hydraResult).toBe(false);
       expect(result.metadata?.stopReason).toBe('Max turns reached');
-      // agent (100) + target (50) + learning update (100) = 250
-      expect(result.tokenUsage?.total).toBe(250);
+      expect(result.tokenUsage?.total).toBe(50);
+      expect(result.tokenUsage?.attacker).toMatchObject({ total: 200, numRequests: 2 });
     });
 
     it('should execute an attack when the agent returns a prompt object', async () => {
@@ -1516,13 +1516,15 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      // Total tokens should be sum of all calls
-      // Agent: 100 + 150 = 250
-      // Target: 80 + 120 = 200
-      // Total: 450
-      expect(result.tokenUsage?.total).toBe(450);
-      expect(result.tokenUsage?.prompt).toBe(225);
-      expect(result.tokenUsage?.completion).toBe(225);
+      expect(result.tokenUsage?.total).toBe(200);
+      expect(result.tokenUsage?.prompt).toBe(100);
+      expect(result.tokenUsage?.completion).toBe(100);
+      expect(result.tokenUsage?.attacker).toMatchObject({
+        total: 250,
+        prompt: 125,
+        completion: 125,
+        numRequests: 2,
+      });
       // Probes should only count target calls.
       expect(result.tokenUsage?.numRequests).toBe(2);
     });

@@ -8,7 +8,11 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -394,14 +398,16 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`\n[Custom] ROUND ${roundNum}\n`);
 
-        const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
-          roundNum,
-          evalFlag,
-          lastResponse,
-          lastFeedback,
-          objectiveScore,
-          options,
-        );
+        const { generatedQuestion: attackPrompt, tokenUsage: attackerTokenUsage } =
+          await this.getAttackPrompt(
+            roundNum,
+            evalFlag,
+            lastResponse,
+            lastFeedback,
+            objectiveScore,
+            options,
+          );
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
 
         if (!attackPrompt) {
           logger.debug('[Custom] failed to generate a question. Will skip turn and try again');
@@ -749,7 +755,7 @@ export class CustomProvider implements ApiProvider {
       logger.debug('[Custom] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
-        tokenUsage: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
 

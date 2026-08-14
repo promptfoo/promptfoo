@@ -171,8 +171,9 @@ function getTokenUsageLines(
   const hasEvalTokens =
     (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
   const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
+  const hasAttackerTokens = tokenUsage.attacker && (tokenUsage.attacker.total || 0) > 0;
 
-  if (!hasEvalTokens && !hasGradingTokens) {
+  if (!hasEvalTokens && !hasGradingTokens && !hasAttackerTokens) {
     return [];
   }
 
@@ -192,7 +193,11 @@ function getTokenUsageLines(
 
   const lines = [
     `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
-      (evalTokens.total + (tokenUsage.assertions?.total || 0)).toLocaleString(),
+      (
+        evalTokens.total +
+        (tokenUsage.attacker?.total || 0) +
+        (tokenUsage.assertions?.total || 0)
+      ).toLocaleString(),
     )}`,
   ];
 
@@ -208,6 +213,13 @@ function getTokenUsageLines(
       `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(
         ', ',
       )})`,
+    );
+  }
+
+  if (tokenUsage.attacker?.total && tokenUsage.attacker.total > 0) {
+    const attackerParts = buildUsageDetails(tokenUsage.attacker, tokenUsage.attacker.total);
+    lines.push(
+      `  ${chalk.gray('Attacker:')} ${chalk.white(tokenUsage.attacker.total.toLocaleString())} (${attackerParts.join(', ')})`,
     );
   }
 

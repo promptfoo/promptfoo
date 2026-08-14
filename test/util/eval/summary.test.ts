@@ -272,6 +272,38 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
     });
 
+    it('separates target, attacker, and grading token totals', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-three-token-buckets',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 2,
+          attacker: { total: 50, prompt: 30, completion: 20, numRequests: 3 },
+          assertions: { total: 25, prompt: 15, completion: 10 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+      expect(output).toContain('Total Tokens: 175');
+      expect(output).toContain('Eval: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Attacker: 50 (30 prompt, 20 completion)');
+      expect(output).toContain('Grading: 25 (15 prompt, 10 completion)');
+      expect(output).toContain('Probes: 2');
+    });
+
     it('should show 100% cached correctly', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-cached',

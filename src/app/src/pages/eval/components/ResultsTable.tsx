@@ -707,12 +707,23 @@ function renderTokenMetrics({
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
-  if (!metrics?.tokenUsage?.total) {
+  if (
+    !metrics?.tokenUsage?.total &&
+    !metrics?.tokenUsage?.attacker?.total &&
+    !metrics?.tokenUsage?.assertions?.total
+  ) {
     return null;
   }
 
-  const totalTokens = metrics.tokenUsage.total;
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const totalTokens =
+    (metrics.tokenUsage.total ?? 0) +
+    (metrics.tokenUsage.attacker?.total ?? 0) +
+    (metrics.tokenUsage.assertions?.total ?? 0);
+  const filteredTokens = filteredMetrics?.tokenUsage
+    ? (filteredMetrics.tokenUsage.total ?? 0) +
+      (filteredMetrics.tokenUsage.attacker?.total ?? 0) +
+      (filteredMetrics.tokenUsage.assertions?.total ?? 0)
+    : undefined;
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
@@ -723,6 +734,16 @@ function renderTokenMetrics({
         <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
         {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
       </div>
+      {metrics.tokenUsage.attacker?.total ? (
+        <div>
+          <strong>Attacker Tokens:</strong> {formatMetricValue(metrics.tokenUsage.attacker.total)}
+        </div>
+      ) : null}
+      {metrics.tokenUsage.assertions?.total ? (
+        <div>
+          <strong>Grading Tokens:</strong> {formatMetricValue(metrics.tokenUsage.assertions.total)}
+        </div>
+      ) : null}
       <div>
         <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
         {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}

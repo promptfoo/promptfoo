@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAttackerTokenUsage,
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
@@ -305,6 +306,37 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('accumulateAttackerTokenUsage', () => {
+    it('keeps attacker tokens and requests separate from target usage', () => {
+      const target = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
+      });
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+      });
+      accumulateAttackerTokenUsage(target, { tokenUsage: { total: 7, prompt: 5, completion: 2 } });
+
+      expect(target).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        attacker: { total: 19, prompt: 13, completion: 6, numRequests: 2 },
+      });
+    });
+
+    it('preserves attacker usage when aggregating results', () => {
+      const target = createEmptyTokenUsage();
+      accumulateTokenUsage(target, {
+        total: 10,
+        attacker: { total: 20, prompt: 15, completion: 5, numRequests: 2 },
+      });
+      expect(target).toMatchObject({
+        total: 10,
+        attacker: { total: 20, prompt: 15, completion: 5, numRequests: 2 },
+      });
     });
   });
 

@@ -11,7 +11,11 @@ import {
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
 import { sleep } from '../../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -435,7 +439,7 @@ export class HydraProvider implements ApiProvider {
       );
 
       // Agent coordination calls are internal and should not count as target probes.
-      accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
+      accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
 
       if (this.agentProvider.delay) {
         await sleep(this.agentProvider.delay);
@@ -999,9 +1003,7 @@ export class HydraProvider implements ApiProvider {
           options,
         );
         // Learning update is an internal cloud call, not a target probe.
-        accumulateResponseTokenUsage(totalTokenUsage, learningResponse, {
-          countAsRequest: false,
-        });
+        accumulateAttackerTokenUsage(totalTokenUsage, learningResponse);
 
         logger.debug(`${this.logPrefix} Scan learnings updated`, { scanId, testRunId });
       } catch (error) {

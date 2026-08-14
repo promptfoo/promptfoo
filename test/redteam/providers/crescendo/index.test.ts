@@ -1598,6 +1598,7 @@ describe('CrescendoProvider', () => {
         completion: 60,
         numRequests: 1,
         cached: 0,
+        attacker: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
       });
     });
 

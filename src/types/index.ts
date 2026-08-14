@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
 import {
   BaseTokenUsageSchema,
+  type NormalizedTokenUsage,
   type NunjucksFilterMap,
   type TokenUsage,
   type VarValue,
@@ -407,7 +408,7 @@ export interface EvaluateResult {
   namedScores: Record<string, number>;
   cost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: NormalizedTokenUsage;
   /**
    * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
    * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
@@ -483,7 +484,7 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: NormalizedTokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;

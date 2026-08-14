@@ -66,6 +66,8 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
 Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. They are particularly effective against stateful applications where they can convince the target to act against its purpose over time. Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
 
+Token usage separates target calls from attacker-model calls (`tokenUsage.attacker`) and grading calls (`tokenUsage.assertions`). The top-level request count tracks target probes only.
+
 ### Indirect Prompt Injection Strategies
 
 Indirect prompt injection strategies test whether AI agents can be manipulated through malicious instructions embedded in external content they consume. These strategies generate realistic attack surfaces containing hidden payloads to test both data exfiltration and behavior manipulation. Currently available: [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn/) for web browsing agents.

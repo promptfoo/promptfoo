@@ -13,7 +13,11 @@ import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -117,6 +121,7 @@ type CrescendoAttackPromptResponse = {
   inputMaterialization?: Record<string, unknown>;
   materializationHandled?: boolean;
   materializedVars?: Record<string, string>;
+  tokenUsage?: TokenUsage;
 };
 
 interface CrescendoConfig {
@@ -422,6 +427,7 @@ export class CrescendoProvider implements ApiProvider {
           inputMaterialization,
           materializationHandled,
           materializedVars,
+          tokenUsage: attackerTokenUsage,
         } = await this.getAttackPrompt(
           roundNum,
           evalFlag,
@@ -432,6 +438,7 @@ export class CrescendoProvider implements ApiProvider {
           tracingOptions,
           options,
         );
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
 
         if (!attackPrompt) {
           logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
@@ -889,12 +896,14 @@ export class CrescendoProvider implements ApiProvider {
       logger.debug('[Crescendo] Attack model refused to generate prompt', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
     if (!response.output) {
       logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
 
@@ -951,6 +960,7 @@ export class CrescendoProvider implements ApiProvider {
       inputMaterialization: response.inputMaterialization,
       materializationHandled: response.materializationHandled,
       materializedVars: response.materializedVars,
+      tokenUsage: response.tokenUsage,
     };
   }
 
