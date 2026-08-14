@@ -88,8 +88,6 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
     }
   };
 
-  const isFormDisabled = isChecking || isSaving;
-
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-sm">
@@ -138,7 +136,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
                 id="api-base-url"
                 value={tempApiBaseUrl}
                 onChange={handleApiBaseUrlChange}
-                disabled={isFormDisabled}
+                disabled={isSaving}
                 placeholder="Enter API base URL"
               />
               <p className="text-xs text-muted-foreground">
@@ -149,10 +147,10 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isFormDisabled}>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Close
           </Button>
-          <Button onClick={handleSave} disabled={isFormDisabled}>
+          <Button onClick={handleSave} disabled={isSaving}>
             {isSaving && <Spinner size="sm" className="mr-2" />}
             Save
           </Button>

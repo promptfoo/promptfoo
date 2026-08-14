@@ -38,8 +38,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PluginsTab from './PluginsTab';
 import { DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
-import type { ApiHealthResult } from '@app/hooks/useApiHealth';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { ApiHealthQueryResult } from '@app/hooks/useApiHealth';
 
 import type { LocalPluginConfig } from '../types';
 
@@ -70,7 +69,7 @@ vi.mock('@app/hooks/useApiHealth', () => ({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
-      }) as unknown as DefinedUseQueryResult<ApiHealthResult, Error>,
+      }) as unknown as ApiHealthQueryResult,
   ),
 }));
 
