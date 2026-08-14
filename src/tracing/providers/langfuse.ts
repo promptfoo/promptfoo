@@ -112,7 +112,7 @@ function normalizedModelParameters(value: unknown): Record<string, number> {
 
   for (const [name, parameter] of Object.entries(safeAttributes(value))) {
     if (
-      Object.hasOwn(GEN_AI_MODEL_PARAMETER_NAMES, name) &&
+      Object.prototype.hasOwnProperty.call(GEN_AI_MODEL_PARAMETER_NAMES, name) &&
       typeof parameter === 'number' &&
       Number.isFinite(parameter)
     ) {
