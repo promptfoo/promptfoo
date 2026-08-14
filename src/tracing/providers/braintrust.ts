@@ -1,9 +1,11 @@
 import logger from '../../logger';
+import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
   MAX_TRACE_RESPONSE_BYTES,
   readLimitedResponse,
   releaseResponse,
+  validateTraceProviderEndpoint,
 } from './fetch';
 import { TraceProviderError } from './types';
 
@@ -75,13 +77,7 @@ function transformSpan(row: BraintrustSpan, options?: FetchTraceOptions): SpanDa
     ...(typeof row.span_attributes?.type === 'string' && {
       'braintrust.span.type': row.span_attributes.type,
     }),
-    ...(isToolSpan && {
-      'gen_ai.tool.name': name,
-      'tool.name': name,
-      ...(row.input !== undefined && {
-        'tool.arguments': typeof row.input === 'string' ? row.input : JSON.stringify(row.input),
-      }),
-    }),
+    ...(isToolSpan && getNormalizedToolAttributes(name, row.input)),
   };
 
   return {
@@ -116,21 +112,7 @@ export class BraintrustProvider implements TraceProvider {
       throw new Error('Braintrust provider requires an auth token');
     }
 
-    let endpoint: URL;
-    try {
-      endpoint = new URL(config.endpoint);
-    } catch {
-      throw new Error('Braintrust provider endpoint must be a valid HTTP or HTTPS URL');
-    }
-    if (
-      !['http:', 'https:'].includes(endpoint.protocol) ||
-      endpoint.username ||
-      endpoint.password
-    ) {
-      throw new Error(
-        'Braintrust provider endpoint must be an HTTP or HTTPS URL without credentials',
-      );
-    }
+    validateTraceProviderEndpoint(config.endpoint, 'Braintrust');
     if (
       config.timeout !== undefined &&
       (!Number.isSafeInteger(config.timeout) || config.timeout <= 0)

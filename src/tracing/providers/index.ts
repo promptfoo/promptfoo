@@ -1,4 +1,5 @@
 import { BraintrustProvider } from './braintrust';
+import { LangfuseProvider } from './langfuse';
 import { TempoProvider } from './tempo';
 
 import type { TraceProvider, TraceProviderConfig } from './types';
@@ -21,6 +22,8 @@ export function createTraceProvider(config: TraceProviderConfig): TraceProvider 
   switch (config.id) {
     case 'braintrust':
       return new BraintrustProvider(config);
+    case 'langfuse':
+      return new LangfuseProvider(config);
     case 'tempo':
       return new TempoProvider(config);
     // Future providers:

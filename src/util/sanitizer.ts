@@ -467,7 +467,7 @@ export function sanitizeTracingConfigForPersistence(
             return [[key, value]];
           }
           const reference = references?.auth.get(key);
-          return reference?.renderedValue === value ? [[key, reference.template]] : [];
+          return reference && reference.renderedValue === value ? [[key, reference.template]] : [];
         }),
       )
     : undefined;
