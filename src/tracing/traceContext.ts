@@ -368,14 +368,20 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
 }
 
 function getProviderFetchOptions(
-  spanOptions: Pick<FetchTraceOptions, 'earliestStartTime' | 'maxSpans'>,
+  spanOptions: Pick<
+    FetchTraceContextOptions,
+    'earliestStartTime' | 'includeInternalSpans' | 'maxSpans' | 'spanFilter'
+  >,
   abortSignal?: AbortSignal,
 ): FetchTraceOptions | undefined {
+  const requiresPostFetchFiltering =
+    spanOptions.includeInternalSpans === false || Boolean(spanOptions.spanFilter?.length);
   const providerOptions = {
     ...(spanOptions.earliestStartTime !== undefined && {
       earliestStartTime: spanOptions.earliestStartTime,
     }),
-    ...(spanOptions.maxSpans !== undefined && { maxSpans: spanOptions.maxSpans }),
+    ...(spanOptions.maxSpans !== undefined &&
+      !requiresPostFetchFiltering && { maxSpans: spanOptions.maxSpans }),
     ...(abortSignal && { abortSignal }),
   };
 
