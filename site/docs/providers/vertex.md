@@ -38,7 +38,7 @@ starting January 1, 2027.
 These models ignore the deprecated `temperature`, `topP`, and `topK` sampling
 controls, which promptfoo removes automatically. Configure reasoning with
 `generationConfig.thinkingConfig.thinkingLevel`; Gemini 3.7 Flash supports `LOW`,
-`MEDIUM`, and `HIGH`, but not `MINIMAL`.
+`MEDIUM`, and `HIGH`, but not `MINIMAL` or the legacy `thinkingBudget` setting.
 
 **Gemini 3.1:**
 

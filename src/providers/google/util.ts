@@ -202,7 +202,7 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
  * Current Gemini Flash models no longer support manual sampling controls,
  * candidate counts, or frequency/presence penalties.
  */
-export function removeDeprecatedGeminiGenerationParams<T>(
+export function removeDeprecatedGeminiGenerationParams<T extends Record<string, unknown>>(
   modelName: string,
   generationConfig: T,
 ): T {
@@ -215,15 +215,8 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   ) {
     return generationConfig;
   }
-  if (
-    !generationConfig ||
-    typeof generationConfig !== 'object' ||
-    Array.isArray(generationConfig)
-  ) {
-    return generationConfig;
-  }
 
-  const sanitized = { ...generationConfig } as Record<string, unknown>;
+  const sanitized = { ...generationConfig };
   for (const field of [
     'temperature',
     'topP',
@@ -242,8 +235,21 @@ export function removeDeprecatedGeminiGenerationParams<T>(
 
   if (modelName.startsWith('gemini-3.7-flash')) {
     const thinkingConfig = sanitized.thinkingConfig as
-      | { thinkingLevel?: unknown; thinking_level?: unknown }
+      | {
+          thinkingBudget?: unknown;
+          thinking_budget?: unknown;
+          thinkingLevel?: unknown;
+          thinking_level?: unknown;
+        }
       | undefined;
+    if (
+      thinkingConfig?.thinkingBudget !== undefined ||
+      thinkingConfig?.thinking_budget !== undefined
+    ) {
+      throw new Error(
+        'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).',
+      );
+    }
     const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
     if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
       throw new Error(
@@ -351,9 +357,13 @@ export function calculateGoogleCost(
     isVertexMode && (region === 'us' || region === 'eu')
       ? (model?.vertexRegionalMultiplier ?? 1)
       : 1;
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * vertexRegionalMultiplier;
-  const outputCost =
-    config.outputCost ?? config.cost ?? modelCost.output * vertexRegionalMultiplier;
+  const introductoryMultiplier =
+    model?.introductoryPricing && Date.now() < model.introductoryPricing.expiresAt
+      ? model.introductoryPricing.multiplier
+      : 1;
+  const catalogMultiplier = vertexRegionalMultiplier * introductoryMultiplier;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * catalogMultiplier;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * catalogMultiplier;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(
     imagePromptTokens,
@@ -391,68 +401,42 @@ export function calculateGoogleCost(
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    (modelCost.audioInput === undefined
-      ? undefined
-      : modelCost.audioInput * vertexRegionalMultiplier) ??
+    modelCost.audioInput ??
     inputCost;
   const audioOutputCost =
     config.audioOutputCost ??
     config.audioCost ??
     config.outputCost ??
     config.cost ??
-    (modelCost.audioOutput === undefined
-      ? undefined
-      : modelCost.audioOutput * vertexRegionalMultiplier) ??
+    modelCost.audioOutput ??
     outputCost;
   const videoOutputCost =
     config.videoOutputCost ??
     config.outputCost ??
     config.cost ??
-    (modelCost.videoOutput === undefined
-      ? undefined
-      : modelCost.videoOutput * vertexRegionalMultiplier) ??
+    modelCost.videoOutput ??
     outputCost;
   const imageInputCost =
-    config.imageInputCost ??
-    config.inputCost ??
-    config.cost ??
-    (modelCost.imageInput === undefined
-      ? undefined
-      : modelCost.imageInput * vertexRegionalMultiplier) ??
-    inputCost;
+    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
   const serviceTierCacheRead =
     serviceTier === 'priority' && modelCost.priorityCacheRead !== undefined
       ? modelCost.priorityCacheRead / serviceTierMultiplier
       : serviceTier === 'flex' && modelCost.flexCacheRead !== undefined
         ? modelCost.flexCacheRead / serviceTierMultiplier
         : modelCost.cacheRead;
-  const cachedInputCost =
-    config.inputCost ??
-    config.cost ??
-    (serviceTierCacheRead === undefined
-      ? undefined
-      : serviceTierCacheRead * vertexRegionalMultiplier) ??
-    inputCost;
+  const catalogCacheRead =
+    serviceTierCacheRead === undefined ? undefined : serviceTierCacheRead * catalogMultiplier;
+  const cachedInputCost = config.inputCost ?? config.cost ?? catalogCacheRead ?? inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    (modelCost.cacheReadAudio === undefined
-      ? undefined
-      : modelCost.cacheReadAudio * vertexRegionalMultiplier) ??
-    (serviceTierCacheRead === undefined
-      ? undefined
-      : serviceTierCacheRead * vertexRegionalMultiplier) ??
+    modelCost.cacheReadAudio ??
+    catalogCacheRead ??
     audioInputCost;
   const cachedImageInputCost =
-    config.imageInputCost ??
-    config.inputCost ??
-    config.cost ??
-    (serviceTierCacheRead === undefined
-      ? undefined
-      : serviceTierCacheRead * vertexRegionalMultiplier) ??
-    imageInputCost;
+    config.imageInputCost ?? config.inputCost ?? config.cost ?? catalogCacheRead ?? imageInputCost;
   // A modality/base cost override on the request takes precedence over the
   // catalog's tier-specific audio rate.
   const hasAudioInputOverride =
@@ -463,11 +447,9 @@ export function calculateGoogleCost(
   let serviceTierAudioInputCost = audioInputCost;
   if (!hasAudioInputOverride) {
     if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
-      serviceTierAudioInputCost =
-        (modelCost.priorityAudioInput / serviceTierMultiplier) * vertexRegionalMultiplier;
+      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
     } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
-      serviceTierAudioInputCost =
-        (modelCost.flexAudioInput / serviceTierMultiplier) * vertexRegionalMultiplier;
+      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
     }
   }
 
@@ -501,7 +483,7 @@ const getGoogleModalityTokenCount = (details: unknown, modalities: string[]): nu
 
 export function calculateGoogleCostFromUsage(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens: number | undefined,
   completionTokens: number | undefined,
   isVertexMode: boolean,

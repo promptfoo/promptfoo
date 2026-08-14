@@ -514,11 +514,13 @@ export async function createDummyFiles(
         ],
       },
       {
-        name: '[Google] Gemini 3.7 Flash, 3.5 Flash-Lite, ...',
+        name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
-          'vertex:gemini-3.7-flash',
+          { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+          { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
           'vertex:gemini-3.5-flash-lite',
           'vertex:gemini-3.1-pro-preview',
+          'vertex:gemini-2.5-pro',
         ],
       },
       {

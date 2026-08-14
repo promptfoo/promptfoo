@@ -32,11 +32,9 @@ The example tests across multiple Gemini and Gemma models:
 - **Gemini 2.5 Flash-Lite** - Cost-efficient and fast 2.5 model, optimized for high-volume, latency-sensitive tasks
 - **gemini-embedding-001** - Embedding model used for similarity-based assertions
 
-Gemini 3.7 Flash and 3.6 Flash cost $0.75 per million input tokens and $3.75 per
-million output tokens through December 31, 2026. Gemini 3.5 Flash-Lite costs
-$0.30 per million input tokens and $2.50 per million output tokens. These models
-use `thinkingLevel` instead of deprecated `temperature`, `topP`, or `topK`
-controls; Gemini 3.7 Flash does not support `MINIMAL` thinking.
+Gemini 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite use `thinkingLevel` instead of
+deprecated `temperature`, `topP`, or `topK` controls. Gemini 3.7 Flash does not
+support `MINIMAL` thinking.
 
 ## System Instructions from File
 

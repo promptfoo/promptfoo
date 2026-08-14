@@ -893,7 +893,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             : completionTokenCount + (thoughtsTokenCount ?? 0);
         const cost = calculateGoogleCostFromUsage(
           this.modelName,
-          config,
+          { ...config, region: this.getRegion() },
           promptTokenCount,
           completionForCost,
           true,

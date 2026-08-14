@@ -908,6 +908,20 @@ describe('AIStudioChatProvider', () => {
       expect(cache.fetchWithCache).not.toHaveBeenCalled();
     });
 
+    it('rejects deprecated thinking budgets before requesting Gemini 3.7 Flash', async () => {
+      const latestProvider = new AIStudioChatProvider('gemini-3.7-flash', {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+        },
+      });
+
+      await expect(latestProvider.callGemini('test prompt')).rejects.toThrow(
+        'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel',
+      );
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should normalize Gemini TTS audio and send the required audio generation config', async () => {
       const ttsProvider = new AIStudioChatProvider('gemini-2.5-flash-preview-tts', {
         config: { apiKey: 'test-key', generationConfig: { response_modalities: ['audio'] } },

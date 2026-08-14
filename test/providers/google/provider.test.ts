@@ -991,6 +991,30 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.000035, 10);
     });
 
+    it('prices Vertex Flash-Lite using the resolved environment-configured region', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
+        env: { VERTEX_REGION: 'eu' },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(provider.getRegion()).toBe('eu');
+      expect(result.cost).toBeCloseTo(0.001705, 10);
+    });
+
     it('should use Vertex-specific pricing when it differs from AI Studio', async () => {
       const provider = new GoogleProvider('gemini-2.0-flash', {
         config: { vertexai: true, apiKey: 'test-vertex-key' },

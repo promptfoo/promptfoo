@@ -348,12 +348,20 @@ export async function redteamInit(directory: string | undefined) {
         value: 'google:gemini-3.7-flash',
       },
       {
+        name: 'Google Gemini 3.6 Flash',
+        value: 'google:gemini-3.6-flash',
+      },
+      {
         name: 'Google Gemini 3.5 Flash-Lite',
         value: 'google:gemini-3.5-flash-lite',
       },
       {
         name: 'Google Vertex Gemini 3.7 Flash',
         value: 'vertex:gemini-3.7-flash',
+      },
+      {
+        name: 'Google Vertex Gemini 3.6 Flash',
+        value: 'vertex:gemini-3.6-flash',
       },
       {
         name: 'Google Vertex Gemini 3.5 Flash-Lite',
@@ -376,7 +384,16 @@ export async function redteamInit(directory: string | undefined) {
     if (selectedProvider === 'Other') {
       providers = [{ id: 'openai:gpt-5-mini', label }];
     } else {
-      providers = [{ id: selectedProvider, label }];
+      providers = [
+        {
+          id: selectedProvider,
+          label,
+          ...(selectedProvider === 'vertex:gemini-3.7-flash' ||
+          selectedProvider === 'vertex:gemini-3.6-flash'
+            ? { config: { region: 'global' } }
+            : {}),
+        },
+      ];
     }
   }
 

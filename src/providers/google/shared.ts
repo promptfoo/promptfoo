@@ -29,6 +29,7 @@ export interface GoogleModel {
   id: string;
   cost?: GoogleModelCost;
   tieredCost?: GoogleModelTieredCost;
+  introductoryPricing?: { expiresAt: number; multiplier: number };
   /** Override pricing for Vertex AI when it differs from AI Studio. */
   vertexCost?: GoogleModelCost;
   /** Multiplier applied to Vertex multi-region pricing when the model supports it. */
@@ -58,6 +59,10 @@ const GEMINI_2_5_PRO_TIERED_COST = {
   threshold: 200_000,
   above: { input: 2.5 / 1e6, output: 15.0 / 1e6, cacheRead: 0.25 / 1e6 },
 };
+const GEMINI_FLASH_INTRODUCTORY_PRICING = {
+  expiresAt: Date.UTC(2027, 0, 1),
+  multiplier: 0.5,
+};
 
 /**
  * Google AI Studio models with pricing data.
@@ -66,17 +71,17 @@ const GEMINI_2_5_PRO_TIERED_COST = {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
-  // Gemini 3.7 Flash and 3.6 Flash share introductory pricing through 2026-12-31.
-  // `gemini-flash-latest` currently resolves to the same Flash pricing tier.
+  // Gemini 3.7 Flash and 3.6 Flash receive a 50% discount through 2026-12-31.
   ...['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'].map((id) => ({
     id,
     cost: {
-      input: 0.75 / 1e6,
-      output: 3.75 / 1e6,
-      cacheRead: 0.075 / 1e6,
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.15 / 1e6,
       priorityMultiplier: 1.8,
       flexMultiplier: 0.5,
     },
+    introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
   })),
 
   // Gemini 3.5 models.

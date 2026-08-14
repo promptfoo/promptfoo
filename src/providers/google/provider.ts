@@ -700,7 +700,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ? undefined
         : calculateGoogleCostFromUsage(
             this.modelName,
-            config,
+            this.isVertexMode ? { ...config, region: this.getRegion() } : config,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             this.isVertexMode,

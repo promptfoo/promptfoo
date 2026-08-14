@@ -322,7 +322,7 @@ providers:
 ```
 
 Gemini 3.7 Flash supports `LOW`, `MEDIUM`, and `HIGH` thinking levels. It does not
-support `MINIMAL`.
+support `MINIMAL` or the legacy `thinkingBudget` setting.
 
 ### Embedding Models
 

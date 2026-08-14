@@ -2622,6 +2622,15 @@ describe('util', () => {
         }),
       ).toThrow('Gemini 3.7 Flash does not support MINIMAL thinking');
     });
+
+    it.each([{ thinkingBudget: 1024 }, { thinking_budget: 1024 }])(
+      'rejects deprecated thinking budgets on Gemini 3.7 Flash',
+      (thinkingConfig) => {
+        expect(() =>
+          removeDeprecatedGeminiGenerationParams('gemini-3.7-flash', { thinkingConfig }),
+        ).toThrow('Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel');
+      },
+    );
   });
 
   describe('calculateGoogleCost', () => {
@@ -2712,14 +2721,44 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
-    it.each(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
-      'uses the current introductory Flash pricing for %s',
-      (modelName) => {
-        const cost = calculateGoogleCost(modelName, {}, 1000, 500);
+    describe('Gemini Flash introductory pricing', () => {
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
 
-        expect(cost).toBeCloseTo(0.002625, 10);
-      },
-    );
+      it.each(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
+        'switches %s to standard rates when introductory pricing expires',
+        (modelName) => {
+          const now = vi.spyOn(Date, 'now');
+          now.mockReturnValue(Date.UTC(2026, 11, 31, 23, 59, 59, 999));
+
+          expect(calculateGoogleCost(modelName, {}, 1000, 500)).toBeCloseTo(0.002625, 10);
+
+          now.mockReturnValue(Date.UTC(2027, 0, 1));
+
+          expect(calculateGoogleCost(modelName, {}, 1000, 500)).toBeCloseTo(0.00525, 10);
+        },
+      );
+
+      it('uses standard priority and cache rates after introductory pricing expires', () => {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2027, 0, 1));
+
+        const cost = calculateGoogleCost(
+          'gemini-3.7-flash',
+          { service_tier: 'priority' },
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+
+        expect(cost).toBeCloseTo((600 * 2.7 + 400 * 0.27 + 500 * 13.5) / 1e6, 12);
+      });
+    });
 
     it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(
       'uses Gemini 3.5 Flash-Lite pricing for %s',
@@ -2855,6 +2894,25 @@ describe('util', () => {
       );
 
       expect(cost).toBeCloseTo(0.006375, 10);
+    });
+
+    it('applies the Vertex regional premium to cached multimodal tokens once', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'eu', service_tier: 'priority' },
+        1000,
+        500,
+        true,
+        200,
+        0,
+        undefined,
+        100,
+        400,
+        100,
+        100,
+      );
+
+      expect(cost).toBeCloseTo((600 * 0.594 + 400 * 0.0594 + 500 * 4.95) / 1e6, 12);
     });
 
     it('should calculate cost for gemini-omni-flash-preview', () => {

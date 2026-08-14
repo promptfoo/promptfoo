@@ -220,10 +220,33 @@ describe('redteamInit', () => {
     expect(modelPrompt?.[0].choices).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ value: 'google:gemini-3.7-flash' }),
+        expect.objectContaining({ value: 'google:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.5-flash-lite' }),
         expect.objectContaining({ value: 'vertex:gemini-3.7-flash' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
       ]),
     );
   });
+
+  it.each(['vertex:gemini-3.7-flash', 'vertex:gemini-3.6-flash'])(
+    'configures the global Vertex region for %s',
+    async (modelName) => {
+      vi.mocked(select)
+        .mockReset()
+        .mockResolvedValueOnce('prompt_model_chatbot')
+        .mockResolvedValueOnce('now')
+        .mockResolvedValueOnce(modelName)
+        .mockResolvedValueOnce('default')
+        .mockResolvedValueOnce('default');
+
+      await redteamInit(undefined);
+
+      const config = yaml.load(vi.mocked(fs.writeFile).mock.calls[0][1] as string) as {
+        targets: Array<{ id: string; config: { region: string } }>;
+      };
+
+      expect(config.targets[0]).toMatchObject({ id: modelName, config: { region: 'global' } });
+    },
+  );
 });

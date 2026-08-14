@@ -607,7 +607,7 @@ export default function ProviderTypeSelector({
       setProvider(
         {
           id: 'vertex:gemini-3.7-flash',
-          config: {},
+          config: { region: 'global' },
           label: currentLabel,
         },
         'vertex',

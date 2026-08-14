@@ -112,10 +112,12 @@ vi.mock('../../../src/providers/google/auth', async () => {
       getApiKey: vi.fn().mockReturnValue({ apiKey: undefined, source: 'none' }),
       determineVertexMode: vi.fn().mockReturnValue(true),
       validateAndWarn: vi.fn(),
-      // Respect config.region when provided, otherwise default to us-central1
-      resolveRegion: vi.fn().mockImplementation((config?: { region?: string }) => {
-        return config?.region || 'us-central1';
-      }),
+      resolveRegion: vi
+        .fn()
+        .mockImplementation(
+          (config?: { region?: string }, env?: { VERTEX_REGION?: string }) =>
+            config?.region || env?.VERTEX_REGION || 'us-central1',
+        ),
       resolveProjectId: vi.fn().mockResolvedValue('test-project-id'),
     },
   };
@@ -295,6 +297,31 @@ describe('VertexChatProvider.callGeminiApi', () => {
       expect(request.data.generationConfig).not.toHaveProperty('topK');
       expect(request.data.generationConfig).not.toHaveProperty('candidateCount');
       expect(result.cost).toBeCloseTo(expectedCost, 10);
+    },
+  );
+
+  it.each(['us', 'eu'])(
+    'prices Gemini Flash-Lite using the resolved %s multi-region',
+    async (region) => {
+      const latestProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: {},
+        env: { VERTEX_REGION: region },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        },
+      ]);
+
+      const result = await latestProvider.callGeminiApi('test prompt');
+
+      expect(mockRequest.mock.calls[0][0].url).toContain(`aiplatform.${region}.rep.googleapis.com`);
+      expect(result.cost).toBeCloseTo(0.001705, 10);
     },
   );
 

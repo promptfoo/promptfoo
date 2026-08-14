@@ -63,9 +63,9 @@ describe('ProviderTypeSelector', () => {
   });
 
   it.each([
-    ['Google AI Studio', 'google', 'google:gemini-3.7-flash'],
-    ['Google Vertex AI', 'vertex', 'vertex:gemini-3.7-flash'],
-  ])('defaults %s to Gemini 3.7 Flash', async (label, providerType, expectedModel) => {
+    ['Google AI Studio', 'google', 'google:gemini-3.7-flash', {}],
+    ['Google Vertex AI', 'vertex', 'vertex:gemini-3.7-flash', { region: 'global' }],
+  ])('defaults %s to Gemini 3.7 Flash', async (label, providerType, expectedModel, config) => {
     const user = userEvent.setup();
     const setProvider = vi.fn();
 
@@ -81,7 +81,7 @@ describe('ProviderTypeSelector', () => {
     await user.click(providerCard!);
 
     expect(setProvider).toHaveBeenCalledWith(
-      { id: expectedModel, config: {}, label: 'Gemini target' },
+      { id: expectedModel, config, label: 'Gemini target' },
       providerType,
     );
   });

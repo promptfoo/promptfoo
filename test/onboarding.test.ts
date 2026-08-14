@@ -259,9 +259,11 @@ describe('createDummyFiles', () => {
 
   it('offers current Gemini Flash models during interactive onboarding', async () => {
     const googleModels = [
-      'vertex:gemini-3.7-flash',
+      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
       'vertex:gemini-3.5-flash-lite',
       'vertex:gemini-3.1-pro-preview',
+      'vertex:gemini-2.5-pro',
     ];
     mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleModels);
 
@@ -272,7 +274,7 @@ describe('createDummyFiles', () => {
       expect.objectContaining({
         choices: expect.arrayContaining([
           expect.objectContaining({
-            name: '[Google] Gemini 3.7 Flash, 3.5 Flash-Lite, ...',
+            name: '[Google] Gemini 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
             value: googleModels,
           }),
         ]),
@@ -282,7 +284,7 @@ describe('createDummyFiles', () => {
     const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    const config = yaml.load(configCall?.[1] as string) as { providers: string[] };
+    const config = yaml.load(configCall?.[1] as string) as { providers: typeof googleModels };
 
     expect(config.providers).toEqual(googleModels);
   });
