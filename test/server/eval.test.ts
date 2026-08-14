@@ -10,6 +10,8 @@ import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
+import type { EvaluateTableOutput } from '../../src/types/index';
+
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
   return {
@@ -64,7 +66,9 @@ describe('eval routes', () => {
     vi.resetAllMocks();
   });
 
-  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
+  function mockTablePayloadRangeError(
+    shouldThrow: (attempt: number, payload: Record<string, unknown>) => boolean,
+  ) {
     const originalStringify = JSON.stringify;
     let tablePayloadAttempts = 0;
 
@@ -74,7 +78,7 @@ describe('eval routes', () => {
         const value = args[0];
         if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
           tablePayloadAttempts += 1;
-          if (shouldThrow(tablePayloadAttempts)) {
+          if (shouldThrow(tablePayloadAttempts, value as Record<string, unknown>)) {
             throw new RangeError('Invalid string length');
           }
         }
@@ -417,6 +421,30 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
+    it('retains visible prompts while trimming hidden cell detail in ordinary payloads', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('table');
+      expect(res.body.table.body.length).toBeGreaterThan(0);
+      expect(res.body.config.tests).toHaveLength(2);
+
+      const outputs: EvaluateTableOutput[] = res.body.table.body.flatMap(
+        (row: { outputs: EvaluateTableOutput[] }) => row.outputs,
+      );
+      expect(outputs).toHaveLength(3);
+      expect(outputs.map((output) => output.prompt)).toEqual([
+        'small prompt',
+        'x'.repeat(100),
+        'x'.repeat(50),
+      ]);
+      expect(outputs.every((output) => output.isTruncated)).toBe(true);
+    });
+
     it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {
       const sasUri =
         'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=azure-secret&sv={{ version }}';
@@ -454,10 +482,7 @@ describe('eval routes', () => {
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('table');
-      expect(res.body.table.body.length).toBeGreaterThan(0);
       expect(res.body.config.tests).toHaveLength(2);
-
       const prompts: Array<string | undefined> = res.body.table.body.flatMap(
         (row: { outputs: Array<{ prompt?: string }> }) =>
           row.outputs.map((output) => output?.prompt),
@@ -467,28 +492,31 @@ describe('eval routes', () => {
       expect(prompts).toContain('x'.repeat(50));
     });
 
-    it('strips per-cell prompts largest first until the response serializes', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 3 });
+    it('omits config tests only when the prompt-stripped response remains oversized', async () => {
+      const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
-      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockTablePayloadRangeError((attempt) => attempt <= 2);
+      mockTablePayloadRangeError((_attempt, payload) => {
+        const config = payload.config as Record<string, unknown> | undefined;
+        return Boolean(config?.tests);
+      });
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('table');
-      expect(res.body.config.tests).toHaveLength(2);
+      expect(res.body.config).not.toHaveProperty('tests');
 
-      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
-        (row: { outputs: Array<{ prompt?: string }> }) =>
-          row.outputs.map((output) => output?.prompt),
-      );
-      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(2);
-      expect(prompts).toContain('small prompt');
+      const patchRes = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'large eval renamed' } });
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toHaveLength(2);
     });
 
-    it('returns 413 when the table response is still too large after stripping prompts', async () => {
+    it('returns 413 when the table response is still too large after all fallbacks', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
@@ -543,6 +571,128 @@ describe('eval routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');
       expect(res.body.keys).toEqual([]);
+    });
+  });
+
+  describe('GET /:id/table - trimmed payload', () => {
+    it('should strip redundant fields from table cell outputs', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(res.status).toBe(200);
+
+      const cell: EvaluateTableOutput = res.body.table.body[0].outputs[0];
+
+      // The visible prompt is retained until serialization fallbacks are required.
+      expect(cell.prompt).not.toBe('');
+
+      // evalId is preserved (needed for detail endpoint in comparison mode)
+      expect(cell).toHaveProperty('evalId');
+      expect(cell.isTruncated).toBe(true);
+
+      // Other fields from ...result spread should NOT be present
+      expect(cell).not.toHaveProperty('promptIdx');
+      expect(cell).not.toHaveProperty('testIdx');
+      expect(cell).not.toHaveProperty('promptId');
+      expect(cell).not.toHaveProperty('persisted');
+      expect(cell).not.toHaveProperty('pluginId');
+      expect(cell).not.toHaveProperty('description');
+
+      // Essential fields should be present
+      expect(cell).toHaveProperty('id');
+      expect(cell).toHaveProperty('text');
+      expect(cell).toHaveProperty('pass');
+      expect(cell).toHaveProperty('score');
+      expect(cell).toHaveProperty('latencyMs');
+      expect(cell).toHaveProperty('namedScores');
+    });
+
+    it('should trim response to only essential fields', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(res.status).toBe(200);
+
+      const cell: EvaluateTableOutput = res.body.table.body[0].outputs[0];
+
+      // Response should be trimmed — no raw, output, error, or prompt fields
+      if (cell.response) {
+        expect(cell.response).not.toHaveProperty('raw');
+        expect(cell.response).not.toHaveProperty('output');
+        expect(cell.response).not.toHaveProperty('error');
+        expect(cell.response).not.toHaveProperty('prompt');
+        // tokenUsage should be preserved
+        expect(cell.response).toHaveProperty('tokenUsage');
+      }
+    });
+
+    it('should retain config.tests in an ordinary table response', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(res.status).toBe(200);
+
+      expect(res.body.config.tests).toHaveLength(2);
+      // Other config fields should remain
+      expect(res.body.config).toHaveProperty('providers');
+      expect(res.body.config).toHaveProperty('prompts');
+    });
+  });
+
+  describe('GET /:evalId/results/:resultId/detail', () => {
+    it('should return full cell detail for a valid result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api.get(`/api/eval/${eval_.id}/results/${result.id}/detail`);
+      expect(res.status).toBe(200);
+
+      // Should have the full prompt
+      expect(res.body).toHaveProperty('prompt');
+      expect(typeof res.body.prompt).toBe('string');
+      expect(res.body.prompt.length).toBeGreaterThan(0);
+
+      // Should have testCase
+      expect(res.body).toHaveProperty('testCase');
+      expect(res.body.testCase).toHaveProperty('vars');
+
+      // Should have response
+      expect(res.body).toHaveProperty('response');
+      expect(res.body.response).toHaveProperty('output');
+    });
+
+    it('should return 404 for non-existent result', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api.get(`/api/eval/${eval_.id}/results/non-existent-id/detail`);
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Result not found');
+    });
+
+    it('should return 404 when result belongs to a different eval', async () => {
+      const eval1 = await EvalFactory.create();
+      const eval2 = await EvalFactory.create();
+      testEvalIds.add(eval1.id);
+      testEvalIds.add(eval2.id);
+
+      const results = await eval1.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      // The endpoint enforces eval ownership — a result from eval1 cannot
+      // be fetched via eval2's URL. The frontend passes the cell's own evalId
+      // (preserved through trimming) to handle comparison mode correctly.
+      const res = await api.get(`/api/eval/${eval2.id}/results/${result.id}/detail`);
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Result not found');
     });
   });
 });
