@@ -26,6 +26,7 @@ import {
 } from '../anthropic/util';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
@@ -39,6 +40,7 @@ import {
   normalizeGeminiAudio,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -136,7 +138,7 @@ function getVertexApiHost(
     configApiHost ||
     envOverrides?.VERTEX_API_HOST ||
     getEnvString('VERTEX_API_HOST') ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+    getVertexApiHostForRegion(region)
   );
 }
 
@@ -174,7 +176,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       this.config.apiHost ||
       this.env?.VERTEX_API_HOST ||
       getEnvString('VERTEX_API_HOST') ||
-      (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+      getVertexApiHostForRegion(region)
     );
   }
 
@@ -632,6 +634,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    body.generationConfig = removeDeprecatedGeminiGenerationParams(
+      this.modelName,
+      body.generationConfig,
+    );
 
     if (config.responseSchema) {
       if (body.generationConfig.response_schema) {

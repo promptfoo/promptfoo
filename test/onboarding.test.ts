@@ -257,6 +257,36 @@ describe('createDummyFiles', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
+  it('offers current Gemini Flash models during interactive onboarding', async () => {
+    const googleModels = [
+      'vertex:gemini-3.7-flash',
+      'vertex:gemini-3.5-flash-lite',
+      'vertex:gemini-3.1-pro-preview',
+    ];
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleModels);
+
+    await createDummyFiles(tempDir, true);
+
+    expect(mockSelect).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        choices: expect.arrayContaining([
+          expect.objectContaining({
+            name: '[Google] Gemini 3.7 Flash, 3.5 Flash-Lite, ...',
+            value: googleModels,
+          }),
+        ]),
+      }),
+    );
+
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
+    );
+    const config = yaml.load(configCall?.[1] as string) as { providers: string[] };
+
+    expect(config.providers).toEqual(googleModels);
+  });
+
   it('should prompt for confirmation when files exist', async () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 

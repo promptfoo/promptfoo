@@ -27,6 +27,7 @@ import {
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
@@ -2575,6 +2576,54 @@ describe('util', () => {
     });
   });
 
+  describe('removeDeprecatedGeminiGenerationParams', () => {
+    it.each([
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ])('removes unsupported sampling and candidate controls for %s', (modelName) => {
+      const generationConfig = {
+        temperature: 0.7,
+        topP: 0.9,
+        top_p: 0.8,
+        topK: 40,
+        top_k: 30,
+        candidateCount: 2,
+        candidate_count: 3,
+        presencePenalty: 1,
+        presence_penalty: 1,
+        frequencyPenalty: 1,
+        frequency_penalty: 1,
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+      };
+
+      expect(removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toEqual({
+        maxOutputTokens: 1024,
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+      });
+      expect(generationConfig.temperature).toBe(0.7);
+    });
+
+    it('preserves sampling controls for models that still support them', () => {
+      const generationConfig = { temperature: 0.7, topP: 0.9, topK: 40 };
+
+      expect(removeDeprecatedGeminiGenerationParams('gemini-3.5-flash', generationConfig)).toBe(
+        generationConfig,
+      );
+    });
+
+    it('rejects unsupported MINIMAL thinking on Gemini 3.7 Flash', () => {
+      expect(() =>
+        removeDeprecatedGeminiGenerationParams('gemini-3.7-flash', {
+          thinkingConfig: { thinkingLevel: 'MINIMAL' },
+        }),
+      ).toThrow('Gemini 3.7 Flash does not support MINIMAL thinking');
+    });
+  });
+
   describe('calculateGoogleCost', () => {
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
@@ -2663,6 +2712,151 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.006, 10);
     });
 
+    it.each(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'])(
+      'uses the current introductory Flash pricing for %s',
+      (modelName) => {
+        const cost = calculateGoogleCost(modelName, {}, 1000, 500);
+
+        expect(cost).toBeCloseTo(0.002625, 10);
+      },
+    );
+
+    it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(
+      'uses Gemini 3.5 Flash-Lite pricing for %s',
+      (modelName) => {
+        const cost = calculateGoogleCost(modelName, {}, 1000, 500);
+
+        expect(cost).toBeCloseTo(0.00155, 10);
+      },
+    );
+
+    it.each(['gemini-3.7-flash', 'gemini-3.6-flash'])(
+      'applies cached, priority, and flex pricing for %s',
+      (modelName) => {
+        const standard = calculateGoogleCost(
+          modelName,
+          {},
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+        const priority = calculateGoogleCost(
+          modelName,
+          { service_tier: 'priority' },
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+        const flex = calculateGoogleCost(
+          modelName,
+          { service_tier: 'flex' },
+          1000,
+          500,
+          false,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          400,
+        );
+
+        expect(standard).toBeCloseTo((600 * 0.75 + 400 * 0.075 + 500 * 3.75) / 1e6, 12);
+        expect(priority).toBeCloseTo((600 * 1.35 + 400 * 0.135 + 500 * 6.75) / 1e6, 12);
+        expect(flex).toBeCloseTo((600 * 0.375 + 400 * 0.0375 + 500 * 1.875) / 1e6, 12);
+      },
+    );
+
+    it('uses AI Studio Flash-Lite tier-specific cached token prices', () => {
+      const priority = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'priority' },
+        1000,
+        500,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+      const flex = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { service_tier: 'flex' },
+        1000,
+        500,
+        false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+
+      expect(priority).toBeCloseTo((600 * 0.54 + 400 * 0.05 + 500 * 4.5) / 1e6, 12);
+      expect(flex).toBeCloseTo((600 * 0.15 + 400 * 0.02 + 500 * 1.25) / 1e6, 12);
+    });
+
+    it('uses Vertex Flash-Lite tier-specific cached token prices', () => {
+      const priority = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global', service_tier: 'priority' },
+        1000,
+        500,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+      const flex = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'global', service_tier: 'flex' },
+        1000,
+        500,
+        true,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        400,
+      );
+
+      expect(priority).toBeCloseTo((600 * 0.54 + 400 * 0.054 + 500 * 4.5) / 1e6, 12);
+      expect(flex).toBeCloseTo((600 * 0.15 + 400 * 0.015 + 500 * 1.25) / 1e6, 12);
+    });
+
+    it.each(['us', 'eu'])(
+      'applies the Vertex Flash-Lite regional premium in the %s multi-region',
+      (region) => {
+        const cost = calculateGoogleCost('gemini-3.5-flash-lite', { region }, 1000, 500, true);
+
+        expect(cost).toBeCloseTo(0.001705, 10);
+      },
+    );
+
+    it('does not apply the Vertex Flash-Lite regional premium to explicit price overrides', () => {
+      const cost = calculateGoogleCost(
+        'gemini-3.5-flash-lite',
+        { region: 'us', inputCost: 5 / 1e6 },
+        1000,
+        500,
+        true,
+      );
+
+      expect(cost).toBeCloseTo(0.006375, 10);
+    });
+
     it('should calculate cost for gemini-omni-flash-preview', () => {
       const cost = calculateGoogleCost('gemini-omni-flash-preview', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.006, 10);
@@ -2733,7 +2927,7 @@ describe('util', () => {
       expect(cost).toBeCloseTo((400 * 0.3 + 500 * 0.075 + 100 * 3 + 500 * 12) / 1e6, 12);
     });
 
-    it.each(['gemini-3.5-flash', 'gemini-flash-latest'])(
+    it.each(['gemini-3.5-flash'])(
       'should apply cached, audio, and priority pricing for %s',
       (modelId) => {
         const cost = calculateGoogleCost(
@@ -2804,7 +2998,7 @@ describe('util', () => {
       );
     });
 
-    it.each(['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'])(
+    it.each(['gemini-3.1-flash-lite'])(
       'should preserve the %s audio-input rate at priority tier',
       (modelId) => {
         const cost = calculateGoogleCost(
@@ -2828,7 +3022,7 @@ describe('util', () => {
       },
     );
 
-    it.each(['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'])(
+    it.each(['gemini-3.1-flash-lite'])(
       'should apply %s flex pricing with passthrough precedence',
       (modelId) => {
         const flexCost = calculateGoogleCost(
@@ -2854,8 +3048,8 @@ describe('util', () => {
     );
 
     it.each([
-      ['gemini-flash-latest', 1.5, 0.15, 0.15, 1, 9],
-      ['gemini-flash-lite-latest', 0.25, 0.025, 0.05, 0.5, 1.5],
+      ['gemini-flash-latest', 0.75, 0.075, 0.075, 0.75, 3.75],
+      ['gemini-flash-lite-latest', 0.3, 0.03, 0.03, 0.3, 2.5],
       ['gemini-2.0-flash-001', 0.1, 0.025, 0.175, 0.7, 0.4],
     ])(
       'uses AI Studio cached and audio rates for %s',
@@ -3070,12 +3264,12 @@ describe('util', () => {
 
     it('should calculate resolved-model cost for gemini-flash-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.006, 10);
+      expect(cost).toBeCloseTo(0.002625, 10);
     });
 
     it('should calculate resolved-model cost for gemini-flash-lite-latest', () => {
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
-      expect(cost).toBeCloseTo(0.001, 10);
+      expect(cost).toBeCloseTo(0.00155, 10);
     });
 
     it('should return undefined for shutdown models', () => {

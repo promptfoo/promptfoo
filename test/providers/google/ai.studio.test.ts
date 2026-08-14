@@ -844,6 +844,70 @@ describe('AIStudioChatProvider', () => {
       expect(calledOptions.headers['x-goog-api-key']).toBe('test-key');
     });
 
+    it.each([
+      ['gemini-3.7-flash', 0.002625],
+      ['gemini-3.6-flash', 0.002625],
+      ['gemini-3.5-flash-lite', 0.00155],
+    ])(
+      'normalizes generation controls and calculates cost for %s',
+      async (modelName, expectedCost) => {
+        const latestProvider = new AIStudioChatProvider(modelName, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.7,
+            topP: 0.9,
+            topK: 40,
+            generationConfig: {
+              temperature: 0.6,
+              topP: 0.8,
+              topK: 30,
+              maxOutputTokens: 256,
+              thinkingConfig: { thinkingLevel: 'HIGH' },
+              candidateCount: 2,
+            } as any,
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1000,
+              candidatesTokenCount: 500,
+              totalTokenCount: 1500,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await latestProvider.callGemini('test prompt');
+        const request = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+        const body = JSON.parse(request?.[1]?.body as string);
+
+        expect(request?.[0]).toContain(`/v1beta/models/${modelName}:generateContent`);
+        expect(body.generationConfig).toEqual({
+          maxOutputTokens: 256,
+          thinkingConfig: { thinkingLevel: 'HIGH' },
+        });
+        expect(result.cost).toBeCloseTo(expectedCost, 10);
+      },
+    );
+
+    it('rejects unsupported MINIMAL thinking before requesting Gemini 3.7 Flash', async () => {
+      const latestProvider = new AIStudioChatProvider('gemini-3.7-flash', {
+        config: {
+          apiKey: 'test-key',
+          generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+        },
+      });
+
+      await expect(latestProvider.callGemini('test prompt')).rejects.toThrow(
+        'Gemini 3.7 Flash does not support MINIMAL thinking',
+      );
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should normalize Gemini TTS audio and send the required audio generation config', async () => {
       const ttsProvider = new AIStudioChatProvider('gemini-2.5-flash-preview-tts', {
         config: { apiKey: 'test-key', generationConfig: { response_modalities: ['audio'] } },

@@ -198,6 +198,63 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
   });
 }
 
+/**
+ * Current Gemini Flash models no longer support manual sampling controls,
+ * candidate counts, or frequency/presence penalties.
+ */
+export function removeDeprecatedGeminiGenerationParams<T>(
+  modelName: string,
+  generationConfig: T,
+): T {
+  if (
+    !modelName.startsWith('gemini-3.7-flash') &&
+    !modelName.startsWith('gemini-3.6-flash') &&
+    !modelName.startsWith('gemini-3.5-flash-lite') &&
+    modelName !== 'gemini-flash-latest' &&
+    modelName !== 'gemini-flash-lite-latest'
+  ) {
+    return generationConfig;
+  }
+  if (
+    !generationConfig ||
+    typeof generationConfig !== 'object' ||
+    Array.isArray(generationConfig)
+  ) {
+    return generationConfig;
+  }
+
+  const sanitized = { ...generationConfig } as Record<string, unknown>;
+  for (const field of [
+    'temperature',
+    'topP',
+    'top_p',
+    'topK',
+    'top_k',
+    'candidateCount',
+    'candidate_count',
+    'presencePenalty',
+    'presence_penalty',
+    'frequencyPenalty',
+    'frequency_penalty',
+  ]) {
+    delete sanitized[field];
+  }
+
+  if (modelName.startsWith('gemini-3.7-flash')) {
+    const thinkingConfig = sanitized.thinkingConfig as
+      | { thinkingLevel?: unknown; thinking_level?: unknown }
+      | undefined;
+    const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
+    if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
+      throw new Error(
+        'Gemini 3.7 Flash does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
+      );
+    }
+  }
+
+  return sanitized as T;
+}
+
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
   if (typeof tools === 'string' && tools.startsWith('file://')) {
     const { filePath } = parseFileUrl(tools);
@@ -244,7 +301,7 @@ export function stripExecutableToolFileReferences(
  */
 export function calculateGoogleCost(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
@@ -277,8 +334,26 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const serviceTier =
+    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
+      ?.service_tier ??
+    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
+    config.service_tier;
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+
+  const region = config.region;
+  const vertexRegionalMultiplier =
+    isVertexMode && (region === 'us' || region === 'eu')
+      ? (model?.vertexRegionalMultiplier ?? 1)
+      : 1;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * vertexRegionalMultiplier;
+  const outputCost =
+    config.outputCost ?? config.cost ?? modelCost.output * vertexRegionalMultiplier;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(
     imagePromptTokens,
@@ -316,49 +391,68 @@ export function calculateGoogleCost(
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.audioInput ??
+    (modelCost.audioInput === undefined
+      ? undefined
+      : modelCost.audioInput * vertexRegionalMultiplier) ??
     inputCost;
   const audioOutputCost =
     config.audioOutputCost ??
     config.audioCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.audioOutput ??
+    (modelCost.audioOutput === undefined
+      ? undefined
+      : modelCost.audioOutput * vertexRegionalMultiplier) ??
     outputCost;
   const videoOutputCost =
     config.videoOutputCost ??
     config.outputCost ??
     config.cost ??
-    modelCost.videoOutput ??
+    (modelCost.videoOutput === undefined
+      ? undefined
+      : modelCost.videoOutput * vertexRegionalMultiplier) ??
     outputCost;
   const imageInputCost =
-    config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
-  const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    (modelCost.imageInput === undefined
+      ? undefined
+      : modelCost.imageInput * vertexRegionalMultiplier) ??
+    inputCost;
+  const serviceTierCacheRead =
+    serviceTier === 'priority' && modelCost.priorityCacheRead !== undefined
+      ? modelCost.priorityCacheRead / serviceTierMultiplier
+      : serviceTier === 'flex' && modelCost.flexCacheRead !== undefined
+        ? modelCost.flexCacheRead / serviceTierMultiplier
+        : modelCost.cacheRead;
+  const cachedInputCost =
+    config.inputCost ??
+    config.cost ??
+    (serviceTierCacheRead === undefined
+      ? undefined
+      : serviceTierCacheRead * vertexRegionalMultiplier) ??
+    inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheReadAudio ??
-    modelCost.cacheRead ??
+    (modelCost.cacheReadAudio === undefined
+      ? undefined
+      : modelCost.cacheReadAudio * vertexRegionalMultiplier) ??
+    (serviceTierCacheRead === undefined
+      ? undefined
+      : serviceTierCacheRead * vertexRegionalMultiplier) ??
     audioInputCost;
   const cachedImageInputCost =
     config.imageInputCost ??
     config.inputCost ??
     config.cost ??
-    modelCost.cacheRead ??
+    (serviceTierCacheRead === undefined
+      ? undefined
+      : serviceTierCacheRead * vertexRegionalMultiplier) ??
     imageInputCost;
-  const serviceTier =
-    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
-      ?.service_tier ??
-    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
-    config.service_tier;
-  let serviceTierMultiplier = 1;
-  if (serviceTier === 'priority') {
-    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
-  } else if (serviceTier === 'flex') {
-    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
-  }
   // A modality/base cost override on the request takes precedence over the
   // catalog's tier-specific audio rate.
   const hasAudioInputOverride =
@@ -369,9 +463,11 @@ export function calculateGoogleCost(
   let serviceTierAudioInputCost = audioInputCost;
   if (!hasAudioInputOverride) {
     if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.priorityAudioInput / serviceTierMultiplier;
+      serviceTierAudioInputCost =
+        (modelCost.priorityAudioInput / serviceTierMultiplier) * vertexRegionalMultiplier;
     } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
-      serviceTierAudioInputCost = modelCost.flexAudioInput / serviceTierMultiplier;
+      serviceTierAudioInputCost =
+        (modelCost.flexAudioInput / serviceTierMultiplier) * vertexRegionalMultiplier;
     }
   }
 

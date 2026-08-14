@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
-import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -249,6 +249,54 @@ describe('VertexChatProvider.callGeminiApi', () => {
       timeout: expect.any(Number),
     });
   });
+
+  it.each([
+    ['gemini-3.7-flash', 0.002625],
+    ['gemini-3.6-flash', 0.002625],
+    ['gemini-3.5-flash-lite', 0.00155],
+  ])(
+    'normalizes generation controls and calculates Vertex cost for %s',
+    async (modelName, expectedCost) => {
+      const latestProvider = new VertexChatProvider(modelName, {
+        config: {
+          region: 'global',
+          temperature: 0.7,
+          topP: 0.9,
+          topK: 40,
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 256,
+            thinkingConfig: { thinkingLevel: 'HIGH' },
+            candidateCount: 2,
+          } as any,
+        },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        },
+      ]);
+
+      const result = await latestProvider.callGeminiApi('test prompt');
+      const request = mockRequest.mock.calls.at(-1)?.[0];
+
+      expect(request.url).toContain(`/locations/global/publishers/google/models/${modelName}:`);
+      expect(request.data.generationConfig).toMatchObject({
+        maxOutputTokens: 256,
+        thinkingConfig: { thinkingLevel: 'HIGH' },
+      });
+      expect(request.data.generationConfig).not.toHaveProperty('temperature');
+      expect(request.data.generationConfig).not.toHaveProperty('topP');
+      expect(request.data.generationConfig).not.toHaveProperty('topK');
+      expect(request.data.generationConfig).not.toHaveProperty('candidateCount');
+      expect(result.cost).toBeCloseTo(expectedCost, 10);
+    },
+  );
 
   it('should return cached response if available', async () => {
     const mockCachedResponse = {
@@ -3977,6 +4025,29 @@ describe('VertexChatProvider.callClaudeApi', () => {
       const provider = new VertexChatProvider('gemini-pro', { config: { region: 'us-central1' } });
       expect(provider.getApiHost()).toBe('us-central1-aiplatform.googleapis.com');
     });
+
+    it.each([
+      ['us', 'aiplatform.us.rep.googleapis.com'],
+      ['eu', 'aiplatform.eu.rep.googleapis.com'],
+    ])('should return the dedicated %s multi-region endpoint', (region, expectedHost) => {
+      const provider = new VertexChatProvider('gemini-3.5-flash-lite', { config: { region } });
+
+      expect(provider.getApiHost()).toBe(expectedHost);
+    });
+
+    it.each([
+      ['us', 'aiplatform.us.rep.googleapis.com'],
+      ['eu', 'aiplatform.eu.rep.googleapis.com'],
+    ])(
+      'should use the dedicated %s multi-region endpoint for embeddings',
+      (region, expectedHost) => {
+        const provider = new VertexEmbeddingProvider('gemini-embedding-001', {
+          config: { region },
+        });
+
+        expect(provider.getApiHost()).toBe(expectedHost);
+      },
+    );
 
     it('should use custom apiHost over default', () => {
       const provider = new VertexChatProvider('gemini-pro', {
