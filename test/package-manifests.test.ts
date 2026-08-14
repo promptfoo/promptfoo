@@ -483,20 +483,22 @@ describe('package manifests', () => {
     const sdkName = '@modelcontextprotocol/sdk';
     const adapterName = '@hono/node-server';
     const sdkRange = packageJson.optionalDependencies?.[sdkName];
+    const adapterVersion = packageJson.dependencies?.[adapterName];
     const lockedSdk = packageLock.packages[`node_modules/${sdkName}`];
     const lockedAdapter = packageLock.packages[`node_modules/${adapterName}`];
 
     expect(sdkRange).toBeDefined();
+    expect(adapterVersion).toBeDefined();
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
-    expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
-    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
+    expect(minVersion(adapterVersion!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe(adapterVersion);
     expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
     expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
-    expect(minVersion(lockedAdapter.version!)?.compare('2.0.12')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
     expect(lockedAdapter.engines?.node).toBe('>=20');
 
     for (const manifestPath of [
@@ -505,7 +507,7 @@ describe('package manifests', () => {
     ]) {
       const manifest = readPackageJson<PackageManifest>(manifestPath);
       expect(manifest.dependencies?.[sdkName], manifestPath).toBe(sdkRange);
-      expect(manifest.dependencies?.[adapterName], manifestPath).toBe('2.0.12');
+      expect(manifest.dependencies?.[adapterName], manifestPath).toBe(adapterVersion);
     }
   });
 
