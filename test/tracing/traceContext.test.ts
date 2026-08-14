@@ -95,7 +95,7 @@ describe('fetchTraceContext', () => {
       spanFilter: ['target'],
     });
 
-    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', { maxSpans: 1 });
     expect(mocks.addSpans).toHaveBeenCalledWith('trace-1', [internalSpan, targetSpan], {
       warnIfMissingTrace: false,
     });
@@ -191,13 +191,38 @@ describe('fetchTraceContext', () => {
       queryDelay: 0,
     });
 
-    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', { earliestStartTime: 150 });
     expect(storedSpans).toEqual([previousTurn, currentTurn]);
     expect(mocks.getSpans).toHaveBeenCalledWith(
       'trace-1',
       expect.objectContaining({ earliestStartTime: 150 }),
     );
     expect(result?.spans.map((span) => span.name)).toEqual(['current.call']);
+  });
+
+  it('forwards query bounds and cancellation without exposing store-only options', async () => {
+    const controller = new AbortController();
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'current', name: 'target.call', startTime: 200 },
+    ]);
+
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      abortSignal: controller.signal,
+      earliestStartTime: 150,
+      includeInternalSpans: true,
+      maxRetries: 0,
+      maxSpans: 50,
+      queryDelay: 0,
+      sanitizeAttributes: false,
+      spanFilter: ['target'],
+    });
+
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
+      abortSignal: controller.signal,
+      earliestStartTime: 150,
+      maxSpans: 50,
+    });
   });
 
   it('discards cyclic parent relationships while preserving valid spans', async () => {

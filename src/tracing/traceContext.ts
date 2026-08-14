@@ -1,6 +1,10 @@
 import logger from '../logger';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
-import { type TraceProviderConfig, TraceProviderError } from './providers/types';
+import {
+  type FetchTraceOptions,
+  type TraceProviderConfig,
+  TraceProviderError,
+} from './providers/types';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
 import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './store';
 import { getToolNameFromAttributes } from './toolAttributes';
@@ -363,6 +367,21 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
   };
 }
 
+function getProviderFetchOptions(
+  spanOptions: Pick<FetchTraceOptions, 'earliestStartTime' | 'maxSpans'>,
+  abortSignal?: AbortSignal,
+): FetchTraceOptions | undefined {
+  const providerOptions = {
+    ...(spanOptions.earliestStartTime !== undefined && {
+      earliestStartTime: spanOptions.earliestStartTime,
+    }),
+    ...(spanOptions.maxSpans !== undefined && { maxSpans: spanOptions.maxSpans }),
+    ...(abortSignal && { abortSignal }),
+  };
+
+  return Object.keys(providerOptions).length > 0 ? providerOptions : undefined;
+}
+
 /**
  * Fetch trace context from an external provider (Tempo, Jaeger, etc.)
  */
@@ -385,6 +404,7 @@ async function fetchFromExternalProvider(
 ): Promise<TraceContextData | null> {
   const { queryDelay, maxRetries, retryDelayMs, redactAttributes, abortSignal, ...spanOptions } =
     options;
+  const providerFetchOptions = getProviderFetchOptions(spanOptions, abortSignal);
 
   let provider: ReturnType<typeof createTraceProvider>;
   try {
@@ -404,7 +424,7 @@ async function fetchFromExternalProvider(
       throw createTraceAbortError(abortSignal);
     }
     try {
-      const result = await provider.fetchTrace(traceId, abortSignal ? { abortSignal } : undefined);
+      const result = await provider.fetchTrace(traceId, providerFetchOptions);
       const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
 
       if (!result || validSpans.length === 0) {
