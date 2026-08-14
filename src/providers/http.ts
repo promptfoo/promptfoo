@@ -12,7 +12,11 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  withGenAISpan,
+} from '../tracing/genaiTracer';
 import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
 import {
   maybeLoadConfigFromExternalFile,
@@ -2588,23 +2592,10 @@ export class HttpProvider implements ApiProvider {
       traceparent: context?.traceparent,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
     return withGenAISpan(
       spanContext,
       () => this.callApiInternal(prompt, context, options),
-      resultExtractor,
+      extractProviderResponseAttributes,
     );
   }
 
