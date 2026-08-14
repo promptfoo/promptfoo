@@ -23,6 +23,26 @@ describe('loadYaml', () => {
     expect(() => loadYaml('!!set {a: not-null}')).toThrow(/cannot resolve a set item/);
   });
 
+  it('does not read inherited values from YAML mapping tags', () => {
+    const mapping = Object.create({ inherited: 'prototype value' }) as Record<string, unknown>;
+    mapping.own = 'own value';
+
+    for (const tag of [yaml.mapTag, yaml.legacyMapTag]) {
+      expect(tag.get(mapping, 'inherited')).toBeNull();
+      expect(tag.get(mapping, 'own')).toBe('own value');
+    }
+  });
+
+  it('preserves timestamps from the first century', () => {
+    expect(loadYaml('0001-01-01')).toEqual(new Date('0001-01-01T00:00:00.000Z'));
+    expect(loadYaml('0050-06-15T12:30:00Z')).toEqual(new Date('0050-06-15T12:30:00.000Z'));
+    expect(loadYaml('0001-02-29')).toBe('0001-02-29');
+  });
+
+  it('preserves implicit null values before a document end marker', () => {
+    expect(loadYaml('optional:\n...\n')).toEqual({ optional: null });
+  });
+
   it('supports large and Map-backed ordered maps while rejecting duplicate keys', () => {
     const entries = Array.from({ length: 2048 }, (_, index) => `{key${index}: ${index}}`);
     expect(loadYaml(`!!omap [${entries.join(', ')}]`)).toHaveLength(2048);

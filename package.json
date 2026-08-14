@@ -195,14 +195,14 @@
     },
     "chevrotain": {
       ".": "11.2.0",
-      "@chevrotain/cst-dts-gen": "13.1.0",
+      "@chevrotain/cst-dts-gen": "11.2.0",
       "@chevrotain/gast": "11.2.0",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "@chevrotain/types": "11.2.0",
       "@chevrotain/utils": "11.2.0"
     },
     "@chevrotain/cst-dts-gen": {
-      ".": "13.1.0",
+      ".": "11.2.0",
       "@chevrotain/gast": "11.2.0",
       "@chevrotain/types": "11.2.0"
     },
@@ -218,7 +218,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.220",
+    "@anthropic-ai/claude-agent-sdk": "0.3.221",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -257,7 +257,7 @@
     "knip": "^6.0.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.142.0",
+    "oxc-parser": "^0.143.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
@@ -275,7 +275,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.220",
+    "@anthropic-ai/claude-agent-sdk": "0.3.221",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -287,7 +287,7 @@
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
-    "@googleapis/sheets": "^13.0.1",
+    "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.15",
     "@langfuse/client": "^5.4.0",
@@ -321,7 +321,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.115.0",
     "@apidevtools/json-schema-ref-parser": "^15.5.1",
-    "@hono/node-server": "2.0.12",
+    "@hono/node-server": "2.1.0",
     "@inquirer/checkbox": "^5.1.0",
     "@inquirer/confirm": "^6.0.8",
     "@inquirer/core": "^11.1.5",

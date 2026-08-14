@@ -52,13 +52,8 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
-    mockStopOTLPReceiver.mockReset();
     mockStopOTLPReceiver.mockResolvedValue(undefined);
-    mockUpdateOTLPReceiverOptions.mockReset();
-    mockRegisterOTLPReceiverTracePolicy.mockReset();
-    mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
       createTrace: mockCreateTrace,
