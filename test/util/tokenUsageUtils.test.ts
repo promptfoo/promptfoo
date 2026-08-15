@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAssertionTokenUsage,
   accumulateAttackerTokenUsage,
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyAssertions,
@@ -338,6 +340,72 @@ describe('tokenUsageUtils', () => {
         attacker: { total: 20, prompt: 15, completion: 5, numRequests: 2 },
       });
     });
+
+    it('routes grading-model work nested in an attack task into the grading bucket', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          assertions: {
+            total: 25,
+            prompt: 18,
+            completion: 7,
+            numRequests: 0,
+            completionDetails: { reasoning: 4 },
+          },
+        },
+      });
+
+      expect(target).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        attacker: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+        assertions: {
+          total: 25,
+          prompt: 18,
+          completion: 7,
+          numRequests: 0,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      expect(target.attacker).not.toHaveProperty('assertions');
+    });
+  });
+
+  describe('accumulateGradingResponseTokenUsage', () => {
+    it('counts grading tasks once even when a task reports multiple model calls', () => {
+      const target = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(target, {
+        tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
+      });
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: {
+          total: 12,
+          prompt: 8,
+          completion: 4,
+          numRequests: 2,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+      accumulateGradingResponseTokenUsage(target, { tokenUsage: { total: 7, prompt: 5 } });
+      accumulateGradingResponseTokenUsage(target, {});
+
+      expect(target).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        assertions: {
+          total: 19,
+          prompt: 13,
+          completion: 4,
+          numRequests: 3,
+          completionDetails: { reasoning: 3 },
+        },
+      });
+    });
   });
 
   describe('accumulateGenerationTokenUsage', () => {
@@ -391,14 +459,44 @@ describe('tokenUsageUtils', () => {
       expect(assertions.total).toBe(0);
     });
 
-    it('counts the request and folds in reported assertion token usage', () => {
+    it('preserves every request represented by cumulative assertion token usage', () => {
       const assertions = createEmptyAssertions();
       accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
 
-      expect(assertions.numRequests).toBe(1);
+      expect(assertions.numRequests).toBe(3);
       expect(assertions.total).toBe(9);
       expect(assertions.prompt).toBe(5);
       expect(assertions.completion).toBe(4);
+    });
+
+    it('counts legacy grading usage without an explicit request count once', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4 });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+  });
+
+  describe('accumulateAssertionTokenUsage', () => {
+    it('preserves cumulative grader requests and reasoning details', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateAssertionTokenUsage(assertions, {
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
+
+      expect(assertions).toMatchObject({
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
     });
   });
 

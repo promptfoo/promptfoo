@@ -803,6 +803,10 @@ describe('RedteamGoatProvider', () => {
         prompt: 'test response',
         response: 'second harmful response',
       });
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: true,
+        tokensUsed: { total: 15, prompt: 7, completion: 8, numRequests: 3 },
+      });
       expect(mockFetch).toHaveBeenCalledTimes(3); // All three turns
     });
 

@@ -43,6 +43,7 @@ import {
   isBasicRefusal,
 } from '../../util';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
@@ -931,10 +932,10 @@ export class HydraProvider implements ApiProvider {
             gradingContext,
           );
           graderResult = grade;
-          storedGraderResult = {
+          storedGraderResult = accumulateGraderResult(storedGraderResult, {
             ...grade,
             assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          });
 
           logger.debug(`${this.logPrefix} Grader result`, {
             turn,

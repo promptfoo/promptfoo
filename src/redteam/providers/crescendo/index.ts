@@ -15,6 +15,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -46,6 +47,7 @@ import {
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
@@ -556,6 +558,7 @@ export class CrescendoProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          totalTokenUsage,
           options,
         );
         logger.debug(
@@ -683,10 +686,10 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = {
+            storedGraderResult = accumulateGraderResult(storedGraderResult, {
               ...grade,
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            });
           }
         }
 
@@ -727,7 +730,7 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output, options);
+        const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -1257,6 +1260,7 @@ export class CrescendoProvider implements ApiProvider {
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
@@ -1297,6 +1301,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
+    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
@@ -1326,7 +1331,11 @@ export class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {
+  private async getEvalScore(
+    lastResponse: string,
+    tokenUsage: TokenUsage,
+    options?: CallApiOptionsParams,
+  ): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );
@@ -1358,6 +1367,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);

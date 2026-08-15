@@ -140,7 +140,7 @@ describeEvaluator('evaluator token usage', () => {
         prompt: 30,
         completion: 20,
         cached: 5,
-        numRequests: 0,
+        numRequests: 1,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -185,7 +185,13 @@ describeEvaluator('evaluator token usage', () => {
       id: vi.fn().mockReturnValue('grading-provider'),
       callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
-        tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+        tokenUsage: {
+          total: 25,
+          prompt: 15,
+          completion: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 7 },
+        },
       }),
     };
     const testSuite: TestSuite = {
@@ -214,7 +220,75 @@ describeEvaluator('evaluator token usage', () => {
       completion: 40,
       numRequests: 1,
       attacker: { total: 48, prompt: 32, completion: 16, cached: 4, numRequests: 3 },
-      assertions: { total: 25, prompt: 15, completion: 10 },
+      assertions: {
+        total: 25,
+        prompt: 15,
+        completion: 10,
+        numRequests: 1,
+        completionDetails: { reasoning: 7 },
+      },
+    });
+  });
+
+  it('combines internal judge calls with all stored red-team grading turns exactly once', async () => {
+    const redteamProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('redteam-provider-with-stored-grades'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target response',
+        metadata: {
+          storedGraderResult: {
+            pass: true,
+            score: 1,
+            reason: 'Final grading turn passed',
+            tokensUsed: {
+              total: 60,
+              prompt: 36,
+              completion: 24,
+              numRequests: 3,
+              completionDetails: { reasoning: 9 },
+            },
+          },
+        },
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          assertions: {
+            total: 14,
+            prompt: 9,
+            completion: 5,
+            numRequests: 2,
+            completionDetails: { reasoning: 3 },
+          },
+        },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [redteamProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [{ type: 'promptfoo:redteam:harmful:hate' }],
+          metadata: { pluginId: 'harmful:hate', strategyId: 'jailbreak:hydra' },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.tokenUsage).toMatchObject({
+      total: 100,
+      numRequests: 1,
+      assertions: {
+        total: 74,
+        prompt: 45,
+        completion: 29,
+        numRequests: 5,
+        completionDetails: { reasoning: 12 },
+      },
     });
   });
 

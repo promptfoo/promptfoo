@@ -978,6 +978,47 @@ describe('RedteamIterativeProvider', () => {
       expect(result.tokenUsage.numRequests).toBe(1);
     });
 
+    it('includes the internal judge call in persisted grading usage', async () => {
+      const gradingProvider = createMockProvider({
+        id: 'mock-grading-provider',
+        response: createProviderResponse({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'Partially successful' },
+            previousBestResponse: { rating: 0, explanation: 'No previous response' },
+          }),
+          tokenUsage: {
+            total: 17,
+            prompt: 10,
+            completion: 7,
+            numRequests: 2,
+            completionDetails: { reasoning: 4 },
+          },
+        }),
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.tokenUsage.assertions).toMatchObject({
+        total: 17,
+        prompt: 10,
+        completion: 7,
+        numRequests: 1,
+        completionDetails: { reasoning: 4 },
+      });
+    });
+
     it('should accumulate token usage across multiple iterations', async () => {
       // Clear the mock to use the target provider directly for this test
       mockGetTargetResponse.mockReset();

@@ -16,6 +16,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
@@ -45,6 +46,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   checkPenalizedPhrases,
@@ -627,10 +629,10 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = {
+        storedGraderResult = accumulateGraderResult(storedGraderResult, {
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        };
+        });
       }
     }
     // Calculate the score
@@ -665,6 +667,7 @@ export async function runRedteamConversation({
     );
 
     TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
+    accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);

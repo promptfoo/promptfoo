@@ -1285,6 +1285,7 @@ describe('CustomProvider', () => {
           metadata: 50,
           rationale: 'Not a refusal',
         }),
+        tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
       });
 
       const context = {
@@ -1293,7 +1294,7 @@ describe('CustomProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
       };
 
-      await testProvider.callApi('test prompt', context, options);
+      const result = await testProvider.callApi('test prompt', context, options);
 
       // Scoring provider should be called with options
       expect(mockScoringProvider.callApi).toHaveBeenCalledWith(
@@ -1301,6 +1302,12 @@ describe('CustomProvider', () => {
         expect.any(Object),
         options,
       );
+      expect(result.tokenUsage?.assertions).toMatchObject({
+        total: 26,
+        prompt: 16,
+        completion: 10,
+        numRequests: 2,
+      });
     });
 
     it('should re-throw AbortError and not swallow it', async () => {

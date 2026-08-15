@@ -177,7 +177,33 @@ export function accumulateAttackerTokenUsage(
     return;
   }
   target.attacker ??= createEmptyAssertions();
-  accumulateResponseTokenUsage(target.attacker, response);
+  if (!response.tokenUsage) {
+    accumulateResponseTokenUsage(target.attacker, response);
+    return;
+  }
+
+  const { assertions, ...attackerUsage } = response.tokenUsage;
+  accumulateResponseTokenUsage(target.attacker, { tokenUsage: attackerUsage });
+  if (assertions) {
+    target.assertions ??= createEmptyAssertions();
+    accumulateAssertionTokenUsage(target.assertions, assertions);
+  }
+}
+
+/** Record one strategy grading task while retaining all model usage reported for that task. */
+export function accumulateGradingResponseTokenUsage(
+  target: TokenUsage,
+  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (!response) {
+    return;
+  }
+
+  target.assertions ??= createEmptyAssertions();
+  accumulateAssertionTokenUsage(target.assertions, {
+    ...response.tokenUsage,
+    numRequests: 1,
+  });
 }
 
 /**
@@ -199,8 +225,7 @@ export function accumulateAssertionTokenUsage(
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
-  // Note: We don't accumulate numRequests from the update for assertions
-  // to maintain separation between provider and assertion request counts
+  target.numRequests = addNumbers(target.numRequests, update.numRequests);
 
   // Handle completion details
   if (update.completionDetails) {
@@ -221,10 +246,15 @@ export function accumulateGradingRequest(
   assertions: NonNullable<TokenUsage['assertions']>,
   tokensUsed: Partial<TokenUsage> | undefined,
 ): void {
-  assertions.numRequests = (assertions.numRequests ?? 0) + 1;
-  if (tokensUsed) {
-    accumulateAssertionTokenUsage(assertions, tokensUsed);
+  if (!tokensUsed) {
+    assertions.numRequests = (assertions.numRequests ?? 0) + 1;
+    return;
   }
+
+  accumulateAssertionTokenUsage(assertions, {
+    ...tokensUsed,
+    numRequests: tokensUsed.numRequests ?? 1,
+  });
 }
 
 /**

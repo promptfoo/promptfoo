@@ -43,6 +43,7 @@ import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callTargetProvider,
   getGraderAssertionValue,
@@ -808,10 +809,10 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = {
+          storedGraderResult = accumulateGraderResult(storedGraderResult, {
             ...grade,
             assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          });
         }
 
         if (graderPassed === false) {

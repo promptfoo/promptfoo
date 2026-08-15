@@ -19,6 +19,7 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type GradingResult,
   isApiProvider,
   isProviderOptions,
   type ProviderResponse,
@@ -29,6 +30,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -639,6 +641,43 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
     },
     invoke,
   );
+}
+
+/** Preserve the latest verdict while retaining usage from every strategy grading turn. */
+export function accumulateGraderResult(
+  previous: GradingResult | undefined,
+  current: GradingResult,
+): GradingResult {
+  if (!previous?.tokensUsed) {
+    if (!current.tokensUsed || (current.tokensUsed.numRequests ?? 1) <= 1) {
+      return current;
+    }
+
+    return {
+      ...current,
+      tokensUsed: {
+        ...current.tokensUsed,
+        numRequests: 1,
+      },
+    };
+  }
+
+  const tokensUsed = {
+    ...previous.tokensUsed,
+    numRequests: previous.tokensUsed.numRequests ?? 1,
+    ...(previous.tokensUsed.completionDetails
+      ? { completionDetails: { ...previous.tokensUsed.completionDetails } }
+      : {}),
+  };
+
+  if (current.tokensUsed) {
+    accumulateTokenUsage(tokensUsed, {
+      ...current.tokensUsed,
+      numRequests: current.tokensUsed.numRequests === 0 ? 0 : 1,
+    });
+  }
+
+  return { ...current, tokensUsed };
 }
 
 export interface Message {

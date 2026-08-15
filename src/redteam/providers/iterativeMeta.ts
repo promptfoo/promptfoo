@@ -39,6 +39,7 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -613,7 +614,7 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = graderResult;
+        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult);
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,

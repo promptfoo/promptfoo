@@ -1599,6 +1599,48 @@ describe('CrescendoProvider', () => {
         numRequests: 1,
         cached: 0,
         attacker: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+        assertions: { total: 55, prompt: 27, completion: 28, numRequests: 2 },
+      });
+    });
+
+    it('retains reported usage when the internal refusal judge returns an error', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+      mockScoringProvider.callApi.mockResolvedValue({
+        error: 'Refusal judge failed after inference',
+        tokenUsage: {
+          total: 23,
+          prompt: 14,
+          completion: 9,
+          numRequests: 1,
+          completionDetails: { reasoning: 6 },
+        },
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage?.assertions).toMatchObject({
+        total: 23,
+        prompt: 14,
+        completion: 9,
+        numRequests: 1,
+        completionDetails: { reasoning: 6 },
       });
     });
 
@@ -1841,7 +1883,7 @@ describe('CrescendoProvider', () => {
         tokenUsage: { total: 40, prompt: 18, completion: 22, numRequests: 1, cached: 0 },
       });
 
-      await provider.callApi('test prompt', context);
+      const result = await provider.callApi('test prompt', context);
 
       // Should track scoring provider token usage via TokenUsageTracker
       // Scoring provider is called twice per round: refusal check + internal evaluator
@@ -1852,6 +1894,12 @@ describe('CrescendoProvider', () => {
         completion: 44, // 22 * 2 calls
         numRequests: 2,
         cached: 0,
+      });
+      expect(result.tokenUsage?.assertions).toMatchObject({
+        total: 80,
+        prompt: 36,
+        completion: 44,
+        numRequests: 2,
       });
     });
 

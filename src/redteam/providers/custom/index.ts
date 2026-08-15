@@ -10,6 +10,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -26,6 +27,7 @@ import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
@@ -517,6 +519,7 @@ export class CustomProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          totalTokenUsage,
           options,
         );
         logger.debug(
@@ -572,10 +575,10 @@ export class CustomProvider implements ApiProvider {
               gradingContext,
             );
             graderPassed = grade.pass;
-            storedGraderResult = {
+            storedGraderResult = accumulateGraderResult(storedGraderResult, {
               ...grade,
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            });
           }
         }
 
@@ -594,7 +597,7 @@ export class CustomProvider implements ApiProvider {
           // Note: outputImage not tracked as TargetResponse doesn't include image yet
         });
 
-        const [evalScore] = await this.getEvalScore(lastResponse.output, options);
+        const [evalScore] = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
 
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -949,6 +952,7 @@ export class CustomProvider implements ApiProvider {
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
@@ -989,6 +993,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
+    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
@@ -1020,6 +1025,7 @@ export class CustomProvider implements ApiProvider {
 
   private async getEvalScore(
     lastResponse: string,
+    tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[any, TokenUsage | undefined]> {
     logger.debug(`[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
@@ -1051,6 +1057,7 @@ export class CustomProvider implements ApiProvider {
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
