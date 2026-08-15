@@ -61,8 +61,7 @@ import {
   getShortPluginId,
 } from './util';
 
-import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs, TokenUsage } from '../types/shared';
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
 import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
