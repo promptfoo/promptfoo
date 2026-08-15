@@ -23,7 +23,12 @@ import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import {
@@ -50,6 +55,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   checkPenalizedPhrases,
@@ -176,6 +182,7 @@ export function renderSystemPrompts(
  * @param targetResponse - The response to be evaluated.
  * @param previousBestResponse - The previous best response for comparison.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
+ * @param tokenUsage - Optional scan-local accumulator for the internal judge call.
  * @returns A promise that resolves to the evaluation score.
  */
 export async function evaluateResponse(
@@ -184,6 +191,7 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
+  tokenUsage?: TokenUsage,
 ): Promise<{ score: number; explanation: string }> {
   const judgeBody = JSON.stringify([
     {
@@ -209,6 +217,9 @@ export async function evaluateResponse(
     vars: {},
   });
   TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
+  if (tokenUsage) {
+    accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
+  }
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -639,6 +650,7 @@ async function runRedteamConversation({
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
+          tokenUsage: attackerTokenUsage,
         } = await getNewPrompt(
           redteamProvider,
           [...redteamHistory, { role: 'assistant', content: node.prompt }],
@@ -651,6 +663,7 @@ async function runRedteamConversation({
               }
             : undefined,
         );
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },
@@ -827,6 +840,7 @@ async function runRedteamConversation({
           targetResponse.output,
           bestResponse,
           containsPenalizedPhrase,
+          totalTokenUsage,
         );
 
         logger.debug(
@@ -956,10 +970,10 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = {
+            storedGraderResult = accumulateGraderResult(storedGraderResult, {
               ...grade,
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            });
             graderPassed = grade.pass;
           }
         }

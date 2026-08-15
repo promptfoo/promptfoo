@@ -6,6 +6,7 @@ import {
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
+  accumulateGraderResult,
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
   callGradingProvider,
@@ -1451,6 +1452,117 @@ describe('shared redteam provider utilities', () => {
         undefined,
         undefined,
       );
+    });
+  });
+
+  describe('accumulateGraderResult', () => {
+    it('retains the latest verdict while summing every turn and completion detail', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first turn was safe',
+        tokensUsed: {
+          total: 100,
+          prompt: 70,
+          completion: 30,
+          cached: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 12, cacheCreationInputTokens: 20 },
+        },
+      };
+      const second = {
+        pass: false,
+        score: 0,
+        reason: 'second turn exposed a vulnerability',
+        tokensUsed: {
+          total: 200,
+          prompt: 150,
+          completion: 50,
+          cached: 15,
+          numRequests: 2,
+          completionDetails: { reasoning: 18, cacheCreationInputTokens: 25 },
+        },
+      };
+
+      expect(accumulateGraderResult(first, second)).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'second turn exposed a vulnerability',
+        tokensUsed: {
+          total: 300,
+          prompt: 220,
+          completion: 80,
+          cached: 25,
+          numRequests: 2,
+          completionDetails: { reasoning: 30, cacheCreationInputTokens: 45 },
+        },
+      });
+      expect(first.tokensUsed.completionDetails).toEqual({
+        reasoning: 12,
+        cacheCreationInputTokens: 20,
+      });
+    });
+
+    it('retains prior usage when the final verdict did not require a model call', () => {
+      const previous = {
+        pass: true,
+        score: 1,
+        reason: 'graded by a model',
+        tokensUsed: { total: 75, prompt: 50, completion: 25, numRequests: 1 },
+      };
+      const current = { pass: false, score: 0, reason: 'deterministic verdict' };
+
+      expect(accumulateGraderResult(previous, current)).toMatchObject({
+        ...current,
+        tokensUsed: previous.tokensUsed,
+      });
+    });
+
+    it('infers request counts when accumulating legacy grader responses', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'safe',
+        tokensUsed: { total: 45, prompt: 30, completion: 15 },
+      };
+      const second = {
+        ...first,
+        reason: 'still safe',
+        tokensUsed: { total: 30, prompt: 20, completion: 10 },
+      };
+
+      expect(accumulateGraderResult(first, second).tokensUsed).toMatchObject({
+        total: 75,
+        prompt: 50,
+        completion: 25,
+        numRequests: 2,
+      });
+    });
+
+    it('counts one grading task when its first result includes multiple model calls', () => {
+      const result = {
+        pass: true,
+        score: 1,
+        reason: 'grading task passed',
+        tokensUsed: {
+          total: 75,
+          prompt: 50,
+          completion: 25,
+          numRequests: 4,
+          completionDetails: { reasoning: 8 },
+        },
+      };
+
+      expect(accumulateGraderResult(undefined, result)).toMatchObject({
+        ...result,
+        tokensUsed: { ...result.tokensUsed, numRequests: 1 },
+      });
+    });
+
+    it('leaves entirely deterministic grading results unchanged', () => {
+      const result = { pass: true, score: 1, reason: 'deterministic verdict' };
+
+      expect(accumulateGraderResult(undefined, result)).toBe(result);
     });
   });
 

@@ -10,7 +10,11 @@ import {
 } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -35,6 +39,7 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -257,7 +262,7 @@ export async function runMetaAgentRedteam({
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
     // Agent coordination calls are internal and should not count as target probes.
-    accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
+    accumulateAttackerTokenUsage(totalTokenUsage, agentResp);
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
@@ -609,7 +614,7 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = graderResult;
+        storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult);
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,

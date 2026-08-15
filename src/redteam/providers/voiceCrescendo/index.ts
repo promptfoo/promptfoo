@@ -20,7 +20,11 @@ import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import { textToAudio } from '../../strategies/simpleAudio';
@@ -508,11 +512,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           tokenUsage: redteamTokenUsage,
         } = await this.generateNextVoicePrompt(currentTurn);
         // Redteam generation calls are internal and should not count as target probes.
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: redteamTokenUsage },
-          { countAsRequest: false },
-        );
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: redteamTokenUsage });
         lastPrompt = voicePrompt;
 
         logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);

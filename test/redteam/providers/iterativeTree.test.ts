@@ -156,6 +156,44 @@ describe('RedteamIterativeProvider', () => {
       );
     });
 
+    it('includes internal judge usage in the scan-local grading totals', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          currentResponse: { rating: 8, explanation: 'Good response' },
+          previousBestResponse: { rating: 5, explanation: 'Previous response' },
+        }),
+        tokenUsage: {
+          total: 19,
+          prompt: 11,
+          completion: 8,
+          numRequests: 2,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+      const tokenUsage = createEmptyTokenUsage();
+
+      await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Target response',
+        'Previous response',
+        false,
+        tokenUsage,
+      );
+
+      expect(tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        assertions: {
+          total: 19,
+          prompt: 11,
+          completion: 8,
+          numRequests: 1,
+          completionDetails: { reasoning: 4 },
+        },
+      });
+    });
+
     it('should apply penalty for penalized phrases', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         output: JSON.stringify({
