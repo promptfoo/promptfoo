@@ -323,6 +323,11 @@
       "minimumReleaseAge": "10 days"
     },
     {
+      "description": "Hold Knip below 6.28 until existing public barrel re-exports have been audited; 6.28 changed ignoreExportsUsedInFile and flags 130 established exports",
+      "matchPackageNames": ["knip"],
+      "allowedVersions": "<6.28.0"
+    },
+    {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
