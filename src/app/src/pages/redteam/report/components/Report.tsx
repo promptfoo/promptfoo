@@ -777,8 +777,12 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {selectedPrompt?.metrics?.tokenUsage?.total
-                        ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
+                      {selectedPrompt?.metrics?.tokenUsage
+                        ? `${(
+                            (selectedPrompt.metrics.tokenUsage.total ?? 0) +
+                              (selectedPrompt.metrics.tokenUsage.attacker?.total ?? 0) +
+                              (selectedPrompt.metrics.tokenUsage.assertions?.total ?? 0)
+                          ).toLocaleString()} tokens`
                         : ''}
                     </TooltipContent>
                   </Tooltip>
