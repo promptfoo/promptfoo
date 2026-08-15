@@ -441,6 +441,7 @@ describe('package manifests', () => {
     const agentName = '@anthropic-ai/claude-agent-sdk';
     const sdkVersion = packageJson.dependencies?.[sdkName];
     const agentVersion = packageJson.devDependencies?.[agentName];
+    const sdkPackage = packageLock.packages[`node_modules/${sdkName}`];
     const agentPackage = packageLock.packages[`node_modules/${agentName}`];
 
     expect(sdkVersion).toBeDefined();
@@ -449,14 +450,25 @@ describe('package manifests', () => {
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    expect(packageLock.packages[`node_modules/${sdkName}`].version).toBe(sdkVersion);
-    expect(agentPackage.version).toBe(agentVersion);
+    expect(sdkPackage.version, 'the Anthropic SDK must have a resolved version').toBeDefined();
+    expect(
+      satisfies(sdkPackage.version as string, sdkVersion as string),
+      'the resolved Anthropic SDK must satisfy its declared dependency range',
+    ).toBe(true);
+    expect(
+      agentPackage.version,
+      'the Anthropic agent SDK must have a resolved version',
+    ).toBeDefined();
+    expect(
+      satisfies(agentPackage.version as string, agentVersion as string),
+      'the resolved Anthropic agent SDK must satisfy its declared dependency range',
+    ).toBe(true);
 
     for (const [binaryName, binaryVersion] of Object.entries(
       agentPackage.optionalDependencies ?? {},
     )) {
-      expect(binaryVersion).toBe(agentVersion);
-      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentVersion);
+      expect(binaryVersion).toBe(agentPackage.version);
+      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentPackage.version);
     }
   });
 
@@ -924,7 +936,17 @@ describe('package manifests', () => {
     ).toBeDefined();
     expect(minVersion(parserRange as string)?.compare('15.5.1')).toBeGreaterThanOrEqual(0);
     expect(parserTransportRange, 'the parser must pin its HTTP transport').toBeDefined();
-    expect(satisfies(minVersion(parserTransportRange as string)!, PATCHED_UNDICI_RANGE)).toBe(true);
+    expect(
+      validRange(parserTransportRange as string),
+      'the parser transport dependency must declare a valid semver range',
+    ).not.toBeNull();
+
+    const parserTransportMinVersion = minVersion(parserTransportRange as string);
+    expect(
+      parserTransportMinVersion,
+      'the parser transport range must have a minimum version',
+    ).not.toBeNull();
+    expect(satisfies(parserTransportMinVersion?.version ?? '', PATCHED_UNDICI_RANGE)).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
