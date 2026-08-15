@@ -11,15 +11,15 @@ import {
   providerRemoteGenerationContextPayload,
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { fetchWithRetries } from '../util/fetch/index';
-import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { getRequestTimeoutMs } from './shared';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   Inputs,
   PluginConfig,
   ProviderResponse,
@@ -147,7 +147,11 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         throw err;
       }
       logger.info(`[HarmfulCompletionProvider] ${err}`);
-      const tokenUsage = getErrorTokenUsage(err);
+      const parsedTokenUsage =
+        err && typeof err === 'object' && 'tokenUsage' in err
+          ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
+          : undefined;
+      const tokenUsage = parsedTokenUsage?.success ? parsedTokenUsage.data : undefined;
       return {
         error: `[HarmfulCompletionProvider] ${err}`,
         ...(tokenUsage ? { tokenUsage } : {}),
