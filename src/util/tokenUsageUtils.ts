@@ -176,8 +176,7 @@ export function accumulateAssertionTokenUsage(
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
-  // Note: We don't accumulate numRequests from the update for assertions
-  // to maintain separation between provider and assertion request counts
+  target.numRequests = addNumbers(target.numRequests, update.numRequests);
 
   // Handle completion details
   if (update.completionDetails) {
@@ -198,10 +197,15 @@ export function accumulateGradingRequest(
   assertions: NonNullable<TokenUsage['assertions']>,
   tokensUsed: Partial<TokenUsage> | undefined,
 ): void {
-  assertions.numRequests = (assertions.numRequests ?? 0) + 1;
-  if (tokensUsed) {
-    accumulateAssertionTokenUsage(assertions, tokensUsed);
+  if (!tokensUsed) {
+    assertions.numRequests = (assertions.numRequests ?? 0) + 1;
+    return;
   }
+
+  accumulateAssertionTokenUsage(assertions, {
+    ...tokensUsed,
+    numRequests: tokensUsed.numRequests ?? 1,
+  });
 }
 
 /**

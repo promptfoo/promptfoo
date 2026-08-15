@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAssertionTokenUsage,
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
@@ -350,14 +351,44 @@ describe('tokenUsageUtils', () => {
       expect(assertions.total).toBe(0);
     });
 
-    it('counts the request and folds in reported assertion token usage', () => {
+    it('preserves every request represented by cumulative assertion token usage', () => {
       const assertions = createEmptyAssertions();
       accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
 
-      expect(assertions.numRequests).toBe(1);
+      expect(assertions.numRequests).toBe(3);
       expect(assertions.total).toBe(9);
       expect(assertions.prompt).toBe(5);
       expect(assertions.completion).toBe(4);
+    });
+
+    it('counts legacy grading usage without an explicit request count once', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4 });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+  });
+
+  describe('accumulateAssertionTokenUsage', () => {
+    it('preserves cumulative grader requests and reasoning details', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateAssertionTokenUsage(assertions, {
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
+
+      expect(assertions).toMatchObject({
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
     });
   });
 
