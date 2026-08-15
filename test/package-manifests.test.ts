@@ -244,7 +244,16 @@ describe('package manifests', () => {
       packages: Record<string, { resolved?: string }>;
     }>('package-lock.json');
     const privateRegistryPackages = Object.entries(packageLock.packages)
-      .filter(([, packageInfo]) => packageInfo.resolved?.includes('.internal.api.openai.org/'))
+      .filter(([, packageInfo]) => {
+        if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
+          return false;
+        }
+
+        const hostname = new URL(packageInfo.resolved).hostname;
+        return (
+          hostname === 'internal.api.openai.org' || hostname.endsWith('.internal.api.openai.org')
+        );
+      })
       .map(([packagePath]) => packagePath);
 
     expect(privateRegistryPackages).toEqual([]);
