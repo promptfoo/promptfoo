@@ -724,7 +724,7 @@ describe('package manifests', () => {
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
-    const pinnedParserPackages = ['chevrotain', ...pinnedGrammarPackages];
+    const pinnedParserPackages = ['chevrotain', 'chevrotain-allstar', ...pinnedGrammarPackages];
 
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
