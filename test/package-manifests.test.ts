@@ -239,6 +239,31 @@ describe('package manifests', () => {
     expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
   });
 
+  it('holds Knip below the incompatible public re-export audit', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const knipRange = packageJson.devDependencies?.knip;
+    const knipVersion = packageLock.packages['node_modules/knip']?.version;
+    const knipCap = renovateConfig.packageRules?.find(
+      (rule) => rule.matchPackageNames?.includes('knip') && rule.allowedVersions,
+    )?.allowedVersions;
+
+    expect(knipRange, 'the root manifest must constrain Knip').toBeDefined();
+    expect(satisfies('6.27.0', knipRange as string)).toBe(true);
+    expect(satisfies('6.28.0', knipRange as string)).toBe(false);
+    expect(knipCap).toBe('<6.28.0');
+    expect(knipVersion, 'the root lockfile must resolve Knip').toBeDefined();
+    expect(satisfies(knipVersion as string, knipRange as string)).toBe(true);
+  });
+
   it('keeps jsdom on a release the supported Node floor can install', () => {
     const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
       'package.json',
@@ -855,6 +880,13 @@ describe('package manifests', () => {
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
     const PATCHED_UNDICI = '7.29.0';
+    const rootPackageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const providerUtilsOverride = rootPackageJson.overrides?.['@ai-sdk/provider-utils'];
+
+    expect(providerUtilsOverride).toMatchObject({ undici: '$undici' });
+
     const projects = [
       // The root declares undici directly; code-scan-action only pins it through an
       // override, since it arrives transitively via @actions/github.

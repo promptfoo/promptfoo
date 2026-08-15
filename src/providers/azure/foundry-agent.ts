@@ -39,7 +39,6 @@ import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-p
 import type { Span } from '@opentelemetry/api';
 import type {
   Response as OpenAIResponse,
-  ResponseCreateParamsNonStreaming,
   ResponseFunctionToolCall,
   ResponseFunctionToolCallOutputItem,
 } from 'openai/resources/responses/responses';
@@ -53,6 +52,9 @@ import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 type FoundryAgent = Agent;
+type FoundryResponseCreateParams = Parameters<
+  ReturnType<AzureAIProjectClient['getOpenAIClient']>['responses']['create']
+>[0] & { stream?: false };
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
 };
@@ -672,7 +674,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       let response;
       try {
         response = await openAIClient.responses.create(
-          body as ResponseCreateParamsNonStreaming,
+          body as FoundryResponseCreateParams,
           responseOptions,
         );
         emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
@@ -704,7 +706,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             {
               input: outputs as ResponseFunctionToolCallOutputItem[],
               previous_response_id: response.id,
-            } as ResponseCreateParamsNonStreaming,
+            } as FoundryResponseCreateParams,
             responseOptions,
           );
           emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
