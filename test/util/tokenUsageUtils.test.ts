@@ -377,6 +377,36 @@ describe('tokenUsageUtils', () => {
 
       expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
     });
+
+    it('counts fresh matcher usage when normalization replaced its missing request count with zero', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, {
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        cached: 0,
+        numRequests: 0,
+      });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+
+    it('counts partially cached grading usage as one fresh request', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, cached: 3, numRequests: 0 });
+
+      expect(assertions).toMatchObject({ total: 9, cached: 3, numRequests: 1 });
+    });
+
+    it('preserves an explicit zero request count from cached grading usage', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, cached: 9, numRequests: 0 });
+
+      expect(assertions).toMatchObject({ total: 9, cached: 9, numRequests: 0 });
+    });
   });
 
   describe('accumulateAssertionTokenUsage', () => {

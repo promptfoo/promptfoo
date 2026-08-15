@@ -194,8 +194,9 @@ export function accumulateAssertionTokenUsage(
 }
 
 /**
- * Account for a single grading (assertion) request: every grading call counts as one
- * assertion request, and its token usage is folded in when the grader reported any.
+ * Account for reported grading usage, preserving cumulative request counts and cached
+ * responses that represent zero new requests. Legacy usage without a request count,
+ * fresh matcher usage normalized to zero, and calls without usage each count once.
  * Shared by the live grading path and the EvalResult -> EvaluateResult reconstruction so
  * the two stay in sync. Mutates {@code assertions}.
  */
@@ -208,9 +209,13 @@ export function accumulateGradingRequest(
     return;
   }
 
+  const reportedTotal = tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
+  const hasUncachedUsage = reportedTotal > (tokensUsed.cached ?? 0);
+
   accumulateAssertionTokenUsage(assertions, {
     ...tokensUsed,
-    numRequests: tokensUsed.numRequests ?? 1,
+    numRequests:
+      tokensUsed.numRequests === 0 && hasUncachedUsage ? 1 : (tokensUsed.numRequests ?? 1),
   });
 }
 

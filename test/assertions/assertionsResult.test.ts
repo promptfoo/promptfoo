@@ -6,7 +6,7 @@ import {
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
 
-import type { AssertionSet, GradingResult } from '../../src/types/index';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
 vi.mock('../../src/envars');
 
@@ -322,6 +322,33 @@ describe('AssertionsResult', () => {
           tokensUsed: DEFAULT_TOKENS_USED,
         },
       );
+    });
+
+    it('exposes completion details to typed scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Grading passed',
+          tokensUsed: {
+            total: 12,
+            prompt: 5,
+            completion: 7,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: context?.tokensUsed?.completionDetails?.reasoning ?? 0,
+        reason: 'Reasoning tokens are available',
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).score).toBe(7);
     });
 
     it('should handle scoring function errors', async () => {
