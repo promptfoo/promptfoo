@@ -188,7 +188,7 @@ describe('doRemoteGrading', () => {
 
     const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
 
-    expect(result.tokensUsed).toMatchObject({ total: 97, numRequests: 0 });
+    expect(result.tokensUsed).toEqual({ total: 97, cached: 97, numRequests: 0 });
   });
 
   it('propagates the active grader traceparent to remote grading requests', async () => {

@@ -1,6 +1,5 @@
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
-import { accumulateAssertionTokenUsage } from '../util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
 
@@ -125,7 +124,27 @@ export class AssertionsResult {
     }
 
     if (result.tokensUsed) {
-      accumulateAssertionTokenUsage(this.tokensUsed, result.tokensUsed);
+      for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
+        this.tokensUsed[field] += result.tokensUsed[field] ?? 0;
+      }
+
+      if (result.tokensUsed.completionDetails) {
+        const currentDetails = this.tokensUsed.completionDetails;
+        const incomingDetails = result.tokensUsed.completionDetails;
+        this.tokensUsed.completionDetails = {
+          reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
+          acceptedPrediction:
+            (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
+          rejectedPrediction:
+            (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
+          cacheReadInputTokens:
+            (currentDetails?.cacheReadInputTokens ?? 0) +
+            (incomingDetails.cacheReadInputTokens ?? 0),
+          cacheCreationInputTokens:
+            (currentDetails?.cacheCreationInputTokens ?? 0) +
+            (incomingDetails.cacheCreationInputTokens ?? 0),
+        };
+      }
     }
 
     if (result.pass) {
