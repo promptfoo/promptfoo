@@ -193,6 +193,19 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps Renovate on the npm major used by CI', () => {
+    const renovateConfig = readPackageJson<{
+      constraints?: {
+        npm?: string;
+      };
+    }>('renovate.json');
+    const npmConstraint = renovateConfig.constraints?.npm;
+
+    expect(npmConstraint, 'Renovate must constrain its npm version').toBeDefined();
+    expect(satisfies('11.18.0', npmConstraint as string)).toBe(true);
+    expect(satisfies('12.0.0', npmConstraint as string)).toBe(false);
+  });
+
   it('keeps jsdom on a release the supported Node floor can install', () => {
     const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
       'package.json',

@@ -6,7 +6,7 @@
   "rangeStrategy": "auto",
   "postUpdateOptions": [],
   "constraints": {
-    "npm": ">= 11"
+    "npm": ">=11.18.0 <12"
   },
   "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true",
   "lockFileMaintenance": {
