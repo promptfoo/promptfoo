@@ -193,6 +193,131 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps Renovate on the npm major used by CI', () => {
+    const renovateConfig = readPackageJson<{
+      constraints?: {
+        npm?: string;
+      };
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchFileNames?: string[];
+        matchPackageNames?: string[];
+        matchUpdateTypes?: string[];
+      }>;
+    }>('renovate.json');
+    const npmConstraint = renovateConfig.constraints?.npm;
+
+    expect(npmConstraint, 'Renovate must constrain its npm version').toBeDefined();
+    expect(validRange(npmConstraint)).not.toBeNull();
+    expect(satisfies('11.17.0', npmConstraint as string)).toBe(false);
+    expect(satisfies('11.18.0', npmConstraint as string)).toBe(true);
+    expect(satisfies('12.0.0', npmConstraint as string)).toBe(false);
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false &&
+          rule.matchFileNames?.includes('renovate.json') &&
+          rule.matchPackageNames?.includes('npm') &&
+          rule.matchUpdateTypes?.includes('major'),
+      ),
+    ).toBe(true);
+  });
+
+  it('applies the npm release-age policy to Renovate lockfile maintenance', () => {
+    const renovateConfig = readPackageJson<{
+      npmrc?: string;
+      packageRules?: Array<{
+        matchDatasources?: string[];
+        minimumReleaseAge?: string;
+      }>;
+    }>('renovate.json');
+    const npmReleaseAgeRule = renovateConfig.packageRules?.find((rule) =>
+      rule.matchDatasources?.includes('npm'),
+    );
+
+    expect(npmReleaseAgeRule?.minimumReleaseAge).toBe('10 days');
+    expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
+  });
+
+  it('keeps private npm registry endpoints out of the published lockfile', () => {
+    const packageLock = readPackageJson<{
+      packages: Record<string, { resolved?: string }>;
+    }>('package-lock.json');
+    const privateRegistryPackages = Object.entries(packageLock.packages)
+      .filter(([, packageInfo]) => {
+        if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
+          return false;
+        }
+
+        const hostname = new URL(packageInfo.resolved).hostname;
+        return (
+          hostname === 'internal.api.openai.org' || hostname.endsWith('.internal.api.openai.org')
+        );
+      })
+      .map(([packagePath]) => packagePath);
+
+    expect(privateRegistryPackages).toEqual([]);
+  });
+
+  it('holds Knip below the incompatible public re-export audit', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const knipRange = packageJson.devDependencies?.knip;
+    const knipVersion = packageLock.packages['node_modules/knip']?.version;
+    const knipCap = renovateConfig.packageRules?.find(
+      (rule) => rule.matchPackageNames?.includes('knip') && rule.allowedVersions,
+    )?.allowedVersions;
+
+    expect(knipRange, 'the root manifest must constrain Knip').toBeDefined();
+    expect(satisfies('6.27.0', knipRange as string)).toBe(true);
+    expect(satisfies('6.28.0', knipRange as string)).toBe(false);
+    expect(knipCap).toBe('<6.28.0');
+    expect(knipVersion, 'the root lockfile must resolve Knip').toBeDefined();
+    expect(satisfies(knipVersion as string, knipRange as string)).toBe(true);
+  });
+
+  it('holds TanStack Table below v9 until the shared table migration is complete', () => {
+    const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const tablePackages = ['@tanstack/react-table', '@tanstack/table-core'];
+    const tableVersionCap = renovateConfig.packageRules?.find(
+      (rule) =>
+        rule.allowedVersions &&
+        tablePackages.every((packageName) => rule.matchPackageNames?.includes(packageName)),
+    )?.allowedVersions;
+
+    expect(tableVersionCap, 'Renovate must keep the TanStack Table packages on v8').toBe('<9');
+
+    for (const packageName of tablePackages) {
+      const packageRange = appPackageJson.devDependencies?.[packageName];
+      const packageVersion = packageLock.packages[`node_modules/${packageName}`]?.version;
+
+      expect(packageRange, `${packageName} must be declared in the app workspace`).toBeDefined();
+      expect(satisfies('9.0.0', packageRange as string), `${packageName} must exclude v9`).toBe(
+        false,
+      );
+      expect(packageVersion, `${packageName} must be present in the lockfile`).toBeDefined();
+      expect(satisfies(packageVersion as string, packageRange as string)).toBe(true);
+      expect(satisfies(packageVersion as string, tableVersionCap as string)).toBe(true);
+    }
+  });
+
   it('keeps jsdom on a release the supported Node floor can install', () => {
     const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
       'package.json',
@@ -633,7 +758,7 @@ describe('package manifests', () => {
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
-    const pinnedParserPackages = ['chevrotain', ...pinnedGrammarPackages];
+    const pinnedParserPackages = ['chevrotain', 'chevrotain-allstar', ...pinnedGrammarPackages];
 
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
@@ -809,6 +934,13 @@ describe('package manifests', () => {
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
     const PATCHED_UNDICI = '7.29.0';
+    const rootPackageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const providerUtilsOverride = rootPackageJson.overrides?.['@ai-sdk/provider-utils'];
+
+    expect(providerUtilsOverride).toMatchObject({ undici: '$undici' });
+
     const projects = [
       // The root declares undici directly; code-scan-action only pins it through an
       // override, since it arrives transitively via @actions/github.

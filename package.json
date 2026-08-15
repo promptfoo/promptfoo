@@ -124,6 +124,9 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-is": "^19.2.4",
+    "@ai-sdk/provider-utils": {
+      "undici": "$undici"
+    },
     "*": {
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
@@ -218,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.221",
+    "@anthropic-ai/claude-agent-sdk": "0.3.222",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -254,7 +257,7 @@
     "drizzle-kit": "^0.31.10",
     "husky": "^9.1.7",
     "ibm-cloud-sdk-core": "^5.6.0",
-    "knip": "^6.0.0",
+    "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
     "oxc-parser": "^0.143.0",
@@ -275,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.221",
+    "@anthropic-ai/claude-agent-sdk": "0.3.222",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
