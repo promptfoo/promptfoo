@@ -190,6 +190,11 @@
       "groupName": "TanStack packages"
     },
     {
+      "description": "Keep TanStack Table on v8 until the shared data tables migrate to v9's feature registration, hooks, row models, state APIs, and generic types; the v9 upgrade currently breaks the production build and every shared-table interaction.",
+      "matchPackageNames": ["@tanstack/react-table", "@tanstack/table-core"],
+      "allowedVersions": "<9"
+    },
+    {
       "description": "Group Testing Library packages together",
       "matchPackagePatterns": ["^@testing-library/"],
       "groupName": "Testing Library packages"

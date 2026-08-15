@@ -284,6 +284,40 @@ describe('package manifests', () => {
     expect(satisfies(knipVersion as string, knipRange as string)).toBe(true);
   });
 
+  it('holds TanStack Table below v9 until the shared table migration is complete', () => {
+    const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const tablePackages = ['@tanstack/react-table', '@tanstack/table-core'];
+    const tableVersionCap = renovateConfig.packageRules?.find(
+      (rule) =>
+        rule.allowedVersions &&
+        tablePackages.every((packageName) => rule.matchPackageNames?.includes(packageName)),
+    )?.allowedVersions;
+
+    expect(tableVersionCap, 'Renovate must keep the TanStack Table packages on v8').toBe('<9');
+
+    for (const packageName of tablePackages) {
+      const packageRange = appPackageJson.devDependencies?.[packageName];
+      const packageVersion = packageLock.packages[`node_modules/${packageName}`]?.version;
+
+      expect(packageRange, `${packageName} must be declared in the app workspace`).toBeDefined();
+      expect(satisfies('9.0.0', packageRange as string), `${packageName} must exclude v9`).toBe(
+        false,
+      );
+      expect(packageVersion, `${packageName} must be present in the lockfile`).toBeDefined();
+      expect(satisfies(packageVersion as string, packageRange as string)).toBe(true);
+      expect(satisfies(packageVersion as string, tableVersionCap as string)).toBe(true);
+    }
+  });
+
   it('keeps jsdom on a release the supported Node floor can install', () => {
     const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
       'package.json',
