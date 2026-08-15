@@ -198,6 +198,12 @@ describe('package manifests', () => {
       constraints?: {
         npm?: string;
       };
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchFileNames?: string[];
+        matchPackageNames?: string[];
+        matchUpdateTypes?: string[];
+      }>;
     }>('renovate.json');
     const npmConstraint = renovateConfig.constraints?.npm;
 
@@ -206,6 +212,31 @@ describe('package manifests', () => {
     expect(satisfies('11.17.0', npmConstraint as string)).toBe(false);
     expect(satisfies('11.18.0', npmConstraint as string)).toBe(true);
     expect(satisfies('12.0.0', npmConstraint as string)).toBe(false);
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false &&
+          rule.matchFileNames?.includes('renovate.json') &&
+          rule.matchPackageNames?.includes('npm') &&
+          rule.matchUpdateTypes?.includes('major'),
+      ),
+    ).toBe(true);
+  });
+
+  it('applies the npm release-age policy to Renovate lockfile maintenance', () => {
+    const renovateConfig = readPackageJson<{
+      npmrc?: string;
+      packageRules?: Array<{
+        matchDatasources?: string[];
+        minimumReleaseAge?: string;
+      }>;
+    }>('renovate.json');
+    const npmReleaseAgeRule = renovateConfig.packageRules?.find((rule) =>
+      rule.matchDatasources?.includes('npm'),
+    );
+
+    expect(npmReleaseAgeRule?.minimumReleaseAge).toBe('10 days');
+    expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
   });
 
   it('keeps jsdom on a release the supported Node floor can install', () => {
