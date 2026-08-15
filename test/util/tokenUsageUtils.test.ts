@@ -310,7 +310,7 @@ describe('tokenUsageUtils', () => {
   });
 
   describe('accumulateGenerationTokenUsage', () => {
-    it('adds generation totals without inflating target request counts', () => {
+    it('keeps generation usage separate from target tokens and request counts', () => {
       const target = createEmptyTokenUsage();
       target.numRequests = 2;
 
@@ -325,11 +325,12 @@ describe('tokenUsageUtils', () => {
       ).toBe(true);
 
       expect(target).toMatchObject({
-        total: 15,
-        prompt: 9,
-        completion: 6,
+        total: 0,
+        prompt: 0,
+        completion: 0,
         numRequests: 2,
         assertions: { total: 0, numRequests: 0 },
+        generation: { total: 15, prompt: 9, completion: 6, numRequests: 3 },
       });
     });
 
@@ -337,8 +338,16 @@ describe('tokenUsageUtils', () => {
       const target = createEmptyTokenUsage();
 
       expect(accumulateGenerationTokenUsage(target, 'invalid')).toBe(false);
-      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
+      expect(accumulateGenerationTokenUsage(target, {})).toBe(false);
       expect(target.total).toBe(0);
+    });
+
+    it('preserves generation request counts when a provider reports no token totals', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(true);
+      expect(target.generation).toMatchObject({ total: 0, numRequests: 3 });
+      expect(target.numRequests).toBe(0);
     });
   });
 

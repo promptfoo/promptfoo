@@ -12,6 +12,7 @@ import {
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { fetchWithRetries } from '../util/fetch/index';
+import { getErrorTokenUsage } from '../util/tokenUsageUtils';
 import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -114,7 +115,17 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+        const body = await response.text();
+        const error = new Error(`API call failed with status ${response.status}: ${body}`);
+        try {
+          const parsed = JSON.parse(body) as { tokenUsage?: TokenUsage };
+          if (parsed.tokenUsage) {
+            Object.assign(error, { tokenUsage: parsed.tokenUsage });
+          }
+        } catch {
+          // Preserve the original error for non-JSON responses.
+        }
+        throw error;
       }
 
       const data = await response.json();
@@ -128,6 +139,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 
       return {
         output: validOutputs,
+        ...(data.tokenUsage ? { tokenUsage: data.tokenUsage as TokenUsage } : {}),
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
@@ -135,8 +147,10 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         throw err;
       }
       logger.info(`[HarmfulCompletionProvider] ${err}`);
+      const tokenUsage = getErrorTokenUsage(err);
       return {
         error: `[HarmfulCompletionProvider] ${err}`,
+        ...(tokenUsage ? { tokenUsage } : {}),
       };
     }
   }

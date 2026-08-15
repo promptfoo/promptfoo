@@ -135,8 +135,12 @@ describe('contracts leaf surface', () => {
           numRequests: 1,
           completionDetails: { reasoning: 1 },
         },
+        generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
       });
       expect(parsed.success).toBe(true);
+      expect(parsed).toMatchObject({
+        data: { generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 } },
+      });
     });
 
     it('parses CompletionTokenDetailsSchema with all fields', () => {
