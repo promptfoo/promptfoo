@@ -8,7 +8,7 @@
   "constraints": {
     "npm": ">=11.18.0 <12"
   },
-  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true",
+  "npmrc": "registry=https://registry.npmjs.org/\nengine-strict=true\nmin-release-age=10",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -26,6 +26,13 @@
     {
       "description": "Disable major Node.js version updates",
       "matchPackageNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "Keep Renovate's npm tool constraint on the CI-supported major; npm 12 breaks bundled lockfile maintenance",
+      "matchFileNames": ["renovate.json"],
+      "matchPackageNames": ["npm"],
       "matchUpdateTypes": ["major"],
       "enabled": false
     },
