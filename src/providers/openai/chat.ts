@@ -5,11 +5,6 @@ import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import {
-  extractProviderResponseAttributes,
-  type GenAISpanContext,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { parseFileUrl } from '../../util/functions/loadFunction';
@@ -28,6 +23,12 @@ import {
   transformToolChoice,
   transformTools,
 } from '../shared';
+import {
+  extractProviderResponseAttributes,
+  type GenAISpanContext,
+  withGenAISpan,
+  withGenAIToolSpan,
+} from '../tracing';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
 import {
@@ -181,6 +182,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     functionName: string,
     args: string,
     config: OpenAiCompletionOptions,
+    callId?: string,
   ): Promise<string> {
     try {
       // Check if we've already loaded this function
@@ -212,7 +214,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       // Format the result
       if (result === undefined || result === null) {
@@ -231,10 +235,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error; // Re-throw so caller can handle fallback behavior
     }
-  }
-
-  protected getGenAISystem(): string {
-    return 'openai';
   }
 
   async getOpenAiBody(
@@ -442,6 +442,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const spanContext: GenAISpanContext = {
       system: this.getGenAISystem(),
       operationName: 'chat',
+      openaiApiType: 'chat_completions',
       model: this.modelName,
       providerId: this.id(),
       // Optional request parameters
@@ -451,7 +452,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       stopSequences: this.config.stop,
       // Promptfoo context from test case if available
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -776,6 +777,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 functionName,
                 functionCall.arguments || functionCall.function?.arguments,
                 config,
+                functionCall.call_id ?? functionCall.id,
               );
               results.push(functionResult);
               hasSuccessfulCallback = true;

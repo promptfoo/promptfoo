@@ -10,16 +10,16 @@ import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
+  addActiveSpanRoleAttribute,
   emitTurnMarkerSpan,
+  GenAIAttributes,
   getGenAITracer,
   getTraceparent,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
-import {
-  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
-  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
-} from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -30,6 +30,11 @@ import {
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
+import {
+  getConfiguredTracingExport,
+  isActiveTracingExport,
+  waitForNativeTraceExport,
+} from './tracing';
 import type {
   AgentDefinition,
   CanUseTool,
@@ -167,6 +172,9 @@ function emitToolSpan(
   try {
     const tracer = getGenAITracer();
     const attributes: Record<string, string | number | boolean> = {
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.call.id': entry.id,
+      'gen_ai.tool.name': entry.name,
       'tool.name': entry.name,
       'tool.is_error': isError,
     };
@@ -190,7 +198,7 @@ function emitToolSpan(
 
     const span = tracer.startSpan(`tool ${entry.name}`, {
       startTime: startTimeMs,
-      attributes,
+      attributes: addActiveSpanRoleAttribute(attributes),
     });
     span.setStatus({
       code: isError || incomplete ? SpanStatusCode.ERROR : SpanStatusCode.OK,
@@ -383,6 +391,13 @@ export interface ClaudeCodeOptions {
 
   max_turns?: number;
   max_thinking_tokens?: number;
+
+  /**
+   * Enable the Claude subprocess's native model, tool, and subagent OpenTelemetry spans.
+   * Existing OTEL environment settings take precedence over Promptfoo's local defaults.
+   * @default false
+   */
+  deep_tracing?: boolean;
 
   mcp?: MCPConfig;
   strict_mcp_config?: boolean; // only allow MCP servers that are explicitly configured—no discovery; true by default
@@ -1142,6 +1157,29 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
+    if (config.deep_tracing) {
+      const receiverExport = getConfiguredTracingExport();
+
+      env.CLAUDE_CODE_ENABLE_TELEMETRY ??= '1';
+      env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA ??= '1';
+      env.OTEL_TRACES_EXPORTER ??= 'otlp';
+      env.OTEL_EXPORTER_OTLP_ENDPOINT ??= receiverExport?.endpoint ?? 'http://127.0.0.1:4318';
+      env.OTEL_EXPORTER_OTLP_PROTOCOL ??=
+        receiverExport?.format === 'json' ? 'http/json' : 'http/protobuf';
+      // The SDK's five-second default is longer than Promptfoo's three-second fetch delay.
+      env.OTEL_TRACES_EXPORT_INTERVAL ??= '1000';
+    }
+
+    const sdkExportsNativeSpans =
+      env.CLAUDE_CODE_ENABLE_TELEMETRY === '1' &&
+      (env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA === '1' ||
+        env.ENABLE_ENHANCED_TELEMETRY_BETA === '1') &&
+      env.OTEL_TRACES_EXPORTER?.split(',').some((exporter) => exporter.trim() === 'otlp') &&
+      isActiveTracingExport(
+        env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? env.OTEL_EXPORTER_OTLP_PROTOCOL,
+      );
+
     const subagentLimits = [
       ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],
       ['max_concurrent_subagents', 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS'],
@@ -1458,8 +1496,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       return await withGenAISpan(
         {
           system: 'anthropic',
-          operationName: 'chat',
-          model: config.model || 'default',
+          operationName: 'invoke_agent',
+          model: config.model || 'Claude Code',
+          agentName: 'Claude Code',
           providerId: this.providerId,
           traceparent: context?.traceparent,
           maxTokens: config.max_thinking_tokens,
@@ -1517,12 +1556,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Tool spans are tagged with the active turn index via `toolTurnIndex`.
           let turnCount = 0;
           const toolTurnIndex = new Map<string, number>();
+          const deferredSyntheticSpans: Array<() => void> = [];
+          const emitOrDeferSyntheticSpan = (emit: () => void): void => {
+            if (sdkExportsNativeSpans) {
+              deferredSyntheticSpans.push(emit);
+            } else {
+              emit();
+            }
+          };
           const emitTurnSpan = (msg: SDKAssistantMessage): number => {
             const index = turnCount + 1;
             turnCount = index;
             const attributes: Record<string, string | number | boolean> = {
               'gen_ai.turn.index': index,
-              'gen_ai.system': 'anthropic',
+              [GenAIAttributes.PROVIDER_NAME]: 'anthropic',
             };
             if (msg.parent_tool_use_id) {
               attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
@@ -1552,14 +1599,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             }
             // A turn marker is a point-in-time event, so start and end at the same instant.
             const now = Date.now();
-            emitTurnMarkerSpan({
-              tracer: getGenAITracer(),
-              index,
-              startTime: now,
-              endTime: now,
-              attributes,
-              errorMessage: msg.error,
-              logLabel: 'ClaudeAgentSDK',
+            emitOrDeferSyntheticSpan(() => {
+              emitTurnMarkerSpan({
+                tracer: getGenAITracer(),
+                index,
+                startTime: now,
+                endTime: now,
+                attributes,
+                errorMessage: msg.error,
+                logLabel: 'ClaudeAgentSDK',
+              });
             });
             return index;
           };
@@ -1574,14 +1623,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             for (const [toolUseId, startMs] of toolStartTimes) {
               const entry = toolCallsMap.get(toolUseId);
               if (entry) {
-                emitToolSpan(
-                  entry,
-                  startMs,
-                  endedAt,
-                  false,
-                  /* incomplete */ true,
-                  toolTurnIndex.get(toolUseId),
-                );
+                const turnIndex = toolTurnIndex.get(toolUseId);
+                emitOrDeferSyntheticSpan(() => {
+                  emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true, turnIndex);
+                });
               }
             }
             toolStartTimes.clear();
@@ -1649,14 +1694,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {
-                        emitToolSpan(
-                          entry,
-                          startMs,
-                          Date.now(),
-                          entry.is_error,
-                          false,
-                          toolTurnIndex.get(block.tool_use_id),
-                        );
+                        const endedAt = Date.now();
+                        const turnIndex = toolTurnIndex.get(block.tool_use_id);
+                        emitOrDeferSyntheticSpan(() => {
+                          emitToolSpan(entry, startMs, endedAt, entry.is_error, false, turnIndex);
+                        });
                         toolStartTimes.delete(block.tool_use_id);
                         toolTurnIndex.delete(block.tool_use_id);
                       }
@@ -1690,6 +1732,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           if (!finalMsg) {
             return { error: "Claude Agent SDK call didn't return a result" };
+          }
+
+          if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
+            let nativeSpansArrived = false;
+            try {
+              nativeSpansArrived = await waitForNativeTraceExport(
+                tpTraceId,
+                tpSpanId,
+                env,
+                callOptions?.abortSignal,
+              );
+            } catch (error) {
+              logger.debug('[ClaudeAgentSDK] Unable to inspect native trace export', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+
+            if (!nativeSpansArrived && !callOptions?.abortSignal?.aborted) {
+              logger.warn(
+                '[ClaudeAgentSDK] Native trace spans did not reach the receiver before grading; emitting synthetic turn and tool spans.',
+              );
+              for (const emit of deferredSyntheticSpans) {
+                emit();
+              }
+            }
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -1836,17 +1903,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const metadata = response.metadata ?? {};
           const additional: Record<string, string | number | boolean> = {};
           if (typeof metadata.numTurns === 'number') {
-            additional['gen_ai.agent.num_turns'] = metadata.numTurns;
+            additional['promptfoo.agent.num_turns'] = metadata.numTurns;
           }
           if (typeof metadata.durationApiMs === 'number') {
-            additional['gen_ai.agent.duration_api_ms'] = metadata.durationApiMs;
+            additional['promptfoo.agent.duration_api_ms'] = metadata.durationApiMs;
           }
           if (typeof response.cost === 'number' && response.cost > 0) {
-            additional['gen_ai.agent.cost_usd'] = response.cost;
+            additional['promptfoo.agent.cost_usd'] = response.cost;
           }
           const toolCalls = metadata.toolCalls;
           if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-            additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
+            additional['promptfoo.agent.tool_call_count'] = toolCalls.length;
           }
           // Response model: the SDK reports per-model usage keyed by model name.
           // Pick the key with the largest token usage rather than iteration order —

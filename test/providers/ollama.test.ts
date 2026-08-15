@@ -1,3 +1,4 @@
+import { trace } from '@opentelemetry/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
@@ -687,6 +688,64 @@ describe('OllamaChatProvider', () => {
         },
       },
     ]);
+  });
+});
+
+describe('Ollama provider tracing', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it.each([
+    {
+      operation: 'completion',
+      Provider: OllamaCompletionProvider,
+      data: '{"response":"test response","done":true}\n',
+    },
+    {
+      operation: 'chat',
+      Provider: OllamaChatProvider,
+      data: '{"message":{"role":"assistant","content":"test response"},"done":true}\n',
+    },
+  ])('prefers the canonical test index for $operation spans', async ({ Provider, data }) => {
+    const attributes: Record<string, unknown> = {};
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (
+        _name: string,
+        options: { attributes: Record<string, unknown> },
+        _context: unknown,
+        callback: any,
+      ) => {
+        Object.assign(attributes, options.attributes);
+        return callback({
+          setAttribute: vi.fn(),
+          setStatus: vi.fn(),
+          recordException: vi.fn(),
+          end: vi.fn(),
+        });
+      },
+    } as any);
+
+    try {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await new Provider('llama3.3').callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'ollama prompt' },
+        vars: {},
+        test: { vars: { __testIdx: 99 } },
+        testIdx: 7,
+      });
+
+      expect(attributes['promptfoo.test.index']).toBe(7);
+    } finally {
+      getTracer.mockRestore();
+    }
   });
 });
 

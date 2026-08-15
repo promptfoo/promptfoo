@@ -82,6 +82,256 @@ describe('TraceStore span persistence', () => {
     await expect(firstTraceStore.getSpans('first-trace')).resolves.toHaveLength(1);
     await expect(secondTraceStore.getSpans('second-trace')).resolves.toHaveLength(1);
   });
+
+  it('keeps meaningful model, tool, command, search, guardrail, and error spans in red-team context', async () => {
+    const traceStore = await createTrace('semantic-selection');
+    const spans = [
+      {
+        spanId: 'http',
+        name: 'POST /chat',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'server', 'http.request.method': 'POST' },
+      },
+      {
+        spanId: 'handler',
+        name: 'request handler - /chat',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'internal' },
+      },
+      {
+        spanId: 'model',
+        parentSpanId: 'handler',
+        name: 'chat gpt-4.1-mini',
+        startTime: 3,
+        attributes: {
+          'otel.span.kind': 'internal',
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': 'gpt-4.1-mini',
+        },
+      },
+      {
+        spanId: 'tool',
+        parentSpanId: 'model',
+        name: 'execute_tool search_knowledge_base',
+        startTime: 4,
+        attributes: {
+          'otel.span.kind': 'internal',
+          'gen_ai.operation.name': 'execute_tool',
+          'gen_ai.tool.name': 'search_knowledge_base',
+        },
+      },
+      {
+        spanId: 'guardrail',
+        parentSpanId: 'model',
+        name: 'policy check',
+        startTime: 5,
+        attributes: { 'otel.span.kind': 'internal', 'guardrails.decision': 'blocked' },
+      },
+      {
+        spanId: 'command',
+        parentSpanId: 'model',
+        name: 'execute operation',
+        startTime: 6,
+        attributes: { 'otel.span.kind': 'client', 'command.name': 'git status' },
+      },
+      {
+        spanId: 'search',
+        parentSpanId: 'model',
+        name: 'retrieve information',
+        startTime: 7,
+        attributes: { 'otel.span.kind': 'client', search_query: 'customer records' },
+      },
+      {
+        spanId: 'error',
+        name: 'POST /remote-api',
+        startTime: 8,
+        statusCode: 2,
+        statusMessage: 'rate limited',
+        attributes: { 'otel.span.kind': 'client' },
+      },
+      {
+        spanId: 'grader-model',
+        name: 'chat grading-model',
+        startTime: 9,
+        attributes: {
+          'gen_ai.operation.name': 'chat',
+          'gen_ai.request.model': 'grading-model',
+          'promptfoo.span.role': 'grader',
+        },
+      },
+    ];
+    await traceStore.addSpans('semantic-selection', spans);
+
+    const selected = await traceStore.getSpans('semantic-selection', {
+      includeInternalSpans: false,
+    });
+
+    expect(selected.map((span) => span.name)).toEqual([
+      'chat gpt-4.1-mini',
+      'execute_tool search_knowledge_base',
+      'policy check',
+      'execute operation',
+      'retrieve information',
+      'POST /remote-api',
+    ]);
+    await expect(traceStore.getSpans('semantic-selection')).resolves.toHaveLength(spans.length);
+    await expect(
+      traceStore.getSpans('semantic-selection', { includeInternalSpans: true }),
+    ).resolves.toHaveLength(spans.length);
+  });
+
+  it('applies semantic filtering before the red-team span limit', async () => {
+    const traceStore = await createTrace('semantic-limit');
+    await traceStore.addSpans('semantic-limit', [
+      {
+        spanId: 'http-1',
+        name: 'POST',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'client' },
+      },
+      {
+        spanId: 'http-2',
+        name: 'GET',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'client' },
+      },
+      {
+        spanId: 'model',
+        name: 'chat gpt-4.1-mini',
+        startTime: 3,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 4,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
+      },
+    ]);
+
+    const spans = await traceStore.getSpans('semantic-limit', {
+      includeInternalSpans: false,
+      maxSpans: 2,
+    });
+
+    expect(spans.map((span) => span.name)).toEqual(['chat gpt-4.1-mini', 'execute_tool search']);
+  });
+
+  it('excludes descendants of grading spans even when external SDKs omit role attributes', async () => {
+    const traceStore = await createTrace('grader-descendants');
+    await traceStore.addSpans('grader-descendants', [
+      {
+        spanId: 'target',
+        name: 'chat target-model',
+        startTime: 1,
+        attributes: { 'gen_ai.operation.name': 'chat', 'promptfoo.span.role': 'target' },
+      },
+      {
+        spanId: 'grader',
+        name: 'grader llm-rubric',
+        startTime: 2,
+        attributes: { 'promptfoo.span.role': 'grader' },
+      },
+      {
+        spanId: 'grader-agent',
+        parentSpanId: 'grader',
+        name: 'agent grading-agent',
+        startTime: 3,
+        attributes: { 'agent.name': 'grading-agent' },
+      },
+      {
+        spanId: 'grader-model',
+        parentSpanId: 'grader-agent',
+        name: 'chat grading-model',
+        startTime: 4,
+        attributes: { 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'grader-tool',
+        parentSpanId: 'grader-model',
+        name: 'execute_tool search',
+        startTime: 5,
+        attributes: { 'gen_ai.tool.name': 'search' },
+      },
+    ]);
+
+    await expect(
+      traceStore.getSpans('grader-descendants', { includeInternalSpans: false }),
+    ).resolves.toEqual([expect.objectContaining({ spanId: 'target' })]);
+    await expect(
+      traceStore.getSpans('grader-descendants', {
+        includeInternalSpans: false,
+        spanFilter: ['chat*', '*tool*'],
+      }),
+    ).resolves.toEqual([expect.objectContaining({ spanId: 'target' })]);
+    await expect(
+      traceStore.getSpans('grader-descendants', { includeInternalSpans: true }),
+    ).resolves.toHaveLength(5);
+  });
+
+  it('supports wildcard span-name filters and preserves explicit nonsemantic selections', async () => {
+    const traceStore = await createTrace('wildcard-selection');
+    await traceStore.addSpans('wildcard-selection', [
+      {
+        spanId: 'model',
+        name: 'chat gpt-4.1-mini',
+        startTime: 1,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.operation.name': 'chat' },
+      },
+      {
+        spanId: 'tool',
+        name: 'execute_tool search',
+        startTime: 2,
+        attributes: { 'otel.span.kind': 'internal', 'gen_ai.tool.name': 'search' },
+      },
+      {
+        spanId: 'http',
+        name: 'POST /chat',
+        startTime: 3,
+        attributes: { 'otel.span.kind': 'server' },
+      },
+    ]);
+
+    const modelAndTool = await traceStore.getSpans('wildcard-selection', {
+      includeInternalSpans: false,
+      spanFilter: ['chat*', '*tool*'],
+    });
+    expect(modelAndTool.map((span) => span.name)).toEqual([
+      'chat gpt-4.1-mini',
+      'execute_tool search',
+    ]);
+
+    const explicitHttp = await traceStore.getSpans('wildcard-selection', {
+      includeInternalSpans: false,
+      spanFilter: ['POST*'],
+    });
+    expect(explicitHttp.map((span) => span.name)).toEqual(['POST /chat']);
+  });
+
+  it('orders equal start times by span ID before applying maxSpans', async () => {
+    const traceStore = await createTrace('stable-ordering');
+
+    await traceStore.addSpans('stable-ordering', [
+      { spanId: 'bbbbbbbbbbbbbbbb', name: 'second tied span', startTime: 1_000 },
+      { spanId: 'aaaaaaaaaaaaaaaa', name: 'first tied span', startTime: 1_000 },
+      { spanId: 'cccccccccccccccc', name: 'earliest span', startTime: 999 },
+      { spanId: '0000000000000001', name: 'latest span', startTime: 1_001 },
+    ]);
+
+    const spans = await traceStore.getSpans('stable-ordering');
+    expect(spans.map((span) => span.spanId)).toEqual([
+      'cccccccccccccccc',
+      'aaaaaaaaaaaaaaaa',
+      'bbbbbbbbbbbbbbbb',
+      '0000000000000001',
+    ]);
+
+    const limitedSpans = await traceStore.getSpans('stable-ordering', { maxSpans: 2 });
+    expect(limitedSpans.map((span) => span.spanId)).toEqual([
+      'cccccccccccccccc',
+      'aaaaaaaaaaaaaaaa',
+    ]);
+  });
 });
 
 describe('span uniqueness migration', () => {
@@ -89,6 +339,7 @@ describe('span uniqueness migration', () => {
     const directory = await mkdtemp(join(tmpdir(), 'promptfoo-span-migration-'));
 
     try {
+      // Pin the migration that removes duplicate spans before adding its unique index.
       const migration = await readFile(
         new URL('../../drizzle/0025_broken_emma_frost.sql', import.meta.url),
         'utf8',

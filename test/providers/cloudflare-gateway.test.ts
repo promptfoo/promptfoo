@@ -304,6 +304,19 @@ describe('CloudflareGateway Provider', () => {
       expect(provider.id()).toBe('cloudflare-gateway:openai:gpt-4o');
     });
 
+    it.each(['openai', 'groq', 'mistral'])(
+      'attributes %s gateway telemetry to the underlying provider rather than a custom label',
+      (underlyingProvider) => {
+        const provider = new CloudflareGatewayOpenAiProvider(underlyingProvider, 'test-model', {
+          config: minimumConfig,
+          id: 'customer:custom-label',
+        });
+
+        expect(provider.id()).toBe('customer:custom-label');
+        expect(provider['getGenAISystem']()).toBe(underlyingProvider);
+      },
+    );
+
     it('should return correct toString()', () => {
       const provider = new CloudflareGatewayOpenAiProvider('openai', 'gpt-4o', {
         config: minimumConfig,
@@ -332,6 +345,16 @@ describe('CloudflareGateway Provider', () => {
       });
 
       expect(provider.id()).toBe('cloudflare-gateway:anthropic:claude-sonnet-4-20250514');
+    });
+
+    it('attributes gateway telemetry to Anthropic rather than the gateway or custom label', () => {
+      const provider = new CloudflareGatewayAnthropicProvider('claude-sonnet-4-20250514', {
+        config: minimumConfig,
+        id: 'customer:custom-label',
+      });
+
+      expect(provider.id()).toBe('customer:custom-label');
+      expect(provider['getGenAISystem']()).toBe('anthropic');
     });
 
     it('should return correct toString()', () => {

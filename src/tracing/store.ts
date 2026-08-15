@@ -3,6 +3,8 @@ import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
+import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
 import type { TraceData } from '../types/tracing';
 
@@ -67,6 +69,38 @@ function serializeSpan(
   };
 }
 
+function isGraderOwnedSpan(
+  span: typeof spansTable.$inferSelect,
+  spansById: ReadonlyMap<string, typeof spansTable.$inferSelect>,
+  ownershipCache: Map<string, boolean>,
+): boolean {
+  let ancestor: typeof spansTable.$inferSelect | undefined = span;
+  const visitedSpanIds = new Set<string>();
+  let belongsToGrader = false;
+
+  while (ancestor && !visitedSpanIds.has(ancestor.spanId)) {
+    const cached = ownershipCache.get(ancestor.spanId);
+    if (cached !== undefined) {
+      belongsToGrader = cached;
+      break;
+    }
+
+    visitedSpanIds.add(ancestor.spanId);
+    if (ancestor.attributes?.[SPAN_ROLE_ATTRIBUTE] === 'grader') {
+      belongsToGrader = true;
+      break;
+    }
+
+    ancestor = ancestor.parentSpanId ? spansById.get(ancestor.parentSpanId) : undefined;
+  }
+
+  for (const spanId of visitedSpanIds) {
+    ownershipCache.set(spanId, belongsToGrader);
+  }
+
+  return belongsToGrader;
+}
+
 function sqliteTimestampFromMs(timestampMs: number): string {
   return new Date(timestampMs).toISOString().slice(0, 19).replace('T', ' ');
 }
@@ -109,19 +143,6 @@ function computeDepth(
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;
-}
-
-function deriveSpanKind(span: SpanData): string {
-  const attributes = span.attributes || {};
-  const attributeKind = (attributes['span.kind'] ||
-    attributes['otel.span.kind'] ||
-    attributes['spanKind']) as string | undefined;
-
-  if (typeof attributeKind === 'string') {
-    return attributeKind.toLowerCase();
-  }
-
-  return 'internal';
 }
 
 export class TraceStore {
@@ -378,8 +399,10 @@ export class TraceStore {
         .select()
         .from(spansTable)
         .where(eq(spansTable.traceId, traceId))
-        .orderBy(asc(spansTable.startTime));
+        .orderBy(asc(spansTable.startTime), asc(spansTable.spanId));
 
+      const rowsBySpanId = new Map(rows.map((row) => [row.spanId, row]));
+      const graderOwnedSpanIds = new Map<string, boolean>();
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
@@ -389,6 +412,10 @@ export class TraceStore {
         }
 
         const rawAttributes = row.attributes ?? {};
+
+        if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
+          continue;
+        }
 
         const spanData: SpanData = {
           spanId: row.spanId,
@@ -401,22 +428,18 @@ export class TraceStore {
           statusMessage: row.statusMessage ?? undefined,
         };
 
-        const spanKind = deriveSpanKind({
-          ...spanData,
-          attributes: rawAttributes,
-        });
+        const hasExplicitFilter = Boolean(spanFilter?.length);
 
-        if (!includeInternalSpans && spanKind === 'internal') {
+        if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
           continue;
         }
 
-        if (spanFilter && spanFilter.length > 0) {
-          const matchesFilter = spanFilter.some((filterName) =>
-            spanData.name.toLowerCase().includes(filterName.toLowerCase()),
-          );
-          if (!matchesFilter) {
-            continue;
-          }
+        if (
+          !includeInternalSpans &&
+          !hasExplicitFilter &&
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+        ) {
+          continue;
         }
 
         spanMap.set(spanData.spanId, spanData);
