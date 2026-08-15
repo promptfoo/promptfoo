@@ -239,6 +239,17 @@ describe('package manifests', () => {
     expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
   });
 
+  it('keeps private npm registry endpoints out of the published lockfile', () => {
+    const packageLock = readPackageJson<{
+      packages: Record<string, { resolved?: string }>;
+    }>('package-lock.json');
+    const privateRegistryPackages = Object.entries(packageLock.packages)
+      .filter(([, packageInfo]) => packageInfo.resolved?.includes('.internal.api.openai.org/'))
+      .map(([packagePath]) => packagePath);
+
+    expect(privateRegistryPackages).toEqual([]);
+  });
+
   it('holds Knip below the incompatible public re-export audit', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
