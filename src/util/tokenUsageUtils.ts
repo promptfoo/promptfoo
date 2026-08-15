@@ -161,6 +161,11 @@ export function accumulateTokenUsage(
     target.attacker ??= createEmptyAssertions();
     accumulateTokenUsage(target.attacker, update.attacker);
   }
+
+  if (update.generation) {
+    target.generation ??= createEmptyAssertions();
+    accumulateTokenUsage(target.generation, update.generation);
+  }
 }
 
 /** Record attacker-model usage separately without inflating target tokens or probes. */
@@ -257,8 +262,8 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
- * Fold generation-time provider tokens into evaluation totals without treating
- * internal generation calls as target probes. Returns whether the payload was valid.
+ * Record generation-time provider tokens separately from target usage and probes.
+ * Returns whether the payload contained observable generation usage.
  */
 export function accumulateGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
   const parsed = BaseTokenUsageSchema.safeParse(update);
@@ -269,16 +274,17 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   const {
     attacker: _attacker,
     assertions: _assertions,
-    numRequests: _numRequests,
-    ...tokenTotals
+    generation: _generation,
+    ...generationUsage
   } = parsed.data;
-  const hasTokenTotals =
-    Object.values(tokenTotals).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(tokenTotals.completionDetails ?? {}).some((value) => value !== 0);
-  if (!hasTokenTotals) {
+  const hasUsage =
+    Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
+    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+  if (!hasUsage) {
     return false;
   }
-  accumulateTokenUsage(target, tokenTotals);
+  target.generation ??= createEmptyAssertions();
+  accumulateTokenUsage(target.generation, generationUsage);
   return true;
 }
 
@@ -300,5 +306,6 @@ export function normalizeTokenUsage(
     completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
     ...(tokenUsage?.attacker ? { attacker: tokenUsage.attacker } : {}),
+    ...(tokenUsage?.generation ? { generation: tokenUsage.generation } : {}),
   };
 }

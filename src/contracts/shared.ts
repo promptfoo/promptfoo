@@ -20,15 +20,16 @@ const TokenUsageCoreSchema = z.object({
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
 
-/** Target usage with optional independent attacker-model and assertion-model breakdowns. */
+/** Target usage with independent generation, attacker, and assertion breakdowns. */
 export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
   attacker: TokenUsageCoreSchema.optional(),
   assertions: TokenUsageCoreSchema.optional(),
+  generation: TokenUsageCoreSchema.optional(),
 });
 
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
-export type NormalizedTokenUsage = Required<Omit<TokenUsage, 'attacker'>> &
-  Pick<TokenUsage, 'attacker'>;
+export type NormalizedTokenUsage = Required<Omit<TokenUsage, 'attacker' | 'generation'>> &
+  Pick<TokenUsage, 'attacker' | 'generation'>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 

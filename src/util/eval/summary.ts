@@ -172,8 +172,9 @@ function getTokenUsageLines(
     (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
   const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
   const hasAttackerTokens = tokenUsage.attacker && (tokenUsage.attacker.total || 0) > 0;
+  const hasGenerationTokens = tokenUsage.generation && (tokenUsage.generation.total || 0) > 0;
 
-  if (!hasEvalTokens && !hasGradingTokens && !hasAttackerTokens) {
+  if (!hasEvalTokens && !hasGradingTokens && !hasAttackerTokens && !hasGenerationTokens) {
     return [];
   }
 
@@ -196,7 +197,8 @@ function getTokenUsageLines(
       (
         evalTokens.total +
         (tokenUsage.attacker?.total || 0) +
-        (tokenUsage.assertions?.total || 0)
+        (tokenUsage.assertions?.total || 0) +
+        (tokenUsage.generation?.total || 0)
       ).toLocaleString(),
     )}`,
   ];
@@ -213,6 +215,13 @@ function getTokenUsageLines(
       `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(
         ', ',
       )})`,
+    );
+  }
+
+  if (tokenUsage.generation?.total && tokenUsage.generation.total > 0) {
+    const generationParts = buildUsageDetails(tokenUsage.generation, tokenUsage.generation.total);
+    lines.push(
+      `  ${chalk.gray('Generation:')} ${chalk.white(tokenUsage.generation.total.toLocaleString())} (${generationParts.join(', ')})`,
     );
   }
 

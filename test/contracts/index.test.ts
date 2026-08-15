@@ -141,6 +141,7 @@ describe('contracts leaf surface', () => {
           total: 10,
           numRequests: 1,
         },
+        generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
       });
       expect(parsed.success).toBe(true);
       expect(parsed).toMatchObject({
@@ -152,6 +153,7 @@ describe('contracts leaf surface', () => {
             total: 10,
             numRequests: 1,
           },
+          generation: { prompt: 12, completion: 4, total: 16, numRequests: 2 },
         },
       });
     });
