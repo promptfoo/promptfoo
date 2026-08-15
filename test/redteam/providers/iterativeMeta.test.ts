@@ -287,10 +287,13 @@ describe('RedteamIterativeMetaProvider', () => {
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()
-        .mockResolvedValueOnce({ error: 'Agent error' })
+        .mockResolvedValueOnce({
+          error: 'Agent error',
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 2 },
+        })
         .mockResolvedValueOnce({
           output: { result: 'Second attempt' },
-          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+          tokenUsage: { total: 100, prompt: 50, completion: 50, numRequests: 3 },
         });
 
       const result = await runMetaAgentRedteam({
@@ -314,6 +317,13 @@ describe('RedteamIterativeMetaProvider', () => {
       // Should continue after error and complete iteration 2
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
       expect(result.metadata.redteamHistory).toHaveLength(1); // Only iteration 2 succeeded
+      expect(result.tokenUsage?.attacker).toMatchObject({
+        total: 118,
+        prompt: 61,
+        completion: 57,
+        numRequests: 5,
+      });
+      expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
     it('should handle nunjucks template syntax in attack prompts without crashing', async () => {
@@ -624,11 +634,11 @@ describe('RedteamIterativeMetaProvider', () => {
         .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({
           output: { result: 'First attack' },
-          tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 1 },
+          tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 3 },
         })
         .mockResolvedValueOnce({
           output: { result: 'Second attack' },
-          tokenUsage: { prompt: 60, completion: 40, total: 100, numRequests: 1 },
+          tokenUsage: { prompt: 60, completion: 40, total: 100, numRequests: 2 },
         });
 
       // Set up target to return token usage
@@ -663,7 +673,8 @@ describe('RedteamIterativeMetaProvider', () => {
       // Verify token usage is accumulated
       expect(result.tokenUsage).toBeDefined();
       expect(result.tokenUsage?.total).toBe(78);
-      expect(result.tokenUsage?.attacker).toMatchObject({ total: 180, numRequests: 2 });
+      expect(result.tokenUsage?.attacker).toMatchObject({ total: 180, numRequests: 5 });
+      expect(result.tokenUsage?.numRequests).toBe(2);
       expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
       expect(result.tokenUsage?.completion).toBeGreaterThan(0);
     });

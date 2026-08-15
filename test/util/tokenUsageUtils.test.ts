@@ -481,6 +481,23 @@ describe('tokenUsageUtils', () => {
       expect(result.assertions.completion).toBe(10);
     });
 
+    it('preserves attacker tokens, internal request counts, and completion details', () => {
+      const attacker = {
+        total: 90,
+        prompt: 55,
+        completion: 35,
+        cached: 7,
+        numRequests: 4,
+        completionDetails: { reasoning: 12 },
+      };
+
+      const result = normalizeTokenUsage({ total: 25, numRequests: 1, attacker });
+
+      expect(result.total).toBe(25);
+      expect(result.numRequests).toBe(1);
+      expect(result.attacker).toEqual(attacker);
+    });
+
     it('should handle empty object', () => {
       const result = normalizeTokenUsage({});
 

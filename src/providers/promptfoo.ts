@@ -244,6 +244,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         );
         return {
           error: 'LLM did not return a result, likely refusal',
+          ...(data.tokenUsage ? { tokenUsage: data.tokenUsage } : {}),
         };
       }
 

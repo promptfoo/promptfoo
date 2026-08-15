@@ -1354,6 +1354,42 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - scan learning', () => {
+    it('includes aggregated attack-generation and scan-learning model usage', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Attack message',
+          tokenUsage: { total: 125, prompt: 80, completion: 45, numRequests: 2 },
+        })
+        .mockResolvedValueOnce({
+          output: 'hydra-complete',
+          tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+        attacker: { total: 165, prompt: 105, completion: 60, numRequests: 3 },
+      });
+    });
+
     it('should send learning update after completion', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -1475,9 +1511,80 @@ describe('HydraProvider', () => {
       expect(result).toBeDefined();
       expect(result.output).toBe('Target response');
     });
+
+    it('counts reported usage when a scan-learning request returns an error', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Attack message',
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 2 },
+        })
+        .mockResolvedValueOnce({
+          error: 'Learning update failed',
+          tokenUsage: { total: 25, prompt: 15, completion: 10, numRequests: 1 },
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        tokenUsage: { total: 50, numRequests: 1 },
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(result.output).toBe('Target response');
+      expect(result.tokenUsage).toMatchObject({
+        total: 50,
+        numRequests: 1,
+        attacker: { total: 125, prompt: 75, completion: 50, numRequests: 3 },
+      });
+    });
   });
 
   describe('callApi() - token usage tracking', () => {
+    it('includes failed attack attempts without counting them as target probes', async () => {
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Agent refused',
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Recovered attack',
+          tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 2 },
+        })
+        .mockResolvedValueOnce({
+          output: 'hydra-complete',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        tokenUsage: { total: 50, numRequests: 1 },
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 50,
+        numRequests: 1,
+        attacker: { total: 128, prompt: 77, completion: 51, numRequests: 4 },
+      });
+    });
+
     it('should accumulate token usage from agent and target', async () => {
       mockAgentProvider.callApi
         .mockResolvedValueOnce({
@@ -1770,9 +1877,15 @@ describe('HydraProvider', () => {
     });
 
     it('should fail closed when the hydra agent never produces a target probe', async () => {
-      mockAgentProvider.callApi.mockResolvedValue({
-        error: 'Invalid schema for inputs.document',
-      });
+      mockAgentProvider.callApi
+        .mockResolvedValueOnce({
+          error: 'Invalid schema for inputs.document',
+          tokenUsage: { total: 73, prompt: 45, completion: 28, numRequests: 3 },
+        })
+        .mockResolvedValueOnce({
+          output: 'hydra-complete',
+          tokenUsage: { total: 9, prompt: 6, completion: 3, numRequests: 1 },
+        });
 
       const provider = new HydraProvider({
         injectVar: 'input',
@@ -1804,6 +1917,12 @@ describe('HydraProvider', () => {
       expect(result.error).toBe('Invalid schema for inputs.document');
       expect(result.metadata.hydraRoundsCompleted).toBe(0);
       expect(result.tokenUsage?.numRequests).toBe(0);
+      expect(result.tokenUsage?.attacker).toMatchObject({
+        total: 82,
+        prompt: 51,
+        completion: 31,
+        numRequests: 4,
+      });
       expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
     });
   });
