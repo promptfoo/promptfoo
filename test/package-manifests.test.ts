@@ -202,6 +202,8 @@ describe('package manifests', () => {
     const npmConstraint = renovateConfig.constraints?.npm;
 
     expect(npmConstraint, 'Renovate must constrain its npm version').toBeDefined();
+    expect(validRange(npmConstraint)).not.toBeNull();
+    expect(satisfies('11.17.0', npmConstraint as string)).toBe(false);
     expect(satisfies('11.18.0', npmConstraint as string)).toBe(true);
     expect(satisfies('12.0.0', npmConstraint as string)).toBe(false);
   });
