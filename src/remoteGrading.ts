@@ -84,11 +84,17 @@ export async function doRemoteGrading(
       score: result.score,
       reason: result.reason,
       tokensUsed: result.tokensUsed
-        ? {
-            ...result.tokensUsed,
-            // This endpoint represents one grading task even when the task uses multiple models.
-            numRequests: cached ? 0 : 1,
-          }
+        ? cached
+          ? {
+              total: result.tokensUsed.total,
+              cached: result.tokensUsed.total,
+              numRequests: 0,
+            }
+          : {
+              ...result.tokensUsed,
+              // This endpoint represents one grading task even when the task uses multiple models.
+              numRequests: 1,
+            }
         : undefined,
       metadata: result.metadata,
     };

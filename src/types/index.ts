@@ -857,6 +857,7 @@ export type ScoringFunction = (
       completion: number;
       cached?: number;
       numRequests?: number;
+      completionDetails?: TokenUsage['completionDetails'];
     };
   },
 ) => Promise<GradingResult> | GradingResult;
