@@ -940,6 +940,21 @@ describe('OpenRouter', () => {
         expect(result.error).toContain('400 Bad Request');
       });
 
+      it('should return a clean error when the response has no choices', async () => {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: { apiKeyEnvar: 'OPENROUTER_API_KEY' },
+        });
+
+        const response = new Response(JSON.stringify({ choices: [] }), {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        });
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        const result = await provider.callApi('Test prompt');
+        expect(result.error).toContain('No choices');
+      });
       it('should pass through OpenRouter-specific options', async () => {
         const providerWithOptions = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: {

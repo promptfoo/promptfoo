@@ -175,6 +175,24 @@ describe('Snowflake Cortex Provider', () => {
       expect(result.error).toContain('400 Bad Request');
     });
 
+    it('should return a clean error when the response has no choices', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          accountIdentifier: 'myorg-myaccount',
+          apiKey: 'test-key',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { choices: [] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('No choices');
+    });
     it('should handle network errors', async () => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {
         config: {

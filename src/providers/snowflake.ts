@@ -163,6 +163,12 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       };
     }
 
+    if (!data.choices || data.choices.length === 0) {
+      return {
+        error: `No choices in Snowflake Cortex response: ${JSON.stringify(data)}`,
+      };
+    }
+
     // Process the response (should be OpenAI-compatible)
     const message = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);

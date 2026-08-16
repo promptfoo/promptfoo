@@ -180,6 +180,12 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
+    if (!data.choices || data.choices.length === 0) {
+      return {
+        error: `No choices in OpenRouter response: ${JSON.stringify(data)}`,
+      };
+    }
+
     // Process the response with special handling for Gemini
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
