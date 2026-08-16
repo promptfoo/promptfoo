@@ -197,7 +197,7 @@ tests:
 
 ```js
 module.exports = (output, context) => {
-  return context.config.inclusive ? output.length >= context.value : output.length > context.value;
+  return context.config?.inclusive ? output.length >= context.value : output.length > context.value;
 };
 ```
 
