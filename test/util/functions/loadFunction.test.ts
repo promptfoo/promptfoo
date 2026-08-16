@@ -365,6 +365,13 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should preserve multi-colon Python paths without an unambiguous function suffix', () => {
+    const result = parseFileUrl('file://fixtures/check.py:golden:v1');
+    expect(result).toEqual({
+      filePath: 'fixtures/check.py:golden:v1',
+    });
+  });
+
   it('should parse Ruby file URLs with namespaced function names', () => {
     const result = parseFileUrl('file://./path/to/check.rb:Checks::check_value');
     expect(result).toEqual({

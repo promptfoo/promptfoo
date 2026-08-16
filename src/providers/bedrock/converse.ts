@@ -25,7 +25,7 @@ import {
   withGenAISpan,
   withGenAIToolSpan,
 } from '../../tracing/genaiTracer';
-import { parseFileUrl } from '../../util/functions/parseFileUrl';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import {
   isAlwaysOnAdaptiveThinkingClaudeModel,

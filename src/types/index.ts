@@ -799,7 +799,7 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = string | string[] | number | object | AssertionValueFunction;
+export type AssertionValue = string | unknown[] | number | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 

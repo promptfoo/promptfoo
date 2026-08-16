@@ -20,6 +20,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { runRuby } from '../ruby/rubyUtils.js';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -69,7 +70,7 @@ import { handleGEval } from './geval';
 import { handleGleuScore } from './gleu';
 import { handleGuardrails } from './guardrails';
 import { handleContainsHtml, handleIsHtml } from './html';
-import { handleJavascript } from './javascript';
+import { formatJavascriptAssertionError, handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
@@ -123,6 +124,7 @@ const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+type ValueFromScript = string | boolean | number | GradingResult | object | undefined;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'agent-rubric',
@@ -332,9 +334,41 @@ function renderAssertionValue(
   if (Array.isArray(value)) {
     return value.map((item) =>
       typeof item === 'string' ? nunjucks.renderString(item, vars) : item,
-    ) as AssertionValue;
+    );
   }
   return value;
+}
+
+async function executeAssertionScript({
+  baseType,
+  script,
+  output,
+  context,
+}: {
+  baseType: AssertionType;
+  script: string;
+  output: string | object;
+  context: AssertionValueFunctionContext;
+}): Promise<ValueFromScript> {
+  const basePath = cliState.basePath || '';
+  const { filePath: parsedPath, functionName } = parseFileUrl(script);
+  const filePath = path.resolve(basePath, parsedPath);
+
+  if (baseType === 'javascript') {
+    invariant(
+      isJavascriptFile(filePath),
+      'javascript assertion script must reference a JavaScript file',
+    );
+    return loadFromJavaScriptFile(filePath, functionName, [output, context]);
+  }
+  if (baseType === 'python') {
+    invariant(filePath.endsWith('.py'), 'python assertion script must reference a .py file');
+    return runPython(filePath, functionName || 'get_assert', [output, context]);
+  }
+  if (baseType === 'ruby') {
+    invariant(filePath.endsWith('.rb'), 'ruby assertion script must reference a .rb file');
+    return runRuby(filePath, functionName || 'get_assert', [output, context]);
+  }
 }
 
 /**
@@ -477,7 +511,10 @@ async function runAssertionInternal({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
   if (assertion.script && renderedValue !== undefined) {
-    context.value = renderedValue;
+    context.value =
+      typeof renderedValue === 'object' && renderedValue !== null
+        ? structuredClone(renderedValue)
+        : renderedValue;
   }
 
   // Add trace data if traceId is available
@@ -499,10 +536,37 @@ async function runAssertionInternal({
   }
 
   // Render assertion values
-  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let valueFromScript: ValueFromScriptType;
+  let valueFromScript: ValueFromScript;
   if (assertion.script) {
-    // The language-specific handler loads the script. value remains the call-site parameter.
+    try {
+      valueFromScript = await executeAssertionScript({
+        baseType,
+        script: assertion.script,
+        output,
+        context,
+      });
+    } catch (error) {
+      if (baseType === 'javascript') {
+        return formatJavascriptAssertionError(assertion, error as Error, renderedValue);
+      }
+      if (baseType === 'python') {
+        return {
+          pass: false,
+          score: 0,
+          reason: `Python code execution failed: ${(error as Error).message}`,
+          assertion,
+        };
+      }
+      if (baseType === 'ruby') {
+        return {
+          pass: false,
+          score: 0,
+          reason: `Ruby code execution failed: ${(error as Error).message}`,
+          assertion,
+        };
+      }
+      throw error;
+    }
   } else if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -514,7 +578,7 @@ async function runAssertionInternal({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+          const pythonScriptOutput = await runPython<ValueFromScript>(
             filePath,
             functionName || 'get_assert',
             [output, context],
@@ -531,8 +595,7 @@ async function runAssertionInternal({
         }
       } else if (filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+          const rubyScriptOutput = await runRuby<ValueFromScript>(
             filePath,
             functionName || 'get_assert',
             [output, context],

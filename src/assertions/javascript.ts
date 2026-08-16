@@ -1,12 +1,6 @@
-import path from 'path';
-
-import cliState from '../cliState';
 import { type GradingResult, isGradingResult } from '../types/index';
-import { isJavascriptFile } from '../util/fileExtensions';
-import { parseFileUrl } from '../util/functions/parseFileUrl';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
-import { loadFromJavaScriptFile } from './utils';
 
 import type { AssertionParams } from '../types/index';
 
@@ -155,6 +149,23 @@ function appendRenderedValueToReason(
     : reason;
 }
 
+export function formatJavascriptAssertionError(
+  assertion: AssertionParams['assertion'],
+  error: Error,
+  renderedValue?: AssertionParams['renderedValue'],
+): GradingResult {
+  return {
+    pass: false,
+    score: 0,
+    reason: appendRenderedValueToReason(
+      `Custom function threw error: ${error.message}
+Stack Trace: ${error.stack}`,
+      renderedValue,
+    ),
+    assertion: normalizeResultAssertion(undefined, assertion),
+  };
+}
+
 function normalizeJavascriptAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
@@ -215,15 +226,7 @@ export const handleJavascript = async ({
 }: AssertionParams): Promise<GradingResult> => {
   try {
     if (assertion.script) {
-      const { filePath, functionName } = parseFileUrl(assertion.script);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      invariant(
-        isJavascriptFile(resolvedPath),
-        'javascript assertion script must reference a JavaScript file',
-      );
-      const result = await validateResult(
-        loadFromJavaScriptFile(resolvedPath, functionName, [output, assertionValueContext]),
-      );
+      const result = await validateResult(valueFromScript);
       return normalizeJavascriptAssertionResult(
         assertion,
         result,
@@ -274,15 +277,6 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: appendRenderedValueToReason(
-        `Custom function threw error: ${(err as Error).message}
-Stack Trace: ${(err as Error).stack}`,
-        renderedValue,
-      ),
-      assertion: normalizeResultAssertion(undefined, assertion),
-    };
+    return formatJavascriptAssertionError(assertion, err as Error, renderedValue);
   }
 };

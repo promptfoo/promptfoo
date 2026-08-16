@@ -10,7 +10,7 @@ import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
-import { parseFileUrl } from '../../util/functions/parseFileUrl';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,

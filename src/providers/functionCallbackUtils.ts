@@ -3,7 +3,7 @@ import path from 'path';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { parseFileUrl } from '../util/functions/parseFileUrl';
+import { parseFileUrl } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 

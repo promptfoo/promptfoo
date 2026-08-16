@@ -6,6 +6,8 @@ import logger from '../../logger';
 import { runPython } from '../../python/pythonUtils';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
+export { parseFileUrl } from './parseFileUrl';
+
 export const functionCache: Record<string, Function> = {};
 
 interface LoadFunctionOptions {

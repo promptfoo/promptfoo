@@ -1,9 +1,4 @@
-import path from 'path';
-
-import cliState from '../cliState';
-import { runPython } from '../python/pythonUtils';
 import { runPythonCode } from '../python/wrapper';
-import { parseFileUrl } from '../util/functions/parseFileUrl';
 import invariant from '../util/invariant';
 import { normalizeScriptResult, type ScriptAssertionResult } from './scriptResultNormalization';
 
@@ -45,13 +40,7 @@ export const handlePython = async ({
   try {
     let result: ScriptAssertionResult;
     if (assertion.script) {
-      const { filePath, functionName } = parseFileUrl(assertion.script);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      invariant(resolvedPath.endsWith('.py'), 'python assertion script must reference a .py file');
-      result = await runPython(resolvedPath, functionName || 'get_assert', [
-        output,
-        assertionValueContext,
-      ]);
+      result = valueFromScript;
     } else {
       invariant(typeof renderedValue === 'string', 'python assertion must have a string value');
       result =
@@ -68,7 +57,7 @@ export const handlePython = async ({
       result,
       inverse,
       { code: 'Python code', language: 'Python' },
-      assertion.value,
+      assertion.script ? renderedValue : assertion.value,
     );
   } catch (err) {
     return {

@@ -101,6 +101,44 @@ describe('Ruby assertions', () => {
     });
   });
 
+  it('should use the rendered script parameter in failure reasons', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+    vi.mocked(runRuby).mockResolvedValue(false);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'ruby',
+        script: 'file://checks/assert.rb',
+        value: 'Expected {{ expected }}',
+      },
+      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toBe('Ruby code returned false\nExpected rendered');
+    expect(result.reason).not.toContain('{{ expected }}');
+  });
+
+  it('should preserve the detected indentation for multiline inline assertions', async () => {
+    vi.mocked(runRubyCode).mockResolvedValue(true);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'ruby',
+        value: 'if output\n  return true\nend',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(runRubyCode).toHaveBeenCalledWith(
+      expect.stringContaining('  if output\n    return true\n  end'),
+      'main',
+      expect.any(Array),
+    );
+    expect(result.pass).toBe(true);
+  });
+
   it.each([
     [
       'boolean',

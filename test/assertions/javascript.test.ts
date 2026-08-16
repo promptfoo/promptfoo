@@ -322,7 +322,7 @@ describe('JavaScript file references', () => {
   });
 
   it('should preserve non-string array items in script call-site values', async () => {
-    const mixedValue = ['{{ label }}', 5, { enabled: true }] as unknown as Assertion['value'];
+    const mixedValue = ['{{ label }}', 5, { enabled: true }];
     const assertion: Assertion = {
       type: 'javascript',
       script: 'file://checks/assert.js',
@@ -346,6 +346,34 @@ describe('JavaScript file references', () => {
       expect.objectContaining({ value: ['rendered', 5, { enabled: true }] }),
     );
     expect(result.pass).toBe(true);
+  });
+
+  it('should isolate mutable script call-site values from script mutations', async () => {
+    const mutableValue = [{ nested: { enabled: true } }, ['original']];
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      value: mutableValue,
+    };
+    const mockFn = vi.fn((_output: string, context: { value?: unknown }) => {
+      const value = context.value as [{ nested: { enabled: boolean } }, string[]];
+      value[0].nested.enabled = false;
+      value[1].push('mutated');
+      return true;
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(mutableValue).toEqual([{ nested: { enabled: true } }, ['original']]);
+    expect(assertion.value).toEqual([{ nested: { enabled: true } }, ['original']]);
   });
 
   it('should apply existing inverse handling to script fields', async () => {

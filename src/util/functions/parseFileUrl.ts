@@ -23,25 +23,29 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  let separatorIndex = urlWithoutProtocol.lastIndexOf(':');
+  const separatorIndex = urlWithoutProtocol.lastIndexOf(':');
+  const candidateFilePath = urlWithoutProtocol.slice(0, separatorIndex);
 
-  while (separatorIndex > 1) {
-    const candidateFilePath = urlWithoutProtocol.slice(0, separatorIndex);
-
-    // Only executable function files support a :functionName suffix. Scanning
-    // backward preserves colons in paths and Ruby namespace separators.
-    if (
-      isJavascriptFile(candidateFilePath) ||
+  if (
+    separatorIndex > 1 &&
+    (isJavascriptFile(candidateFilePath) ||
       candidateFilePath.endsWith('.py') ||
-      candidateFilePath.endsWith('.rb')
-    ) {
-      return {
-        filePath: normalizeFilePath(candidateFilePath),
-        functionName: urlWithoutProtocol.slice(separatorIndex + 1),
-      };
-    }
+      candidateFilePath.endsWith('.rb'))
+  ) {
+    return {
+      filePath: normalizeFilePath(candidateFilePath),
+      functionName: urlWithoutProtocol.slice(separatorIndex + 1),
+    };
+  }
 
-    separatorIndex = urlWithoutProtocol.lastIndexOf(':', separatorIndex - 1);
+  // Ruby permits namespaced function names such as Checks::check_value. In
+  // that one case the function separator is the colon immediately after .rb.
+  const rubySeparatorIndex = urlWithoutProtocol.lastIndexOf('.rb:');
+  if (rubySeparatorIndex > -1) {
+    return {
+      filePath: normalizeFilePath(urlWithoutProtocol.slice(0, rubySeparatorIndex + 3)),
+      functionName: urlWithoutProtocol.slice(rubySeparatorIndex + 4),
+    };
   }
 
   return {

@@ -111,6 +111,24 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
+  it('should use the rendered script parameter in failure reasons', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.py');
+    vi.mocked(runPython).mockResolvedValue(false);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'python',
+        script: 'file://checks/assert.py',
+        value: 'Expected {{ expected }}',
+      },
+      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toBe('Python code returned false\nExpected rendered');
+    expect(result.reason).not.toContain('{{ expected }}');
+  });
+
   it('should handle Python file reference with function name', async () => {
     const assertion: Assertion = {
       type: 'python',
