@@ -1,4 +1,9 @@
+import path from 'path';
+
+import cliState from '../cliState';
+import { runRuby } from '../ruby/rubyUtils.js';
 import { runRubyCode } from '../ruby/wrapper';
+import { parseFileUrl } from '../util/functions/parseFileUrl';
 import invariant from '../util/invariant';
 import { normalizeScriptResult, type ScriptAssertionResult } from './scriptResultNormalization';
 
@@ -38,12 +43,26 @@ export const handleRuby = async ({
   inverse,
   output,
 }: AssertionParams): Promise<GradingResult> => {
-  invariant(typeof renderedValue === 'string', 'ruby assertion must have a string value');
   try {
-    const result: ScriptAssertionResult =
-      typeof valueFromScript === 'undefined'
-        ? await runRubyCode(buildRubyScript(renderedValue), 'main', [output, assertionValueContext])
-        : valueFromScript;
+    let result: ScriptAssertionResult;
+    if (assertion.script) {
+      const { filePath, functionName } = parseFileUrl(assertion.script);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      invariant(resolvedPath.endsWith('.rb'), 'ruby assertion script must reference a .rb file');
+      result = await runRuby(resolvedPath, functionName || 'get_assert', [
+        output,
+        assertionValueContext,
+      ]);
+    } else {
+      invariant(typeof renderedValue === 'string', 'ruby assertion must have a string value');
+      result =
+        typeof valueFromScript === 'undefined'
+          ? await runRubyCode(buildRubyScript(renderedValue), 'main', [
+              output,
+              assertionValueContext,
+            ])
+          : valueFromScript;
+    }
 
     return normalizeScriptResult(
       assertion,

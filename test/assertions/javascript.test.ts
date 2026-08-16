@@ -288,6 +288,103 @@ describe('JavaScript file references', () => {
     vi.resetAllMocks();
   });
 
+  it('should run a Windows script field with a rendered call-site value and safe metadata', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://C:\\checks\\assert.mjs:checkValue',
+      value: 'Expected {{ expected }}',
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+    const mockFn = vi.fn((_output: string, context: { value?: unknown }) => {
+      return context.value === 'Expected rendered';
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('C:\\checks\\assert.mjs');
+    vi.mocked(importModule).mockResolvedValue({ checkValue: mockFn });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(importModule).toHaveBeenCalledWith('C:\\checks\\assert.mjs', 'checkValue');
+    expect(mockFn).toHaveBeenCalledWith(
+      'Expected output',
+      expect.objectContaining({ value: 'Expected rendered' }),
+    );
+    expect(result.pass).toBe(true);
+    expect(result.metadata?.renderedAssertionValue).toBe('Expected rendered');
+    expect(result.metadata?.renderedAssertionValue).not.toContain('assert.mjs');
+  });
+
+  it('should preserve non-string array items in script call-site values', async () => {
+    const mixedValue = ['{{ label }}', 5, { enabled: true }] as unknown as Assertion['value'];
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      value: mixedValue,
+    };
+    const mockFn = vi.fn((_output: string, context: { value?: unknown }) => {
+      return Array.isArray(context.value);
+    });
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion,
+      test: { vars: { label: 'rendered' } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(mockFn).toHaveBeenCalledWith(
+      'Expected output',
+      expect.objectContaining({ value: ['rendered', 5, { enabled: true }] }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('should apply existing inverse handling to script fields', async () => {
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      script: 'file://checks/assert.js',
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(vi.fn(() => true));
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+  });
+
+  it('should report a language mismatch for a JavaScript script field', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        script: 'file://checks/assert.py',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining(
+        'javascript assertion script must reference a JavaScript file',
+      ),
+    });
+  });
+
   it('should handle JavaScript file reference with function name', async () => {
     const assertion: Assertion = {
       type: 'javascript',

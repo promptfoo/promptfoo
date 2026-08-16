@@ -64,6 +64,53 @@ describe('Python file references', { timeout: 15000 }, () => {
     resetPythonMocks();
   });
 
+  it('should run a script field with rendered value and config in context', async () => {
+    const assertion: Assertion = {
+      type: 'python',
+      script: 'file://checks/assert.py:check_value',
+      value: '{{ expected }}',
+      config: { inclusive: true },
+    };
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output: 'Expected output' };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.py');
+    vi.mocked(runPython).mockResolvedValue(true);
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(runPython).toHaveBeenCalledWith('/base/path/checks/assert.py', 'check_value', [
+      'Expected output',
+      expect.objectContaining({ value: 'rendered', config: { inclusive: true } }),
+    ]);
+    expect(result.pass).toBe(true);
+    expect(result.metadata?.renderedAssertionValue).toBe('rendered');
+    expect(result.metadata?.renderedAssertionValue).not.toContain('assert.py');
+  });
+
+  it('should report Python script field execution errors in the handler result', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.py');
+    vi.mocked(runPython).mockRejectedValue(new Error('Python script failed'));
+
+    const result = await runAssertion({
+      assertion: { type: 'python', script: 'file://checks/assert.py' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Python code execution failed: Python script failed',
+    });
+  });
+
   it('should handle Python file reference with function name', async () => {
     const assertion: Assertion = {
       type: 'python',

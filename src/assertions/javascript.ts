@@ -1,6 +1,12 @@
+import path from 'path';
+
+import cliState from '../cliState';
 import { type GradingResult, isGradingResult } from '../types/index';
+import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/parseFileUrl';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { loadFromJavaScriptFile } from './utils';
 
 import type { AssertionParams } from '../types/index';
 
@@ -208,10 +214,29 @@ export const handleJavascript = async ({
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
   try {
+    if (assertion.script) {
+      const { filePath, functionName } = parseFileUrl(assertion.script);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+      invariant(
+        isJavascriptFile(resolvedPath),
+        'javascript assertion script must reference a JavaScript file',
+      );
+      const result = await validateResult(
+        loadFromJavaScriptFile(resolvedPath, functionName, [output, assertionValueContext]),
+      );
+      return normalizeJavascriptAssertionResult(
+        assertion,
+        result,
+        inverse,
+        typeof renderedValue === 'string' ? renderedValue : undefined,
+      );
+    }
+
     if (typeof assertion.value === 'function') {
       const result = await validateResult(assertion.value(outputString, assertionValueContext));
       return normalizeJavascriptAssertionResult(assertion, result, inverse);
     }
+
     invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
 
     /**

@@ -38,6 +38,7 @@ import {
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parseFileUrl } from '../util/functions/parseFileUrl';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -121,6 +122,7 @@ const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
 const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
 const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
 const MAX_TRACE_FETCH_STABLE_POLLS = 10;
+const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'agent-rubric',
@@ -320,6 +322,21 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+function renderAssertionValue(
+  value: AssertionValue | undefined,
+  vars: Record<string, VarValue>,
+): AssertionValue | undefined {
+  if (typeof value === 'string') {
+    return nunjucks.renderString(value, vars);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      typeof item === 'string' ? nunjucks.renderString(item, vars) : item,
+    ) as AssertionValue;
+  }
+  return value;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -435,6 +452,7 @@ async function runAssertionInternal({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+  const baseType = getAssertionBaseType(assertion);
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -443,6 +461,10 @@ async function runAssertionInternal({
       ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
     });
   }
+
+  let renderedValue = assertion.script
+    ? renderAssertionValue(assertion.value, resolvedVars)
+    : assertion.value;
 
   const context: AssertionValueFunctionContext = {
     prompt,
@@ -454,6 +476,9 @@ async function runAssertionInternal({
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
+  if (assertion.script && renderedValue !== undefined) {
+    context.value = renderedValue;
+  }
 
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion)) {
@@ -475,22 +500,14 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  if (typeof renderedValue === 'string') {
+  if (assertion.script) {
+    // The language-specific handler loads the script. value remains the call-site parameter.
+  } else if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const { filePath: parsedPath, functionName } = parseFileUrl(renderedValue);
+      const filePath = path.resolve(basePath, parsedPath);
 
       if (isJavascriptFile(filePath)) {
         valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
@@ -563,9 +580,6 @@ async function runAssertionInternal({
   // Centralized script output resolution
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
-  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
-
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
     if (typeof valueFromScript === 'function') {

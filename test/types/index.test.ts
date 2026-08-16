@@ -96,6 +96,47 @@ describe('AssertionSchema', () => {
     const result = AssertionSchema.safeParse(arrayAssertion);
     expect(result.success).toBe(true);
   });
+
+  it.each(['javascript', 'python', 'ruby', 'not-javascript', 'not-python', 'not-ruby'])(
+    'should validate the script field for %s assertions',
+    (type) => {
+      const result = AssertionSchema.safeParse({
+        type,
+        script: 'file://assertions/check.js:checkValue',
+        value: 'call-site value',
+      });
+
+      expect(result.success).toBe(true);
+    },
+  );
+
+  it('should reject script fields on non-script assertion types', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'contains',
+      script: 'file://assertions/check.js',
+      value: 'expected',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({
+        message: 'script is only supported for javascript, python, and ruby assertions',
+        path: ['script'],
+      }),
+    );
+  });
+
+  it('should reject script fields that are not file URLs', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'javascript',
+      script: './assertions/check.js',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toContainEqual(
+      expect.objectContaining({ message: 'script must start with file://', path: ['script'] }),
+    );
+  });
 });
 
 describe('VarsSchema', () => {

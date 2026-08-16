@@ -61,6 +61,46 @@ describe('Ruby assertions', () => {
     resetRubyMocks();
   });
 
+  it('should run a Windows script field with a namespaced function and call-site value', async () => {
+    const assertion: Assertion = {
+      type: 'ruby',
+      script: 'file://C:\\checks\\assert.rb:Checks::check_value',
+      value: 7,
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('C:\\checks\\assert.rb');
+    vi.mocked(runRuby).mockResolvedValueOnce(true);
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(runRuby).toHaveBeenCalledWith('C:\\checks\\assert.rb', 'Checks::check_value', [
+      'Expected output',
+      expect.objectContaining({ value: 7 }),
+    ]);
+    expect(result.pass).toBe(true);
+  });
+
+  it('should report Ruby script field execution errors in the handler result', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+    vi.mocked(runRuby).mockRejectedValue(new Error('Ruby script failed'));
+
+    const result = await runAssertion({
+      assertion: { type: 'ruby', script: 'file://checks/assert.rb' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Ruby code execution failed: Ruby script failed',
+    });
+  });
+
   it.each([
     [
       'boolean',
