@@ -77,7 +77,7 @@ describe('Ruby assertions', () => {
       providerResponse: { output: 'Expected output' },
     });
 
-    expect(runRuby).toHaveBeenCalledWith('C:\\checks\\assert.rb', 'Checks::check_value', [
+    expect(runRuby).toHaveBeenCalledWith('C:\\checks\\assert.rb', 'Checks.check_value', [
       'Expected output',
       expect.objectContaining({ value: 7 }),
     ]);

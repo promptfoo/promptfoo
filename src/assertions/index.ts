@@ -332,11 +332,25 @@ function renderAssertionValue(
     return nunjucks.renderString(value, vars);
   }
   if (Array.isArray(value)) {
-    return value.map((item) =>
-      typeof item === 'string' ? nunjucks.renderString(item, vars) : item,
+    return value.map((item) => renderAssertionValue(item as AssertionValue, vars));
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        renderAssertionValue(item as AssertionValue, vars),
+      ]),
     );
   }
   return value;
+}
+
+function getRubyWrapperMethodName(functionName: string | undefined): string {
+  const methodName = functionName || 'get_assert';
+  const separatorIndex = methodName.lastIndexOf('::');
+  return separatorIndex === -1
+    ? methodName
+    : `${methodName.slice(0, separatorIndex)}.${methodName.slice(separatorIndex + 2)}`;
 }
 
 async function executeAssertionScript({
@@ -367,8 +381,28 @@ async function executeAssertionScript({
   }
   if (baseType === 'ruby') {
     invariant(filePath.endsWith('.rb'), 'ruby assertion script must reference a .rb file');
-    return runRuby(filePath, functionName || 'get_assert', [output, context]);
+    return runRuby(filePath, getRubyWrapperMethodName(functionName), [output, context]);
   }
+}
+
+function finalizeAssertionResult(
+  result: GradingResult,
+  assertion: Assertion,
+  renderedValue: AssertionValue | undefined,
+): GradingResult {
+  // Store rendered assertion value in metadata if it differs from the original template
+  // This allows the UI to display substituted variable values instead of raw templates
+  if (
+    renderedValue !== undefined &&
+    renderedValue !== assertion.value &&
+    typeof renderedValue === 'string'
+  ) {
+    result.metadata = result.metadata || {};
+    result.metadata.renderedAssertionValue = renderedValue;
+  }
+
+  // If weight is 0, treat this as a metric-only assertion that can't fail
+  return assertion.weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -547,23 +581,35 @@ async function runAssertionInternal({
       });
     } catch (error) {
       if (baseType === 'javascript') {
-        return formatJavascriptAssertionError(assertion, error as Error, renderedValue);
+        return finalizeAssertionResult(
+          formatJavascriptAssertionError(assertion, error as Error, renderedValue),
+          assertion,
+          renderedValue,
+        );
       }
       if (baseType === 'python') {
-        return {
-          pass: false,
-          score: 0,
-          reason: `Python code execution failed: ${(error as Error).message}`,
+        return finalizeAssertionResult(
+          {
+            pass: false,
+            score: 0,
+            reason: `Python code execution failed: ${(error as Error).message}`,
+            assertion,
+          },
           assertion,
-        };
+          renderedValue,
+        );
       }
       if (baseType === 'ruby') {
-        return {
-          pass: false,
-          score: 0,
-          reason: `Ruby code execution failed: ${(error as Error).message}`,
+        return finalizeAssertionResult(
+          {
+            pass: false,
+            score: 0,
+            reason: `Ruby code execution failed: ${(error as Error).message}`,
+            assertion,
+          },
           assertion,
-        };
+          renderedValue,
+        );
       }
       throw error;
     }
@@ -731,27 +777,7 @@ async function runAssertionInternal({
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
   if (handler) {
     const result = await handler(assertionParams);
-
-    // Store rendered assertion value in metadata if it differs from the original template
-    // This allows the UI to display substituted variable values instead of raw templates
-    if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
-    ) {
-      result.metadata = result.metadata || {};
-      result.metadata.renderedAssertionValue = renderedValue;
-    }
-
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return finalizeAssertionResult(result, assertion, renderedValue);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);

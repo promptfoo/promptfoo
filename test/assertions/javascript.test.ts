@@ -348,6 +348,43 @@ describe('JavaScript file references', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('should recursively render nested script call-site values', async () => {
+    const nestedValue = {
+      expected: '{{ label }}',
+      nested: ['prefix-{{ label }}', { message: '{{ greeting }}' }, 5],
+    };
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      value: nestedValue,
+    };
+    const mockFn = vi.fn(() => true);
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const result = await runAssertion({
+      assertion,
+      test: { vars: { label: 'rendered', greeting: 'hello' } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(mockFn).toHaveBeenCalledWith(
+      'Expected output',
+      expect.objectContaining({
+        value: {
+          expected: 'rendered',
+          nested: ['prefix-rendered', { message: 'hello' }, 5],
+        },
+      }),
+    );
+    expect(result.pass).toBe(true);
+    expect(nestedValue).toEqual({
+      expected: '{{ label }}',
+      nested: ['prefix-{{ label }}', { message: '{{ greeting }}' }, 5],
+    });
+  });
+
   it('should isolate mutable script call-site values from script mutations', async () => {
     const mutableValue = [{ nested: { enabled: true } }, ['original']];
     const assertion: Assertion = {
@@ -410,6 +447,29 @@ describe('JavaScript file references', () => {
       reason: expect.stringContaining(
         'javascript assertion script must reference a JavaScript file',
       ),
+    });
+  });
+
+  it('should treat script load errors as passing for weight-zero assertions', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      script: 'file://checks/assert.js',
+      weight: 0,
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockRejectedValue(new Error('Unable to load assertion script'));
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: expect.stringContaining('Unable to load assertion script'),
     });
   });
 
