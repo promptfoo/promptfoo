@@ -446,6 +446,8 @@ describe('package manifests', () => {
 
     expect(sdkVersion).toBeDefined();
     expect(agentVersion).toBeDefined();
+    expect(sdkPackage, 'the Anthropic SDK must have a lockfile entry').toBeDefined();
+    expect(agentPackage, 'the Anthropic agent SDK must have a lockfile entry').toBeDefined();
     expect(packageJson.optionalDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
@@ -467,8 +469,11 @@ describe('package manifests', () => {
     for (const [binaryName, binaryVersion] of Object.entries(
       agentPackage.optionalDependencies ?? {},
     )) {
+      const binaryPackage = packageLock.packages[`node_modules/${binaryName}`];
+
       expect(binaryVersion).toBe(agentPackage.version);
-      expect(packageLock.packages[`node_modules/${binaryName}`].version).toBe(agentPackage.version);
+      expect(binaryPackage, `${binaryName} must have a lockfile entry`).toBeDefined();
+      expect(binaryPackage.version).toBe(agentPackage.version);
     }
   });
 
@@ -941,12 +946,10 @@ describe('package manifests', () => {
       'the parser transport dependency must declare a valid semver range',
     ).not.toBeNull();
 
-    const parserTransportMinVersion = minVersion(parserTransportRange as string);
     expect(
-      parserTransportMinVersion,
-      'the parser transport range must have a minimum version',
-    ).not.toBeNull();
-    expect(satisfies(parserTransportMinVersion?.version ?? '', PATCHED_UNDICI_RANGE)).toBe(true);
+      subset(parserTransportRange as string, PATCHED_UNDICI_RANGE),
+      `the parser transport dependency must not allow vulnerable undici ${parserTransportRange}`,
+    ).toBe(true);
   });
 
   it('keeps undici patched and aligned across the root and code-scan-action manifests', () => {
