@@ -1,0 +1,909 @@
+/* DEF CON 34 (2026) — black ground, phosphor green accent.
+   Type is the site's sans stack; mono is reserved for the things that are
+   actually terminal output (the transcript, the two shell headings, the
+   bracket tags, and the `man agency` block). Sibling page blackhat-2026 is
+   red/black and briefing-room sleek; this is the underground counterpart. */
+
+/* ============================================================
+   Page shell + tokens
+   ============================================================ */
+
+.defconPage {
+  --dc-black: #000;
+  --dc-panel: #060906;
+  --dc-panel-alt: #030503;
+  --dc-green: #00ff41;
+  --dc-green-dim: #00c233;
+  --dc-text: #c9f5d6;
+  --dc-muted: #8aa892;
+  --dc-red: #ff5f5f;
+  --dc-amber: #ffb000;
+  --dc-line: rgba(0, 255, 65, 0.22);
+  --dc-line-soft: rgba(0, 255, 65, 0.1);
+  --dc-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Top clearance for the fixed ambient layer. Docusaurus only resolves the
+     announcement bar to a real height at >=997px; the narrow-viewport value is
+     set in the responsive block. */
+  --dc-bar-offset: var(--docusaurus-announcement-bar-height, 30px);
+
+  position: relative;
+  z-index: 0; /* bounds the fixed ambient layer below the navbar */
+  min-height: 100vh;
+  background: var(--dc-black);
+  color: var(--dc-text);
+  font-family: var(--ifm-font-family-base);
+  overflow-x: hidden;
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* ============================================================
+   Ambient layer (fixed, behind content, never over the navbar or
+   the announcement bar)
+   ============================================================ */
+
+/* `.defconPage` is a z-index:0 stacking context, so this fixed layer would
+   paint above the announcement bar, which Docusaurus deliberately ships
+   unpositioned. Start it below the bar; the uncovered strip that leaves at the
+   top of the viewport sits behind the sticky navbar. */
+.phosphorGlow {
+  position: fixed;
+  top: var(--dc-bar-offset);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(0, 255, 65, 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 100%, rgba(0, 255, 65, 0.06) 0%, transparent 60%);
+}
+
+/* ============================================================
+   Section rhythm
+   ============================================================ */
+
+.findSection,
+.terminalSection,
+.lineupSection,
+.definitionSection,
+.statsSection,
+.runSection,
+.finalCta {
+  padding: 5rem 0;
+}
+
+/* Sits between two flat sections, so it carries its own rule to separate them. */
+.lineupSection {
+  border-top: 1px solid var(--dc-line-soft);
+}
+
+/* Alternating recessed panels */
+.findSection,
+.definitionSection,
+.statsSection,
+.finalCta {
+  background: var(--dc-panel-alt);
+  border-top: 1px solid var(--dc-line-soft);
+}
+
+.findSection,
+.definitionSection,
+.statsSection {
+  border-bottom: 1px solid var(--dc-line-soft);
+}
+
+/* ============================================================
+   Shared primitives
+   ============================================================ */
+
+.sectionHeading {
+  margin: 0 0 1rem;
+  font-size: clamp(1.5rem, 3.5vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--dc-green);
+}
+
+/* The two headings that are literally commands. */
+.shellHeading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-family: var(--dc-mono);
+  font-size: clamp(1.35rem, 3vw, 1.9rem);
+  letter-spacing: 0;
+}
+
+.prompt {
+  color: var(--dc-green-dim);
+}
+
+.sectionLead {
+  max-width: 62ch;
+  margin: 0 0 2.75rem;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: var(--dc-muted);
+}
+
+.inlineCode {
+  padding: 0.1em 0.35em;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid var(--dc-line-soft);
+  border-radius: 3px;
+  font-family: var(--dc-mono);
+  font-size: 0.9em;
+  color: var(--dc-green);
+}
+
+.cardTag,
+.senseSource {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid var(--dc-line-soft);
+  color: var(--dc-green-dim);
+  font-family: var(--dc-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+/* Panels */
+.card,
+.dictCard,
+.runCard {
+  background: var(--dc-panel);
+  border: 1px solid var(--dc-line-soft);
+}
+
+/* Buttons */
+.primaryButton,
+.secondaryButton {
+  display: inline-block;
+  padding: 0.9rem 1.75rem;
+  font-family: var(--dc-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.primaryButton {
+  background: var(--dc-green);
+  border: 1px solid var(--dc-green);
+  color: #000;
+}
+
+.primaryButton:hover,
+.primaryButton:focus-visible {
+  background: #4dff7a;
+  border-color: #4dff7a;
+  color: #000;
+  text-decoration: none;
+}
+
+.secondaryButton {
+  background: transparent;
+  border: 1px solid var(--dc-line);
+  color: var(--dc-green);
+}
+
+.secondaryButton:hover,
+.secondaryButton:focus-visible {
+  background: rgba(0, 255, 65, 0.1);
+  border-color: var(--dc-green);
+  color: var(--dc-green);
+  text-decoration: none;
+}
+
+/* ============================================================
+   Hero
+   ============================================================ */
+
+.hero {
+  position: relative;
+  padding: 6rem 0 5rem;
+}
+
+.heroContent {
+  max-width: 900px;
+}
+
+.eyebrow {
+  display: inline-block;
+  margin-bottom: 1.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 255, 65, 0.05);
+  border: 1px solid var(--dc-line);
+  color: var(--dc-green);
+  font-family: var(--dc-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+/* Identity, not logistics: this is why we are at someone else's booth. */
+.identity {
+  margin: 0 0 0.85rem;
+  font-size: clamp(0.95rem, 1.5vw, 1.05rem);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--dc-text);
+}
+
+.heroTitle {
+  margin: 0 0 1.75rem;
+  font-size: clamp(2.25rem, 8vw, 5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  color: #e8fff0;
+}
+
+.accent {
+  color: var(--dc-green);
+}
+
+.heroSubtitle {
+  max-width: 60ch;
+  margin: 0 0 2.5rem;
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+  line-height: 1.75;
+  color: var(--dc-text);
+}
+
+.heroButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+
+.eventDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--dc-line-soft);
+}
+
+.detail {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.95rem;
+  color: var(--dc-text);
+}
+
+.icon {
+  flex: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  color: var(--dc-green);
+}
+
+/* ============================================================
+   Find us
+   ============================================================ */
+
+/* Clears the sticky navbar when /events/defcon-2026/#find-us is opened directly
+   or restored by back-navigation, i.e. without the JS scroll handler. */
+.findSection {
+  scroll-margin-top: 80px;
+}
+
+/* Three explicit columns rather than auto-fit: auto-fit held three columns well
+   past the point the copy stayed readable, then dropped straight to one. */
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.75rem;
+  transition:
+    border-color 0.25s ease,
+    background-color 0.25s ease;
+}
+
+/* Static cards, so the hover response is a border, not a lift. */
+.card:hover {
+  border-color: var(--dc-line);
+  background: #080d08;
+}
+
+.cardTitle {
+  margin: 0 0 0.85rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--dc-green);
+}
+
+.cardBody {
+  flex: 1;
+  margin: 0 0 1.5rem;
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--dc-text);
+}
+
+.boothHours {
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.9rem;
+  list-style: none;
+}
+
+.boothHours li {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--dc-line-soft);
+}
+
+.boothHours li:last-child {
+  border-bottom: 0;
+}
+
+.boothHoursDay {
+  flex: 0 0 5.5rem;
+  font-family: var(--dc-mono);
+  font-size: 0.75rem;
+  color: var(--dc-green);
+}
+
+.boothHoursTime {
+  color: var(--dc-text);
+}
+
+.hoursNote {
+  flex: 1;
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--dc-muted);
+}
+
+.cardTag {
+  align-self: flex-start;
+}
+
+.boothNote {
+  margin: 2rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--dc-muted);
+}
+
+/* ============================================================
+   Terminal transcript
+   ============================================================ */
+
+.terminalFigure {
+  margin: 0;
+}
+
+.terminalWindow {
+  background: #020402;
+  border: 1px solid var(--dc-line);
+}
+
+.terminalBody {
+  margin: 0;
+  padding: 1.5rem 1.25rem;
+  font-family: var(--dc-mono);
+  font-size: clamp(0.78rem, 1.6vw, 0.9rem);
+  line-height: 1.8;
+}
+
+/* Wraps rather than scrolls: the transcript is content, and a sideways scroll
+   inside the page's centrepiece is a dead end on a phone. */
+.termLine {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lineCmd {
+  color: #e8fff0;
+  font-weight: 700;
+}
+
+.lineInfo {
+  color: var(--dc-muted);
+}
+
+.lineBlank {
+  color: transparent;
+}
+
+.lineSummary {
+  color: var(--dc-amber);
+}
+
+.lineVerdict {
+  color: var(--dc-red);
+  font-weight: 700;
+}
+
+/* Result rows are laid out, not padded, so no `padEnd` column is needed. The
+   plugin column is sized for the longest registered ID in the transcript
+   (`indirect-prompt-injection`, 25ch) so no name breaks mid-word. */
+.resultRow {
+  display: grid;
+  grid-template-columns: 4ch minmax(0, 26ch) minmax(0, 1fr);
+  column-gap: 1.5rem;
+  color: var(--dc-text);
+}
+
+.statusPass {
+  color: var(--dc-green);
+  font-weight: 700;
+}
+
+.statusFail {
+  color: var(--dc-red);
+  font-weight: 700;
+}
+
+.resultPlugin {
+  color: var(--dc-text);
+}
+
+.resultNote {
+  color: var(--dc-muted);
+}
+
+.terminalCaption {
+  margin-top: 1rem;
+  max-width: 68ch;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--dc-muted);
+}
+
+/* ============================================================
+   Agency, defined
+   ============================================================ */
+
+.dictCard {
+  padding: 2.25rem;
+  border-left: 3px solid var(--dc-green);
+}
+
+.dictHead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px dashed var(--dc-line-soft);
+}
+
+.dictWord {
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  font-weight: 700;
+  color: var(--dc-green);
+}
+
+.dictPron {
+  font-size: 1rem;
+  color: var(--dc-muted);
+}
+
+.dictPos {
+  font-size: 0.95rem;
+  font-style: italic;
+  color: var(--dc-amber);
+}
+
+.dictSenses {
+  counter-reset: sense;
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+.sense {
+  counter-increment: sense;
+  position: relative;
+  padding-left: 2.5rem;
+}
+
+.sense + .sense {
+  margin-top: 1.5rem;
+}
+
+.sense::before {
+  content: counter(sense) '.';
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-weight: 700;
+  color: var(--dc-green-dim);
+}
+
+.senseSource {
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.senseText {
+  display: block;
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.98rem;
+  line-height: 1.75;
+  color: var(--dc-text);
+}
+
+.dictFooter {
+  font-family: var(--ifm-font-family-base);
+  margin: 2rem 0 0;
+  padding-top: 1.25rem;
+  border-top: 1px dashed var(--dc-line-soft);
+  font-size: 0.98rem;
+  line-height: 1.7;
+  color: var(--dc-green);
+}
+
+/* ============================================================
+   Open source proof
+   ============================================================ */
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.stat {
+  display: block;
+  padding: 1rem 0 1rem 1.25rem;
+  border-left: 1px solid var(--dc-line-soft);
+}
+
+.statLink {
+  text-decoration: none;
+  transition:
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.statLink:hover,
+.statLink:focus-visible {
+  border-left-color: var(--dc-green);
+  text-decoration: none;
+}
+
+.statLink:hover .statLabel,
+.statLink:focus-visible .statLabel {
+  color: var(--dc-green);
+}
+
+.statNumber {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--dc-green);
+}
+
+.statLabel {
+  margin-top: 0.45rem;
+  font-family: var(--dc-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dc-muted);
+  transition: color 0.2s ease;
+}
+
+/* ============================================================
+   The Vegas run
+   ============================================================ */
+
+.runCard {
+  padding: 2.25rem;
+}
+
+.runHeader {
+  margin-bottom: 1.75rem;
+}
+
+.runKicker {
+  margin-bottom: 0.6rem;
+  font-family: var(--dc-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--dc-green-dim);
+}
+
+.runTitle {
+  margin: 0;
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--dc-green);
+}
+
+.runTimeline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.runLeg {
+  padding: 1.25rem;
+  background: var(--dc-panel-alt);
+  border: 1px solid var(--dc-line-soft);
+}
+
+.runLegDate {
+  font-family: var(--dc-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--dc-amber);
+}
+
+.runLegName {
+  margin-top: 0.45rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--dc-green);
+}
+
+.runLegVenue {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+  color: var(--dc-muted);
+}
+
+.runConnector {
+  --dc-dash-angle: 90deg;
+  width: 3rem;
+  height: 1px;
+  background: repeating-linear-gradient(
+    var(--dc-dash-angle),
+    var(--dc-green-dim) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+.runNote {
+  margin: 1.75rem 0 1.25rem;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--dc-text);
+}
+
+.runLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--dc-green);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.runLink:hover {
+  color: #4dff7a;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.runLinkIcon {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ============================================================
+   Final CTA + footer nav
+   ============================================================ */
+
+.finalCta {
+  text-align: center;
+}
+
+.ctaTitle {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--dc-green);
+}
+
+.ctaText {
+  max-width: 56ch;
+  margin: 0 auto 2.25rem;
+  font-size: 1.05rem;
+  line-height: 1.75;
+  color: var(--dc-text);
+}
+
+.ctaButtons {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.ctaFootnote {
+  margin: 1.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--dc-muted);
+}
+
+.ctaFootnote a {
+  color: var(--dc-green);
+  text-underline-offset: 3px;
+}
+
+.footerNav {
+  padding: 2rem 0 3.5rem;
+  border-top: 1px solid var(--dc-line-soft);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--dc-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: var(--dc-green);
+  text-decoration: none;
+}
+
+.backIcon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 996px) {
+  /* Below 997px the announcement bar height is `auto` and its text wraps, so
+     clear it with a fixed value that still tucks under the sticky navbar. */
+  .defconPage {
+    --dc-bar-offset: 3.5rem;
+  }
+
+  .hero {
+    padding: 4.5rem 0 3.5rem;
+  }
+
+  /* Two columns, not one: the cards are short enough to stay side by side. */
+  .cardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0 1.25rem;
+  }
+
+  .findSection,
+  .terminalSection,
+  .lineupSection,
+  .definitionSection,
+  .statsSection,
+  .runSection,
+  .finalCta {
+    padding: 3.5rem 0;
+  }
+
+  .heroButtons,
+  .ctaButtons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    text-align: center;
+  }
+
+  .eventDetails {
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .card,
+  .dictCard,
+  .runCard {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .runTimeline {
+    grid-template-columns: 1fr;
+  }
+
+  .runConnector {
+    --dc-dash-angle: 180deg;
+    width: 1px;
+    height: 2rem;
+    justify-self: start;
+    margin-left: 1.25rem;
+  }
+
+  .stat {
+    padding-left: 1rem;
+  }
+
+  .terminalBody {
+    padding: 1.25rem 1rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .cardGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The note drops under the plugin name so the transcript never scrolls
+   sideways on a phone. */
+@media (max-width: 600px) {
+  .resultRow {
+    grid-template-columns: 4ch minmax(0, 1fr);
+    column-gap: 1rem;
+  }
+
+  .resultNote {
+    grid-column: 2;
+  }
+}
+
+/* ============================================================
+   Reduced motion — neutralize every transition above
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryButton,
+  .secondaryButton,
+  .card,
+  .statLink,
+  .statLabel,
+  .backLink,
+  .runLink {
+    transition: none;
+  }
+}

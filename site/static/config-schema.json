@@ -59,13 +59,13 @@
           "$ref": "#/definitions/__schema40"
         },
         "evaluateOptions": {
-          "$ref": "#/definitions/__schema41"
+          "$ref": "#/definitions/__schema45"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema47"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema48"
         }
       },
       "required": ["prompts"],
@@ -3191,12 +3191,170 @@
           },
           "required": ["enabled", "endpoint"],
           "additionalProperties": false
+        },
+        "provider": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "tempo"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "$ref": "#/definitions/__schema42"
+                    },
+                    "username": {
+                      "$ref": "#/definitions/__schema43"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema44"
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "braintrust"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "projectId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": ["token"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "projectId", "auth"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "langfuse"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "password": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "token": {
+                      "not": {}
+                    }
+                  },
+                  "required": ["username", "password"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "auth"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "queryDelay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300000
         }
       },
       "required": ["enabled"],
       "additionalProperties": false
     },
     "__schema41": {
+      "type": "string",
+      "format": "uri"
+    },
+    "__schema42": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema43": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema44": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema45": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3239,15 +3397,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema46"
         }
       },
       "additionalProperties": false
     },
-    "__schema42": {
+    "__schema46": {
       "type": "string"
     },
-    "__schema43": {
+    "__schema47": {
       "type": "object",
       "properties": {
         "description": {
@@ -3375,7 +3533,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema42"
+              "$ref": "#/definitions/__schema46"
             }
           ]
         },
@@ -3449,7 +3607,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema48": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

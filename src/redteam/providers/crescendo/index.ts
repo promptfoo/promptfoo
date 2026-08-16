@@ -43,6 +43,7 @@ import {
 import { getGoalRubric } from '../prompts';
 import {
   buildGraderResultAssertion,
+  callGradingProvider,
   externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
@@ -52,6 +53,7 @@ import {
   isValidChatMessageArray,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
@@ -661,7 +663,8 @@ export class CrescendoProvider implements ApiProvider {
               ),
             };
 
-            const { grade, rubric } = await grader.getResult(
+            const { grade, rubric } = await runRedteamGrader(
+              grader,
               attackPrompt,
               lastResponse.output,
               test,
@@ -1200,12 +1203,13 @@ export class CrescendoProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    if (shouldFetchTrace && tracingOptions) {
+    if (shouldFetchTrace && tracingOptions && !targetResponse.cached) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         const traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
@@ -1214,6 +1218,9 @@ export class CrescendoProvider implements ApiProvider {
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
 
         if (traceContext) {
@@ -1267,7 +1274,8 @@ export class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(
+    const refusalResponse = await callGradingProvider(
+      scoringProvider,
       refusalBody,
       {
         prompt: {
@@ -1327,7 +1335,8 @@ export class CrescendoProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(
+    const evalResponse = await callGradingProvider(
+      scoringProvider,
       evalBody,
       {
         prompt: {

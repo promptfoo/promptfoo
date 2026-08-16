@@ -2197,14 +2197,57 @@ describe('HydraProvider', () => {
         traceparent: '00-trace123-span456-01',
       };
 
-      const result = await provider.callApi('', context);
+      const abortController = new AbortController();
+      const result = await provider.callApi('', context, { abortSignal: abortController.signal });
 
       // Should call fetchTraceContext
-      expect(mockFetchTraceContext).toHaveBeenCalled();
+      expect(mockFetchTraceContext).toHaveBeenCalledWith(
+        'test-trace-id',
+        expect.objectContaining({ abortSignal: abortController.signal }),
+      );
 
       // Metadata should have trace snapshots
       expect(result.metadata?.traceSnapshots).toBeDefined();
       expect(result.metadata?.traceSnapshots).toHaveLength(1);
+    });
+
+    it('skips trace retrieval when a Hydra target response came from cache', async () => {
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Cached target response',
+        cached: true,
+      });
+
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      expect(result.metadata?.traceSnapshots).toBeUndefined();
     });
 
     it('should NOT fetch trace context when traceparent is missing', async () => {

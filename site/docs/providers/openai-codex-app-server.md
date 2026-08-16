@@ -369,7 +369,7 @@ generations and tool execution. App-server notifications do not expose those int
 model-generation boundaries, so these markers cannot distinguish batched from
 sequential tool calls inside a turn.
 
-Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Deep tracing starts a fresh app-server process for each row so the child process can receive the active trace context. Reusable app-server process and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
+Enable deeper app-server tracing by setting `deep_tracing: true` with Promptfoo's OpenTelemetry tracing enabled. Promptfoo configures Codex's trace exporter automatically unless you have already selected one, and starts a fresh app-server process for each row so the child process receives the active trace context. Reusable app-server processes and persistent thread pooling are disabled in this mode; explicit `thread_id` resumes are still serialized so parallel rows do not overlap turns on the same Codex thread.
 
 ## Local Verification
 

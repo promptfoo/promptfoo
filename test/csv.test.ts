@@ -374,20 +374,21 @@ describe('testCaseFromCsvRow', () => {
       );
     });
 
-    it.each(
-      INVALID_THRESHOLD_VALUES.slice(0, 3),
-    )('throws on invalid threshold value %s', (thresholdValue) => {
-      const key = '__config:__expected1:threshold';
-      const row: CsvRow = {
-        __expected1: 'similar:foo',
-        [key]: thresholdValue,
-      } as any;
+    it.each(INVALID_THRESHOLD_VALUES.slice(0, 3))(
+      'throws on invalid threshold value %s',
+      (thresholdValue) => {
+        const key = '__config:__expected1:threshold';
+        const row: CsvRow = {
+          __expected1: 'similar:foo',
+          [key]: thresholdValue,
+        } as any;
 
-      expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
-      expect(logger.error).toHaveBeenCalledWith(
-        `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
-      );
-    });
+        expect(() => testCaseFromCsvRow(row)).toThrow('Invalid numeric value for threshold');
+        expect(logger.error).toHaveBeenCalledWith(
+          `Invalid numeric value "${thresholdValue}" for config key "threshold" in column "__config:__expected1:threshold"`,
+        );
+      },
+    );
   });
   it('should preserve zero __threshold in the test case', () => {
     const row: CsvRow = {

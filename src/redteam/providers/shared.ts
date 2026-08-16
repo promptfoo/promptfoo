@@ -7,11 +7,16 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { type RateLimitRegistry, wrapProviderWithRateLimiting } from '../../scheduler';
+import {
+  getProviderCallTracingContext,
+  type RateLimitRegistry,
+  wrapProviderWithRateLimiting,
+} from '../../scheduler';
 import {
   type ApiProvider,
   type Assertion,
   type AssertionOrSet,
+  type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
   isApiProvider,
@@ -45,6 +50,23 @@ export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:
  * redteam call site.
  */
 export type LoadableRedteamProvider = string | ProviderOptions;
+export type RedteamProviderSelectionSource = 'explicit' | 'cache' | 'fallback' | 'default';
+
+/**
+ * A provider chosen for one red-team generation request.
+ *
+ * localProviderSpec is intentionally runtime-only: provider option objects can
+ * contain resolved credentials, but are still needed to build local JSON-only
+ * variants of an explicitly configured provider. Only persistableId may cross
+ * a serialization boundary.
+ */
+export interface RedteamProviderSelection {
+  provider: ApiProvider;
+  source: RedteamProviderSelectionSource;
+  localProviderSpec?: RedteamFileConfig['provider'];
+  persistableId?: string;
+}
+
 export type RedteamProviderLoader = (
   providers: LoadableRedteamProvider[],
 ) => Promise<ApiProvider[]>;
@@ -91,7 +113,7 @@ async function loadRedteamProvider({
   purpose?: 'redteam' | 'grading';
 } = {}) {
   let ret;
-  const redteamProvider = provider || cliState.config?.redteam?.provider;
+  const redteamProvider = provider;
   if (isApiProvider(redteamProvider)) {
     logger.debug(`Using ${purpose} provider: ${redteamProvider}`);
     ret = redteamProvider;
@@ -113,6 +135,7 @@ async function loadRedteamProvider({
 
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
+  private providerSpec: LoadableRedteamProvider | undefined;
   private jsonOnlyProvider: ApiProvider | undefined;
   private multilingualProvider: ApiProvider | undefined;
   private gradingProvider: ApiProvider | undefined;
@@ -140,6 +163,7 @@ class RedteamProviderManager {
 
   clearProvider() {
     this.provider = undefined;
+    this.providerSpec = undefined;
     this.jsonOnlyProvider = undefined;
     this.multilingualProvider = undefined;
     this.gradingProvider = undefined;
@@ -149,8 +173,170 @@ class RedteamProviderManager {
   }
 
   async setProvider(provider: RedteamFileConfig['provider']) {
-    this.provider = await loadRedteamProvider({ provider });
-    this.jsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+    // Do not publish a partially replaced cache. Both variants and the spec must
+    // describe the same provider selection or callers can route different phases
+    // of one generation run to different backends.
+    const loadedProvider = await loadRedteamProvider({ provider });
+    const loadedJsonOnlyProvider = await loadRedteamProvider({ provider, jsonOnly: true });
+
+    this.providerSpec =
+      typeof provider === 'string' || isProviderOptions(provider) ? provider : undefined;
+    this.provider = loadedProvider;
+    this.jsonOnlyProvider = loadedJsonOnlyProvider;
+  }
+
+  private getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
+    if (typeof cliState.config?.defaultTest !== 'object') {
+      return undefined;
+    }
+
+    return (
+      (cliState.config.defaultTest as any)?.provider ||
+      (cliState.config.defaultTest as any)?.options?.provider?.text ||
+      (cliState.config.defaultTest as any)?.options?.provider ||
+      undefined
+    );
+  }
+
+  private resolveProviderCandidate({
+    provider,
+    fallbackProvider,
+    ignoreCliState = false,
+  }: {
+    provider?: RedteamFileConfig['provider'];
+    fallbackProvider?: RedteamFileConfig['provider'];
+    ignoreCliState?: boolean;
+  } = {}): {
+    source: RedteamProviderSelectionSource;
+    provider?: RedteamFileConfig['provider'];
+    cachedProvider?: ApiProvider;
+    cachedJsonOnlyProvider?: ApiProvider;
+    spec?: LoadableRedteamProvider;
+  } {
+    const toSpec = (
+      value: RedteamFileConfig['provider'] | undefined,
+    ): LoadableRedteamProvider | undefined =>
+      typeof value === 'string' || isProviderOptions(value) ? value : undefined;
+
+    if (provider) {
+      return { source: 'explicit', provider, spec: toSpec(provider) };
+    }
+
+    if (this.provider && this.jsonOnlyProvider) {
+      return {
+        source: 'cache',
+        cachedProvider: this.provider,
+        cachedJsonOnlyProvider: this.jsonOnlyProvider,
+        spec: this.providerSpec,
+      };
+    }
+
+    if (fallbackProvider) {
+      return {
+        source: 'fallback',
+        provider: fallbackProvider,
+        spec: toSpec(fallbackProvider),
+      };
+    }
+
+    if (ignoreCliState) {
+      return { source: 'default' };
+    }
+
+    const configuredProvider = cliState.config?.redteam?.provider;
+    if (configuredProvider) {
+      return {
+        source: 'explicit',
+        provider: configuredProvider,
+        spec: toSpec(configuredProvider),
+      };
+    }
+
+    const defaultTestProvider = this.getDefaultTestProvider();
+    if (defaultTestProvider) {
+      return {
+        source: 'explicit',
+        provider: defaultTestProvider,
+        spec: toSpec(defaultTestProvider),
+      };
+    }
+
+    return { source: 'default' };
+  }
+
+  private async loadProviderCandidate(
+    candidate: ReturnType<RedteamProviderManager['resolveProviderCandidate']>,
+    {
+      jsonOnly = false,
+      preferSmallModel = false,
+    }: {
+      jsonOnly?: boolean;
+      preferSmallModel?: boolean;
+    } = {},
+  ): Promise<ApiProvider> {
+    if (candidate.source === 'cache') {
+      const cachedProvider = jsonOnly ? candidate.cachedJsonOnlyProvider : candidate.cachedProvider;
+      invariant(cachedProvider, 'Expected cached redteam provider variant to be set');
+      logger.debug(
+        '[RedteamProviderManager] Using cached redteam provider: ' + cachedProvider.id(),
+      );
+      return this.wrapProvider(cachedProvider);
+    }
+
+    const loaded = await loadRedteamProvider({
+      provider: candidate.provider,
+      jsonOnly,
+      preferSmallModel,
+    });
+    logger.debug(
+      '[RedteamProviderManager] Loaded ' + candidate.source + ' redteam provider: ' + loaded.id(),
+    );
+    return this.wrapProvider(loaded);
+  }
+
+  /**
+   * Resolves runtime provider, provenance, local-only spec, and safe persisted ID
+   * through one precedence walk.
+   */
+  async getProviderSelection({
+    provider,
+    fallbackProvider,
+    ignoreCliState = false,
+    jsonOnly = false,
+    preferSmallModel = false,
+  }: {
+    provider?: RedteamFileConfig['provider'];
+    fallbackProvider?: RedteamFileConfig['provider'];
+    /** Skip process-global config for request-scoped callers such as Web UI previews. */
+    ignoreCliState?: boolean;
+    jsonOnly?: boolean;
+    preferSmallModel?: boolean;
+  } = {}): Promise<RedteamProviderSelection> {
+    const candidate = this.resolveProviderCandidate({
+      provider,
+      fallbackProvider,
+      ignoreCliState,
+    });
+    return {
+      provider: await this.loadProviderCandidate(candidate, { jsonOnly, preferSmallModel }),
+      source: candidate.source,
+      localProviderSpec: candidate.spec,
+      persistableId: typeof candidate.spec === 'string' ? candidate.spec : undefined,
+    };
+  }
+
+  /**
+   * Loads the built-in attacker model without consulting cache or CLI state.
+   */
+  async getDefaultProvider({
+    jsonOnly = false,
+    preferSmallModel = false,
+  }: {
+    jsonOnly?: boolean;
+    preferSmallModel?: boolean;
+  } = {}): Promise<ApiProvider> {
+    const provider = await loadRedteamProvider({ jsonOnly, preferSmallModel });
+    return this.wrapProvider(provider);
   }
 
   async setMultilingualProvider(provider: RedteamFileConfig['provider']) {
@@ -169,65 +355,28 @@ class RedteamProviderManager {
 
   async getProvider({
     provider,
+    fallbackProvider,
+    ignoreCliState = false,
     jsonOnly = false,
     preferSmallModel = false,
   }: {
     provider?: RedteamFileConfig['provider'];
+    /** Optional request-scoped fallback used after the cache but before process-global CLI config. */
+    fallbackProvider?: RedteamFileConfig['provider'];
+    /** Skip process-global config for request-scoped callers such as Web UI previews. */
+    ignoreCliState?: boolean;
     jsonOnly?: boolean;
     preferSmallModel?: boolean;
   }): Promise<ApiProvider> {
-    if (this.provider && this.jsonOnlyProvider) {
-      logger.debug(`[RedteamProviderManager] Using cached redteam provider: ${this.provider.id()}`);
-      return this.wrapProvider(jsonOnly ? this.jsonOnlyProvider : this.provider);
-    }
-
-    // Check if we have an explicit provider argument or redteam.provider configured
-    const hasExplicitProvider = provider || cliState.config?.redteam?.provider;
-
-    // If no explicit redteam provider, try defaultTest config chain as fallback
-    // This ensures users who configure defaultTest.options.provider get consistent behavior
-    if (!hasExplicitProvider) {
-      const defaultTestProvider =
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.provider) ||
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-        (typeof cliState.config?.defaultTest === 'object' &&
-          (cliState.config?.defaultTest as any)?.options?.provider) ||
-        undefined;
-
-      if (defaultTestProvider) {
-        logger.debug(
-          '[RedteamProviderManager] Loading redteam provider from defaultTest fallback',
-          {
-            providedConfig:
-              typeof defaultTestProvider === 'string'
-                ? defaultTestProvider
-                : (defaultTestProvider?.id ?? 'object'),
-            jsonOnly,
-            preferSmallModel,
-          },
-        );
-        const redteamProvider = await loadRedteamProvider({
-          provider: defaultTestProvider,
-          jsonOnly,
-          preferSmallModel,
-        });
-        logger.debug(
-          `[RedteamProviderManager] Using redteam provider from defaultTest: ${redteamProvider.id()}`,
-        );
-        return redteamProvider;
-      }
-    }
-
-    logger.debug('[RedteamProviderManager] Loading redteam provider', {
-      providedConfig: typeof provider == 'string' ? provider : (provider?.id ?? 'none'),
-      jsonOnly,
-      preferSmallModel,
-    });
-    const redteamProvider = await loadRedteamProvider({ provider, jsonOnly, preferSmallModel });
-    logger.debug(`[RedteamProviderManager] Loaded redteam provider: ${redteamProvider.id()}`);
-    return this.wrapProvider(redteamProvider);
+    return (
+      await this.getProviderSelection({
+        provider,
+        fallbackProvider,
+        ignoreCliState,
+        jsonOnly,
+        preferSmallModel,
+      })
+    ).provider;
   }
 
   async getGradingProvider({
@@ -320,6 +469,50 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
   return configuredLimit;
 }
 
+/** Invoke a red-team target with the same tracing behavior across every strategy. */
+export function callTargetProvider(
+  targetProvider: ApiProvider,
+  targetPrompt: string,
+  context?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return targetProvider.callApi(targetPrompt, context, options);
+  }
+
+  return tracingContext.withProviderSpan(
+    { provider: targetProvider, callContext: context },
+    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+  );
+}
+
+/** Keep strategy judge calls beneath grader-owned spans without changing their requests. */
+export function callGradingProvider(
+  provider: ApiProvider,
+  prompt: string,
+  callContext?: CallApiContextParams,
+  options?: CallApiOptionsParams,
+): Promise<ProviderResponse> {
+  const invoke = (context?: CallApiContextParams) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke(callContext);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: callContext?.prompt.label ?? 'judge',
+      evalId: callContext?.evaluationId,
+      testIndex: callContext?.testIdx ?? tracingContext.testIndex,
+    },
+    () => tracingContext.withProviderSpan({ provider, callContext, role: 'grader' }, invoke),
+  );
+}
+
 /**
  * Gets the response from the target provider for a given prompt.
  * @param targetProvider - The API provider to get the response from.
@@ -336,7 +529,7 @@ export async function getTargetResponse(
 
   try {
     throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
-    targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
+    targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
     if (error instanceof Error && error.name === 'AbortError') {
@@ -411,6 +604,40 @@ export async function getTargetResponse(
 
     Note: Empty strings are valid output values.
     `,
+  );
+}
+
+interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
+  id: string;
+  getResult: (
+    prompt: string,
+    output: string,
+    test: AtomicTestCase,
+    ...args: TArgs
+  ) => Promise<TResult>;
+}
+
+/** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
+export function runRedteamGrader<TResult, TArgs extends unknown[]>(
+  grader: TraceableRedteamGrader<TResult, TArgs>,
+  prompt: string,
+  output: string,
+  test: AtomicTestCase,
+  ...args: TArgs
+): Promise<TResult> {
+  const invoke = () => grader.getResult(prompt, output, test, ...args);
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return invoke();
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: grader.id,
+      evalId: test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    invoke,
   );
 }
 
