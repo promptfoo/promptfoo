@@ -134,6 +134,9 @@ interface AssertionValueFunctionContext {
   // Configuration passed to the assertion
   config?: Record<string, any>;
 
+  // Rendered value from an assertion that uses the script field
+  value?: string | string[] | number | object;
+
   // The provider that generated the response
   provider: ApiProvider | undefined;
 
@@ -174,7 +177,7 @@ tests:
 
 ## Passing assertion-specific parameters
 
-If you want to reuse the same JavaScript assertion with different parameters in a single test case, prefer assertion-level `config` over test `vars`. Test vars are shared across all assertions and appear as report columns, while `config` stays attached to one assertion and is available as `context.config`.
+To reuse the same JavaScript file with a different primary value at each call site, set the file in `script` and the parameter in `value`. Promptfoo renders `value` with the test vars and passes it as `context.value`. Use `config` for additional named options.
 
 ```yaml
 tests:
@@ -183,31 +186,32 @@ tests:
       topic: 'bananas'
     assert:
       - type: javascript
-        value: file://assertions/min-length.js
+        script: file://assertions/min-length.js
+        value: 5
         config:
-          minLength: 5
+          inclusive: true
       - type: javascript
-        value: file://assertions/min-length.js
-        config:
-          minLength: 20
+        script: file://assertions/min-length.js
+        value: 20
 ```
 
 ```js
 module.exports = (output, context) => {
-  return output.length >= context.config.minLength;
+  return context.config.inclusive ? output.length >= context.value : output.length > context.value;
 };
 ```
 
 ## External script
 
-To reference an external file, use the `file://` prefix:
+To reference an external file while keeping `value` available for call-site data, use `script` with a `file://` path:
 
 ```yaml
 assert:
   - type: javascript
-    value: file://relative/path/to/script.js
+    script: file://relative/path/to/script.js
+    value: 10
     config:
-      maximumOutputSize: 10
+      inclusive: true
 ```
 
 You can specify a particular function to use by appending it after a colon:
@@ -215,15 +219,17 @@ You can specify a particular function to use by appending it after a colon:
 ```yaml
 assert:
   - type: javascript
-    value: file://relative/path/to/script.js:customFunction
+    script: file://relative/path/to/script.js:customFunction
 ```
+
+The existing `value: file://relative/path/to/script.js` form remains supported when no call-site value is needed.
 
 The JavaScript file must export an assertion function. Here are examples:
 
 ```js
 // Default export
 module.exports = (output, context) => {
-  return output.length > 10;
+  return context.config.inclusive ? output.length >= context.value : output.length > context.value;
 };
 ```
 
