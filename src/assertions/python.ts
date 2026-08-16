@@ -57,7 +57,7 @@ export const handlePython = async ({
       result,
       inverse,
       { code: 'Python code', language: 'Python' },
-      assertion.script ? renderedValue : assertion.value,
+      assertion.script ? undefined : assertion.value,
     );
   } catch (err) {
     return {

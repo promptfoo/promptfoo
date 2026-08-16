@@ -111,7 +111,8 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
-  it('should use the rendered script parameter in failure reasons', async () => {
+  it('should keep rendered script parameters out of failure reasons', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
     vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.py');
     vi.mocked(runPython).mockResolvedValue(false);
 
@@ -119,14 +120,14 @@ describe('Python file references', { timeout: 15000 }, () => {
       assertion: {
         type: 'python',
         script: 'file://checks/assert.py',
-        value: 'Expected {{ expected }}',
+        value: '{{ fakeSecret }}',
       },
-      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      test: { vars: { fakeSecret } } as AtomicTestCase,
       providerResponse: { output: 'Expected output' },
     });
 
-    expect(result.reason).toBe('Python code returned false\nExpected rendered');
-    expect(result.reason).not.toContain('{{ expected }}');
+    expect(result.reason).toBe('Python code returned false');
+    expect(result.reason).not.toContain(fakeSecret);
   });
 
   it('should handle Python file reference with function name', async () => {

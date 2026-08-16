@@ -321,6 +321,48 @@ describe('JavaScript file references', () => {
     expect(result.metadata?.renderedAssertionValue).not.toContain('assert.mjs');
   });
 
+  it('should keep rendered script parameters out of failure reasons', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockResolvedValue(vi.fn(() => false));
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        script: 'file://checks/assert.js',
+        value: '{{ fakeSecret }}',
+      },
+      test: { vars: { fakeSecret } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toBe('Custom function returned false');
+    expect(result.reason).not.toContain(fakeSecret);
+  });
+
+  it('should preserve script load errors without exposing rendered parameters', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.js');
+    vi.mocked(importModule).mockRejectedValue(
+      new Error('Unable to load assertion script at /base/path/checks/assert.js'),
+    );
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'javascript',
+        script: 'file://checks/assert.js',
+        value: '{{ fakeSecret }}',
+      },
+      test: { vars: { fakeSecret } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toContain(
+      'Unable to load assertion script at /base/path/checks/assert.js',
+    );
+    expect(result.reason).not.toContain(fakeSecret);
+  });
+
   it('should preserve non-string array items in script call-site values', async () => {
     const mixedValue = ['{{ label }}', 5, { enabled: true }];
     const assertion: Assertion = {

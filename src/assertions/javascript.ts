@@ -227,12 +227,7 @@ export const handleJavascript = async ({
   try {
     if (assertion.script) {
       const result = await validateResult(valueFromScript);
-      return normalizeJavascriptAssertionResult(
-        assertion,
-        result,
-        inverse,
-        typeof renderedValue === 'string' ? renderedValue : undefined,
-      );
+      return normalizeJavascriptAssertionResult(assertion, result, inverse);
     }
 
     if (typeof assertion.value === 'function') {
@@ -277,6 +272,10 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
-    return formatJavascriptAssertionError(assertion, err as Error, renderedValue);
+    return formatJavascriptAssertionError(
+      assertion,
+      err as Error,
+      assertion.script ? undefined : renderedValue,
+    );
   }
 };

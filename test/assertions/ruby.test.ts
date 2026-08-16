@@ -140,7 +140,8 @@ describe('Ruby assertions', () => {
     });
   });
 
-  it('should use the rendered script parameter in failure reasons', async () => {
+  it('should keep rendered script parameters out of failure reasons', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
     vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
     vi.mocked(runRuby).mockResolvedValue(false);
 
@@ -148,14 +149,14 @@ describe('Ruby assertions', () => {
       assertion: {
         type: 'ruby',
         script: 'file://checks/assert.rb',
-        value: 'Expected {{ expected }}',
+        value: '{{ fakeSecret }}',
       },
-      test: { vars: { expected: 'rendered' } } as AtomicTestCase,
+      test: { vars: { fakeSecret } } as AtomicTestCase,
       providerResponse: { output: 'Expected output' },
     });
 
-    expect(result.reason).toBe('Ruby code returned false\nExpected rendered');
-    expect(result.reason).not.toContain('{{ expected }}');
+    expect(result.reason).toBe('Ruby code returned false');
+    expect(result.reason).not.toContain(fakeSecret);
   });
 
   it('should preserve the detected indentation for multiline inline assertions', async () => {

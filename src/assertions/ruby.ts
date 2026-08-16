@@ -58,7 +58,7 @@ export const handleRuby = async ({
       result,
       inverse,
       { code: 'Ruby code', language: 'Ruby' },
-      assertion.script ? renderedValue : assertion.value,
+      assertion.script ? undefined : assertion.value,
     );
   } catch (err) {
     return {

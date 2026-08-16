@@ -582,7 +582,7 @@ async function runAssertionInternal({
     } catch (error) {
       if (baseType === 'javascript') {
         return finalizeAssertionResult(
-          formatJavascriptAssertionError(assertion, error as Error, renderedValue),
+          formatJavascriptAssertionError(assertion, error as Error),
           assertion,
           renderedValue,
         );
