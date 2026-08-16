@@ -9,6 +9,7 @@ import {
   getNamedMetricTotals,
   hasHumanRating,
   hashVarSchema,
+  mergeFilteredNamedMetrics,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -512,6 +513,44 @@ describe('named metric helpers', () => {
     expect(getNamedMetricTotal(baseMetrics, 'missing')).toBe(0);
   });
 
+  it('preserves an own zero denominator and ignores inherited values', () => {
+    const namedScoreWeights = Object.create({ inherited: 99 }) as Record<string, number>;
+    Object.defineProperty(namedScoreWeights, 'zero', {
+      enumerable: true,
+      value: 0,
+    });
+
+    expect(
+      getNamedMetricTotal(
+        {
+          namedScoresCount: Object.create({ inherited: 50 }) as Record<string, number>,
+          namedScoreWeights,
+        },
+        'zero',
+      ),
+    ).toBe(0);
+    expect(
+      getNamedMetricTotal(
+        {
+          namedScoresCount: Object.create({ inherited: 50 }) as Record<string, number>,
+          namedScoreWeights,
+        },
+        'inherited',
+      ),
+    ).toBe(0);
+  });
+
+  it('falls back from invalid weights to finite assertion counts', () => {
+    const metrics = {
+      namedScoresCount: { accuracy: 2, malformed: Number.NaN },
+      namedScoreWeights: { accuracy: Number.POSITIVE_INFINITY },
+    } as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>;
+
+    expect(getNamedMetricTotal(metrics, 'accuracy')).toBe(2);
+    expect(getNamedMetricTotal(metrics, 'malformed')).toBe(0);
+    expect(getNamedMetricTotals(metrics)).toEqual({ accuracy: 2, malformed: 0 });
+  });
+
   it('merges sparse namedScoreWeights over namedScoresCount', () => {
     expect(getNamedMetricTotals(baseMetrics)).toEqual({
       accuracy: 4,
@@ -528,6 +567,21 @@ describe('named metric helpers', () => {
     expect(
       getNamedMetricTotals({} as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
     ).toBeUndefined();
+  });
+
+  it('keeps declared derived totals while omitting other unfiltered named metrics', () => {
+    const total = {
+      namedScores: { accuracy: 8, f1: 0.75, omitted: 3 },
+    } as unknown as PromptMetrics;
+    const filtered = {
+      namedScores: { accuracy: 4 },
+      namedScoresCount: { accuracy: 5 },
+    } as unknown as PromptMetrics;
+
+    expect(mergeFilteredNamedMetrics(total, filtered, ['f1'])?.namedScores).toEqual({
+      accuracy: 4,
+      f1: 0.75,
+    });
   });
 });
 
