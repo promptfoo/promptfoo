@@ -30,6 +30,7 @@ import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
+  AssertionSchema,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -353,6 +354,17 @@ function getRubyWrapperMethodName(functionName: string | undefined): string {
     : `${methodName.slice(0, separatorIndex)}.${methodName.slice(separatorIndex + 2)}`;
 }
 
+function validateScriptAssertion(assertion: Assertion): void {
+  if (!assertion.script) {
+    return;
+  }
+
+  const result = AssertionSchema.safeParse(assertion);
+  if (!result.success) {
+    throw new Error(result.error.issues.map((issue) => issue.message).join('; '));
+  }
+}
+
 async function executeAssertionScript({
   baseType,
   script,
@@ -520,6 +532,7 @@ async function runAssertionInternal({
   let output = originalOutput;
 
   invariant(assertion.type, `Assertion must have a type: ${JSON.stringify(assertion)}`);
+  validateScriptAssertion(assertion);
   const baseType = getAssertionBaseType(assertion);
 
   if (assertion.transform) {
