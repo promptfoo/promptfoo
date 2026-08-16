@@ -18,7 +18,8 @@ import {
   maybeLoadFromExternalFile,
   pathExists,
 } from '../util/file';
-import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
+import { loadFunction } from '../util/functions/loadFunction';
+import { parseFileUrl } from '../util/functions/parseFileUrl';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';

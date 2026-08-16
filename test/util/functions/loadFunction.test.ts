@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
-import {
-  functionCache,
-  loadFunction,
-  parseFileUrl,
-} from '../../../src/util/functions/loadFunction';
+import { functionCache, loadFunction } from '../../../src/util/functions/loadFunction';
+import { parseFileUrl } from '../../../src/util/functions/parseFileUrl';
 
 vi.mock('../../../src/esm', () => ({
   importModule: vi.fn(),

@@ -78,7 +78,8 @@ import { type ApiProvider, isApiProvider } from './types/providers';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
-import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
+import { loadFunction } from './util/functions/loadFunction';
+import { parseFileUrl } from './util/functions/parseFileUrl';
 import {
   buildConfiguredProviderMap,
   resolveConfiguredProviderReference,

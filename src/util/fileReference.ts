@@ -5,7 +5,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
-import { parseFileUrl } from './functions/loadFunction';
+import { parseFileUrl } from './functions/parseFileUrl';
 import { loadYaml } from './yamlLoad';
 
 /**

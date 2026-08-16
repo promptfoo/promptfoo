@@ -7,7 +7,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import { parseFileUrl } from '../../util/functions/parseFileUrl';
 import {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,

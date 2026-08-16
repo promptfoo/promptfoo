@@ -7,7 +7,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import { parseFileUrl } from '../../util/functions/parseFileUrl';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
