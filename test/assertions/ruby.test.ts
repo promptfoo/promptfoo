@@ -84,6 +84,45 @@ describe('Ruby assertions', () => {
     expect(result.pass).toBe(true);
   });
 
+  it.each([
+    {
+      family: 'bare method',
+      functionName: 'check_value',
+      wrapperMethod: 'check_value',
+    },
+    {
+      family: 'dot-free namespace',
+      functionName: 'Checks::check_value',
+      wrapperMethod: 'Checks.check_value',
+    },
+    {
+      family: 'dotted nested namespace',
+      functionName: 'Validators::Format.check_length',
+      wrapperMethod: 'Validators::Format.check_length',
+    },
+  ])(
+    'should pass $family Ruby script references to the wrapper as $wrapperMethod',
+    async ({ functionName, wrapperMethod }) => {
+      vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+      vi.mocked(runRuby).mockResolvedValueOnce(true);
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          script: `file://checks/assert.rb:${functionName}`,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(runRuby).toHaveBeenCalledWith('/base/path/checks/assert.rb', wrapperMethod, [
+        'Expected output',
+        expect.any(Object),
+      ]);
+      expect(result.pass).toBe(true);
+    },
+  );
+
   it('should report Ruby script field execution errors in the handler result', async () => {
     vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
     vi.mocked(runRuby).mockRejectedValue(new Error('Ruby script failed'));

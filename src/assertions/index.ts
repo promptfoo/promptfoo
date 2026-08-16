@@ -348,7 +348,7 @@ function renderAssertionValue(
 function getRubyWrapperMethodName(functionName: string | undefined): string {
   const methodName = functionName || 'get_assert';
   const separatorIndex = methodName.lastIndexOf('::');
-  return separatorIndex === -1
+  return separatorIndex === -1 || methodName.includes('.')
     ? methodName
     : `${methodName.slice(0, separatorIndex)}.${methodName.slice(separatorIndex + 2)}`;
 }
