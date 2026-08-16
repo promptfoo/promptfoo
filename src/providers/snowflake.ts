@@ -166,6 +166,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     if (!data.choices || data.choices.length === 0) {
       return {
         error: `No choices in Snowflake Cortex response: ${JSON.stringify(data)}`,
+        cached,
       };
     }
 

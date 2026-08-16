@@ -183,6 +183,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (!data.choices || data.choices.length === 0) {
       return {
         error: `No choices in OpenRouter response: ${JSON.stringify(data)}`,
+        cached,
       };
     }
 
