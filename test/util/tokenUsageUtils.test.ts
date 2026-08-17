@@ -491,6 +491,40 @@ describe('tokenUsageUtils', () => {
       expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
     });
 
+    it('counts fresh grading tasks when the provider reports no tokens or request count', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+      });
+
+      expect(assertions).toMatchObject({ total: 0, cached: 0, numRequests: 1 });
+    });
+
+    it('does not count cached grading responses when no token usage was reported', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(
+        assertions,
+        { total: 0, cached: 0, numRequests: 0 },
+        { cached: true },
+      );
+
+      expect(assertions).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+    });
+
+    it('does not count cached grading responses without a usage object', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, undefined, { cached: true });
+
+      expect(assertions).toMatchObject({ total: 0, numRequests: 0 });
+    });
+
     it('counts partially cached grading usage as one fresh request', () => {
       const assertions = createEmptyAssertions();
 

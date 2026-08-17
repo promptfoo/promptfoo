@@ -5,6 +5,7 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import { accumulateGradingRequest, createEmptyAssertions } from '../../src/util/tokenUsageUtils';
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
@@ -147,6 +148,62 @@ describe('AssertionsResult', () => {
   });
 
   describe('testResult', () => {
+    it('preserves cache provenance when every grading response was reused', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result without token usage',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { cachedResponse: true },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.tokensUsed).toMatchObject({ total: 0, cached: 0, numRequests: 0 });
+      expect(result.metadata).toEqual({ cachedResponse: true });
+      expect(usage.numRequests).toBe(0);
+    });
+
+    it('does not mark mixed fresh and cached grading responses as fully cached', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { cachedResponse: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh grading result without token usage',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(usage.numRequests).toBe(1);
+    });
+
     it('should calculate final result with threshold', async () => {
       const assertionsResult = new AssertionsResult({ threshold: 0.7 });
 

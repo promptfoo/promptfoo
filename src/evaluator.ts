@@ -595,7 +595,9 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage.assertions) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
-  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed);
+  accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed, {
+    cached: checkResult.metadata?.cachedResponse === true,
+  });
   row.gradingResult = checkResult;
 }
 
