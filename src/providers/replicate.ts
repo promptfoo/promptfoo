@@ -334,6 +334,7 @@ export class ReplicateProvider implements ApiProvider {
     logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
     return {
       error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
+      ...responseMetadata,
     };
   }
 

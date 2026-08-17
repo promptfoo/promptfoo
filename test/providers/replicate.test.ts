@@ -355,6 +355,29 @@ describe('ReplicateProvider', () => {
     },
   );
 
+  it.each([{ unsupported: true }, [{ unsupported: true }]])(
+    'preserves cache accounting for unsupported cached output %o',
+    async (output) => {
+      mockedFetchWithCache.mockResolvedValue({
+        data: { id: 'test-id', status: 'succeeded', output },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new ReplicateProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        error: expect.stringContaining('Unsupported response from Replicate'),
+        cached: true,
+        tokenUsage: { total: 0, cached: 0, numRequests: 0 },
+      });
+    },
+  );
+
   it('should cache successful string responses', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: {
