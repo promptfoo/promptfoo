@@ -207,6 +207,14 @@ describe('ReplicateProvider', () => {
       expect(result.cached).not.toBe(true);
       expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
       expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
+      expect(mockedFetchWithCache).toHaveBeenNthCalledWith(
+        2,
+        'https://api.replicate.com/v1/predictions/test-id',
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'json',
+        true,
+      );
     },
   );
 

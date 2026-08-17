@@ -352,7 +352,7 @@ export class ReplicateProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        false, // Don't cache polling requests
+        true, // Don't cache polling requests
       );
 
       const prediction = pollResponse.data as ReplicatePrediction;
