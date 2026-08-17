@@ -3390,7 +3390,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private trackRowStats(row: EvaluateResult): void {
-    this.trackModelGradedAssertionUsage(row);
     if (row.success) {
       this.stats.successes++;
     } else if (row.failureReason === ResultFailureReason.ERROR) {
