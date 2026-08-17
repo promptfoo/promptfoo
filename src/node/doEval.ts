@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError, StrictConfigError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -246,6 +246,7 @@ export async function doEval(
   let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
+  let strictConfigEnabled: boolean | undefined;
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -298,7 +299,9 @@ export async function doEval(
     if (defaultConfigPath) {
       const configDir = path.dirname(defaultConfigPath);
       const configName = path.basename(defaultConfigPath, path.extname(defaultConfigPath));
-      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName);
+      const { defaultConfig: newDefaultConfig } = await loadDefaultConfig(configDir, configName, {
+        deferUnknownKeyValidation: true,
+      });
       defaultConfig = newDefaultConfig;
     }
 
@@ -320,7 +323,9 @@ export async function doEval(
           continue;
         }
         const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
-          await loadDefaultConfig(configPath);
+          await loadDefaultConfig(configPath, 'promptfooconfig', {
+            deferUnknownKeyValidation: true,
+          });
         if (newConfigPath) {
           resolvedConfigPaths.push(newConfigPath);
           defaultConfig = { ...defaultConfig, ...dirConfig };
@@ -393,6 +398,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
       } = await resolveReplayConfigs(resumeEval, 'resuming'));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -450,6 +456,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
       } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
@@ -469,6 +476,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        strictConfigEnabled,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -494,12 +502,6 @@ export async function doEval(
         cliState.retryMode = true;
         cliState._retryErrorResultIds = retryErrorResultIds;
       }
-    }
-
-    // Phase 2: Load environment from config files if not already set via CLI
-    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
-      logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);
@@ -702,8 +704,12 @@ export async function doEval(
 
     // Strip any providerFilter a config file injected via evaluateOptions — only the
     // normalized CLI/persisted value above may be persisted and replayed.
-    const { providerFilter: _ignoredProviderFilter, ...safeEvaluateOptions } =
-      evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
+    const {
+      providerFilter: _ignoredProviderFilter,
+      skipStrictAssertionValidation: _ignoredSkipStrictAssertionValidation,
+      strictConfigEnabled: _ignoredStrictConfigEnabled,
+      ...safeEvaluateOptions
+    } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
       showProgressBar:
@@ -719,6 +725,7 @@ export async function doEval(
       filterRange,
       maxConcurrency,
       cache,
+      strictConfigEnabled,
     };
 
     if (!resumeEval && cmdObj.grader) {
@@ -888,6 +895,11 @@ export async function doEval(
           cliState.retryMode = false;
         }
       }
+    } catch (error) {
+      if (error instanceof StrictConfigError && isCliInvocation) {
+        throw new ConfigResolutionError(error.message);
+      }
+      throw error;
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
     }

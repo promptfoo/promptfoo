@@ -221,7 +221,10 @@ export const RedteamGenerateOptionsSchema = z.object({
     .nonnegative()
     .optional()
     .describe('Delay in milliseconds between plugin API calls'),
-  envFile: z.string().optional().describe('Path to the environment file'),
+  envFile: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe('Path(s) to environment files'),
   filterProviders: z.string().optional().describe('Regex used to select providers'),
   filterTargets: z.string().optional().describe('Regex used to select targets'),
   force: z.boolean().describe('Whether to force generation').prefault(false),
