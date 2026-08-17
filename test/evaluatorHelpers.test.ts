@@ -293,6 +293,50 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with loaded from file');
     });
 
+    it('should load a file reference nested inside an object var', async () => {
+      const prompt = toPrompt('Analyze this report: {{ reporting_period.previous.report }}');
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: { period: '2022-12-31', report: 'file://data/report.txt' },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('quarterly numbers');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
+      expect(renderedPrompt).toBe('Analyze this report: quarterly numbers');
+    });
+
+    it('should load file references nested inside an array var', async () => {
+      const prompt = toPrompt('{{ docs[0] }} and {{ docs[1].body }}');
+      const vars = {
+        docs: ['file://first.txt', { body: 'file://second.txt' }],
+      };
+
+      vi.spyOn(fs, 'readFileSync')
+        .mockReturnValueOnce('first contents')
+        .mockReturnValueOnce('second contents');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('first contents and second contents');
+    });
+
+    it('should leave nested non-file values and script references untouched', async () => {
+      const prompt = toPrompt('{{ cfg.period }} {{ cfg.script }} {{ cfg.count }}');
+      const vars = {
+        cfg: { period: '2023-12-31', script: 'file://gen.py', count: 3 },
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('2023-12-31 file://gen.py 3');
+    });
+
     it('should load external js files in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
       const vars = {

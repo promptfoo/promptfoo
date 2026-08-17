@@ -226,6 +226,62 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Loads `file://` references that are nested inside an object or array var.
+ *
+ * The top-level loader in `renderPrompt` only sees string values, so a reference
+ * sitting under a key (e.g. `reporting_period.previous.report`) used to reach the
+ * prompt as the raw path. This walks plain objects and arrays and replaces any
+ * `file://` string with the file's contents, mirroring the top-level behavior for
+ * text and YAML files.
+ *
+ * JS/Python var scripts, package paths, and base64 media are deliberately not
+ * handled here: they are passed the var name and the base prompt, which has no
+ * clear meaning for a value buried inside a structure. Such references are left
+ * untouched so behavior is unchanged for them.
+ */
+async function loadNestedFileVars(value: unknown, varName: string): Promise<unknown> {
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((item) => loadNestedFileVars(item, varName)));
+  }
+
+  if (typeof value === 'string') {
+    if (!value.startsWith('file://')) {
+      return value;
+    }
+
+    const filePath = path.resolve(
+      process.cwd(),
+      cliState.basePath || '',
+      value.slice('file://'.length),
+    );
+
+    if (isJavascriptFile(filePath) || filePath.endsWith('.py')) {
+      logger.debug(`Leaving nested script reference in var ${varName} unloaded: ${filePath}`);
+      return value;
+    }
+
+    logger.debug(`Loading nested file reference in var ${varName} from file: ${filePath}`);
+    const contents = (await fs.readFile(filePath, 'utf8')).trim();
+
+    if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      return JSON.stringify(loadYaml(contents) as string | object);
+    }
+    return contents;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = await Promise.all(
+      Object.entries(value).map(
+        async ([key, nested]) => [key, await loadNestedFileVars(nested, varName)] as const,
+      ),
+    );
+    return Object.fromEntries(entries);
+  }
+
+  return value;
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -381,6 +437,8 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (value && typeof value === 'object') {
+      vars[varName] = (await loadNestedFileVars(value, varName)) as VarValue;
     }
   }
 
