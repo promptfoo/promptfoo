@@ -289,6 +289,9 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
             targetId: this.config.targetId,
           });
+          if (unblockingResult.attempted || unblockingResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
+          }
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(

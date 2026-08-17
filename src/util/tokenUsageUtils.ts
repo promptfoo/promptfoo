@@ -171,9 +171,9 @@ export function accumulateTokenUsage(
 /** Record attacker-model usage separately without inflating target tokens or probes. */
 export function accumulateAttackerTokenUsage(
   target: TokenUsage,
-  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
 ): void {
-  if (!response) {
+  if (!response || response.cached) {
     return;
   }
   target.attacker ??= createEmptyAssertions();
@@ -193,13 +193,32 @@ export function accumulateAttackerTokenUsage(
 /** Record one strategy grading task while retaining all model usage reported for that task. */
 export function accumulateGradingResponseTokenUsage(
   target: TokenUsage,
-  response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
 ): void {
   if (!response) {
     return;
   }
 
+  const reportedTotal =
+    response.tokenUsage?.total ??
+    (response.tokenUsage?.prompt ?? 0) + (response.tokenUsage?.completion ?? 0);
+  const cachedTokens = response.tokenUsage?.cached ?? 0;
+  const cachedResponse =
+    response.cached === true ||
+    (response.tokenUsage?.numRequests === 0 && reportedTotal <= cachedTokens);
+
   target.assertions ??= createEmptyAssertions();
+  if (cachedResponse) {
+    accumulateAssertionTokenUsage(target.assertions, {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: cachedTokens || reportedTotal,
+      numRequests: 0,
+    });
+    return;
+  }
+
   accumulateAssertionTokenUsage(target.assertions, {
     ...response.tokenUsage,
     numRequests: 1,

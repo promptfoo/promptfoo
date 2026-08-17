@@ -22,6 +22,7 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
@@ -308,7 +309,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
   /**
    * Generate the next voice prompt in the conversation
    */
-  private async generateNextVoicePrompt(turnNumber: number): Promise<{
+  private async generateNextVoicePrompt(
+    turnNumber: number,
+    totalTokenUsage: TokenUsage,
+  ): Promise<{
     voicePrompt: string;
     emotionalTone: string;
     escalationLevel: string;
@@ -331,6 +335,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
       ]),
     );
 
+    accumulateAttackerTokenUsage(totalTokenUsage, response);
     TokenUsageTracker.getInstance().trackUsage(redTeamProvider.id(), response.tokenUsage);
 
     if (response.error) {
@@ -505,14 +510,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
       try {
         // Generate next voice prompt
-        const {
-          voicePrompt,
-          emotionalTone,
-          escalationLevel,
-          tokenUsage: redteamTokenUsage,
-        } = await this.generateNextVoicePrompt(currentTurn);
-        // Redteam generation calls are internal and should not count as target probes.
-        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: redteamTokenUsage });
+        const { voicePrompt, emotionalTone, escalationLevel } = await this.generateNextVoicePrompt(
+          currentTurn,
+          totalTokenUsage,
+        );
         lastPrompt = voicePrompt;
 
         logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
@@ -599,12 +600,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);
-        // Evaluation calls are internal and should not count as target probes.
-        accumulateResponseTokenUsage(
-          totalTokenUsage,
-          { tokenUsage: evaluation.tokenUsage },
-          { countAsRequest: false },
-        );
+        accumulateGradingResponseTokenUsage(totalTokenUsage, {
+          tokenUsage: evaluation.tokenUsage,
+        });
         logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
 
         if (evaluation.objectiveAchieved || evaluation.partialSuccess) {

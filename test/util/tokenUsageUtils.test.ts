@@ -341,6 +341,18 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('does not add historical usage from fully cached attacker responses', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateAttackerTokenUsage(target, {
+        cached: true,
+        tokenUsage: { total: 32, prompt: 20, completion: 12, numRequests: 1 },
+      });
+
+      expect(target.attacker).toBeUndefined();
+      expect(target.numRequests).toBe(0);
+    });
+
     it('routes grading-model work nested in an attack task into the grading bucket', () => {
       const target = createEmptyTokenUsage();
 
@@ -405,6 +417,34 @@ describe('tokenUsageUtils', () => {
           completionDetails: { reasoning: 3 },
         },
       });
+    });
+
+    it('does not count fully cached strategy grading responses as new requests', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: { total: 40, cached: 40, numRequests: 0 },
+      });
+
+      expect(target.assertions).toMatchObject({ total: 0, cached: 40, numRequests: 0 });
+    });
+
+    it('does not count explicitly cached strategy responses with missing usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, { cached: true });
+
+      expect(target.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    });
+
+    it('counts fresh strategy grading tasks normalized to zero requests', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: { total: 25, cached: 10, numRequests: 0 },
+      });
+
+      expect(target.assertions).toMatchObject({ total: 25, cached: 10, numRequests: 1 });
     });
   });
 

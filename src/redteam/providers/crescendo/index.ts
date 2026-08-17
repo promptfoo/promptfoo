@@ -429,7 +429,6 @@ export class CrescendoProvider implements ApiProvider {
           inputMaterialization,
           materializationHandled,
           materializedVars,
-          tokenUsage: attackerTokenUsage,
         } = await this.getAttackPrompt(
           roundNum,
           evalFlag,
@@ -438,9 +437,9 @@ export class CrescendoProvider implements ApiProvider {
           objectiveScore,
           context,
           tracingOptions,
+          totalTokenUsage,
           options,
         );
-        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
 
         if (!attackPrompt) {
           logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
@@ -512,6 +511,9 @@ export class CrescendoProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
+        if (unblockingResult.attempted || unblockingResult.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
+        }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -819,6 +821,7 @@ export class CrescendoProvider implements ApiProvider {
     objectiveScore: { value: number; rationale: string } | undefined,
     context: CallApiContextParams | undefined,
     tracingOptions: RedteamTracingOptions,
+    totalTokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoAttackPromptResponse> {
     logger.debug(
@@ -885,6 +888,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
 
+    accumulateAttackerTokenUsage(totalTokenUsage, response);
     TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
 
     if (redTeamingChat.delay) {

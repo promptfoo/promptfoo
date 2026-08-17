@@ -1544,6 +1544,70 @@ describe('CrescendoProvider', () => {
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 
+    it('preserves attacker usage when generation returns an error after inference', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        error: 'attack generation failed after inference',
+        tokenUsage: { total: 32, prompt: 21, completion: 11, numRequests: 1 },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        attacker: { total: 32, prompt: 21, completion: 11, numRequests: 1 },
+      });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('includes unblocking analysis in attacker usage even when no block is detected', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 20, prompt: 12, completion: 8, numRequests: 1 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 30, prompt: 18, completion: 12, numRequests: 1 },
+      });
+      vi.mocked(tryUnblocking).mockResolvedValue({
+        success: false,
+        tokenUsage: { total: 14, prompt: 9, completion: 5, numRequests: 1 },
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ value: false, metadata: 20, rationale: 'not successful' }),
+      });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 30,
+        numRequests: 1,
+        attacker: { total: 34, prompt: 21, completion: 13, numRequests: 2 },
+      });
+    });
+
     it('should correctly track token usage from target provider', async () => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',

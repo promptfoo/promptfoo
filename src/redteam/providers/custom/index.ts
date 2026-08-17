@@ -400,16 +400,15 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`\n[Custom] ROUND ${roundNum}\n`);
 
-        const { generatedQuestion: attackPrompt, tokenUsage: attackerTokenUsage } =
-          await this.getAttackPrompt(
-            roundNum,
-            evalFlag,
-            lastResponse,
-            lastFeedback,
-            objectiveScore,
-            options,
-          );
-        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
+        const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
+          roundNum,
+          evalFlag,
+          lastResponse,
+          lastFeedback,
+          objectiveScore,
+          totalTokenUsage,
+          options,
+        );
 
         if (!attackPrompt) {
           logger.debug('[Custom] failed to generate a question. Will skip turn and try again');
@@ -468,6 +467,9 @@ export class CustomProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           targetId: this.config.targetId,
         });
+        if (unblockingResult.attempted || unblockingResult.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
+        }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -696,7 +698,8 @@ export class CustomProvider implements ApiProvider {
     evalFlag: boolean,
     lastResponse: TargetResponse,
     lastFeedback: string,
-    objectiveScore?: { value: number; rationale: string },
+    objectiveScore: { value: number; rationale: string } | undefined,
+    totalTokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
@@ -746,6 +749,7 @@ export class CustomProvider implements ApiProvider {
       },
       options,
     );
+    accumulateAttackerTokenUsage(totalTokenUsage, response);
     TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);
