@@ -607,17 +607,16 @@ describe('package manifests', () => {
     }>('package-lock.json');
     const dependencyName = '@opencode-ai/sdk';
     const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
 
     expect(optionalRange).toBeDefined();
     expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
-    expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare(
-        '1.18.15',
-      ),
-    ).toBeGreaterThanOrEqual(0);
+    expect(installedVersion).toBeDefined();
+    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
     expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
   });
 
