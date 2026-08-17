@@ -4,6 +4,7 @@ import {
   trackAdditionalGenerationProvider,
   trackGenerationTokenUsage,
 } from '../../src/redteam/generationTokenUsage';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../../src/types/index';
 
@@ -29,6 +30,33 @@ describe('generation token usage', () => {
 
     expect(usage).toEqual({});
   });
+
+  it.each([false, undefined])(
+    'counts fresh generation requests with normalized zero usage when cached is %s',
+    async (cached) => {
+      const usage: TokenUsage = {};
+      const provider = trackGenerationTokenUsage(
+        createProvider(
+          vi.fn().mockResolvedValue({
+            output: 'unmetered generation',
+            cached,
+            tokenUsage: createEmptyTokenUsage(),
+          }),
+        ),
+        usage,
+      );
+
+      await provider.callApi('generate a test');
+
+      expect(usage).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 1,
+      });
+    },
+  );
 
   it('counts actual provider requests that contain prompt-cache token details', async () => {
     const usage: TokenUsage = {};
