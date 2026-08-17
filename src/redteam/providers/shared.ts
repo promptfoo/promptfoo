@@ -684,17 +684,18 @@ export function accumulateGraderResult(
       return current;
     }
 
-    if (current.tokensUsed?.numRequests === undefined) {
-      return current;
-    }
-
     return {
       ...current,
       tokensUsed,
     };
   }
 
-  const previousTokensUsed = normalizeGradingTaskUsage(previous);
+  // The latest verdict can be cached even when the accumulated usage already
+  // contains fresh grading tasks from earlier turns.
+  const previousTokensUsed =
+    previous.metadata?.cachedResponse === true && (previous.tokensUsed.numRequests ?? 0) > 0
+      ? previous.tokensUsed
+      : normalizeGradingTaskUsage(previous);
   if (!previousTokensUsed) {
     return current;
   }

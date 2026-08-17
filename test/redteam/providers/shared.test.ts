@@ -1612,6 +1612,20 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('counts the first legacy grading task when its usage omits the request count', () => {
+      const result = {
+        pass: true,
+        score: 1,
+        reason: 'legacy grading task passed',
+        tokensUsed: { total: 45, prompt: 30, completion: 15 },
+      };
+
+      expect(accumulateGraderResult(undefined, result)).toMatchObject({
+        ...result,
+        tokensUsed: { ...result.tokensUsed, numRequests: 1 },
+      });
+    });
+
     it('counts every fresh grading turn when matcher normalization sets requests to zero', () => {
       const first = {
         pass: true,
@@ -1660,6 +1674,38 @@ describe('shared redteam provider utilities', () => {
         total: 20,
         cached: 35,
         numRequests: 1,
+      });
+    });
+
+    it('preserves fresh grading usage before and after a cached middle turn', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first fresh grading task',
+        tokensUsed: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+      };
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 35, cached: 35, numRequests: 0 },
+      };
+      const last = {
+        pass: false,
+        score: 0,
+        reason: 'last fresh grading task',
+        tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
+      };
+
+      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+
+      expect(result.tokensUsed).toMatchObject({
+        total: 60,
+        prompt: 40,
+        completion: 20,
+        cached: 35,
+        numRequests: 2,
       });
     });
 

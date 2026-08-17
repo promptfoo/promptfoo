@@ -17,6 +17,7 @@ import {
 import { getTargetResponse, redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import { getNunjucksEngine } from '../../../src/util/templates';
+import { TokenUsageTracker } from '../../../src/util/tokenUsage';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
@@ -273,6 +274,7 @@ describe('RedteamIterativeProvider', () => {
     beforeEach(() => {
       mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
       mockRedteamProvider.callApi.mockReset();
+      TokenUsageTracker.getInstance().resetProviderUsage(mockRedteamProvider.id());
     });
 
     it('should generate a new prompt correctly', async () => {
@@ -319,6 +321,9 @@ describe('RedteamIterativeProvider', () => {
         numRequests: 0,
         attacker: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
       });
+      expect(
+        TokenUsageTracker.getInstance().getProviderUsage(mockRedteamProvider.id()),
+      ).toMatchObject({ total: 23, prompt: 15, completion: 8, numRequests: 1 });
     });
 
     it('returns accumulated attacker usage when the tree provider fails', async () => {

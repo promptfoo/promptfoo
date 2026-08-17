@@ -306,6 +306,7 @@ export async function getNewPrompt(
   if (totalTokenUsage) {
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
   }
+  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
@@ -316,8 +317,6 @@ export async function getNewPrompt(
       tokenUsage: totalTokenUsage ?? redteamResp.tokenUsage,
     });
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
-
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
     try {

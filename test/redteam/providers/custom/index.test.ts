@@ -1011,6 +1011,7 @@ describe('CustomProvider', () => {
     // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       ...mockGraderResult,
+      tokensUsed: { ...mockGraderResult.tokensUsed, numRequests: 1 },
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Grader failed');
