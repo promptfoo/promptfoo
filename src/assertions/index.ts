@@ -402,9 +402,11 @@ function finalizeAssertionResult(
   assertion: Assertion,
   renderedValue: AssertionValue | undefined,
 ): GradingResult {
-  // Store rendered assertion value in metadata if it differs from the original template
-  // This allows the UI to display substituted variable values instead of raw templates
+  // Store rendered inline assertion values for UI display. Script parameters can contain
+  // secrets and are already available to the script through context.value, so do not persist
+  // their rendered form in result metadata.
   if (
+    !assertion.script &&
     renderedValue !== undefined &&
     renderedValue !== assertion.value &&
     typeof renderedValue === 'string'

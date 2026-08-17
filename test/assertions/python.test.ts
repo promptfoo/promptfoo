@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { runPython } from '../../src/python/pythonUtils';
@@ -90,8 +90,7 @@ describe('Python file references', { timeout: 15000 }, () => {
       expect.objectContaining({ value: 'rendered', config: { inclusive: true } }),
     ]);
     expect(result.pass).toBe(true);
-    expect(result.metadata?.renderedAssertionValue).toBe('rendered');
-    expect(result.metadata?.renderedAssertionValue).not.toContain('assert.py');
+    expect(result.metadata?.renderedAssertionValue).toBeUndefined();
   });
 
   it('should report Python script field execution errors in the handler result', async () => {
@@ -128,6 +127,44 @@ describe('Python file references', { timeout: 15000 }, () => {
 
     expect(result.reason).toBe('Python code returned false');
     expect(result.reason).not.toContain(fakeSecret);
+  });
+
+  it('should keep rendered script parameters out of passing and failing aggregate results', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.py');
+    const results = [];
+
+    for (const scriptResult of [true, false]) {
+      vi.mocked(runPython).mockResolvedValueOnce(scriptResult);
+      results.push(
+        await runAssertions({
+          test: {
+            vars: { fakeSecret },
+            assert: [
+              {
+                type: 'python',
+                script: 'file://checks/assert.py',
+                value: '{{ fakeSecret }}',
+              },
+            ],
+          } as AtomicTestCase,
+          providerResponse: { output: 'Expected output' },
+        }),
+      );
+    }
+
+    expect(results.map((result) => result.pass)).toEqual([true, false]);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].metadata?.renderedAssertionValue === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].assertion?.value === '{{ fakeSecret }}',
+      ),
+    ).toBe(true);
+    expect(results.every((result) => !JSON.stringify(result).includes(fakeSecret))).toBe(true);
   });
 
   it('should handle Python file reference with function name', async () => {

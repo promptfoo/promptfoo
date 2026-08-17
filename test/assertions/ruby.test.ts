@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import * as rubyUtils from '../../src/ruby/rubyUtils.js';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
@@ -157,6 +157,44 @@ describe('Ruby assertions', () => {
 
     expect(result.reason).toBe('Ruby code returned false');
     expect(result.reason).not.toContain(fakeSecret);
+  });
+
+  it('should keep rendered script parameters out of passing and failing aggregate results', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+    const results = [];
+
+    for (const scriptResult of [true, false]) {
+      vi.mocked(runRuby).mockResolvedValueOnce(scriptResult);
+      results.push(
+        await runAssertions({
+          test: {
+            vars: { fakeSecret },
+            assert: [
+              {
+                type: 'ruby',
+                script: 'file://checks/assert.rb',
+                value: '{{ fakeSecret }}',
+              },
+            ],
+          } as AtomicTestCase,
+          providerResponse: { output: 'Expected output' },
+        }),
+      );
+    }
+
+    expect(results.map((result) => result.pass)).toEqual([true, false]);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].metadata?.renderedAssertionValue === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].assertion?.value === '{{ fakeSecret }}',
+      ),
+    ).toBe(true);
+    expect(results.every((result) => !JSON.stringify(result).includes(fakeSecret))).toBe(true);
   });
 
   it('should preserve the detected indentation for multiline inline assertions', async () => {
