@@ -234,11 +234,24 @@ function detectMimeFromBase64(base64Data: string): string | null {
  * `file://` string with the file's contents, mirroring the top-level behavior for
  * text and YAML files.
  *
- * JS/Python var scripts, package paths, and base64 media are deliberately not
- * handled here: they are passed the var name and the base prompt, which has no
- * clear meaning for a value buried inside a structure. Such references are left
- * untouched so behavior is unchanged for them.
+ * Only text and YAML files are loaded. Var scripts (JS/Python), PDFs, and
+ * image/video/audio files are left as the original `file://` string: the script
+ * forms are handed the var name and the base prompt, and the binary forms have
+ * top-level handling gated behind env vars, neither of which has a clear meaning
+ * for a value buried inside a structure. Reading those as UTF-8 here would
+ * corrupt them, so they are skipped rather than guessed at.
  */
+function isNestedLoadableFile(filePath: string): boolean {
+  return !(
+    isJavascriptFile(filePath) ||
+    filePath.endsWith('.py') ||
+    filePath.endsWith('.pdf') ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
+  );
+}
+
 async function loadNestedFileVars(value: unknown, varName: string): Promise<unknown> {
   if (Array.isArray(value)) {
     return Promise.all(value.map((item) => loadNestedFileVars(item, varName)));
@@ -255,18 +268,18 @@ async function loadNestedFileVars(value: unknown, varName: string): Promise<unkn
       value.slice('file://'.length),
     );
 
-    if (isJavascriptFile(filePath) || filePath.endsWith('.py')) {
-      logger.debug(`Leaving nested script reference in var ${varName} unloaded: ${filePath}`);
+    if (!isNestedLoadableFile(filePath)) {
+      logger.debug(`Leaving nested file reference in var ${varName} unloaded: ${filePath}`);
       return value;
     }
 
     logger.debug(`Loading nested file reference in var ${varName} from file: ${filePath}`);
-    const contents = (await fs.readFile(filePath, 'utf8')).trim();
+    const contents = await fs.readFile(filePath, 'utf8');
 
     if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
       return JSON.stringify(loadYaml(contents) as string | object);
     }
-    return contents;
+    return contents.trim();
   }
 
   if (value && typeof value === 'object') {

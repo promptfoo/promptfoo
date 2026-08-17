@@ -337,6 +337,40 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('2023-12-31 file://gen.py 3');
     });
 
+    it('should leave nested media and pdf references untouched rather than reading them as text', async () => {
+      const prompt = toPrompt('{{ cfg.image }} {{ cfg.doc }} {{ cfg.clip }}');
+      const vars = {
+        cfg: { image: 'file://shot.png', doc: 'file://paper.pdf', clip: 'file://take.mp3' },
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://shot.png file://paper.pdf file://take.mp3');
+    });
+
+    it('should parse nested yaml file references into JSON', async () => {
+      const prompt = toPrompt('{{ cfg.settings }}');
+      const vars = { cfg: { settings: 'file://settings.yaml' } };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('retries: 3\nmode: strict\n');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ retries: 3, mode: 'strict' }));
+    });
+
+    it('should surface an error when a nested file reference does not exist', async () => {
+      const prompt = toPrompt('{{ cfg.report }}');
+      const vars = { cfg: { report: 'file://missing.txt' } };
+
+      vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow('ENOENT');
+    });
+
     it('should load external js files in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }} {{ var2 }} {{ var3 }}');
       const vars = {
