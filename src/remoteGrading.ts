@@ -54,7 +54,7 @@ export async function doRemoteGrading(
     const body = JSON.stringify(payload);
     const traceparent = getActiveTraceparent();
     logger.debug('Performing remote grading', { body: redactImagePayloads(payload) });
-    const { data, status, statusText } = await fetchWithCache(
+    const { cached, data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -83,7 +83,19 @@ export async function doRemoteGrading(
       pass: result.pass,
       score: result.score,
       reason: result.reason,
-      tokensUsed: result.tokensUsed,
+      tokensUsed: result.tokensUsed
+        ? cached
+          ? {
+              total: result.tokensUsed.total,
+              cached: result.tokensUsed.total,
+              numRequests: 0,
+            }
+          : {
+              ...result.tokensUsed,
+              // This endpoint represents one grading task even when the task uses multiple models.
+              numRequests: 1,
+            }
+        : undefined,
       metadata: result.metadata,
     };
   } catch (error) {

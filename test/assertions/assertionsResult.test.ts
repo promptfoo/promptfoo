@@ -6,7 +6,7 @@ import {
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
 
-import type { AssertionSet, GradingResult } from '../../src/types/index';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
 vi.mock('../../src/envars');
 
@@ -78,6 +78,52 @@ describe('AssertionsResult', () => {
       });
 
       expect(assertionsResult['failedReason']).toBe('Test failed');
+    });
+
+    it('preserves detailed token accounting across multiple assertion results', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'First grade passed',
+          tokensUsed: {
+            total: 20,
+            prompt: 12,
+            completion: 8,
+            numRequests: 2,
+            completionDetails: { reasoning: 5, cacheReadInputTokens: 7 },
+          },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Second grade failed',
+          tokensUsed: {
+            total: 11,
+            prompt: 6,
+            completion: 5,
+            numRequests: 1,
+            completionDetails: { reasoning: 3, cacheCreationInputTokens: 4 },
+          },
+        },
+      });
+
+      expect((await assertionsResult.testResult()).tokensUsed).toMatchObject({
+        total: 31,
+        prompt: 18,
+        completion: 13,
+        numRequests: 3,
+        completionDetails: {
+          reasoning: 8,
+          cacheReadInputTokens: 7,
+          cacheCreationInputTokens: 4,
+        },
+      });
     });
 
     it('should throw error if short circuit enabled', () => {
@@ -276,6 +322,33 @@ describe('AssertionsResult', () => {
           tokensUsed: DEFAULT_TOKENS_USED,
         },
       );
+    });
+
+    it('exposes completion details to typed scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Grading passed',
+          tokensUsed: {
+            total: 12,
+            prompt: 5,
+            completion: 7,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: context?.tokensUsed?.completionDetails?.reasoning ?? 0,
+        reason: 'Reasoning tokens are available',
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).score).toBe(7);
     });
 
     it('should handle scoring function errors', async () => {

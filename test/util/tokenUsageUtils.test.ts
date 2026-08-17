@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAssertionTokenUsage,
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateResponseTokenUsage,
@@ -309,7 +310,7 @@ describe('tokenUsageUtils', () => {
   });
 
   describe('accumulateGenerationTokenUsage', () => {
-    it('adds generation totals without inflating target request counts', () => {
+    it('keeps generation usage separate from target tokens and request counts', () => {
       const target = createEmptyTokenUsage();
       target.numRequests = 2;
 
@@ -324,11 +325,12 @@ describe('tokenUsageUtils', () => {
       ).toBe(true);
 
       expect(target).toMatchObject({
-        total: 15,
-        prompt: 9,
-        completion: 6,
+        total: 0,
+        prompt: 0,
+        completion: 0,
         numRequests: 2,
         assertions: { total: 0, numRequests: 0 },
+        generation: { total: 15, prompt: 9, completion: 6, numRequests: 3 },
       });
     });
 
@@ -336,8 +338,16 @@ describe('tokenUsageUtils', () => {
       const target = createEmptyTokenUsage();
 
       expect(accumulateGenerationTokenUsage(target, 'invalid')).toBe(false);
-      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(false);
+      expect(accumulateGenerationTokenUsage(target, {})).toBe(false);
       expect(target.total).toBe(0);
+    });
+
+    it('preserves generation request counts when a provider reports no token totals', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(true);
+      expect(target.generation).toMatchObject({ total: 0, numRequests: 3 });
+      expect(target.numRequests).toBe(0);
     });
   });
 
@@ -350,14 +360,74 @@ describe('tokenUsageUtils', () => {
       expect(assertions.total).toBe(0);
     });
 
-    it('counts the request and folds in reported assertion token usage', () => {
+    it('preserves every request represented by cumulative assertion token usage', () => {
       const assertions = createEmptyAssertions();
       accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4, numRequests: 3 });
 
-      expect(assertions.numRequests).toBe(1);
+      expect(assertions.numRequests).toBe(3);
       expect(assertions.total).toBe(9);
       expect(assertions.prompt).toBe(5);
       expect(assertions.completion).toBe(4);
+    });
+
+    it('counts legacy grading usage without an explicit request count once', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, prompt: 5, completion: 4 });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+
+    it('counts fresh matcher usage when normalization replaced its missing request count with zero', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, {
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        cached: 0,
+        numRequests: 0,
+      });
+
+      expect(assertions).toMatchObject({ total: 9, numRequests: 1 });
+    });
+
+    it('counts partially cached grading usage as one fresh request', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, cached: 3, numRequests: 0 });
+
+      expect(assertions).toMatchObject({ total: 9, cached: 3, numRequests: 1 });
+    });
+
+    it('preserves an explicit zero request count from cached grading usage', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateGradingRequest(assertions, { total: 9, cached: 9, numRequests: 0 });
+
+      expect(assertions).toMatchObject({ total: 9, cached: 9, numRequests: 0 });
+    });
+  });
+
+  describe('accumulateAssertionTokenUsage', () => {
+    it('preserves cumulative grader requests and reasoning details', () => {
+      const assertions = createEmptyAssertions();
+
+      accumulateAssertionTokenUsage(assertions, {
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
+
+      expect(assertions).toMatchObject({
+        total: 30,
+        prompt: 20,
+        completion: 10,
+        numRequests: 3,
+        completionDetails: { reasoning: 7, cacheCreationInputTokens: 11 },
+      });
     });
   });
 

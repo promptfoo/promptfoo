@@ -131,6 +131,66 @@ describe('doRemoteGrading', () => {
     expect(result.metadata?.graderError).toBeUndefined();
   });
 
+  it('counts one remote grading task while preserving usage from all internal model calls', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Grading task passed after multiple model calls',
+          tokensUsed: {
+            total: 97,
+            prompt: 61,
+            completion: 36,
+            numRequests: 4,
+            completionDetails: { reasoning: 13 },
+          },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({
+      total: 97,
+      prompt: 61,
+      completion: 36,
+      numRequests: 1,
+      completionDetails: { reasoning: 13 },
+    });
+  });
+
+  it('does not count a cached remote grading result as a new grading-task request', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: { total: 97, prompt: 61, completion: 36, numRequests: 4 },
+        },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({ total: 97, cached: 97, numRequests: 0 });
+  });
+
   it('propagates the active grader traceparent to remote grading requests', async () => {
     const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
     vi.mocked(getActiveTraceparent).mockReturnValue(traceparent);
