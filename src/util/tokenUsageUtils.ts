@@ -157,10 +157,72 @@ export function accumulateTokenUsage(
     }
   }
 
+  if (update.attacker) {
+    target.attacker ??= createEmptyAssertions();
+    accumulateTokenUsage(target.attacker, update.attacker);
+  }
+
   if (update.generation) {
     target.generation ??= createEmptyAssertions();
     accumulateTokenUsage(target.generation, update.generation);
   }
+}
+
+/** Record attacker-model usage separately without inflating target tokens or probes. */
+export function accumulateAttackerTokenUsage(
+  target: TokenUsage,
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (!response || response.cached) {
+    return;
+  }
+  target.attacker ??= createEmptyAssertions();
+  if (!response.tokenUsage) {
+    accumulateResponseTokenUsage(target.attacker, response);
+    return;
+  }
+
+  const { assertions, ...attackerUsage } = response.tokenUsage;
+  accumulateResponseTokenUsage(target.attacker, { tokenUsage: attackerUsage });
+  if (assertions) {
+    target.assertions ??= createEmptyAssertions();
+    accumulateAssertionTokenUsage(target.assertions, assertions);
+  }
+}
+
+/** Record one strategy grading task while retaining all model usage reported for that task. */
+export function accumulateGradingResponseTokenUsage(
+  target: TokenUsage,
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (!response) {
+    return;
+  }
+
+  const reportedTotal =
+    response.tokenUsage?.total ??
+    (response.tokenUsage?.prompt ?? 0) + (response.tokenUsage?.completion ?? 0);
+  const cachedTokens = response.tokenUsage?.cached ?? 0;
+  const cachedResponse =
+    response.cached === true ||
+    (response.tokenUsage?.numRequests === 0 && reportedTotal <= cachedTokens);
+
+  target.assertions ??= createEmptyAssertions();
+  if (cachedResponse) {
+    accumulateAssertionTokenUsage(target.assertions, {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: cachedTokens || reportedTotal,
+      numRequests: 0,
+    });
+    return;
+  }
+
+  accumulateAssertionTokenUsage(target.assertions, {
+    ...response.tokenUsage,
+    numRequests: 1,
+  });
 }
 
 /**
@@ -263,7 +325,12 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     return false;
   }
 
-  const { assertions: _assertions, generation: _generation, ...generationUsage } = parsed.data;
+  const {
+    attacker: _attacker,
+    assertions: _assertions,
+    generation: _generation,
+    ...generationUsage
+  } = parsed.data;
   const hasUsage =
     Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
     Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
@@ -292,6 +359,7 @@ export function normalizeTokenUsage(
     numRequests: tokenUsage?.numRequests || 0,
     completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
+    ...(tokenUsage?.attacker ? { attacker: tokenUsage.attacker } : {}),
     ...(tokenUsage?.generation ? { generation: tokenUsage.generation } : {}),
   };
 }

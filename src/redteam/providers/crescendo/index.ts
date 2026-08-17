@@ -13,7 +13,12 @@ import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../util/tokenUsageUtils';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -42,6 +47,7 @@ import {
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
   externalizeResponseForRedteamHistory,
@@ -117,6 +123,7 @@ type CrescendoAttackPromptResponse = {
   inputMaterialization?: Record<string, unknown>;
   materializationHandled?: boolean;
   materializedVars?: Record<string, string>;
+  tokenUsage?: TokenUsage;
 };
 
 interface CrescendoConfig {
@@ -430,6 +437,7 @@ export class CrescendoProvider implements ApiProvider {
           objectiveScore,
           context,
           tracingOptions,
+          totalTokenUsage,
           options,
         );
 
@@ -503,6 +511,9 @@ export class CrescendoProvider implements ApiProvider {
           purpose: context?.test?.metadata?.purpose,
           targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
         });
+        if (unblockingResult.attempted || unblockingResult.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
+        }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -549,6 +560,7 @@ export class CrescendoProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          totalTokenUsage,
           options,
         );
         logger.debug(
@@ -676,10 +688,10 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = {
+            storedGraderResult = accumulateGraderResult(storedGraderResult, {
               ...grade,
               assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            });
           }
         }
 
@@ -720,7 +732,7 @@ export class CrescendoProvider implements ApiProvider {
           }
         }
 
-        const evalScore = await this.getEvalScore(lastResponse.output, options);
+        const evalScore = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
         objectiveScore = {
@@ -809,6 +821,7 @@ export class CrescendoProvider implements ApiProvider {
     objectiveScore: { value: number; rationale: string } | undefined,
     context: CallApiContextParams | undefined,
     tracingOptions: RedteamTracingOptions,
+    totalTokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<CrescendoAttackPromptResponse> {
     logger.debug(
@@ -875,6 +888,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
 
+    accumulateAttackerTokenUsage(totalTokenUsage, response);
     TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
 
     if (redTeamingChat.delay) {
@@ -889,12 +903,14 @@ export class CrescendoProvider implements ApiProvider {
       logger.debug('[Crescendo] Attack model refused to generate prompt', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
     if (!response.output) {
       logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
 
@@ -951,6 +967,7 @@ export class CrescendoProvider implements ApiProvider {
       inputMaterialization: response.inputMaterialization,
       materializationHandled: response.materializationHandled,
       materializedVars: response.materializedVars,
+      tokenUsage: response.tokenUsage,
     };
   }
 
@@ -1247,6 +1264,7 @@ export class CrescendoProvider implements ApiProvider {
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    tokenUsage: TokenUsage,
     options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Crescendo] Getting refusal score for prompt: ${attackPrompt}`);
@@ -1287,6 +1305,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
+    accumulateGradingResponseTokenUsage(tokenUsage, refusalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
@@ -1316,7 +1335,11 @@ export class CrescendoProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string, options?: CallApiOptionsParams): Promise<any> {
+  private async getEvalScore(
+    lastResponse: string,
+    tokenUsage: TokenUsage,
+    options?: CallApiOptionsParams,
+  ): Promise<any> {
     logger.debug(
       `[Crescendo] Getting eval score for response: ${lastResponse.substring(0, 100)}...`,
     );
@@ -1348,6 +1371,7 @@ export class CrescendoProvider implements ApiProvider {
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    accumulateGradingResponseTokenUsage(tokenUsage, evalResponse);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
