@@ -398,6 +398,7 @@ async function fetchRemoteTestCases(
     tokenUsage?: TokenUsage;
   }
 
+  let responseRecorded = false;
   try {
     const { cached, data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
@@ -408,8 +409,9 @@ async function fetchRemoteTestCases(
       },
       getRequestTimeoutMs(),
     );
-    if (provider && !cached) {
-      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage });
+    if (provider) {
+      recordGenerationTokenUsage(provider, { tokenUsage: data?.tokenUsage, cached });
+      responseRecorded = true;
     }
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
@@ -422,9 +424,8 @@ async function fetchRemoteTestCases(
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
-    const errorTokenUsage = getErrorTokenUsage(err);
-    if (provider && errorTokenUsage) {
-      recordGenerationTokenUsage(provider, { tokenUsage: errorTokenUsage });
+    if (provider && !responseRecorded) {
+      recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(err) });
     }
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];
