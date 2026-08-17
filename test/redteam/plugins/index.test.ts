@@ -249,6 +249,25 @@ describe('Plugins', () => {
 
       expect(generationUsage).toMatchObject({ ...tokenUsage, numRequests: 1 });
     });
+
+    it('counts failed remote generation requests when token usage is unavailable', async () => {
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('remote generation timed out'));
+      const generationUsage = {};
+      const plugin = Plugins.find((candidate) => candidate.key === 'ssrf');
+
+      await plugin?.action({
+        provider: trackGenerationTokenUsage(mockProvider, generationUsage),
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(generationUsage).toEqual({ numRequests: 1 });
+    });
   });
 
   describe('max chars retries', () => {
