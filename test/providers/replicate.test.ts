@@ -59,6 +59,7 @@ describe('ReplicateProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('test response');
+    expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
     const requestBody = JSON.parse(
       (mockedFetchWithCache.mock.calls[0][1] as { body: string }).body,
     );
@@ -222,6 +223,7 @@ describe('ReplicateProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.output).toBe('Hello World');
+    expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
   });
 
   it('should handle failed predictions', async () => {
@@ -339,7 +341,7 @@ describe('ReplicateProvider', () => {
     expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(String));
     expect(JSON.parse(mockCache.set.mock.calls[0][1])).toEqual({
       output: 'test response',
-      tokenUsage: createEmptyTokenUsage(),
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
     });
   });
 
@@ -573,7 +575,7 @@ describe('ReplicateModerationProvider', () => {
 
     const result = await provider.callModerationApi('unsafe prompt', 'unsafe response');
     expect(result.flags).toHaveLength(1);
-    expect(result.tokenUsage).toEqual(createEmptyTokenUsage());
+    expect(result.tokenUsage).toEqual({ ...createEmptyTokenUsage(), numRequests: 1 });
   });
 
   it('should forward provider-reported token usage with upstream errors', async () => {

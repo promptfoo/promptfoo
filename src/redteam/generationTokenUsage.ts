@@ -47,9 +47,6 @@ export function trackGenerationTokenUsage<T extends ApiProvider>(
   return trackProvider(provider, (response) => {
     if (!response.cached) {
       accumulateResponseTokenUsage(tokenUsage, response);
-      if (response.tokenUsage?.numRequests === 0) {
-        tokenUsage.numRequests = (tokenUsage.numRequests ?? 0) + 1;
-      }
     }
   });
 }

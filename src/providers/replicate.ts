@@ -285,7 +285,7 @@ export class ReplicateProvider implements ApiProvider {
       // It's text
       const ret = {
         output: response,
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
       };
       if (cache && cacheKey) {
         try {
@@ -301,7 +301,7 @@ export class ReplicateProvider implements ApiProvider {
         const output = response.join('');
         const ret = {
           output,
-          tokenUsage: createEmptyTokenUsage(),
+          tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
         };
         if (cache && cacheKey) {
           try {

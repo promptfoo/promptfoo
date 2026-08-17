@@ -32,7 +32,28 @@ describe('generation token usage', () => {
   });
 
   it.each([false, undefined])(
-    'counts fresh generation requests with normalized zero usage when cached is %s',
+    'counts reported zero-token generation requests when cached is %s',
+    async (cached) => {
+      const usage: TokenUsage = {};
+      const provider = trackGenerationTokenUsage(
+        createProvider(
+          vi.fn().mockResolvedValue({
+            output: 'unmetered generation',
+            cached,
+            tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
+          }),
+        ),
+        usage,
+      );
+
+      await provider.callApi('generate a test');
+
+      expect(usage).toMatchObject({ total: 0, numRequests: 1 });
+    },
+  );
+
+  it.each([false, undefined])(
+    'preserves explicit zero-request generation usage when cached is %s',
     async (cached) => {
       const usage: TokenUsage = {};
       const provider = trackGenerationTokenUsage(
@@ -53,7 +74,7 @@ describe('generation token usage', () => {
         prompt: 0,
         completion: 0,
         cached: 0,
-        numRequests: 1,
+        numRequests: 0,
       });
     },
   );
