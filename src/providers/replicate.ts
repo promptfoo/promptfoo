@@ -237,7 +237,11 @@ export class ReplicateProvider implements ApiProvider {
         const parsedResponse = JSON.parse(cachedResponse as string);
         return {
           ...parsedResponse,
-          tokenUsage: { ...parsedResponse.tokenUsage, numRequests: 0 },
+          tokenUsage: {
+            ...parsedResponse.tokenUsage,
+            cached: parsedResponse.tokenUsage?.total ?? 0,
+            numRequests: 0,
+          },
           cached: true,
         };
       }

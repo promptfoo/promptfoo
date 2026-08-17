@@ -295,7 +295,7 @@ describe('ReplicateProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.cached).toBe(true);
-    expect(result.tokenUsage).toEqual({ total: 100, numRequests: 0 });
+    expect(result.tokenUsage).toEqual({ total: 100, cached: 100, numRequests: 0 });
     expect(result.output).toBe('cached PFQA_REPLICATE_CACHED_OUTPUT_SECRET response');
     expect(mockCache.get).toHaveBeenCalled();
     const debugLogs = vi.mocked(logger.debug).mock.calls.map((call) => JSON.stringify(call));
