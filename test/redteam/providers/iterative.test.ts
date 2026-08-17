@@ -284,7 +284,7 @@ describe('RedteamIterativeProvider', () => {
         pass: false,
         score: 0,
         reason: 'Jailbreak detected by grader',
-        tokensUsed: { total: 100, prompt: 50, completion: 50 },
+        tokensUsed: { total: 100, prompt: 50, completion: 50, numRequests: 1 },
         assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
       expect(mockGrader.getResult).toHaveBeenCalledWith(

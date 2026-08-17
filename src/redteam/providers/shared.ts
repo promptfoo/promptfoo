@@ -24,6 +24,7 @@ import {
   isProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
+  type TokenUsage,
   type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
@@ -648,33 +649,68 @@ export function accumulateGraderResult(
   previous: GradingResult | undefined,
   current: GradingResult,
 ): GradingResult {
+  const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
+    if (!result.tokensUsed) {
+      return undefined;
+    }
+
+    const reportedTotal =
+      result.tokensUsed.total ??
+      (result.tokensUsed.prompt ?? 0) + (result.tokensUsed.completion ?? 0);
+    const cachedTokens = result.tokensUsed.cached ?? 0;
+    const cachedResponse =
+      result.metadata?.cachedResponse === true ||
+      (result.tokensUsed.numRequests === 0 && reportedTotal <= cachedTokens);
+
+    if (cachedResponse) {
+      return {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: cachedTokens || reportedTotal,
+        numRequests: 0,
+      };
+    }
+
+    return {
+      ...result.tokensUsed,
+      numRequests: 1,
+    };
+  };
+
   if (!previous?.tokensUsed) {
-    if (!current.tokensUsed || (current.tokensUsed.numRequests ?? 1) <= 1) {
+    const tokensUsed = normalizeGradingTaskUsage(current);
+    if (!tokensUsed) {
       return current;
     }
 
     return {
       ...current,
-      tokensUsed: {
-        ...current.tokensUsed,
-        numRequests: 1,
-      },
+      tokensUsed,
     };
   }
 
+  // The latest verdict can be cached even when the accumulated usage already
+  // contains fresh grading tasks from earlier turns.
+  const previousTokensUsed =
+    previous.metadata?.cachedResponse === true && (previous.tokensUsed.numRequests ?? 0) > 0
+      ? previous.tokensUsed
+      : normalizeGradingTaskUsage(previous);
+  if (!previousTokensUsed) {
+    return current;
+  }
+
   const tokensUsed = {
-    ...previous.tokensUsed,
-    numRequests: previous.tokensUsed.numRequests ?? 1,
+    ...previousTokensUsed,
+    numRequests: previous.tokensUsed.numRequests || previousTokensUsed.numRequests,
     ...(previous.tokensUsed.completionDetails
       ? { completionDetails: { ...previous.tokensUsed.completionDetails } }
       : {}),
   };
 
-  if (current.tokensUsed) {
-    accumulateTokenUsage(tokensUsed, {
-      ...current.tokensUsed,
-      numRequests: current.tokensUsed.numRequests === 0 ? 0 : 1,
-    });
+  const currentTokensUsed = normalizeGradingTaskUsage(current);
+  if (currentTokensUsed) {
+    accumulateTokenUsage(tokensUsed, currentTokensUsed);
   }
 
   return { ...current, tokensUsed };
@@ -873,7 +909,10 @@ export async function tryUnblocking({
   purpose?: string;
   targetId?: string;
 }): Promise<{
+  attempted?: boolean;
+  cached?: boolean;
   success: boolean;
+  tokenUsage?: TokenUsage;
   unblockingPrompt?: string;
 }> {
   try {
@@ -934,7 +973,12 @@ export async function tryUnblocking({
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false };
+      return {
+        attempted: true,
+        cached: response.cached,
+        success: false,
+        tokenUsage: response.tokenUsage,
+      };
     }
 
     const parsed = response.output as any;
@@ -945,13 +989,19 @@ export async function tryUnblocking({
         `[Unblocking] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
       );
       return {
+        attempted: true,
+        cached: response.cached,
         success: true,
+        tokenUsage: response.tokenUsage,
         unblockingPrompt: parsed.unblockingAnswer,
       };
     } else {
       logger.debug('[Unblocking] No blocking question detected');
       return {
+        attempted: true,
+        cached: response.cached,
         success: false,
+        tokenUsage: response.tokenUsage,
       };
     }
   } catch (error) {

@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
+import * as redteamProviderShared from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import * as traceContext from '../../../src/tracing/traceContext';
 import { createMockProvider } from '../../factories/provider';
@@ -1601,6 +1602,39 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.prompt).toBe(75); // 30 + 45
       expect(result.tokenUsage?.completion).toBe(50); // 20 + 30
       expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('counts unblocking analysis as attacker usage when no blocking question is found', async () => {
+      const unblocking = vi.spyOn(redteamProviderShared, 'tryUnblocking').mockResolvedValue({
+        success: false,
+        tokenUsage: { total: 21, prompt: 13, completion: 8, numRequests: 1 },
+      });
+
+      try {
+        const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+        const targetProvider = createMockProvider();
+        targetProvider.callApi
+          .mockReset()
+          .mockResolvedValueOnce({
+            output: 'first response',
+            tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            output: 'second response',
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+          });
+
+        const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+        expect(result.tokenUsage).toMatchObject({
+          total: 70,
+          numRequests: 2,
+          attacker: { total: 21, prompt: 13, completion: 8 },
+        });
+        expect(unblocking).toHaveBeenCalledTimes(1);
+      } finally {
+        unblocking.mockRestore();
+      }
     });
   });
 
