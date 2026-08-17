@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.222",
+    "@anthropic-ai/claude-agent-sdk": "0.3.224",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -231,9 +231,9 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.7",
     "@fal-ai/client": "~1.10.1",
-    "@ibm-cloud/watsonx-ai": "^1.7.15",
+    "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.4.0",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.222",
+    "@anthropic-ai/claude-agent-sdk": "0.3.224",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -292,7 +292,7 @@
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.15",
+    "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.4.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
