@@ -238,6 +238,42 @@ describe('VoiceCrescendoProvider', () => {
     });
   });
 
+  it('does not recharge cached voice grading responses that retain historical usage', async () => {
+    const gradingProvider = createMockProvider({
+      id: 'mock-grading-provider',
+      response: {
+        output: JSON.stringify({
+          objectiveAchieved: true,
+          confidence: 0.9,
+          reason: 'cached objective evaluation',
+          partialSuccess: false,
+        }),
+        cached: true,
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      },
+    });
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(gradingProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 30,
+      numRequests: 1,
+      attacker: { total: 15, numRequests: 1 },
+      assertions: { total: 0, prompt: 0, completion: 0, cached: 19, numRequests: 0 },
+    });
+  });
+
   it('retains failed voice-attacker usage without creating a target probe', async () => {
     mockRedteamProvider.callApi.mockResolvedValue({
       error: 'voice attack failed after inference',

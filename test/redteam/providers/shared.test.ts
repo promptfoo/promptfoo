@@ -1677,6 +1677,24 @@ describe('shared redteam provider utilities', () => {
       });
     });
 
+    it('does not recharge cached grader responses that retain original request and token counts', () => {
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 35, prompt: 20, completion: 15, numRequests: 1 },
+      };
+
+      expect(accumulateGraderResult(undefined, cached).tokensUsed).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 35,
+        numRequests: 0,
+      });
+    });
+
     it('preserves fresh grading usage before and after a cached middle turn', () => {
       const first = {
         pass: true,

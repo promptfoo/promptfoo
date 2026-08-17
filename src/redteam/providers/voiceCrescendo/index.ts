@@ -415,6 +415,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     confidence: number;
     reason: string;
     partialSuccess: boolean;
+    cached?: boolean;
     tokenUsage?: TokenUsage;
   }> {
     const scoringProvider = await this.getScoringProvider();
@@ -442,6 +443,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         confidence: 0,
         reason: `Evaluation error: ${evalResponse.error}`,
         partialSuccess: false,
+        cached: evalResponse.cached,
         tokenUsage: evalResponse.tokenUsage,
       };
     }
@@ -464,11 +466,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
         confidence: 0,
         reason: 'Failed to parse evaluation response',
         partialSuccess: false,
+        cached: evalResponse.cached,
         tokenUsage: evalResponse.tokenUsage,
       };
     }
 
-    return { ...parsed, tokenUsage: evalResponse.tokenUsage };
+    return { ...parsed, cached: evalResponse.cached, tokenUsage: evalResponse.tokenUsage };
   }
 
   /**
@@ -601,6 +604,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);
         accumulateGradingResponseTokenUsage(totalTokenUsage, {
+          cached: evaluation.cached,
           tokenUsage: evaluation.tokenUsage,
         });
         logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
