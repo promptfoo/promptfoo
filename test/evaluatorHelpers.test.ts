@@ -360,6 +360,16 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ retries: 3, mode: 'strict' }));
     });
 
+    it('should not recurse forever on a self-referential object var', async () => {
+      const prompt = toPrompt('{{ cfg.name }}');
+      const cfg: Record<string, unknown> = { name: 'loop' };
+      cfg.self = cfg;
+
+      const renderedPrompt = await renderPrompt(prompt, { cfg }, {});
+
+      expect(renderedPrompt).toBe('loop');
+    });
+
     it('should surface an error when a nested file reference does not exist', async () => {
       const prompt = toPrompt('{{ cfg.report }}');
       const vars = { cfg: { report: 'file://missing.txt' } };

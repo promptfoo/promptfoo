@@ -252,9 +252,22 @@ function isNestedLoadableFile(filePath: string): boolean {
   );
 }
 
-async function loadNestedFileVars(value: unknown, varName: string): Promise<unknown> {
+async function loadNestedFileVars(
+  value: unknown,
+  varName: string,
+  seen: WeakSet<object> = new WeakSet(),
+): Promise<unknown> {
+  // Vars can be self-referential (the evaluator logs circular structures on
+  // error paths); revisiting one would recurse until the stack blows.
+  if (value !== null && typeof value === 'object') {
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+  }
+
   if (Array.isArray(value)) {
-    return Promise.all(value.map((item) => loadNestedFileVars(item, varName)));
+    return Promise.all(value.map((item) => loadNestedFileVars(item, varName, seen)));
   }
 
   if (typeof value === 'string') {
@@ -285,7 +298,7 @@ async function loadNestedFileVars(value: unknown, varName: string): Promise<unkn
   if (value && typeof value === 'object') {
     const entries = await Promise.all(
       Object.entries(value).map(
-        async ([key, nested]) => [key, await loadNestedFileVars(nested, varName)] as const,
+        async ([key, nested]) => [key, await loadNestedFileVars(nested, varName, seen)] as const,
       ),
     );
     return Object.fromEntries(entries);
