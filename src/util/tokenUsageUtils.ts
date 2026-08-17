@@ -1,6 +1,7 @@
 import {
   BaseTokenUsageSchema,
   type CompletionTokenDetails,
+  type NormalizedTokenUsage,
   type TokenUsage,
 } from '../types/shared';
 
@@ -46,7 +47,7 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
-export function createEmptyTokenUsage(): Required<TokenUsage> {
+export function createEmptyTokenUsage(): NormalizedTokenUsage {
   return {
     prompt: 0,
     completion: 0,
@@ -155,6 +156,11 @@ export function accumulateTokenUsage(
       );
     }
   }
+
+  if (update.generation) {
+    target.generation ??= createEmptyAssertions();
+    accumulateTokenUsage(target.generation, update.generation);
+  }
 }
 
 /**
@@ -248,8 +254,8 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
- * Fold generation-time provider tokens into evaluation totals without treating
- * internal generation calls as target probes. Returns whether the payload was valid.
+ * Record generation-time provider tokens separately from target usage and probes.
+ * Returns whether the payload contained observable generation usage.
  */
 export function accumulateGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
   const parsed = BaseTokenUsageSchema.safeParse(update);
@@ -257,14 +263,15 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
     return false;
   }
 
-  const { assertions: _assertions, numRequests: _numRequests, ...tokenTotals } = parsed.data;
-  const hasTokenTotals =
-    Object.values(tokenTotals).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(tokenTotals.completionDetails ?? {}).some((value) => value !== 0);
-  if (!hasTokenTotals) {
+  const { assertions: _assertions, generation: _generation, ...generationUsage } = parsed.data;
+  const hasUsage =
+    Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
+    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+  if (!hasUsage) {
     return false;
   }
-  accumulateTokenUsage(target, tokenTotals);
+  target.generation ??= createEmptyAssertions();
+  accumulateTokenUsage(target.generation, generationUsage);
   return true;
 }
 
@@ -276,7 +283,7 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
  */
 export function normalizeTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
-): Required<TokenUsage> {
+): NormalizedTokenUsage {
   return {
     total: tokenUsage?.total || 0,
     prompt: tokenUsage?.prompt || 0,
@@ -285,5 +292,6 @@ export function normalizeTokenUsage(
     numRequests: tokenUsage?.numRequests || 0,
     completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
+    ...(tokenUsage?.generation ? { generation: tokenUsage.generation } : {}),
   };
 }

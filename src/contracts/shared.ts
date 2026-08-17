@@ -20,12 +20,15 @@ const TokenUsageCoreSchema = z.object({
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
 
-/** Token usage statistics. The optional `assertions` mirrors the top-level fields for model-graded assertion accounting. */
+/** Target usage with independent generation and assertion breakdowns. */
 export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
   assertions: TokenUsageCoreSchema.optional(),
+  generation: TokenUsageCoreSchema.optional(),
 });
 
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
+export type NormalizedTokenUsage = Required<Omit<TokenUsage, 'generation'>> &
+  Pick<TokenUsage, 'generation'>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
