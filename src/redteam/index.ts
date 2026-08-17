@@ -1500,6 +1500,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1638,6 +1639,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;

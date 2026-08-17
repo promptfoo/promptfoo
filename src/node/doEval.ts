@@ -788,7 +788,12 @@ export async function doEval(
       ...(providerFilter ? { providerFilter } : {}),
     };
 
-    if (evaluateOptions.generationTokenUsage) {
+    if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
+      const { generationAccounting: _staleGenerationAccounting, ...metadata } = config.metadata;
+      config = { ...config, metadata };
+    }
+
+    if (!resumeEval && evaluateOptions.generationTokenUsage) {
       config = {
         ...config,
         metadata: {
