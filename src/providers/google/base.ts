@@ -25,6 +25,7 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
+import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools, stripExecutableToolFileReferences, validateFunctionCall } from './util';
 
@@ -325,6 +326,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     functionName: string,
     args: string,
     config: CompletionOptions,
+    callId?: string,
   ): Promise<any> {
     try {
       // Check if we've already loaded this function
@@ -373,7 +375,9 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
       // Execute the callback
       logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
+      const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
 
       return result;
     } catch (error: any) {

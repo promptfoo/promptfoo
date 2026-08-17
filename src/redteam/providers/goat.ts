@@ -40,8 +40,10 @@ import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from 
 import { getGoalRubric } from './prompts';
 import {
   buildGraderResultAssertion,
+  callTargetProvider,
   getGraderAssertionValue,
   getLastMessageContent,
+  runRedteamGrader,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -321,7 +323,8 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await targetProvider.callApi(
+            const unblockingResponse = await callTargetProvider(
+              targetProvider,
               unblockingTargetPrompt,
               context,
               options,
@@ -586,7 +589,8 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await targetProvider.callApi(
+        const targetResponse = (await callTargetProvider(
+          targetProvider,
           targetPrompt,
           targetContext,
           options,
@@ -602,12 +606,13 @@ export default class GoatProvider implements ApiProvider {
 
         let traceContext: TraceContextData | null = null;
         let computedTraceSummary: string | undefined;
-        if (shouldFetchTrace) {
+        if (shouldFetchTrace && !targetResponse.cached) {
           const traceparent = context?.traceparent ?? undefined;
           const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
           if (traceId) {
             traceContext = await fetchTraceContext(traceId, {
+              abortSignal: options?.abortSignal,
               earliestStartTime: iterationStart,
               includeInternalSpans: tracingOptions.includeInternalSpans,
               maxSpans: tracingOptions.maxSpans,
@@ -616,6 +621,9 @@ export default class GoatProvider implements ApiProvider {
               retryDelayMs: tracingOptions.retryDelayMs,
               spanFilter: tracingOptions.spanFilter,
               sanitizeAttributes: tracingOptions.sanitizeAttributes,
+              providerConfig: tracingOptions.provider,
+              queryDelay: tracingOptions.queryDelay,
+              redactAttributes: tracingOptions.redactAttributes,
             });
 
             if (traceContext) {
@@ -779,7 +787,8 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
-          const { grade, rubric } = await grader.getResult(
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
             attackerMessage.content,
             finalOutput,
             test,

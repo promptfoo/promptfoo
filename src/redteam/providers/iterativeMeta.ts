@@ -41,6 +41,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  runRedteamGrader,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -448,12 +449,13 @@ export async function runMetaAgentRedteam({
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;
     let computedTraceSummary: string | undefined;
-    if (shouldFetchTrace) {
+    if (shouldFetchTrace && !targetResponse.cached) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,
           maxSpans: tracingOptions.maxSpans,
@@ -462,6 +464,9 @@ export async function runMetaAgentRedteam({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
+          redactAttributes: tracingOptions.redactAttributes,
         });
 
         if (traceContext) {
@@ -589,7 +594,8 @@ export async function runMetaAgentRedteam({
           });
         }
 
-        const { grade, rubric } = await grader.getResult(
+        const { grade, rubric } = await runRedteamGrader(
+          grader,
           attackPrompt,
           targetResponse.output,
           iterationTest,

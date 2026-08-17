@@ -728,6 +728,7 @@ export class GoogleProvider extends GoogleGenericProvider {
                     : parsed.functionCall.args,
                 ),
                 config,
+                parsed.functionCall.id,
               );
               response.output = functionResult;
             }
