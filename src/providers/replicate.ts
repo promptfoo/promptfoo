@@ -234,7 +234,12 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug('Returning cached Replicate response', { modelName: this.modelName });
-        return { ...JSON.parse(cachedResponse as string), cached: true };
+        const parsedResponse = JSON.parse(cachedResponse as string);
+        return {
+          ...parsedResponse,
+          tokenUsage: { ...parsedResponse.tokenUsage, numRequests: 0 },
+          cached: true,
+        };
       }
     }
 

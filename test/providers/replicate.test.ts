@@ -277,7 +277,7 @@ describe('ReplicateProvider', () => {
   it('should set cached flag when returning cached response', async () => {
     const mockCachedResponse = {
       output: 'cached PFQA_REPLICATE_CACHED_OUTPUT_SECRET response',
-      tokenUsage: { total: 100 },
+      tokenUsage: { total: 100, numRequests: 1 },
     };
 
     const mockCache = {
@@ -295,6 +295,7 @@ describe('ReplicateProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.cached).toBe(true);
+    expect(result.tokenUsage).toEqual({ total: 100, numRequests: 0 });
     expect(result.output).toBe('cached PFQA_REPLICATE_CACHED_OUTPUT_SECRET response');
     expect(mockCache.get).toHaveBeenCalled();
     const debugLogs = vi.mocked(logger.debug).mock.calls.map((call) => JSON.stringify(call));
