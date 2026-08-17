@@ -171,39 +171,44 @@ describe('ReplicateProvider', () => {
     );
   });
 
-  it('should poll for completion when prediction is still processing', async () => {
-    // First call returns processing status
-    mockedFetchWithCache.mockResolvedValueOnce({
-      data: {
-        id: 'test-id',
-        status: 'processing',
-        output: null,
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+  it.each([false, true])(
+    'should count live polling when the cached initial prediction is %s',
+    async (cachedPrediction) => {
+      // First call returns processing status
+      mockedFetchWithCache.mockResolvedValueOnce({
+        data: {
+          id: 'test-id',
+          status: 'processing',
+          output: null,
+        },
+        cached: cachedPrediction,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    // Second call (polling) returns completed
-    mockedFetchWithCache.mockResolvedValueOnce({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      // Second call (polling) returns completed
+      mockedFetchWithCache.mockResolvedValueOnce({
+        data: {
+          id: 'test-id',
+          status: 'succeeded',
+          output: 'test response',
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    const provider = new ReplicateProvider('test-model', {
-      config: { apiKey: mockApiKey },
-    });
+      const provider = new ReplicateProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
 
-    const result = await provider.callApi('test prompt');
-    expect(result.output).toBe('test response');
-    expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
-  });
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('test response');
+      expect(result.cached).not.toBe(true);
+      expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
+      expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('should handle array outputs', async () => {
     mockedFetchWithCache.mockResolvedValue({

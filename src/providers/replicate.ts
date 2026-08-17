@@ -274,6 +274,7 @@ export class ReplicateProvider implements ApiProvider {
 
       // If still processing, poll for completion
       if (response.status === 'starting' || response.status === 'processing') {
+        cached = false;
         response = await this.pollForCompletion(response.id);
       }
 
