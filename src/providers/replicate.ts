@@ -286,6 +286,7 @@ export class ReplicateProvider implements ApiProvider {
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
+        ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }
     logger.debug('Replicate API response received', {

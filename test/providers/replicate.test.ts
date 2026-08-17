@@ -259,6 +259,30 @@ describe('ReplicateProvider', () => {
     expect(result.error).toBe('API call error: Error: Model error');
   });
 
+  it('does not count a cached failed prediction as a new request', async () => {
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'failed',
+        error: 'Model error',
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toMatchObject({
+      error: 'API call error: Error: Model error',
+      cached: true,
+      tokenUsage: { total: 0, cached: 0, numRequests: 0 },
+    });
+  });
+
   it('should use versioned endpoint for models with version IDs', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: {
