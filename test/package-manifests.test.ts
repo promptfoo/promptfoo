@@ -601,6 +601,7 @@ describe('package manifests', () => {
         string,
         PackageManifest & {
           version?: string;
+          optional?: boolean;
         }
       >;
     }>('package-lock.json');
@@ -617,6 +618,7 @@ describe('package manifests', () => {
         '1.18.15',
       ),
     ).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
   });
 
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
