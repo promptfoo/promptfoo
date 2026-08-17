@@ -207,6 +207,9 @@ export class AssertionsResult {
     }
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
+    const cachedResponse =
+      this.componentResults.length > 0 &&
+      this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
     this.result = {
       pass,
@@ -216,9 +219,12 @@ export class AssertionsResult {
       ...(hasNamedScoreWeights && { namedScoreWeights: this.namedScoreWeights }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...(this._parentAssertionSet && {
+      ...((this._parentAssertionSet || cachedResponse) && {
         metadata: {
-          assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          ...(this._parentAssertionSet && {
+            assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          }),
+          ...(cachedResponse && { cachedResponse: true }),
         },
       }),
     };
