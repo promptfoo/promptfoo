@@ -860,6 +860,7 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
+  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
 
   return {
     assertion,
@@ -871,7 +872,7 @@ export async function runJsonGradingPrompt({
       completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
     }),
     metadata: {
-      ...responseMetadata,
+      ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),

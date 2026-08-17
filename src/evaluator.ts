@@ -596,7 +596,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
   accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed, {
-    cached: checkResult.metadata?.cachedResponse === true,
+    cached: checkResult.metadata?.cachedResponse,
   });
   row.gradingResult = checkResult;
 }
@@ -3382,21 +3382,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.stats.successes -= 1;
       this.stats.failures += 1;
     }
-  }
-
-  private trackModelGradedAssertionUsage(row: EvaluateResult): void {
-    if (!row.gradingResult?.tokensUsed || !row.testCase?.assert) {
-      return;
-    }
-    const hasModelGradedAssertion = row.testCase.assert.some((assertion) =>
-      MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType),
-    );
-    if (!hasModelGradedAssertion) {
-      return;
-    }
-
-    this.stats.tokenUsage.assertions ??= createEmptyAssertions();
-    accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, row.gradingResult.tokensUsed);
   }
 
   private trackRowStats(row: EvaluateResult): void {
