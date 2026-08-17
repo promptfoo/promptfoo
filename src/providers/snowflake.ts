@@ -170,6 +170,7 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
 

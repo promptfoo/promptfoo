@@ -262,6 +262,9 @@ describe('OpenRouter', () => {
         const result = await provider.callApi('Test prompt');
         expect(result.error).toContain('Malformed response data');
         expect(result.output).toBeUndefined();
+        // The malformed-response return must carry the cache-hit status so
+        // downstream doesn't treat a cached failure as a live provider call.
+        expect(result.cached).toBe(false);
       } finally {
         restoreEnv();
       }
@@ -287,6 +290,7 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Test prompt');
         expect(result.error).toContain('Malformed response data');
+        expect(result.cached).toBe(false);
       } finally {
         restoreEnv();
       }

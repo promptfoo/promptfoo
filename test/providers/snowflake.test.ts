@@ -249,13 +249,16 @@ describe('Snowflake Cortex Provider', () => {
           choices: [],
           usage: { total_tokens: 5, prompt_tokens: 5, completion_tokens: 0 },
         },
-        cached: false,
+        // Served from cache: the malformed-response return must preserve the
+        // cached flag so downstream skips provider delays / live-call metrics.
+        cached: true,
         status: 200,
         statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
       expect(result.error).toContain('Malformed response data');
+      expect(result.cached).toBe(true);
     });
 
     it('returns a clean error instead of crashing when the response has no choices field', async () => {
@@ -277,6 +280,7 @@ describe('Snowflake Cortex Provider', () => {
 
       const result = await provider.callApi('Test prompt');
       expect(result.error).toContain('Malformed response data');
+      expect(result.cached).toBe(false);
     });
   });
 });
