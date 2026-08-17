@@ -43,6 +43,54 @@ function mergeMetadata(
   };
 }
 
+function normalizeAssertionTokenUsage(result: GradingResult) {
+  const tokensUsed = result.tokensUsed;
+  if (!tokensUsed) {
+    return undefined;
+  }
+
+  if (result.metadata?.cachedResponse === true) {
+    const reportedTotal =
+      tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
+    return {
+      ...tokensUsed,
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: Math.max(tokensUsed.cached ?? 0, reportedTotal),
+      numRequests: 0,
+    };
+  }
+
+  return {
+    ...tokensUsed,
+    ...(result.metadata?.renderedGradingPrompt !== undefined &&
+      tokensUsed.numRequests === 0 && { numRequests: 1 }),
+  };
+}
+
+function mergeScoringMetadata(
+  baseMetadata: GradingResult['metadata'],
+  scoringResult: GradingResult,
+): GradingResult['metadata'] | undefined {
+  const metadata = mergeMetadata(baseMetadata, scoringResult.metadata);
+  const tokensUsed = scoringResult.tokensUsed;
+  const scoringPerformedFreshWork =
+    scoringResult.metadata?.cachedResponse !== true &&
+    tokensUsed !== undefined &&
+    ((tokensUsed.numRequests ?? 0) > 0 ||
+      (tokensUsed.total ?? 0) > 0 ||
+      (tokensUsed.prompt ?? 0) > 0 ||
+      (tokensUsed.completion ?? 0) > 0);
+
+  if (!scoringPerformedFreshWork || metadata?.cachedResponse !== true) {
+    return metadata;
+  }
+
+  const { cachedResponse: _cachedResponse, ...remainingMetadata } = metadata;
+  return Object.keys(remainingMetadata).length > 0 ? remainingMetadata : undefined;
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -123,14 +171,15 @@ export class AssertionsResult {
       });
     }
 
-    if (result.tokensUsed) {
+    const tokensUsed = normalizeAssertionTokenUsage(result);
+    if (tokensUsed) {
       for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
-        this.tokensUsed[field] += result.tokensUsed[field] ?? 0;
+        this.tokensUsed[field] += tokensUsed[field] ?? 0;
       }
 
-      if (result.tokensUsed.completionDetails) {
+      if (result.metadata?.cachedResponse !== true && tokensUsed.completionDetails) {
         const currentDetails = this.tokensUsed.completionDetails;
-        const incomingDetails = result.tokensUsed.completionDetails;
+        const incomingDetails = tokensUsed.completionDetails;
         this.tokensUsed.completionDetails = {
           reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
           acceptedPrediction:
@@ -244,7 +293,7 @@ export class AssertionsResult {
           ...this.result,
           ...scoringResult,
           ...((this.result.metadata || scoringResult.metadata) && {
-            metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
+            metadata: mergeScoringMetadata(this.result.metadata, scoringResult),
           }),
         };
       } catch (err) {

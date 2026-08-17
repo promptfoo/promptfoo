@@ -10,6 +10,24 @@ import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpe
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator token usage', () => {
+  it('does not count deterministic assertions as grading-provider requests', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'equals', value: 'Test output' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.tokenUsage.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    expect(summary.results[0].tokenUsage?.assertions).toMatchObject({
+      total: 0,
+      numRequests: 0,
+    });
+  });
+
   it('should accumulate token usage correctly', async () => {
     const mockOptions = {
       delay: 0,

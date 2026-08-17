@@ -257,17 +257,17 @@ export function accumulateAssertionTokenUsage(
 
 /**
  * Account for reported grading usage, preserving cumulative request counts and cached
- * responses that represent zero new requests. Legacy usage without a request count,
- * fresh matcher usage normalized to zero, and calls without usage each count once.
- * Explicit cache provenance distinguishes zero-token cached responses from fresh
- * grading tasks whose providers do not report token usage.
+ * responses and deterministic assertions that represent zero new requests. Legacy
+ * usage without a request count and confirmed fresh grading calls each count once.
+ * Explicit cache provenance takes precedence over cached-token heuristics because an
+ * aggregate can contain both avoided cached usage and a smaller fresh grading call.
  * Shared by the live grading path and the EvalResult -> EvaluateResult reconstruction so
  * the two stay in sync. Mutates {@code assertions}.
  */
 export function accumulateGradingRequest(
   assertions: NonNullable<TokenUsage['assertions']>,
   tokensUsed: Partial<TokenUsage> | undefined,
-  options?: { cached?: boolean },
+  options?: { cached?: boolean; fresh?: boolean },
 ): void {
   if (!tokensUsed) {
     if (!options?.cached) {
@@ -278,13 +278,26 @@ export function accumulateGradingRequest(
 
   const reportedTotal = tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
   const cachedTokens = tokensUsed.cached ?? 0;
-  const cachedResponse =
-    options?.cached === true ||
-    (tokensUsed.numRequests === 0 && cachedTokens > 0 && reportedTotal <= cachedTokens);
+  const inferredCachedResponse =
+    options?.cached === undefined &&
+    tokensUsed.numRequests === 0 &&
+    cachedTokens > 0 &&
+    reportedTotal <= cachedTokens;
+  const cachedResponse = options?.cached === true || inferredCachedResponse;
+  const hasFreshUsage = options?.fresh === true || reportedTotal > 0;
+
+  let numRequests: number;
+  if (cachedResponse) {
+    numRequests = 0;
+  } else if (tokensUsed.numRequests === 0) {
+    numRequests = hasFreshUsage ? 1 : 0;
+  } else {
+    numRequests = tokensUsed.numRequests ?? 1;
+  }
 
   accumulateAssertionTokenUsage(assertions, {
     ...tokensUsed,
-    numRequests: cachedResponse ? 0 : tokensUsed.numRequests || 1,
+    numRequests,
   });
 }
 

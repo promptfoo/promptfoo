@@ -429,7 +429,6 @@ export class CrescendoProvider implements ApiProvider {
           inputMaterialization,
           materializationHandled,
           materializedVars,
-          tokenUsage: attackerTokenUsage,
         } = await this.getAttackPrompt(
           roundNum,
           evalFlag,
@@ -441,7 +440,6 @@ export class CrescendoProvider implements ApiProvider {
           totalTokenUsage,
           options,
         );
-        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
 
         if (!attackPrompt) {
           logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');

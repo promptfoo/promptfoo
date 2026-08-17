@@ -191,6 +191,7 @@ describe('AssertionsResult', () => {
           score: 1,
           reason: 'Fresh grading result without token usage',
           tokensUsed: DEFAULT_TOKENS_USED,
+          metadata: { renderedGradingPrompt: 'Grade this response' },
         },
       });
 
@@ -202,6 +203,39 @@ describe('AssertionsResult', () => {
 
       expect(result.metadata?.cachedResponse).toBeUndefined();
       expect(usage.numRequests).toBe(1);
+    });
+
+    it('counts fresh matcher calls when avoided cached tokens exceed fresh token usage', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result',
+          tokensUsed: { total: 0, cached: 97, numRequests: 0 },
+          metadata: { cachedResponse: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Fresh local grading result',
+          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 0 },
+          metadata: { renderedGradingPrompt: 'Grade this response' },
+        },
+      });
+
+      const result = await assertionsResult.testResult();
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(usage).toMatchObject({ total: 50, cached: 97, numRequests: 1 });
+      expect(result.metadata?.cachedResponse).toBeUndefined();
     });
 
     it('should calculate final result with threshold', async () => {
@@ -406,6 +440,35 @@ describe('AssertionsResult', () => {
       });
 
       expect((await assertionsResult.testResult(scoringFunction)).score).toBe(7);
+    });
+
+    it('clears cached provenance when a custom scoring function performs fresh grading', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached component grade',
+          tokensUsed: { total: 0, cached: 97, numRequests: 0 },
+          metadata: { cachedResponse: true },
+        },
+      });
+      const scoringFunction: ScoringFunction = () => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Fresh custom grading',
+        tokensUsed: { total: 23, prompt: 15, completion: 8, numRequests: 1 },
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+      const usage = createEmptyAssertions();
+      accumulateGradingRequest(usage, result.tokensUsed, {
+        cached: result.metadata?.cachedResponse === true,
+      });
+
+      expect(result.metadata?.cachedResponse).toBeUndefined();
+      expect(usage).toMatchObject({ total: 23, prompt: 15, completion: 8, numRequests: 1 });
     });
 
     it('should handle scoring function errors', async () => {

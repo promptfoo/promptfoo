@@ -2068,6 +2068,14 @@ function mergeSelectBestGradingResult(
   mergeComparisonTokenUsage(result, gradingResult, evalTokenUsage);
 
   if (result.gradingResult) {
+    if (
+      result.gradingResult.metadata?.cachedResponse === true &&
+      gradingResult.metadata?.cachedResponse !== true
+    ) {
+      const { cachedResponse: _cachedResponse, ...metadata } = result.gradingResult.metadata;
+      result.gradingResult.metadata = Object.keys(metadata).length > 0 ? metadata : undefined;
+    }
+
     result.success = result.gradingResult.pass = result.gradingResult.pass && gradingResult.pass;
     if (!gradingResult.pass) {
       result.gradingResult.reason = gradingResult.reason;
