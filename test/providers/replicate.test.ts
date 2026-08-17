@@ -305,6 +305,43 @@ describe('ReplicateProvider', () => {
     expect(mockedFetchWithCache).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { output: 'cached prediction', expectedOutput: 'cached prediction' },
+    { output: ['cached', ' ', 'prediction'], expectedOutput: 'cached prediction' },
+  ])(
+    'does not count an inner cached prediction for output $output',
+    async ({ output, expectedOutput }) => {
+      mockedFetchWithCache.mockResolvedValue({
+        data: { id: 'test-id', status: 'succeeded', output },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as any;
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
+
+      const provider = new ReplicateProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        output: expectedOutput,
+        cached: true,
+        tokenUsage: { total: 0, cached: 0, numRequests: 0 },
+      });
+      expect(JSON.parse(mockCache.set.mock.calls[0][1])).toMatchObject({
+        cached: true,
+        tokenUsage: { numRequests: 0 },
+      });
+    },
+  );
+
   it('should cache successful string responses', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: {

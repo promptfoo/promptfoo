@@ -249,6 +249,7 @@ export class ReplicateProvider implements ApiProvider {
 
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
+    let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
       const createResponse = await fetchWithCache(
@@ -268,6 +269,7 @@ export class ReplicateProvider implements ApiProvider {
         'json',
       );
 
+      cached = createResponse.cached;
       response = createResponse.data as ReplicatePrediction;
 
       // If still processing, poll for completion
@@ -290,11 +292,16 @@ export class ReplicateProvider implements ApiProvider {
       ...getReplicateValueSummary('response', response),
     });
 
+    const responseMetadata = {
+      ...(cached && { cached: true }),
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
+    };
+
     if (typeof response === 'string') {
       // It's text
       const ret = {
         output: response,
-        tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
+        ...responseMetadata,
       };
       if (cache && cacheKey) {
         try {
@@ -310,7 +317,7 @@ export class ReplicateProvider implements ApiProvider {
         const output = response.join('');
         const ret = {
           output,
-          tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
+          ...responseMetadata,
         };
         if (cache && cacheKey) {
           try {
