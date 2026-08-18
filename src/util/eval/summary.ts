@@ -163,6 +163,16 @@ function buildUsageDetails(usage: TokenUsageBreakdown, total: number): string[] 
   return parts;
 }
 
+function getGradingUsageLine(assertions: TokenUsage['assertions']): string | undefined {
+  if (!assertions || ((assertions.total || 0) === 0 && (assertions.cached || 0) === 0)) {
+    return undefined;
+  }
+
+  const total = assertions.total || 0;
+  const details = buildUsageDetails(assertions, total);
+  return `  ${chalk.gray('Grading:')} ${chalk.white(total.toLocaleString())} (${details.join(', ')})`;
+}
+
 function getTokenUsageLines(
   tokenUsage: TokenUsage,
   isRedteam: boolean,
@@ -170,7 +180,8 @@ function getTokenUsageLines(
 ): string[] {
   const hasEvalTokens =
     (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
-  const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
+  const gradingUsageLine = getGradingUsageLine(tokenUsage.assertions);
+  const hasGradingTokens = gradingUsageLine !== undefined;
   const hasAttackerTokens = tokenUsage.attacker && (tokenUsage.attacker.total || 0) > 0;
   const hasGenerationTokens = tokenUsage.generation && (tokenUsage.generation.total || 0) > 0;
 
@@ -232,13 +243,8 @@ function getTokenUsageLines(
     );
   }
 
-  if (tokenUsage.assertions?.total && tokenUsage.assertions.total > 0) {
-    const gradingParts = buildUsageDetails(tokenUsage.assertions, tokenUsage.assertions.total);
-    lines.push(
-      `  ${chalk.gray('Grading:')} ${chalk.white(
-        tokenUsage.assertions.total.toLocaleString(),
-      )} (${gradingParts.join(', ')})`,
-    );
+  if (gradingUsageLine) {
+    lines.push(gradingUsageLine);
   }
 
   lines.push(...getProviderUsageLines(tracker));

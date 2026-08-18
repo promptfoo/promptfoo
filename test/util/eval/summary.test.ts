@@ -237,6 +237,64 @@ describe('generateEvalSummary', () => {
       expect(output).not.toContain('Eval:');
     });
 
+    it('displays cached-only grading usage without charging historical tokens', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-cached-grading-only',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 0,
+          assertions: { total: 0, cached: 97, numRequests: 0 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 0');
+      expect(output).toContain('Grading: 0 (97 cached)');
+      expect(output).not.toContain('Eval:');
+    });
+
+    it('keeps cached-only grading separate from actual target token totals', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-target-with-cached-grading',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 100,
+          prompt: 60,
+          completion: 40,
+          numRequests: 1,
+          assertions: { total: 0, cached: 97, numRequests: 0 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 100');
+      expect(output).toContain('Eval: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Grading: 0 (97 cached)');
+      expect(output).not.toContain('Total Tokens: 197');
+    });
+
     it('should display both eval and grading tokens', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-both',
