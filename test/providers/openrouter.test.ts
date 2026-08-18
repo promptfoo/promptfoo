@@ -166,14 +166,30 @@ describe('OpenRouter', () => {
       }
     });
 
-    it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
+    it.each([
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/',
+        expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
+      },
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1///',
+        expectedUrl: 'https://proxy.example.com/openrouter/api/v1/chat/completions',
+      },
+      {
+        apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1/?api-version=2026-08-18',
+        expectedUrl:
+          'https://proxy.example.com/openrouter/api/v1/chat/completions?api-version=2026-08-18',
+      },
+    ])('should normalize the request URL for apiBaseUrl $apiBaseUrl', async ({
+      apiBaseUrl,
+      expectedUrl,
+    }) => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
       try {
-        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1/';
         const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: {
-            apiBaseUrl: customApiBaseUrl,
+            apiBaseUrl,
           },
         });
 
@@ -193,7 +209,8 @@ describe('OpenRouter', () => {
         await provider.callApi('Test prompt');
 
         const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+        expect(provider.config.apiBaseUrl).toBe(apiBaseUrl);
+        expect(url).toBe(expectedUrl);
       } finally {
         restoreEnv();
       }
