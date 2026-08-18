@@ -179,8 +179,40 @@ describe('ResultsTable Metrics Display', () => {
 
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
-    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,000',
+    );
+    expect(screen.getByText('Provider Tokens:').parentElement).toHaveTextContent(
+      'Provider Tokens: 1,000',
+    );
+    expect(screen.queryByText('Target Tokens:')).not.toBeInTheDocument();
+  });
+
+  it('labels primary token usage as target tokens for redteam scans', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Target Tokens:').parentElement).toHaveTextContent(
+      'Target Tokens: 1,000',
+    );
+    expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
   });
 
   it('displays average tokens with correct calculation', () => {
@@ -3174,7 +3206,7 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredCostElement).toHaveStyle('margin-left: 4px');
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
     const filteredTokensElement = screen.getByText('(500 filtered)');
     expect(filteredTokensElement).toBeInTheDocument();
@@ -3266,7 +3298,7 @@ describe('ResultsTable - No Filters Applied', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent('1,000');
 
     expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
     expect(screen.getByText('200ms')).toBeInTheDocument();

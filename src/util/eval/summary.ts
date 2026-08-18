@@ -50,6 +50,10 @@ type TokenUsageBreakdown = Pick<
   'prompt' | 'completion' | 'total' | 'cached' | 'numRequests' | 'completionDetails'
 >;
 
+function getTokenUsageTotal(usage: TokenUsageBreakdown | undefined): number {
+  return usage?.total ?? (usage?.prompt ?? 0) + (usage?.completion ?? 0);
+}
+
 function getCompletionMessage({
   completionType,
   evalId,
@@ -164,11 +168,11 @@ function buildUsageDetails(usage: TokenUsageBreakdown, total: number): string[] 
 }
 
 function getGradingUsageLine(assertions: TokenUsage['assertions']): string | undefined {
-  if (!assertions || ((assertions.total || 0) === 0 && (assertions.cached || 0) === 0)) {
+  const total = getTokenUsageTotal(assertions);
+  if (!assertions || (total === 0 && (assertions.cached || 0) === 0)) {
     return undefined;
   }
 
-  const total = assertions.total || 0;
   const details = buildUsageDetails(assertions, total);
   return `  ${chalk.gray('Grading:')} ${chalk.white(total.toLocaleString())} (${details.join(', ')})`;
 }
@@ -178,22 +182,20 @@ function getTokenUsageLines(
   isRedteam: boolean,
   tracker: TokenUsageTracker,
 ): string[] {
-  const hasEvalTokens =
-    (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
+  const primaryTokens = getTokenUsageTotal(tokenUsage);
   const gradingUsageLine = getGradingUsageLine(tokenUsage.assertions);
   const hasGradingTokens = gradingUsageLine !== undefined;
-  const hasAttackerTokens = tokenUsage.attacker && (tokenUsage.attacker.total || 0) > 0;
-  const hasGenerationTokens = tokenUsage.generation && (tokenUsage.generation.total || 0) > 0;
+  const attackerTokens = getTokenUsageTotal(tokenUsage.attacker);
+  const generationTokens = getTokenUsageTotal(tokenUsage.generation);
 
-  if (!hasEvalTokens && !hasGradingTokens && !hasAttackerTokens && !hasGenerationTokens) {
+  if (primaryTokens === 0 && !hasGradingTokens && attackerTokens === 0 && generationTokens === 0) {
     return [];
   }
 
-  const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
   const evalTokens = {
     prompt: tokenUsage.prompt || 0,
     completion: tokenUsage.completion || 0,
-    total: tokenUsage.total || combinedTotal,
+    total: primaryTokens,
     cached: tokenUsage.cached || 0,
     numRequests: tokenUsage.numRequests || 0,
     completionDetails: tokenUsage.completionDetails || {
@@ -207,9 +209,9 @@ function getTokenUsageLines(
     `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
       (
         evalTokens.total +
-        (tokenUsage.attacker?.total || 0) +
-        (tokenUsage.assertions?.total || 0) +
-        (tokenUsage.generation?.total || 0)
+        attackerTokens +
+        getTokenUsageTotal(tokenUsage.assertions) +
+        generationTokens
       ).toLocaleString(),
     )}`,
   ];
@@ -222,24 +224,25 @@ function getTokenUsageLines(
 
   if (evalTokens.total > 0) {
     const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
+    const primaryUsageLabel = isRedteam ? 'Target' : 'Provider';
     lines.push(
-      `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(
-        ', ',
-      )})`,
+      `  ${chalk.gray(`${primaryUsageLabel}:`)} ${chalk.white(
+        evalTokens.total.toLocaleString(),
+      )} (${evalParts.join(', ')})`,
     );
   }
 
-  if (tokenUsage.generation?.total && tokenUsage.generation.total > 0) {
-    const generationParts = buildUsageDetails(tokenUsage.generation, tokenUsage.generation.total);
+  if (tokenUsage.generation && generationTokens > 0) {
+    const generationParts = buildUsageDetails(tokenUsage.generation, generationTokens);
     lines.push(
-      `  ${chalk.gray('Generation:')} ${chalk.white(tokenUsage.generation.total.toLocaleString())} (${generationParts.join(', ')})`,
+      `  ${chalk.gray('Generation:')} ${chalk.white(generationTokens.toLocaleString())} (${generationParts.join(', ')})`,
     );
   }
 
-  if (tokenUsage.attacker?.total && tokenUsage.attacker.total > 0) {
-    const attackerParts = buildUsageDetails(tokenUsage.attacker, tokenUsage.attacker.total);
+  if (tokenUsage.attacker && attackerTokens > 0) {
+    const attackerParts = buildUsageDetails(tokenUsage.attacker, attackerTokens);
     lines.push(
-      `  ${chalk.gray('Attacker:')} ${chalk.white(tokenUsage.attacker.total.toLocaleString())} (${attackerParts.join(', ')})`,
+      `  ${chalk.gray('Attacker:')} ${chalk.white(attackerTokens.toLocaleString())} (${attackerParts.join(', ')})`,
     );
   }
 

@@ -200,7 +200,8 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Tokens:');
-      expect(output).toContain('Eval: 1,000 (400 prompt, 600 completion)');
+      expect(output).toContain('Provider: 1,000 (400 prompt, 600 completion)');
+      expect(output).not.toContain('Target:');
     });
 
     it('should display grading tokens only when no eval tokens (critical bug fix)', () => {
@@ -234,7 +235,7 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Tokens:');
       expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
-      expect(output).not.toContain('Eval:');
+      expect(output).not.toContain('Provider:');
     });
 
     it('displays cached-only grading usage without charging historical tokens', () => {
@@ -261,7 +262,7 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Total Tokens: 0');
       expect(output).toContain('Grading: 0 (97 cached)');
-      expect(output).not.toContain('Eval:');
+      expect(output).not.toContain('Provider:');
     });
 
     it('keeps cached-only grading separate from actual target token totals', () => {
@@ -290,7 +291,7 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Total Tokens: 100');
-      expect(output).toContain('Eval: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Target: 100 (60 prompt, 40 completion)');
       expect(output).toContain('Grading: 0 (97 cached)');
       expect(output).not.toContain('Total Tokens: 197');
     });
@@ -326,7 +327,7 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Tokens:');
-      expect(output).toContain('Eval: 1,000 (400 prompt, 600 completion)');
+      expect(output).toContain('Provider: 1,000 (400 prompt, 600 completion)');
       expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
     });
 
@@ -357,11 +358,45 @@ describe('generateEvalSummary', () => {
       });
       const output = stripAnsi(lines.join('\n'));
       expect(output).toContain('Total Tokens: 215');
-      expect(output).toContain('Eval: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Target: 100 (60 prompt, 40 completion)');
+      expect(output).not.toContain('Provider:');
       expect(output).toContain('Generation: 40 (25 prompt, 15 completion)');
       expect(output).toContain('Attacker: 50 (30 prompt, 20 completion)');
       expect(output).toContain('Grading: 25 (15 prompt, 10 completion)');
       expect(output).toContain('Probes: 2');
+    });
+
+    it('derives category totals from prompt and completion usage when total is absent', () => {
+      const lines = generateEvalSummary({
+        evalId: 'eval-derived-token-totals',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          prompt: 60,
+          completion: 40,
+          numRequests: 2,
+          attacker: { prompt: 30, completion: 20, numRequests: 3 },
+          assertions: { prompt: 15, completion: 10 },
+          generation: { prompt: 25, completion: 15, numRequests: 4 },
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      });
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Total Tokens: 215');
+      expect(output).toContain('Target: 100 (60 prompt, 40 completion)');
+      expect(output).toContain('Generation: 40 (25 prompt, 15 completion)');
+      expect(output).toContain('Attacker: 50 (30 prompt, 20 completion)');
+      expect(output).toContain('Grading: 25 (15 prompt, 10 completion)');
     });
 
     it('displays attacker-only usage without treating internal requests as target probes', () => {
@@ -389,7 +424,7 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Total Tokens: 73');
       expect(output).toContain('Attacker: 73 (45 prompt, 28 completion)');
-      expect(output).not.toContain('Eval:');
+      expect(output).not.toContain('Target:');
       expect(output).not.toContain('Grading:');
       expect(output).not.toContain('Probes:');
     });
@@ -419,7 +454,7 @@ describe('generateEvalSummary', () => {
       const output = stripAnsi(lines.join('\n'));
 
       expect(output).toContain('Tokens:');
-      expect(output).toContain('Eval: 1,000 (cached)');
+      expect(output).toContain('Provider: 1,000 (cached)');
     });
 
     it('should show partial cached tokens', () => {
@@ -448,7 +483,7 @@ describe('generateEvalSummary', () => {
       const lines = generateEvalSummary(params);
       const output = stripAnsi(lines.join('\n'));
 
-      expect(output).toContain('Eval: 1,000 (400 prompt, 600 completion, 200 cached)');
+      expect(output).toContain('Provider: 1,000 (400 prompt, 600 completion, 200 cached)');
     });
 
     it('should not show token section when no tokens', () => {

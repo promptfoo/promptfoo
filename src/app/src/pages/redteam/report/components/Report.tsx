@@ -29,6 +29,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import { getPrimaryTokenUsageLabel, getTokenUsageTotal } from '@app/utils/tokenUsage';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -672,6 +673,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       ? evalData.prompts
       : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
   const selectedPrompt = prompts[selectedPromptIndex];
+  const selectedTokenUsage = selectedPrompt?.metrics?.tokenUsage;
+  const targetTokens = getTokenUsageTotal(selectedTokenUsage);
+  const attackerTokens = getTokenUsageTotal(selectedTokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(selectedTokenUsage?.assertions);
+  const totalTokens = targetTokens + attackerTokens + gradingTokens;
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
@@ -764,28 +770,44 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       <strong>Target:</strong> {selectedPrompt.provider}
                     </Badge>
                   ) : null}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Badge variant="secondary">
-                          <strong>Depth:</strong>{' '}
-                          {(
-                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
-                          ).toLocaleString()}{' '}
-                          probes
-                        </Badge>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {selectedPrompt?.metrics?.tokenUsage
-                        ? `${(
-                            (selectedPrompt.metrics.tokenUsage.total ?? 0) +
-                              (selectedPrompt.metrics.tokenUsage.attacker?.total ?? 0) +
-                              (selectedPrompt.metrics.tokenUsage.assertions?.total ?? 0)
-                          ).toLocaleString()} tokens`
-                        : ''}
-                    </TooltipContent>
-                  </Tooltip>
+                  <Badge
+                    variant="secondary"
+                    aria-label={`${(
+                      selectedTokenUsage?.numRequests ?? tableData.length
+                    ).toLocaleString()} target probes`}
+                  >
+                    <strong>Depth:</strong>{' '}
+                    {(selectedTokenUsage?.numRequests ?? tableData.length).toLocaleString()} probes
+                  </Badge>
+                  {selectedTokenUsage ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Badge
+                            variant="secondary"
+                            className="cursor-help"
+                            aria-label={`${totalTokens.toLocaleString()} total tokens`}
+                          >
+                            <strong>Total Tokens:</strong> {totalTokens.toLocaleString()}
+                          </Badge>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="flex flex-col gap-1">
+                          <span>
+                            <strong>{getPrimaryTokenUsageLabel(true)} Tokens:</strong>{' '}
+                            {targetTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Attacker Tokens:</strong> {attackerTokens.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
+                          </span>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
                     <Badge variant="secondary">
                       <strong>Prompt:</strong> &quot;
