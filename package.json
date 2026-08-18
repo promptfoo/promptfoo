@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.224",
+    "@anthropic-ai/claude-agent-sdk": "0.3.226",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.224",
+    "@anthropic-ai/claude-agent-sdk": "0.3.226",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -322,7 +322,7 @@
     "sharp": "^0.35.3"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.115.0",
+    "@anthropic-ai/sdk": "0.116.0",
     "@apidevtools/json-schema-ref-parser": "^15.5.1",
     "@hono/node-server": "2.1.0",
     "@inquirer/checkbox": "^5.1.0",
