@@ -15,6 +15,7 @@ import { getMediaStorage, mediaExists, retrieveMedia } from '../../../src/storag
 const mockedGetMediaStorage = vi.mocked(getMediaStorage);
 const mockedMediaExists = vi.mocked(mediaExists);
 const mockedRetrieveMedia = vi.mocked(retrieveMedia);
+const fullHash = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
 
 describe('Media Routes', () => {
   let api: ReturnType<typeof request.agent>;
@@ -153,6 +154,23 @@ describe('Media Routes', () => {
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
+    it('should accept full-hash filenames', async () => {
+      const mockStorage = {
+        providerId: 'local-fs',
+        getUrl: vi.fn().mockResolvedValue(`/media/audio/${fullHash}.mp3`),
+      } as unknown as MediaStorageProvider;
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue(mockStorage);
+
+      const response = await api.get(`/api/media/info/audio/${fullHash}.mp3`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.key).toBe(`audio/${fullHash}.mp3`);
+      expect(mockedMediaExists).toHaveBeenCalledWith(`audio/${fullHash}.mp3`);
+      expect(mockStorage.getUrl).toHaveBeenCalledWith(`audio/${fullHash}.mp3`);
+    });
+
     it('should return info when media file exists', async () => {
       const mockStorage = {
         providerId: 'local-fs',
@@ -243,7 +261,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for invalid filename', async () => {
-      // Filename must be exactly 12 hex characters + extension
+      // Filename must be 12 or 64 hex characters + extension
       const response = await api.get('/api/media/audio/invalid-name.mp3');
 
       expect(response.status).toBe(400);
@@ -277,6 +295,20 @@ describe('Media Routes', () => {
       expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.body).toEqual(mockData);
       expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/abcdef123456.wav');
+    });
+
+    it('should serve full-hash media filenames', async () => {
+      const mockData = Buffer.from('fake mp3 data');
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedRetrieveMedia.mockResolvedValue(mockData);
+
+      const response = await api.get(`/api/media/audio/${fullHash}.mp3`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toBe('audio/mpeg');
+      expect(response.body).toEqual(mockData);
+      expect(mockedRetrieveMedia).toHaveBeenCalledWith(`audio/${fullHash}.mp3`);
     });
 
     it.each([
