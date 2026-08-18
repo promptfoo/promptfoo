@@ -149,6 +149,7 @@ describe('bedrock openaiResponses helper', () => {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       });
       expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+      expect(provider['getGenAISystem']()).toBe('bedrock');
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );

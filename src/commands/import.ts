@@ -13,6 +13,7 @@ import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult'
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
+import { sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import type { Command } from 'commander';
 
 import type {
@@ -434,7 +435,7 @@ async function createImportedV2Eval(evalData: any, context: ImportedEvalContext)
       author: context.importAuthor,
       description: evalData.description || evalData.config?.description,
       results: evalData.results,
-      config: evalData.config,
+      config: sanitizeTracingConfigForPersistence(evalData.config),
       isRedteam: evalData.config?.redteam !== undefined,
     })
     .run();

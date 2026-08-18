@@ -116,7 +116,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     // already thrown by this point, and createEmptyTokenUsage cannot throw.
     return {
       output: response.completion,
-      tokenUsage: createEmptyTokenUsage(), // Legacy Completion API doesn't expose token usage in its response type
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 }, // Legacy Completion API doesn't expose token usage in its response type
     };
   }
 }

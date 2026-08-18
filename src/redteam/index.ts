@@ -11,7 +11,6 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
-import { accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import { loadYaml } from '../util/yamlLoad';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -38,6 +37,7 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -61,8 +61,7 @@ import {
   getShortPluginId,
 } from './util';
 
-import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs, TokenUsage } from '../types/shared';
+import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
 import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,
@@ -74,27 +73,6 @@ import type {
 } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
-
-function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage): ApiProvider {
-  const callApi = provider.callApi.bind(provider);
-  const trackedCallApi: ApiProvider['callApi'] = async (...args) => {
-    const response = await callApi(...args);
-    accumulateResponseTokenUsage(tokenUsage, response);
-    return response;
-  };
-  trackedCallApi.label = provider.callApi.label;
-
-  return new Proxy(provider, {
-    get(target, property) {
-      if (property === 'callApi') {
-        return trackedCallApi;
-      }
-
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-}
 
 function getMaterializedMultiInputPromptSnapshot(
   metadata: TestCase['metadata'] | undefined,
@@ -1522,6 +1500,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;
@@ -1660,6 +1639,7 @@ export async function synthesize({
               plugin.id,
               policy,
               cloudTargetId,
+              redteamProvider,
             );
 
             (testCase.metadata as any).goal = extractedGoal;

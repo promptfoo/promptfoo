@@ -236,6 +236,65 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('preserves response-cache provenance when the provider retains historical token usage', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'cached grading result' }),
+          cached: true,
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toMatchObject({
+      cachedResponse: true,
+      renderedGradingPrompt: 'Grading prompt',
+    });
+    expect(result.tokensUsed?.total).toBe(37);
+  });
+
+  it('does not trust cache provenance supplied in fresh provider metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+          cached: false,
+          metadata: { cachedResponse: true, uploadId: 'upload-123' },
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      renderedGradingPrompt: 'Grading prompt',
+    });
+    expect(result.tokensUsed).toMatchObject({ total: 37, numRequests: 1 });
+  });
+
+  it('derives cached provenance from the provider response instead of conflicting metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Cached grading result' }),
+          cached: true,
+          metadata: { cachedResponse: false, uploadId: 'upload-123' },
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      renderedGradingPrompt: 'Grading prompt',
+      cachedResponse: true,
+    });
+  });
+
   it('should preserve renderedGradingPrompt when provider metadata uses the same key', async () => {
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
@@ -1336,6 +1395,40 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('preserves trusted cache provenance when a cached grading response has no output', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: null,
+          cached: true,
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'No output',
+      metadata: { graderError: true, cachedResponse: true },
+      tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+    });
+  });
+
+  it('counts a fresh failed grading request even when its provider reports no usage', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({ response: { output: null } }),
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'No output',
+      metadata: { graderError: true },
+      tokensUsed: { total: 0, numRequests: 1 },
+    });
+  });
+
   it('should fail when output is an array', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
@@ -1392,6 +1485,25 @@ describe('matchesLlmRubric', () => {
         completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
+    });
+  });
+
+  it('preserves cache provenance when a cached grading response contains malformed JSON', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: 'This cached response does not contain JSON',
+          cached: true,
+          tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+        },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      metadata: { graderError: true, cachedResponse: true },
+      tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
     });
   });
 
