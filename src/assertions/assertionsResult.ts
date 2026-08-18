@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
 
@@ -12,6 +14,9 @@ export const DEFAULT_TOKENS_USED = {
   cached: 0,
   numRequests: 0,
 };
+
+type AssertionTokenUsage = typeof DEFAULT_TOKENS_USED &
+  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails'>;
 
 interface ParentAssertionSet {
   index: number;
@@ -43,6 +48,143 @@ function mergeMetadata(
   };
 }
 
+function normalizeAssertionTokenUsage(result: GradingResult) {
+  const tokensUsed = result.tokensUsed;
+  if (!tokensUsed) {
+    return undefined;
+  }
+
+  if (result.metadata?.cachedResponse === true) {
+    const reportedTotal =
+      tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
+    const { completionDetails: _cachedCompletionDetails, ...cachedTokensUsed } = tokensUsed;
+    return {
+      ...cachedTokensUsed,
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: Math.max(tokensUsed.cached ?? 0, reportedTotal),
+      numRequests: 0,
+    };
+  }
+
+  return {
+    ...tokensUsed,
+    ...(result.metadata?.renderedGradingPrompt !== undefined &&
+      tokensUsed.numRequests === 0 && { numRequests: 1 }),
+  };
+}
+
+function accumulateNormalizedAssertionTokenUsage(
+  target: AssertionTokenUsage,
+  update: NonNullable<GradingResult['tokensUsed']>,
+): void {
+  for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
+    target[field] += update[field] ?? 0;
+  }
+
+  if (!update.completionDetails) {
+    return;
+  }
+
+  const currentDetails = target.completionDetails;
+  const incomingDetails = update.completionDetails;
+  target.completionDetails = {
+    reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
+    acceptedPrediction:
+      (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
+    rejectedPrediction:
+      (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
+    cacheReadInputTokens:
+      (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
+    cacheCreationInputTokens:
+      (currentDetails?.cacheCreationInputTokens ?? 0) +
+      (incomingDetails.cacheCreationInputTokens ?? 0),
+  };
+}
+
+function mergeScoringMetadata(
+  baseMetadata: GradingResult['metadata'],
+  scoringResult: GradingResult,
+  baseTokensUsed: GradingResult['tokensUsed'],
+): GradingResult['metadata'] | undefined {
+  const metadata = mergeMetadata(baseMetadata, scoringResult.metadata);
+  const tokensUsed = scoringResult.tokensUsed;
+  const scoringPerformedFreshWork =
+    scoringResult.metadata?.cachedResponse !== true &&
+    tokensUsed !== undefined &&
+    ((tokensUsed.numRequests ?? 0) > 0 ||
+      (tokensUsed.total ?? 0) > 0 ||
+      (tokensUsed.prompt ?? 0) > 0 ||
+      (tokensUsed.completion ?? 0) > 0);
+
+  const componentsPerformedFreshWork =
+    baseMetadata?.cachedResponse !== true &&
+    ((baseTokensUsed?.numRequests ?? 0) > 0 ||
+      (baseTokensUsed?.total ?? 0) > 0 ||
+      (baseTokensUsed?.prompt ?? 0) > 0 ||
+      (baseTokensUsed?.completion ?? 0) > 0);
+
+  if (
+    (!scoringPerformedFreshWork && !componentsPerformedFreshWork) ||
+    metadata?.cachedResponse !== true
+  ) {
+    return metadata;
+  }
+
+  const { cachedResponse: _cachedResponse, ...remainingMetadata } = metadata;
+  return Object.keys(remainingMetadata).length > 0 ? remainingMetadata : undefined;
+}
+
+function mergeScoringTokenUsage(
+  baseTokensUsed: GradingResult['tokensUsed'],
+  scoringResult: GradingResult,
+): GradingResult['tokensUsed'] {
+  if (!scoringResult.tokensUsed || scoringResult.tokensUsed === baseTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const scoringHasIndependentProvenance =
+    scoringResult.metadata?.cachedResponse === true ||
+    scoringResult.metadata?.renderedGradingPrompt !== undefined;
+  if (
+    baseTokensUsed &&
+    !scoringHasIndependentProvenance &&
+    isDeepStrictEqual(scoringResult.tokensUsed, baseTokensUsed)
+  ) {
+    return baseTokensUsed;
+  }
+
+  const scoringTokensUsed = normalizeAssertionTokenUsage(scoringResult);
+  if (!scoringTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const mergedTokensUsed = {
+    total: baseTokensUsed?.total ?? 0,
+    prompt: baseTokensUsed?.prompt ?? 0,
+    completion: baseTokensUsed?.completion ?? 0,
+    cached: baseTokensUsed?.cached ?? 0,
+    numRequests: baseTokensUsed?.numRequests ?? 0,
+    ...(baseTokensUsed?.completionDetails && {
+      completionDetails: { ...baseTokensUsed.completionDetails },
+    }),
+  };
+  const scorerUsedTokens =
+    (scoringTokensUsed.total ?? 0) > 0 ||
+    (scoringTokensUsed.prompt ?? 0) > 0 ||
+    (scoringTokensUsed.completion ?? 0) > 0;
+
+  accumulateNormalizedAssertionTokenUsage(mergedTokensUsed, {
+    ...scoringTokensUsed,
+    ...(scoringResult.metadata?.cachedResponse !== true &&
+      scorerUsedTokens &&
+      !scoringTokensUsed.numRequests && { numRequests: 1 }),
+  });
+
+  return mergedTokensUsed;
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -53,8 +195,7 @@ export class AssertionsResult {
     };
   }
 
-  private tokensUsed: typeof DEFAULT_TOKENS_USED &
-    Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails'> = {
+  private tokensUsed: AssertionTokenUsage = {
     ...DEFAULT_TOKENS_USED,
   };
   private threshold: number | undefined;
@@ -123,28 +264,9 @@ export class AssertionsResult {
       });
     }
 
-    if (result.tokensUsed) {
-      for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
-        this.tokensUsed[field] += result.tokensUsed[field] ?? 0;
-      }
-
-      if (result.tokensUsed.completionDetails) {
-        const currentDetails = this.tokensUsed.completionDetails;
-        const incomingDetails = result.tokensUsed.completionDetails;
-        this.tokensUsed.completionDetails = {
-          reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
-          acceptedPrediction:
-            (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
-          rejectedPrediction:
-            (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
-          cacheReadInputTokens:
-            (currentDetails?.cacheReadInputTokens ?? 0) +
-            (incomingDetails.cacheReadInputTokens ?? 0),
-          cacheCreationInputTokens:
-            (currentDetails?.cacheCreationInputTokens ?? 0) +
-            (incomingDetails.cacheCreationInputTokens ?? 0),
-        };
-      }
+    const tokensUsed = normalizeAssertionTokenUsage(result);
+    if (tokensUsed) {
+      accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
     }
 
     if (result.pass) {
@@ -207,6 +329,9 @@ export class AssertionsResult {
     }
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
+    const cachedResponse =
+      this.componentResults.length > 0 &&
+      this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
     this.result = {
       pass,
@@ -216,9 +341,12 @@ export class AssertionsResult {
       ...(hasNamedScoreWeights && { namedScoreWeights: this.namedScoreWeights }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...(this._parentAssertionSet && {
+      ...((this._parentAssertionSet || cachedResponse) && {
         metadata: {
-          assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          ...(this._parentAssertionSet && {
+            assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          }),
+          ...(cachedResponse && { cachedResponse: true }),
         },
       }),
     };
@@ -237,8 +365,13 @@ export class AssertionsResult {
         this.result = {
           ...this.result,
           ...scoringResult,
+          tokensUsed: mergeScoringTokenUsage(this.result.tokensUsed, scoringResult),
           ...((this.result.metadata || scoringResult.metadata) && {
-            metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
+            metadata: mergeScoringMetadata(
+              this.result.metadata,
+              scoringResult,
+              this.result.tokensUsed,
+            ),
           }),
         };
       } catch (err) {

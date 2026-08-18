@@ -10,6 +10,105 @@ import { mockApiProvider, mockGradingApiProviderPasses, toPrompt } from './helpe
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator token usage', () => {
+  it('does not count deterministic assertions as grading-provider requests', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'equals', value: 'Test output' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.tokenUsage.assertions).toMatchObject({ total: 0, numRequests: 0 });
+    expect(summary.results[0].tokenUsage?.assertions).toMatchObject({
+      total: 0,
+      numRequests: 0,
+    });
+  });
+
+  it('does not treat untrusted provider metadata as a cached grading response', async () => {
+    const gradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('fresh-grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Fresh grading result' }),
+        metadata: { cachedResponse: true },
+        tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'The response should be useful',
+              provider: gradingProvider,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.tokenUsage.assertions).toMatchObject({ total: 37, numRequests: 1 });
+    expect(summary.results[0].tokenUsage?.assertions).toMatchObject({
+      total: 37,
+      numRequests: 1,
+    });
+  });
+
+  it('does not recharge historical usage from a cached malformed grading response', async () => {
+    const gradingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('cached-failed-grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'This cached response does not contain JSON',
+        cached: true,
+        tokenUsage: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'The response should be useful',
+              provider: gradingProvider,
+            },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.tokenUsage.assertions).toMatchObject({
+      total: 0,
+      cached: 37,
+      numRequests: 0,
+    });
+    expect(summary.results[0].tokenUsage?.assertions).toMatchObject({
+      total: 0,
+      cached: 37,
+      numRequests: 0,
+    });
+    expect(summary.results[0].gradingResult?.componentResults?.[0]?.metadata).toMatchObject({
+      graderError: true,
+      cachedResponse: true,
+    });
+  });
+
   it('should accumulate token usage correctly', async () => {
     const mockOptions = {
       delay: 0,

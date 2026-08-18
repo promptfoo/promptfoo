@@ -83,20 +83,22 @@ export async function doRemoteGrading(
       pass: result.pass,
       score: result.score,
       reason: result.reason,
-      tokensUsed: result.tokensUsed
-        ? cached
+      tokensUsed: cached
+        ? {
+            total: 0,
+            cached:
+              result.tokensUsed?.total ??
+              (result.tokensUsed?.prompt ?? 0) + (result.tokensUsed?.completion ?? 0),
+            numRequests: 0,
+          }
+        : result.tokensUsed
           ? {
-              total: result.tokensUsed.total,
-              cached: result.tokensUsed.total,
-              numRequests: 0,
-            }
-          : {
               ...result.tokensUsed,
               // This endpoint represents one grading task even when the task uses multiple models.
               numRequests: 1,
             }
-        : undefined,
-      metadata: result.metadata,
+          : undefined,
+      metadata: cached ? { ...(result.metadata ?? {}), cachedResponse: true } : result.metadata,
     };
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
