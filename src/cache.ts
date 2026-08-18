@@ -423,10 +423,16 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   // Only resolve the header name once we know a credential will actually be
   // injected, so non-cloud-bound requests never depend on `getAuthHeaderName`.
   const cloudAuth = getCloudBearerToken(url);
+  // Tracks the header name we injected the cloud credential under, so it can be
+  // fingerprinted unconditionally below regardless of header name or token shape
+  // (a custom header name and/or a short on-prem token can both evade the generic
+  // isSecretField/looksLikeSecret heuristics used for ordinary headers).
+  let injectedCloudAuthHeaderName: string | undefined;
   if (cloudAuth) {
     const cloudAuthHeaderName = getCloudAuthHeaderName();
     if (!headers.has(cloudAuthHeaderName)) {
       headers.set(cloudAuthHeaderName, cloudAuth);
+      injectedCloudAuthHeaderName = cloudAuthHeaderName;
     }
   }
 
@@ -440,7 +446,12 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
     })
-    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
+    .map(([name, value]) => [
+      name,
+      name === injectedCloudAuthHeaderName
+        ? fingerprintFetchCacheSecret(value)
+        : getStringForFetchCacheKey(value, name),
+    ]);
 }
 
 function hashFetchCacheKey(identity: unknown) {

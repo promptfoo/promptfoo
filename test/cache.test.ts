@@ -1219,6 +1219,48 @@ describe('fetchWithCache', () => {
       }
     });
 
+    it('should fingerprint the cloud auth value under a custom header name even for a short token', async () => {
+      // Regression guard: isSecretField/looksLikeSecret are name/pattern heuristics that
+      // miss a custom header name (e.g. X-Promptfoo-Api-Key normalizes to a name outside
+      // SECRET_FIELD_NAMES) and a short on-prem token (looksLikeSecret's Bearer pattern
+      // requires 20+ chars). getHeadersForCacheKey must fingerprint the injected cloud
+      // credential unconditionally, not rely on those heuristics, so a short token under a
+      // custom header name is still never embedded raw in the cache key.
+      const cache = getCache();
+      vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+      mockFetchWithRetries.mockResolvedValue(mockFetchWithRetriesResponse(true, { data: 'ok' }));
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok-one' });
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        // Different short token, same everything else — a distinct cache entry proves the
+        // token value is incorporated into the key (fingerprinted), not dropped or ignored.
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok-two' });
+        await fetchWithCache('https://api.promptfoo.app/api/v1/task', requestOptions, 1000);
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        expect(cacheKeys[0]).not.toEqual(cacheKeys[1]);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('short-tok-one');
+          expect(cacheKey).not.toContain('short-tok-two');
+        }
+
+        restoreEnv();
+      } finally {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
     it('should preserve Request headers when isolating cached responses', async () => {
       const cache = getCache();
       mockFetchWithRetries
