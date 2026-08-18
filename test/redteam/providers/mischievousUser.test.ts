@@ -13,7 +13,7 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
 
 vi.mock('../../../src/providers/promptfoo', async (importOriginal) => ({
   ...(await importOriginal()),
-  PromptfooSimulatedUserProvider: vi.fn().mockImplementation(function () {
+  PromptfooSimulatedUserProvider: vi.fn(function () {
     return {
       callApi: mockUserProviderCallApi,
       id: vi.fn(() => 'mock-simulated-user'),
