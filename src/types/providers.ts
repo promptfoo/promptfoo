@@ -74,6 +74,11 @@ export interface ProviderOptions {
   config?: any;
   prompts?: string[];
   transform?: string | TransformFunction;
+  /**
+   * Allow this provider transform to control the test outcome by returning a
+   * `testResult` object.
+   */
+  transformCanSetTestResult?: boolean;
   delay?: number;
   env?: EnvOverrides;
   inputs?: Inputs;
@@ -130,6 +135,11 @@ export interface ApiProvider extends MinimalApiProvider {
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;
+  /**
+   * Allow this provider transform to control the test outcome by returning a
+   * `testResult` object.
+   */
+  transformCanSetTestResult?: boolean;
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker

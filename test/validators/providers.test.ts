@@ -27,6 +27,7 @@ describe('ProviderOptionsSchema', () => {
       config: { temperature: 0.7 },
       prompts: ['prompt1', 'prompt2'],
       transform: 'output.toLowerCase()',
+      transformCanSetTestResult: true,
       delay: 1000,
     };
 
