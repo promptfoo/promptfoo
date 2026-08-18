@@ -742,9 +742,9 @@ describe('AnthropicMessagesProvider', () => {
       await getCache().set(cacheKey, 'Test output');
 
       const result = await provider.callApi('What is the forecast in San Francisco?');
-      // Legacy cache items (plain strings) don't get the cached flag
       expect(result).toMatchObject({
         output: 'Test output',
+        cached: true,
         tokenUsage: {},
       });
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(0);

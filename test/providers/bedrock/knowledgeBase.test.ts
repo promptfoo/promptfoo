@@ -311,7 +311,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(result).toEqual({
       output: 'This is the response from the knowledge base',
       metadata: { citations: mockResponse.citations },
-      tokenUsage: createEmptyTokenUsage(),
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: 1 },
     });
   });
 
