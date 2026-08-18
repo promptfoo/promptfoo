@@ -433,6 +433,32 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('{{ var1 }}');
     });
 
+    it('should respect Nunjucks raw tags inside test variables', async () => {
+      const prompt = toPrompt('{{ template }}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        {
+          myVar: 'value1',
+          template: '{% raw %}{{ myVar }}{% endraw %}',
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ myVar }}');
+    });
+
+    it('should respect Nunjucks escaped strings inside test variables', async () => {
+      const prompt = toPrompt('{{ template }}');
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        {
+          myVar: 'value1',
+          template: `{{ '{{ myVar }}' }}`,
+        },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{ myVar }}');
+    });
+
     it('should render variables that are template strings', async () => {
       const prompt = toPrompt('{{ var1 }}');
       const renderedPrompt = await renderPrompt(prompt, { var1: '{{ var2 }}', var2: 'value2' }, {});

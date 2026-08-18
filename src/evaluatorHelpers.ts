@@ -71,14 +71,17 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const { protectedValue, restore } = protectNunjucksBlocks(value);
+      const match = regex.exec(protectedValue);
       if (match) {
         const [placeholder, varName] = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
+          variables[key] = restore(
+            protectedValue.replace(placeholder, variables[varName] as string),
+          );
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -90,6 +93,42 @@ export function resolveVariables(
   } while (!resolved && iterations < 5);
 
   return variables;
+}
+
+/**
+ * Protect Nunjucks constructs whose contents must remain literal while resolving
+ * variable-to-variable mappings. They are rendered later by renderPrompt, where
+ * Nunjucks can correctly distinguish raw blocks and string literal expressions
+ * from actual variable references.
+ */
+function protectNunjucksBlocks(value: string): {
+  protectedValue: string;
+  restore: (value: string) => string;
+} {
+  const protectedBlocks: string[] = [];
+  let protectedValue = value;
+  const patterns = [
+    /\{%\s*raw\s*%\}[\s\S]*?\{%\s*endraw\s*%\}/g,
+    /\{#[\s\S]*?#\}/g,
+    /\{\{\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*\}\}/g,
+  ];
+
+  for (const pattern of patterns) {
+    protectedValue = protectedValue.replace(pattern, (block) => {
+      const placeholder = `\u0000promptfoo-nunjucks-block-${protectedBlocks.length}\u0000`;
+      protectedBlocks.push(block);
+      return placeholder;
+    });
+  }
+
+  return {
+    protectedValue,
+    restore: (renderedValue: string) =>
+      renderedValue.replace(
+        /\u0000promptfoo-nunjucks-block-(\d+)\u0000/g,
+        (_placeholder, index: string) => protectedBlocks[Number(index)] ?? _placeholder,
+      ),
+  };
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
