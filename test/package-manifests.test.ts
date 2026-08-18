@@ -868,7 +868,7 @@ describe('package manifests', () => {
     expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
   });
 
-  it('requires patched WebSocket fragment limits in published and example manifests', () => {
+  it('requires patched WebSocket fragment limits and compression negotiation in manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const lockfile = readPackageJson<{
       packages?: Record<string, PackageManifest>;
@@ -884,7 +884,7 @@ describe('package manifests', () => {
       const websocketRange = manifest.dependencies?.ws;
 
       expect(websocketRange, `${manifestPath} must depend on ws`).toBeDefined();
-      expect(minVersion(websocketRange as string)?.compare('8.21.1')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(websocketRange as string)?.compare('8.21.3')).toBeGreaterThanOrEqual(0);
     }
 
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
