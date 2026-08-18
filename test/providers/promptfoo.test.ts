@@ -79,6 +79,30 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result).toEqual({ output: ['test output'] });
   });
 
+  it('preserves token usage returned by harmful generation', async () => {
+    const tokenUsage = { total: 18, prompt: 11, completion: 7 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ output: 'test output', tokenUsage }), { status: 200 }),
+    );
+
+    await expect(provider.callApi('test prompt')).resolves.toEqual({
+      output: ['test output'],
+      tokenUsage,
+    });
+  });
+
+  it('preserves reported token usage when harmful generation fails', async () => {
+    const tokenUsage = { total: 18, prompt: 11, completion: 7 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Generation failed', tokenUsage }), { status: 500 }),
+    );
+
+    await expect(provider.callApi('test prompt')).resolves.toMatchObject({
+      error: expect.stringContaining('Generation failed'),
+      tokenUsage,
+    });
+  });
+
   it('should include target context in harmful generation requests', async () => {
     provider = new PromptfooHarmfulCompletionProvider({
       ...options,
@@ -223,10 +247,18 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
+    const tokenUsage = {
+      total: 100,
+      prompt: 60,
+      completion: 40,
+      cached: 12,
+      numRequests: 3,
+      completionDetails: { reasoning: 8 },
+    };
     const mockResponse = new Response(
       JSON.stringify({
         result: 'test result',
-        tokenUsage: { total: 100 },
+        tokenUsage,
       }),
       {
         status: 200,
@@ -239,7 +271,7 @@ describe('PromptfooChatCompletionProvider', () => {
 
     expect(result).toEqual({
       output: 'test result',
-      tokenUsage: { total: 100 },
+      tokenUsage,
     });
   });
 
@@ -371,6 +403,26 @@ describe('PromptfooChatCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
 
     expect(result.error).toBe('LLM did not return a result, likely refusal');
+  });
+
+  it('preserves token usage when a remote task fails after calling a model', async () => {
+    const tokenUsage = {
+      total: 73,
+      prompt: 45,
+      completion: 28,
+      numRequests: 2,
+    };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({ message: 'Internal Server Error', details: 'Model refused', tokenUsage }),
+        { status: 500 },
+      ),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      error: 'LLM did not return a result, likely refusal',
+      tokenUsage,
+    });
   });
 
   it('should handle API error', async () => {

@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
+import * as redteamProviderShared from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import * as traceContext from '../../../src/tracing/traceContext';
 import { createMockProvider } from '../../factories/provider';
@@ -803,6 +804,10 @@ describe('RedteamGoatProvider', () => {
         prompt: 'test response',
         response: 'second harmful response',
       });
+      expect(result.metadata?.storedGraderResult).toMatchObject({
+        pass: true,
+        tokensUsed: { total: 15, prompt: 7, completion: 8, numRequests: 3 },
+      });
       expect(mockFetch).toHaveBeenCalledTimes(3); // All three turns
     });
 
@@ -1331,6 +1336,108 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it('keeps attack-generation usage and internal requests separate from target probes', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: { role: 'assistant', content: 'generated attack' },
+          tokenUsage: { total: 48, prompt: 32, completion: 16, numRequests: 2 },
+        }),
+      });
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 1 });
+      const targetProvider = createMockTargetProvider('target response', {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 1,
+      });
+
+      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 1,
+        attacker: { total: 48, prompt: 32, completion: 16, numRequests: 2 },
+      });
+    });
+
+    it('includes privacy-mode failure analysis in attacker usage', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            message: { role: 'assistant', content: 'first attack' },
+            tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 2 },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            message: 'The target rejected the first attack',
+            tokenUsage: { total: 12, prompt: 8, completion: 4, numRequests: 1 },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            message: { role: 'assistant', content: 'second attack' },
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 3 },
+          }),
+        });
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        excludeTargetOutputFromAgenticAttackGeneration: true,
+      });
+      const targetProvider = createMockTargetProvider('target response', {
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+      });
+
+      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 100,
+        numRequests: 2,
+        attacker: { total: 82, prompt: 53, completion: 29, numRequests: 6 },
+      });
+    });
+
+    it('counts tokens reported by an attack generation that fails before a later success', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          json: async () => ({
+            message: 'Internal Server Error',
+            tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 2 },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            message: { role: 'assistant', content: 'recovered attack' },
+            tokenUsage: { total: 31, prompt: 20, completion: 11, numRequests: 1 },
+          }),
+        });
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+      const targetProvider = createMockTargetProvider('target response', {
+        total: 60,
+        numRequests: 1,
+      });
+
+      const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 60,
+        numRequests: 1,
+        attacker: { total: 50, prompt: 32, completion: 18, numRequests: 3 },
+      });
+    });
+
     it('should accumulate token usage across multiple turns', async () => {
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',
@@ -1495,6 +1602,39 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.prompt).toBe(75); // 30 + 45
       expect(result.tokenUsage?.completion).toBe(50); // 20 + 30
       expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it('counts unblocking analysis as attacker usage when no blocking question is found', async () => {
+      const unblocking = vi.spyOn(redteamProviderShared, 'tryUnblocking').mockResolvedValue({
+        success: false,
+        tokenUsage: { total: 21, prompt: 13, completion: 8, numRequests: 1 },
+      });
+
+      try {
+        const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+        const targetProvider = createMockProvider();
+        targetProvider.callApi
+          .mockReset()
+          .mockResolvedValueOnce({
+            output: 'first response',
+            tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            output: 'second response',
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+          });
+
+        const result = await provider.callApi('test prompt', createMockContext(targetProvider));
+
+        expect(result.tokenUsage).toMatchObject({
+          total: 70,
+          numRequests: 2,
+          attacker: { total: 21, prompt: 13, completion: 8 },
+        });
+        expect(unblocking).toHaveBeenCalledTimes(1);
+      } finally {
+        unblocking.mockRestore();
+      }
     });
   });
 

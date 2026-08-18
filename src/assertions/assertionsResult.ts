@@ -53,7 +53,8 @@ export class AssertionsResult {
     };
   }
 
-  private tokensUsed = {
+  private tokensUsed: typeof DEFAULT_TOKENS_USED &
+    Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails'> = {
     ...DEFAULT_TOKENS_USED,
   };
   private threshold: number | undefined;
@@ -123,11 +124,27 @@ export class AssertionsResult {
     }
 
     if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total || 0;
-      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
-      this.tokensUsed.completion += result.tokensUsed.completion || 0;
-      this.tokensUsed.cached += result.tokensUsed.cached || 0;
-      this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
+      for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
+        this.tokensUsed[field] += result.tokensUsed[field] ?? 0;
+      }
+
+      if (result.tokensUsed.completionDetails) {
+        const currentDetails = this.tokensUsed.completionDetails;
+        const incomingDetails = result.tokensUsed.completionDetails;
+        this.tokensUsed.completionDetails = {
+          reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
+          acceptedPrediction:
+            (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
+          rejectedPrediction:
+            (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
+          cacheReadInputTokens:
+            (currentDetails?.cacheReadInputTokens ?? 0) +
+            (incomingDetails.cacheReadInputTokens ?? 0),
+          cacheCreationInputTokens:
+            (currentDetails?.cacheCreationInputTokens ?? 0) +
+            (incomingDetails.cacheCreationInputTokens ?? 0),
+        };
+      }
     }
 
     if (result.pass) {

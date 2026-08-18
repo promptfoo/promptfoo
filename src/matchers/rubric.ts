@@ -874,6 +874,7 @@ export async function runJsonGradingPrompt({
       ...responseMetadata,
       renderedGradingPrompt: renderedPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
+      ...(resp.cached ? { cachedResponse: true } : {}),
     },
   };
 }
