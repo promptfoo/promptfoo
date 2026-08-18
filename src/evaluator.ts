@@ -1154,7 +1154,7 @@ function updateConversationHistory({
   renderedPrompt: string;
   response: ProviderResponse;
 }) {
-  if (!conversations) {
+  if (!conversations || response.error) {
     return;
   }
 
