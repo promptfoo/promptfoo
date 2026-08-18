@@ -98,7 +98,7 @@ export async function doRemoteGrading(
               numRequests: 1,
             }
           : undefined,
-      metadata: cached ? { ...result.metadata, cachedResponse: true } : result.metadata,
+      metadata: cached ? { ...(result.metadata ?? {}), cachedResponse: true } : result.metadata,
     };
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);

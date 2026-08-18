@@ -66,7 +66,7 @@ By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
 
 Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. They are particularly effective against stateful applications where they can convince the target to act against its purpose over time. Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
 
-Token usage separates target calls from attacker-model calls (`tokenUsage.attacker`) and grading calls (`tokenUsage.assertions`). The top-level request count tracks target probes only.
+Multi-turn scans track target, attacker, and grading tokens separately. Probe counts include only requests to the target; grading request counts include one request per grading task, while cached responses do not create additional requests.
 
 ### Indirect Prompt Injection Strategies
 

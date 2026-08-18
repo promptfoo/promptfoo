@@ -570,7 +570,7 @@ export interface GradingResult {
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
     // True when the complete grading response was reused without running a new task.
-    cachedResponse?: true;
+    cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
     // must not flip such results to a pass — a grader error is not evidence

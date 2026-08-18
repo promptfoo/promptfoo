@@ -594,6 +594,32 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the OpenCode SDK optional at the upgraded release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+          optional?: boolean;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = '@opencode-ai/sdk';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(installedVersion).toBeDefined();
+    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
+  });
+
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{

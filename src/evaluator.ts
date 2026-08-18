@@ -596,7 +596,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
   accumulateGradingRequest(row.tokenUsage.assertions, checkResult.tokensUsed, {
-    cached: checkResult.metadata?.cachedResponse === true,
+    cached: checkResult.metadata?.cachedResponse,
   });
   row.gradingResult = checkResult;
 }
@@ -2068,6 +2068,14 @@ function mergeSelectBestGradingResult(
   mergeComparisonTokenUsage(result, gradingResult, evalTokenUsage);
 
   if (result.gradingResult) {
+    if (
+      result.gradingResult.metadata?.cachedResponse === true &&
+      gradingResult.metadata?.cachedResponse !== true
+    ) {
+      const { cachedResponse: _cachedResponse, ...metadata } = result.gradingResult.metadata;
+      result.gradingResult.metadata = Object.keys(metadata).length > 0 ? metadata : undefined;
+    }
+
     result.success = result.gradingResult.pass = result.gradingResult.pass && gradingResult.pass;
     if (!gradingResult.pass) {
       result.gradingResult.reason = gradingResult.reason;
@@ -3374,21 +3382,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       this.stats.successes -= 1;
       this.stats.failures += 1;
     }
-  }
-
-  private trackModelGradedAssertionUsage(row: EvaluateResult): void {
-    if (!row.gradingResult?.tokensUsed || !row.testCase?.assert) {
-      return;
-    }
-    const hasModelGradedAssertion = row.testCase.assert.some((assertion) =>
-      MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType),
-    );
-    if (!hasModelGradedAssertion) {
-      return;
-    }
-
-    this.stats.tokenUsage.assertions ??= createEmptyAssertions();
-    accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, row.gradingResult.tokensUsed);
   }
 
   private trackRowStats(row: EvaluateResult): void {

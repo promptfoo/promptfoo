@@ -217,6 +217,31 @@ describe('doRemoteGrading', () => {
     expect(result.metadata).toEqual({ pluginId: 'test-plugin', cachedResponse: true });
   });
 
+  it('derives cached token counts from prompt and completion when the total is missing', async () => {
+    vi.mocked(getUserEmail).mockReturnValue('user@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.test/task');
+    vi.mocked(getRemoteGenerationHeaders).mockReturnValue({ authorization: 'Bearer test' });
+    vi.mocked(getRequestTimeoutMs).mockReturnValue(1234);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Cached grading result without a total',
+          tokensUsed: { prompt: 61, completion: 36, numRequests: 4 },
+        },
+      },
+      cached: true,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await doRemoteGrading({ task: 'llm-rubric', output: 'Example output' });
+
+    expect(result.tokensUsed).toEqual({ total: 0, cached: 97, numRequests: 0 });
+    expect(result.metadata).toEqual({ cachedResponse: true });
+  });
+
   it('propagates the active grader traceparent to remote grading requests', async () => {
     const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
     vi.mocked(getActiveTraceparent).mockReturnValue(traceparent);

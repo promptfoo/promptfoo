@@ -278,6 +278,7 @@ export async function getNewPrompt(
     pluginId?: string;
     purpose?: string;
   },
+  totalTokenUsage?: TokenUsage,
 ): Promise<{
   improvement: string;
   inputMaterialization?: Record<string, unknown>;
@@ -302,16 +303,20 @@ export async function getNewPrompt(
         })
       : {},
   });
+  if (totalTokenUsage) {
+    accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
+  }
+  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
   logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
   if (redteamResp.error) {
-    throw new Error(`Error from redteam provider: ${redteamResp.error}`);
+    throw Object.assign(new Error(`Error from redteam provider: ${redteamResp.error}`), {
+      tokenUsage: totalTokenUsage ?? redteamResp.tokenUsage,
+    });
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
-
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
     try {
@@ -491,7 +496,12 @@ export interface TreeSearchOutput {
   sessionId?: string; // Session ID for this specific attempt
 }
 
-type StopReason = 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+type StopReason =
+  | 'MAX_ATTEMPTS'
+  | 'MAX_DEPTH'
+  | 'NO_IMPROVEMENT'
+  | 'GRADER_FAILED'
+  | 'ATTACKER_ERROR';
 
 /**
  * Represents metadata for the iterative tree search process.
@@ -644,26 +654,56 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
+        let attackPromptResult: Awaited<ReturnType<typeof getNewPrompt>>;
+        try {
+          attackPromptResult = await getNewPrompt(
+            redteamProvider,
+            [...redteamHistory, { role: 'assistant', content: node.prompt }],
+            shouldGenerateRemote()
+              ? {
+                  inputs,
+                  materializationIndex: attempts,
+                  pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+                  purpose: test?.metadata?.purpose as string | undefined,
+                }
+              : undefined,
+            totalTokenUsage,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            error.name === 'AbortError' ||
+            !('tokenUsage' in error)
+          ) {
+            throw error;
+          }
+
+          logger.error('[IterativeTree] Attacker request failed', { error });
+          return {
+            output: bestResponse,
+            prompt: bestNode.prompt,
+            error: error.message,
+            metadata: {
+              highestScore: maxScore,
+              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+              messages: treeOutputs as Record<string, any>[],
+              attempts,
+              redteamTreeHistory: treeOutputs,
+              stopReason: 'ATTACKER_ERROR',
+              storedGraderResult,
+              sessionIds: extractSessionIds(treeOutputs),
+            },
+            tokenUsage: totalTokenUsage,
+          };
+        }
+
         let {
           improvement,
           inputMaterialization,
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
-          tokenUsage: attackerTokenUsage,
-        } = await getNewPrompt(
-          redteamProvider,
-          [...redteamHistory, { role: 'assistant', content: node.prompt }],
-          shouldGenerateRemote()
-            ? {
-                inputs,
-                materializationIndex: attempts,
-                pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-                purpose: test?.metadata?.purpose as string | undefined,
-              }
-            : undefined,
-        );
-        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: attackerTokenUsage });
+        } = attackPromptResult;
         if (inputs && shouldGenerateRemote()) {
           assertRemoteMaterializationHandled(
             { inputMaterialization, materializationHandled, materializedVars },

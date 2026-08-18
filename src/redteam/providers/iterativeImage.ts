@@ -9,6 +9,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateAttackerTokenUsage,
+  accumulateGradingResponseTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
@@ -433,10 +434,7 @@ async function runRedteamConversation({
             undefined,
             options,
           );
-          // Vision analysis calls are internal and should not count as target probes.
-          accumulateResponseTokenUsage(totalTokenUsage, visionResponse, {
-            countAsRequest: false,
-          });
+          accumulateGradingResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionProvider.delay) {
             await sleep(visionProvider.delay);
@@ -504,6 +502,7 @@ async function runRedteamConversation({
         undefined,
         options,
       );
+      accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
       if (redteamProvider.delay) {
         await sleep(redteamProvider.delay);
       }

@@ -163,7 +163,7 @@
     "https-proxy-agent": "^9.0.0",
     "ip-address": "10.4.0",
     "mongoose": {
-      "gcp-metadata": "^9.0.0"
+      "gcp-metadata": "^9.0.1"
     },
     "webpack-dev-server": {
       "express": "^4.22.2"
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.222",
+    "@anthropic-ai/claude-agent-sdk": "0.3.224",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -231,9 +231,9 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.5",
+    "@biomejs/biome": "2.5.7",
     "@fal-ai/client": "~1.10.1",
-    "@ibm-cloud/watsonx-ai": "^1.7.15",
+    "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.4.0",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.222",
+    "@anthropic-ai/claude-agent-sdk": "0.3.224",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -292,12 +292,12 @@
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.15",
+    "@ibm-cloud/watsonx-ai": "^1.7.16",
     "@langfuse/client": "^5.4.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
     "@openai/codex-sdk": "^0.144.0",
-    "@opencode-ai/sdk": "^1.14.33",
+    "@opencode-ai/sdk": "^1.18.15",
     "@playwright/browser-chromium": "^1.60.0",
     "@rollup/rollup-linux-x64-gnu": "^4.62.0",
     "@slack/web-api": "^8.0.0",
@@ -367,7 +367,7 @@
     "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.7.1",
     "fastest-levenshtein": "^1.0.16",
-    "gcp-metadata": "^9.0.0",
+    "gcp-metadata": "^9.0.1",
     "glob": "^13.0.6",
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",

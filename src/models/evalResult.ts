@@ -992,7 +992,7 @@ export default class EvalResult {
     }
     if (this.gradingResult) {
       accumulateGradingRequest(tokenUsage.assertions, this.gradingResult.tokensUsed, {
-        cached: this.gradingResult.metadata?.cachedResponse === true,
+        cached: this.gradingResult.metadata?.cachedResponse,
       });
     }
 
