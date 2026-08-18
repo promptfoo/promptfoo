@@ -412,6 +412,17 @@ and includes the loaded `SKILL.md` path when OpenCode returns the skill director
 in its result metadata. Those errored entries remain available for diagnostics,
 but they do not count as successful `skill-used` matches.
 
+Because OpenCode is multi-turn, the `skill` tool is usually invoked before the
+final response, so its tool part is absent from that response. To catch those
+calls, promptfoo fetches the session message history after each prompt and
+collects the parts between the user message that triggered the prompt and the
+assistant message it returned. This costs one extra `session.messages` call per
+prompt and is skipped whenever the `skill` tool is disabled — which includes the
+default `tools` config — so evals that never opt into skills pay nothing. If
+either boundary message is missing from the returned history (a truncated or
+paginated response, for example), promptfoo falls back to the final message's
+parts rather than risk attributing another prompt's skill calls to this one.
+
 ## Session Management
 
 ### Ephemeral Sessions (Default)
