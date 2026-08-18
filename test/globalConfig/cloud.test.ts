@@ -865,6 +865,7 @@ describe('CloudConfig', () => {
 
       expect(fetchWithProxy).toHaveBeenCalledWith('https://test.api/api/v1/users/me', {
         headers: { 'X-Custom-Header': 'Bearer candidate-token' },
+        skipCloudAuthInjection: true,
       });
     });
 
@@ -891,7 +892,33 @@ describe('CloudConfig', () => {
 
       expect(fetchWithProxy).toHaveBeenCalledWith('https://test.api/api/v1/users/me', {
         headers: { 'X-Configured-Header': 'Bearer candidate-token' },
+        skipCloudAuthInjection: true,
       });
+    });
+
+    it('should opt out of saved-cloud-auth injection so a stale saved token cannot leak in alongside the candidate header', async () => {
+      const mockResponse = {
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            user: { id: '1', email: 'test@example.com' },
+            organization: { id: '1', name: 'Test Org' },
+            app: { url: 'https://test.app' },
+          }),
+        text: () => Promise.resolve('{}'),
+      } as Response;
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockResponse);
+
+      await cloudConfigInstance.validateApiToken(
+        'candidate-token',
+        'https://test.api',
+        'X-New-Header',
+      );
+
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://test.api/api/v1/users/me',
+        expect.objectContaining({ skipCloudAuthInjection: true }),
+      );
     });
   });
 

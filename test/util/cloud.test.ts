@@ -1075,6 +1075,40 @@ describe('cloud utils', () => {
     });
   });
 
+  describe('getUserTeams', () => {
+    it('should opt out of saved-cloud-auth injection when called with an explicit apiHost/apiKey/authHeaderName', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      await cloudModule.getUserTeams('https://test.api', 'candidate-key', 'X-Custom-Auth');
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://test.api/api/v1/users/me/teams', {
+        headers: { 'X-Custom-Auth': 'Bearer candidate-key' },
+        skipCloudAuthInjection: true,
+      });
+    });
+
+    it('should fall back to the saved credential via makeRequest when no explicit apiHost/apiKey is provided', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve([]),
+      } as Response);
+
+      await cloudModule.getUserTeams();
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/users/me/teams',
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        }),
+      );
+      const [, calledOpts] = mockFetchWithProxy.mock.calls.at(-1)!;
+      expect(calledOpts).not.toHaveProperty('skipCloudAuthInjection');
+    });
+  });
+
   describe('getDefaultTeam', () => {
     it('should return the oldest team', async () => {
       const mockTeams = [

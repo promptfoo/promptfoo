@@ -375,6 +375,7 @@ export async function getUserTeams(
           headers: {
             [authHeaderName || cloudConfig.getAuthHeaderName()]: `Bearer ${apiKey}`,
           },
+          skipCloudAuthInjection: true,
         })
       : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {

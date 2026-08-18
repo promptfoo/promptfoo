@@ -299,6 +299,7 @@ export class CloudConfig {
         headers: {
           [authHeaderName || this.getAuthHeaderName()]: `Bearer ${token}`,
         },
+        skipCloudAuthInjection: true,
       });
 
       if (!response.ok) {

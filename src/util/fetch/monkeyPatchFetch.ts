@@ -190,19 +190,25 @@ export async function monkeyPatchFetch(
   // `promptfoo auth login --auth-header-name` or PROMPTFOO_CLOUD_AUTH_HEADER.
   // Only resolve the header name once we know a credential will actually be
   // injected, so non-cloud-bound requests never depend on `getAuthHeaderName`.
-  const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth) {
-    const cloudAuthHeaderName = getCloudAuthHeaderName();
-    const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
-    if (!hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
-      opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
+  // Callers validating/rotating a not-yet-saved credential under a header name
+  // that may differ from the currently saved one set `skipCloudAuthInjection` to
+  // opt out entirely, rather than relying on header-name matching (which can't
+  // tell an old saved header apart from a new candidate one).
+  if (!options?.skipCloudAuthInjection) {
+    const cloudAuth = getCloudBearerToken(url);
+    if (cloudAuth) {
+      const cloudAuthHeaderName = getCloudAuthHeaderName();
+      const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
+      if (!hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
+        opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
+      }
     }
-  }
 
-  const cloudTaskTeamId = getCloudTaskTeamId(url);
-  const headersWithAuth = getEffectiveHeaders(url, opts.headers);
-  if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
-    opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
+    const cloudTaskTeamId = getCloudTaskTeamId(url);
+    const headersWithAuth = getEffectiveHeaders(url, opts.headers);
+    if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
+      opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
+    }
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
