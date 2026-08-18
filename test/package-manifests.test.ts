@@ -485,7 +485,23 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
-  it('keeps the Excel parser above the XML entity decoding regression', () => {
+  it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const protobufRange = packageJson.dependencies?.protobufjs;
+
+    expect(protobufRange).toBeDefined();
+    expect(minVersion(protobufRange!)?.compare('8.7.2')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.protobufjs).toBe(protobufRange);
+    expect(packageLock.packages['node_modules/protobufjs'].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages['node_modules/protobufjs'].version!)?.compare('8.7.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the Excel parser aligned with Strict OpenXML support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
       packages: Record<
@@ -501,12 +517,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('9.3.3')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('9.3.8')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.3'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.8'),
     ).toBeGreaterThanOrEqual(0);
   });
 
