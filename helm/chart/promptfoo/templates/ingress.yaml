@@ -1,26 +1,51 @@
+{{- $ingress := .Values.ingress | default dict -}}
+{{- $enabled := true -}}
+{{- if hasKey $ingress "enabled" }}{{- $enabled = $ingress.enabled -}}{{- end -}}
+{{- if $enabled -}}
+{{- $fullName := include "promptfoo.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+{{- $hosts := $ingress.hosts -}}
+{{- $className := $ingress.className -}}
+{{- $annotations := $ingress.annotations | default dict -}}
+{{- $tls := $ingress.tls -}}
+{{- if not $hosts -}}
+{{/* Back-compat: reproduce the legacy hard-coded Ingress from the deprecated domainName */}}
+{{- $hosts = list (dict "host" .Values.domainName "paths" (list (dict "path" "/" "pathType" "Prefix"))) -}}
+{{- if not $className }}{{- $className = "traefik" -}}{{- end -}}
+{{- $annotations = merge (dict) $annotations (dict "cert-manager.io/cluster-issuer" "letsencrypt-cloudflare") -}}
+{{- if not $tls }}{{- $tls = list (dict "secretName" (printf "%s-certificate-tls" .Release.Name) "hosts" (list .Values.domainName)) -}}{{- end -}}
+{{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $.Release.Name | quote }}
-  namespace: {{ $.Release.Namespace | quote }}
+  name: {{ .Release.Name | quote }}
   labels:
-    app: {{ $.Release.Name | quote }}
+    {{- include "promptfoo.labels" . | nindent 4 }}
+  {{- with $annotations }}
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-cloudflare
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  ingressClassName: traefik
-  rules:
-  - host: {{ $.Values.domainName }}
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-            service:
-              name:  {{ include "promptfoo.fullname" . }}
-              port:
-                number: {{ $.Values.service.port }}
+  {{- with $className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with $tls }}
   tls:
-  - hosts:
-    - {{ $.Values.domainName }}
-    secretName: {{ $.Release.Name }}-certificate-tls
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ $fullName }}
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}
