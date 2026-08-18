@@ -118,6 +118,19 @@ describe('RedteamMischievousUserProvider', () => {
     expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it('does not count a preflight error as an attacker request', async () => {
+    mockUserProviderCallApi.mockResolvedValueOnce({
+      error: 'Remote generation is disabled',
+      tokenUsage: { numRequests: 0 },
+    });
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.error).toBe('Remote generation is disabled');
+    expect(result.tokenUsage?.attacker).toMatchObject({ total: 0, numRequests: 0 });
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('preserves target and attacker usage when the target returns an error', async () => {
     mockUserProviderCallApi.mockResolvedValueOnce({
       output: 'user response',
