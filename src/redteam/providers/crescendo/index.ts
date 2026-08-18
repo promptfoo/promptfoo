@@ -323,6 +323,8 @@ export class CrescendoProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let lastRetainedResponse: TargetResponse = { output: '' };
+    let lastRetainedFinalAttackPrompt: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -599,6 +601,11 @@ export class CrescendoProvider implements ApiProvider {
           continue;
         }
 
+        // Backtracked responses are excluded from the retained histories, so do not
+        // expose one as the top-level result if the backtrack limit ends the attack.
+        lastRetainedResponse = lastResponse;
+        lastRetainedFinalAttackPrompt = lastFinalAttackPrompt;
+
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
@@ -784,14 +791,20 @@ export class CrescendoProvider implements ApiProvider {
 
     const messages = this.memory.getConversation(this.targetConversationId);
     const finalPrompt = getLastMessageContent(messages, 'user');
+    const resultResponse =
+      exitReason === 'Max backtracks reached' ? lastRetainedResponse : lastResponse;
+    const resultFinalAttackPrompt =
+      exitReason === 'Max backtracks reached'
+        ? lastRetainedFinalAttackPrompt
+        : lastFinalAttackPrompt;
     return {
-      output: lastResponse.output,
-      ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      output: resultResponse.output,
+      ...(resultResponse.error ? { error: resultResponse.error } : {}),
       prompt: finalPrompt,
       metadata: {
-        sessionId: getSessionId(lastResponse, context),
+        sessionId: getSessionId(resultResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
+        redteamFinalPrompt: resultFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
@@ -809,7 +822,7 @@ export class CrescendoProvider implements ApiProvider {
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
+      guardrails: resultResponse.guardrails,
     };
   }
 

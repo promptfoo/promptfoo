@@ -351,6 +351,8 @@ export class HydraProvider implements ApiProvider {
     let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
+    let lastRetainedTargetResponse: TargetResponse | undefined = undefined;
+    let lastRetainedFinalAttackPrompt: string | undefined;
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
@@ -847,6 +849,12 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
 
+      // Keep the reported response aligned with the retained conversation. A backtracked
+      // response still contributes token usage, but it is intentionally absent from both
+      // conversationHistory and redteamHistory.
+      lastRetainedTargetResponse = targetResponse;
+      lastRetainedFinalAttackPrompt = lastFinalAttackPrompt;
+
       // Grade the response
       let graderResult: GradingResult | undefined = undefined;
 
@@ -1038,15 +1046,22 @@ export class HydraProvider implements ApiProvider {
             hydraResult: vulnerabilityAchieved,
           };
 
+    const resultTargetResponse =
+      stopReason === 'Max backtracks reached' ? lastRetainedTargetResponse : lastTargetResponse;
+    const resultFinalAttackPrompt =
+      stopReason === 'Max backtracks reached'
+        ? lastRetainedFinalAttackPrompt
+        : lastFinalAttackPrompt;
+
     return {
-      output: lastTargetResponse?.output || '',
+      output: resultTargetResponse?.output || '',
       ...(failClosedError
         ? { error: failClosedError }
-        : lastTargetResponse?.error
-          ? { error: lastTargetResponse.error }
+        : resultTargetResponse?.error
+          ? { error: resultTargetResponse.error }
           : {}),
       metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+        sessionId: this.sessionId || getSessionId(resultTargetResponse, context),
         messages,
         ...strategyMetadata,
         stopReason,
@@ -1060,10 +1075,10 @@ export class HydraProvider implements ApiProvider {
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
+        redteamFinalPrompt: resultFinalAttackPrompt || successfulAttacks[0]?.message,
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
+      guardrails: resultTargetResponse?.guardrails,
     };
   }
 }

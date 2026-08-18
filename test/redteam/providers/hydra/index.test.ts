@@ -869,6 +869,53 @@ describe('HydraProvider', () => {
 
       expect(result.metadata?.hydraBacktrackCount).toBe(3);
       expect(result.metadata?.stopReason).toBe('Max backtracks reached');
+      expect(result.output).toBe('');
+      expect(result.metadata?.messages).toEqual([]);
+      expect(result.metadata?.redteamHistory).toEqual([]);
+    });
+
+    it('should return the last retained response after a terminal backtrack', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'Retained target response',
+          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: "I can't help with that",
+          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+        });
+      mockIsBasicRefusal.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        stateful: false,
+      });
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.stopReason).toBe('Max backtracks reached');
+      expect(result.output).toBe('Retained target response');
+      expect(result.metadata?.messages.at(-1)).toEqual({
+        role: 'assistant',
+        content: 'Retained target response',
+      });
+      expect(result.metadata?.redteamHistory.at(-1)?.output).toBe('Retained target response');
+      expect(result.tokenUsage?.numRequests).toBe(2);
     });
 
     it('should not backtrack in stateful mode', async () => {

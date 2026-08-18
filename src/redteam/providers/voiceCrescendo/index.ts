@@ -568,7 +568,6 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
         // Extract response text (output is always a string from TargetResponse)
         const responseText = targetResponse.output;
-        lastResponse = responseText;
 
         // Add to memory
         this.memory.addMessage(
@@ -600,6 +599,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
             continue;
           }
         }
+
+        // Only retained turns should become the top-level result. If a later attempt
+        // ends in an error, keep the output aligned with the retained conversation.
+        lastResponse = responseText;
 
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);

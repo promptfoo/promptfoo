@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isBasicRefusal } from '../../../../src/redteam/util';
 import { sleep } from '../../../../src/util/time';
 import {
   createMockProvider,
@@ -357,6 +358,34 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(1);
     expect(result.metadata?.audioHistory).toBeDefined();
     expect(Array.isArray(result.metadata?.audioHistory)).toBe(true);
+  });
+
+  it('should not return a backtracked response when the next target attempt errors', async () => {
+    vi.mocked(isBasicRefusal).mockReturnValueOnce(false).mockReturnValueOnce(true);
+    vi.mocked(getTargetResponse)
+      .mockResolvedValueOnce({ output: 'Retained target response' })
+      .mockResolvedValueOnce({ output: 'I cannot help with that.' })
+      .mockResolvedValueOnce({ output: '', error: 'Target provider error' });
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 2,
+      maxBacktracks: 1,
+      delayBetweenTurns: 0,
+    });
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('Test objective', context);
+
+    expect(result.output).toBe('Retained target response');
+    expect(result.metadata?.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'Retained target response',
+    });
   });
 
   it('should handle target provider errors and track token usage', async () => {

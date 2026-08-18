@@ -324,6 +324,7 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let lastRetainedResponse: TargetResponse = { output: '' };
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -558,6 +559,9 @@ export class CustomProvider implements ApiProvider {
           continue;
         }
 
+        // Keep the result response in sync with the histories after a terminal backtrack.
+        lastRetainedResponse = lastResponse;
+
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
@@ -670,8 +674,10 @@ export class CustomProvider implements ApiProvider {
 
     const messages = this.memory.getConversation(this.targetConversationId);
     const finalPrompt = getLastMessageContent(messages, 'user');
+    const resultResponse =
+      exitReason === 'Max backtracks reached' ? lastRetainedResponse : lastResponse;
     return {
-      output: lastResponse.output,
+      output: resultResponse.output,
       prompt: finalPrompt,
       metadata: {
         redteamFinalPrompt: finalPrompt,
@@ -685,10 +691,10 @@ export class CustomProvider implements ApiProvider {
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult: storedGraderResult,
-        sessionId: getSessionId(lastResponse, context),
+        sessionId: getSessionId(resultResponse, context),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
+      guardrails: resultResponse.guardrails,
       ...(lastTargetError ? { error: lastTargetError } : {}),
     };
   }

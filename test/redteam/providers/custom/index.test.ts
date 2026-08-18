@@ -620,6 +620,63 @@ describe('CustomProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Max backtracks reached');
     expect(result.metadata?.customBacktrackCount).toBe(2);
+    expect(result.output).toBe('');
+    expect(result.metadata?.messages).toEqual([]);
+    expect(result.metadata?.redteamHistory).toEqual([]);
+  });
+
+  it('should return the last retained response after a terminal backtrack', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Custom strategy for backtrack test',
+      maxTurns: 2,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+    });
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'Retained target response',
+        tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'I cannot help with that.',
+        tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+      });
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: false, metadata: 0, rationale: 'Not a refusal' }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: false, metadata: 50, rationale: 'Partial progress' }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ value: true, metadata: 0, rationale: 'This is a refusal' }),
+      });
+
+    const result = await testProvider.callApi('test prompt', context);
+
+    expect(result.metadata?.stopReason).toBe('Max backtracks reached');
+    expect(result.output).toBe('Retained target response');
+    expect(result.metadata?.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'Retained target response',
+    });
+    expect(result.metadata?.redteamHistory?.at(-1)?.output).toBe('Retained target response');
+    expect(result.tokenUsage?.numRequests).toBe(2);
   });
 
   it('should record successful attacks when continueAfterSuccess is true', async () => {
