@@ -593,7 +593,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. Token counters stay visible as long as their value is a number, so GenAI counters such as `gen_ai.usage.input_tokens` and application counters such as `llm.usage.prompt_tokens`, `llm.token_count.prompt`, and `prompt.tokens` are all readable. A token attribute holding anything other than a number is treated as a credential and redacted. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 
