@@ -564,6 +564,76 @@ describe('AssertionsResult', () => {
       });
     });
 
+    it.each([
+      {
+        label: 'a shallow copy',
+        copy: (usage: NonNullable<GradingResult['tokensUsed']>) => ({ ...usage }),
+      },
+      {
+        label: 'a serialized copy',
+        copy: (usage: NonNullable<GradingResult['tokensUsed']>) =>
+          JSON.parse(JSON.stringify(usage)) as NonNullable<GradingResult['tokensUsed']>,
+      },
+    ])('does not double-count $label of existing custom-scoring usage', async ({ copy }) => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: {
+            total: 50,
+            prompt: 30,
+            completion: 20,
+            numRequests: 1,
+            completionDetails: { reasoning: 7 },
+          },
+        },
+      });
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Custom score without additional grading',
+        ...(context?.tokensUsed && { tokensUsed: copy(context.tokensUsed) }),
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        numRequests: 1,
+        completionDetails: { reasoning: 7 },
+      });
+    });
+
+    it('counts independently graded scoring usage even when token counts match components', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Component grading result',
+          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+        },
+      });
+      const scoringFunction: ScoringFunction = (_scores, context) => ({
+        pass: true,
+        score: 0.8,
+        reason: 'Independent grading happened to use the same token counts',
+        ...(context?.tokensUsed && { tokensUsed: { ...context.tokensUsed } }),
+        metadata: { renderedGradingPrompt: 'Grade the component scores' },
+      });
+
+      expect((await assertionsResult.testResult(scoringFunction)).tokensUsed).toMatchObject({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+      });
+    });
+
     it('should handle scoring function errors', async () => {
       const assertionsResult = new AssertionsResult({});
       const scoringFunction = vi.fn().mockRejectedValue(new Error('Scoring failed'));

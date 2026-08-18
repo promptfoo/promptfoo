@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
 
@@ -139,6 +141,17 @@ function mergeScoringTokenUsage(
   scoringResult: GradingResult,
 ): GradingResult['tokensUsed'] {
   if (!scoringResult.tokensUsed || scoringResult.tokensUsed === baseTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const scoringHasIndependentProvenance =
+    scoringResult.metadata?.cachedResponse === true ||
+    scoringResult.metadata?.renderedGradingPrompt !== undefined;
+  if (
+    baseTokensUsed &&
+    !scoringHasIndependentProvenance &&
+    isDeepStrictEqual(scoringResult.tokensUsed, baseTokensUsed)
+  ) {
     return baseTokensUsed;
   }
 
