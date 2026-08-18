@@ -142,9 +142,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     let status: number;
     let statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
 
     try {
-      ({ data, cached, status, statusText } =
+      ({ data, cached, status, statusText, deleteFromCache } =
         await fetchWithCache<OpenRouterChatCompletionResponse>(
           `${this.getApiUrl()}/chat/completions`,
           {
@@ -177,6 +178,18 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (data.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+      };
+    }
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      // fetchWithCache only skips caching for non-2xx responses and bodies carrying an
+      // `error` key, so this 200 has already been written to the cache. OpenRouter emits
+      // this shape when an upstream provider fails, which is transient — leaving it
+      // cached would pin the failure for every later run of the same prompt. Evict it so
+      // the next call retries, matching OpenAiChatCompletionProvider's behavior.
+      await deleteFromCache?.();
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
       };
     }
 
