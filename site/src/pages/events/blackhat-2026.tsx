@@ -8,6 +8,8 @@ import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2026.module.css';
 
 const BOOTH = 'Booth #2967';
+const DESCRIPTION =
+  'Promptfoo demonstrated AI agent red teaming at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6, 2026. Explore the demos and request a follow-up.';
 
 /**
  * A single line of a rendered product artifact (transcript, grader output, CI
@@ -227,16 +229,10 @@ export default function BlackHat2026(): React.ReactElement {
   };
 
   return (
-    <Layout
-      title="Promptfoo at Black Hat USA 2026"
-      description="Promptfoo demonstrated AI agent red teaming at OpenAI booth #2967 during Black Hat USA 2026. Explore the demos and request a follow-up."
-    >
+    <Layout title="Promptfoo at Black Hat USA 2026" description={DESCRIPTION}>
       <Head>
         <meta property="og:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
-        <meta
-          property="og:description"
-          content="Promptfoo demonstrated AI agent attacks and the transcripts they leave behind at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6, 2026."
-        />
+        <meta property="og:description" content={DESCRIPTION} />
         <meta
           property="og:image"
           content="https://www.promptfoo.dev/img/events/blackhat-2026.jpg"
@@ -249,10 +245,7 @@ export default function BlackHat2026(): React.ReactElement {
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
-        <meta
-          name="twitter:description"
-          content="Promptfoo tested real AI agents at OpenAI booth #2967 during Black Hat USA 2026. Explore the demos or request a follow-up."
-        />
+        <meta name="twitter:description" content={DESCRIPTION} />
         <meta
           name="twitter:image"
           content="https://www.promptfoo.dev/img/events/blackhat-2026.jpg"

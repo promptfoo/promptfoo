@@ -9,6 +9,8 @@ import styles from './defcon-2026.module.css';
 
 const BOOTH = 'Booth #1412';
 const REPO_URL = 'https://github.com/promptfoo/promptfoo';
+const DESCRIPTION =
+  'Promptfoo demonstrated AI agent red teaming at OpenAI booth #1412 in LVCC West Hall, August 7-9, 2026, during DEF CON 34. Explore the demo and keep testing.';
 
 const SCAN_PREAMBLE = [
   '[~] target: support-agent (14 tools, 3 data sources)',
@@ -55,16 +57,10 @@ export default function Defcon2026(): React.ReactElement {
   };
 
   return (
-    <Layout
-      title="Promptfoo at DEF CON 34"
-      description="Promptfoo demonstrated AI agent red teaming at OpenAI booth #1412 during DEF CON 34, August 6-9, 2026. Explore the demo and keep testing."
-    >
+    <Layout title="Promptfoo at DEF CON 34" description={DESCRIPTION}>
       <Head>
         <meta property="og:title" content="Promptfoo at DEF CON 34 | AI agent red teaming" />
-        <meta
-          property="og:description"
-          content="At DEF CON 34, Promptfoo demonstrated AI agent red teaming at OpenAI booth #1412 in LVCC West Hall, August 7-9, 2026. Explore the demo and keep testing."
-        />
+        <meta property="og:description" content={DESCRIPTION} />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2026.jpg" />
         <meta property="og:image:width" content="1536" />
         <meta property="og:image:height" content="1024" />
@@ -74,10 +70,7 @@ export default function Defcon2026(): React.ReactElement {
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Promptfoo at DEF CON 34 | AI agent red teaming" />
-        <meta
-          name="twitter:description"
-          content="Promptfoo tested AI agents at OpenAI booth #1412 during DEF CON 34. Explore the open-source demo or request a follow-up."
-        />
+        <meta name="twitter:description" content={DESCRIPTION} />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/defcon-2026.jpg" />
         <meta name="twitter:site" content="@promptfoo" />
 

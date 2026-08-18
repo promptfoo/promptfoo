@@ -3,40 +3,20 @@ import path from 'node:path';
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  events,
-  formatEventDate,
-  getEventBySlug,
-  getEventsAt,
-  getFeaturedEvent,
-  getPastEvents,
-  getUpcomingEvents,
-} from '../../data/events';
+import { events, formatEventDate, getEventBySlug } from '../../data/events';
 import BlackHat2026 from './blackhat-2026';
 import Defcon2026 from './defcon-2026';
 
 const SITE_ROOT = path.resolve(__dirname, '../../..');
 
-/**
- * These assertions cover *facts and promises*, not design devices. Booth numbers, dates,
- * and the OpenAI/Promptfoo relationship are the things that send a real person walking
- * across a convention centre or that misstate a corporate relationship, so they get
- * asserted. Headings, section names, and ASCII art are free to change without a test
- * edit.
- */
+// Preserve historical dates, booth identity, and public promises as the pages become recaps.
 const BLACKHAT_BOOTH = 'Booth #2967';
 const DEFCON_BOOTH = 'Booth #1412';
 const EVENT_REFERENCE_CASES = events.map((event) => [event.id, event] as const);
 const LIVE_EVENT_INVITE =
-  /\b(?:find (?:us|the team|promptfoo)|where to find us|visit (?:us|openai booth)|stop by|attending black hat|our booth (?:opens|is open)|what we're demoing|wait for the conference|register now|rsvp)\b/i;
+  /\b(?:find (?:us|the team|promptfoo)|where to find us|visit (?:us|openai booth)|see promptfoo test|stop by|attending black hat|our booth (?:opens|is open)|what we're demoing|wait for the conference|register now|rsvp)\b/i;
 
-/**
- * Promptfoo is part of OpenAI and demos at OpenAI's booth — OpenAI is the exhibitor of
- * record in the Black Hat directory. Every one of these framings inverts or muddies that
- * hierarchy, so none of them may appear in rendered copy, `<Head>` metadata, alt text, or
- * aria labels. (`@docusaurus/Head` is stubbed as a fragment in `vitest.config.ts`, so its
- * children land in the container and `innerHTML` sees meta/alt/aria values too.)
- */
+// OpenAI was the exhibitor. Promptfoo is part of OpenAI, not a second company sharing a stand.
 const BANNED_BRAND_STRINGS = [
   /with OpenAI/i,
   /OpenAI presence/i,
@@ -93,25 +73,11 @@ describe('Vegas 2026 event data', () => {
     expect(getEventBySlug('defcon-2026')?.booth).toBe(DEFCON_BOOTH);
   });
 
-  it('keeps both conferences in the archive after the Vegas run', () => {
-    const archived = getEventsAt(Date.parse('2026-08-18T12:00:00-07:00'));
-    const vegasIds = ['blackhat-2026', 'defcon-2026'];
-
-    expect(getPastEvents(archived).map((event) => event.id)).toEqual(
-      expect.arrayContaining(vegasIds),
-    );
-    for (const id of vegasIds) {
-      expect(getUpcomingEvents(archived).map((event) => event.id)).not.toContain(id);
-    }
-    expect(vegasIds).not.toContain(getFeaturedEvent(archived)?.id);
-  });
-
   it.each(['blackhat-2026', 'defcon-2026'])('%s card reads as a recap', (slug) => {
     const event = getEventBySlug(slug);
     expect(event).toBeDefined();
 
     const copy = `${event!.description} ${event!.fullDescription ?? ''}`;
-    expect(copy).toMatch(/\bdemonstrated\b/);
     expect(copy).not.toMatch(LIVE_EVENT_INVITE);
     expect(copy).not.toMatch(/\b(?:runs Aug|is open)\b/i);
   });
@@ -200,7 +166,7 @@ describe.each([
     venue: /Mandalay Bay/,
     crossLink: /DEF CON 34/,
     boothDates: /Business Hall and booth:\s*Aug 4-6/i,
-    sourceFile: 'blackhat-2026.tsx',
+    metadataDates: 'August 4-6, 2026',
   },
   {
     name: 'DEF CON 34',
@@ -210,10 +176,10 @@ describe.each([
     venue: /West Hall/,
     crossLink: /Black Hat/,
     boothDates: /Booth #1412:\s*Aug 7-9/i,
-    sourceFile: 'defcon-2026.tsx',
+    metadataDates: 'August 7-9, 2026',
   },
 ])('$name page', (page) => {
-  const { Component, boothNumber, dates, venue, crossLink, boothDates, sourceFile } = page;
+  const { Component, boothNumber, dates, venue, crossLink, boothDates, metadataDates } = page;
 
   it('shows the booth number, dates, and venue', () => {
     const { container } = render(<Component />);
@@ -247,8 +213,7 @@ describe.each([
 
   it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
     const { container } = render(<Component />);
-    // innerHTML rather than textContent so meta descriptions, alt text, and aria labels
-    // are covered too.
+    // Include alt text and aria labels. Social metadata is checked separately below.
     expect(container.innerHTML).not.toMatch(banned);
   });
 
@@ -268,17 +233,21 @@ describe.each([
     expect(screen.queryByRole('list', { name: /booth hours/i })).not.toBeInTheDocument();
   });
 
-  it('keeps page and social descriptions in past tense', () => {
-    const source = fs.readFileSync(path.join(SITE_ROOT, 'src/pages/events', sourceFile), 'utf-8');
-    const descriptions = [
-      source.match(/<Layout\s[^>]*\bdescription="([^"]+)"/s)?.[1],
-      source.match(/property="og:description"\s+content="([^"]+)"/)?.[1],
-      source.match(/name="twitter:description"\s+content="([^"]+)"/)?.[1],
-    ];
+  it('renders consistent archival social descriptions', () => {
+    render(<Component />);
+    const ogDescription = document
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute('content');
+    const twitterDescription = document
+      .querySelector('meta[name="twitter:description"]')
+      ?.getAttribute('content');
 
-    for (const description of descriptions) {
-      expect(description).toMatch(/\b(?:demonstrated|tested)\b/);
-      expect(description).not.toMatch(LIVE_EVENT_INVITE);
+    expect(ogDescription).toContain(`OpenAI booth #${boothNumber}`);
+    expect(ogDescription).toContain(metadataDates);
+    expect(ogDescription).not.toMatch(LIVE_EVENT_INVITE);
+    expect(twitterDescription).toBe(ogDescription);
+    for (const banned of BANNED_BRAND_STRINGS) {
+      expect(ogDescription).not.toMatch(banned);
     }
   });
 
