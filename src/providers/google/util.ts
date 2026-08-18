@@ -198,6 +198,69 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
   });
 }
 
+/**
+ * Current Gemini Flash models no longer support manual sampling controls,
+ * candidate counts, or frequency/presence penalties.
+ */
+export function removeDeprecatedGeminiGenerationParams<T extends Record<string, unknown>>(
+  modelName: string,
+  generationConfig: T,
+): T {
+  if (
+    !modelName.startsWith('gemini-3.7-flash') &&
+    !modelName.startsWith('gemini-3.6-flash') &&
+    !modelName.startsWith('gemini-3.5-flash-lite') &&
+    modelName !== 'gemini-flash-latest' &&
+    modelName !== 'gemini-flash-lite-latest'
+  ) {
+    return generationConfig;
+  }
+
+  const sanitized = { ...generationConfig };
+  for (const field of [
+    'temperature',
+    'topP',
+    'top_p',
+    'topK',
+    'top_k',
+    'candidateCount',
+    'candidate_count',
+    'presencePenalty',
+    'presence_penalty',
+    'frequencyPenalty',
+    'frequency_penalty',
+  ]) {
+    delete sanitized[field];
+  }
+
+  if (modelName.startsWith('gemini-3.7-flash')) {
+    const thinkingConfig = sanitized.thinkingConfig as
+      | {
+          thinkingBudget?: unknown;
+          thinking_budget?: unknown;
+          thinkingLevel?: unknown;
+          thinking_level?: unknown;
+        }
+      | undefined;
+    if (
+      thinkingConfig?.thinkingBudget !== undefined ||
+      thinkingConfig?.thinking_budget !== undefined
+    ) {
+      throw new Error(
+        'Gemini 3.7 Flash does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).',
+      );
+    }
+    const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
+    if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
+      throw new Error(
+        'Gemini 3.7 Flash does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
+      );
+    }
+  }
+
+  return sanitized as T;
+}
+
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
   if (typeof tools === 'string' && tools.startsWith('file://')) {
     const { filePath } = parseFileUrl(tools);
@@ -244,7 +307,7 @@ export function stripExecutableToolFileReferences(
  */
 export function calculateGoogleCost(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
@@ -277,8 +340,30 @@ export function calculateGoogleCost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? modelCost.input;
-  const outputCost = config.outputCost ?? config.cost ?? modelCost.output;
+  const serviceTier =
+    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
+      ?.service_tier ??
+    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
+    config.service_tier;
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+
+  const region = config.region;
+  const vertexRegionalMultiplier =
+    isVertexMode && (region === 'us' || region === 'eu')
+      ? (model?.vertexRegionalMultiplier ?? 1)
+      : 1;
+  const introductoryMultiplier =
+    model?.introductoryPricing && Date.now() < model.introductoryPricing.expiresAt
+      ? model.introductoryPricing.multiplier
+      : 1;
+  const catalogMultiplier = vertexRegionalMultiplier * introductoryMultiplier;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * catalogMultiplier;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * catalogMultiplier;
   const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
   const imageInputTokens = clampCachedTokens(
     imagePromptTokens,
@@ -333,32 +418,25 @@ export function calculateGoogleCost(
     outputCost;
   const imageInputCost =
     config.imageInputCost ?? config.inputCost ?? config.cost ?? modelCost.imageInput ?? inputCost;
-  const cachedInputCost = config.inputCost ?? config.cost ?? modelCost.cacheRead ?? inputCost;
+  const serviceTierCacheRead =
+    serviceTier === 'priority' && modelCost.priorityCacheRead !== undefined
+      ? modelCost.priorityCacheRead / serviceTierMultiplier
+      : serviceTier === 'flex' && modelCost.flexCacheRead !== undefined
+        ? modelCost.flexCacheRead / serviceTierMultiplier
+        : modelCost.cacheRead;
+  const catalogCacheRead =
+    serviceTierCacheRead === undefined ? undefined : serviceTierCacheRead * catalogMultiplier;
+  const cachedInputCost = config.inputCost ?? config.cost ?? catalogCacheRead ?? inputCost;
   const cachedAudioInputCost =
     config.audioInputCost ??
     config.audioCost ??
     config.inputCost ??
     config.cost ??
     modelCost.cacheReadAudio ??
-    modelCost.cacheRead ??
+    catalogCacheRead ??
     audioInputCost;
   const cachedImageInputCost =
-    config.imageInputCost ??
-    config.inputCost ??
-    config.cost ??
-    modelCost.cacheRead ??
-    imageInputCost;
-  const serviceTier =
-    (config.passthrough as { service_tier?: unknown; serviceTier?: unknown } | undefined)
-      ?.service_tier ??
-    (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier ??
-    config.service_tier;
-  let serviceTierMultiplier = 1;
-  if (serviceTier === 'priority') {
-    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
-  } else if (serviceTier === 'flex') {
-    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
-  }
+    config.imageInputCost ?? config.inputCost ?? config.cost ?? catalogCacheRead ?? imageInputCost;
   // A modality/base cost override on the request takes precedence over the
   // catalog's tier-specific audio rate.
   const hasAudioInputOverride =
@@ -405,7 +483,7 @@ const getGoogleModalityTokenCount = (details: unknown, modalities: string[]): nu
 
 export function calculateGoogleCostFromUsage(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens: number | undefined,
   completionTokens: number | undefined,
   isVertexMode: boolean,
