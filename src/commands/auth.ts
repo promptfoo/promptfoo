@@ -241,7 +241,7 @@ async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Pr
     user,
     app,
     hasActiveLicense,
-    cmdObj.authHeaderName,
+    authHeaderName,
   );
   if (existingEmail && existingEmail !== user.email) {
     logger.info(
