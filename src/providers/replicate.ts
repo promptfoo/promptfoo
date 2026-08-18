@@ -234,12 +234,22 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug('Returning cached Replicate response', { modelName: this.modelName });
-        return { ...JSON.parse(cachedResponse as string), cached: true };
+        const parsedResponse = JSON.parse(cachedResponse as string);
+        return {
+          ...parsedResponse,
+          tokenUsage: {
+            ...parsedResponse.tokenUsage,
+            cached: parsedResponse.tokenUsage?.total ?? 0,
+            numRequests: 0,
+          },
+          cached: true,
+        };
       }
     }
 
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
+    let cached = false;
     try {
       // Create prediction with sync mode (wait up to 60 seconds)
       const createResponse = await fetchWithCache(
@@ -259,10 +269,12 @@ export class ReplicateProvider implements ApiProvider {
         'json',
       );
 
+      cached = createResponse.cached;
       response = createResponse.data as ReplicatePrediction;
 
       // If still processing, poll for completion
       if (response.status === 'starting' || response.status === 'processing') {
+        cached = false;
         response = await this.pollForCompletion(response.id);
       }
 
@@ -274,6 +286,7 @@ export class ReplicateProvider implements ApiProvider {
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
+        ...(cached && { cached: true, tokenUsage: createEmptyTokenUsage() }),
       };
     }
     logger.debug('Replicate API response received', {
@@ -281,11 +294,16 @@ export class ReplicateProvider implements ApiProvider {
       ...getReplicateValueSummary('response', response),
     });
 
+    const responseMetadata = {
+      ...(cached && { cached: true }),
+      tokenUsage: { ...createEmptyTokenUsage(), numRequests: Number(!cached) },
+    };
+
     if (typeof response === 'string') {
       // It's text
       const ret = {
         output: response,
-        tokenUsage: createEmptyTokenUsage(),
+        ...responseMetadata,
       };
       if (cache && cacheKey) {
         try {
@@ -301,7 +319,7 @@ export class ReplicateProvider implements ApiProvider {
         const output = response.join('');
         const ret = {
           output,
-          tokenUsage: createEmptyTokenUsage(),
+          ...responseMetadata,
         };
         if (cache && cacheKey) {
           try {
@@ -317,6 +335,7 @@ export class ReplicateProvider implements ApiProvider {
     logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
     return {
       error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
+      ...responseMetadata,
     };
   }
 
@@ -335,7 +354,7 @@ export class ReplicateProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        false, // Don't cache polling requests
+        true, // Don't cache polling requests
       );
 
       const prediction = pollResponse.data as ReplicatePrediction;

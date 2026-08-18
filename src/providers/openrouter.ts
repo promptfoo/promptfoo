@@ -180,6 +180,17 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
+    // Guard against a 200 response with an empty or missing `choices` array
+    // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
+    // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
+    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
+      };
+    }
+
     // Process the response with special handling for Gemini
     const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);

@@ -485,6 +485,22 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const protobufRange = packageJson.dependencies?.protobufjs;
+
+    expect(protobufRange).toBeDefined();
+    expect(minVersion(protobufRange!)?.compare('8.7.2')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.protobufjs).toBe(protobufRange);
+    expect(packageLock.packages['node_modules/protobufjs'].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages['node_modules/protobufjs'].version!)?.compare('8.7.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps the Excel parser aligned with Strict OpenXML support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
