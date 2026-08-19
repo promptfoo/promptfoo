@@ -117,3 +117,29 @@ describe('LocalAI temperature handling', () => {
     expect(callBody.temperature).toBe(0.7);
   });
 });
+
+describe('LocalAI empty choices handling', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns a clean malformed-response error on empty choices (chat)', async () => {
+    // A 200 with an empty choices array (soft moderation block or upstream
+    // hiccup) must not become an opaque TypeError from choices[0].message.
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
+
+    const provider = new LocalAiChatProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+
+  it('returns a clean malformed-response error on empty choices (completion)', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
+
+    const provider = new LocalAiCompletionProvider('test-model', { config: {} });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Malformed response data');
+  });
+});
