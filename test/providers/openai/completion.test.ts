@@ -288,7 +288,6 @@ describe('OpenAI Provider', () => {
         cached: false,
         status: 200,
         statusText: 'OK',
-        severity: 'info',
       });
 
       const provider = new OpenAiCompletionProvider('text-davinci-003');
