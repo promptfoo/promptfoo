@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { type Inputs, InputsSchema } from '../types/shared';
+import {
+  type Inputs,
+  InputsSchema,
+  type RedteamHistoryDisposition,
+  type RedteamHistoryEntry,
+  type RedteamHistoryKind,
+  type RedteamMediaData,
+} from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
@@ -7,7 +14,14 @@ import type { EventSource } from '../types/eventSource';
 import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
-export { type Inputs, InputsSchema };
+export {
+  type Inputs,
+  InputsSchema,
+  RedteamHistoryDisposition,
+  RedteamHistoryEntry,
+  RedteamHistoryKind,
+  RedteamMediaData,
+};
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -391,46 +405,17 @@ export interface SavedRedteamConfig {
 }
 
 /**
- * Media data (audio or image) for redteam history entries
- */
-export interface RedteamMediaData {
-  /**
-   * Media payload for rendering/transport.
-   *
-   * - Base64 string (legacy/inline)
-   * - `storageRef:<key>` string (external media storage)
-   *
-   * Optional because some code paths only know the format and store the payload elsewhere.
-   */
-  data?: string;
-  format: string;
-}
-
-/**
- * Single entry in redteam conversation history
- */
-export interface RedteamHistoryEntry {
-  prompt: string;
-  output: string;
-  /** Audio data for the prompt (when using audio transforms) */
-  promptAudio?: RedteamMediaData;
-  /** Image data for the prompt (when using image transforms) */
-  promptImage?: RedteamMediaData;
-  /** Audio data from the target response */
-  outputAudio?: RedteamMediaData;
-  /** Image data from the target response */
-  outputImage?: RedteamMediaData;
-  /** Extracted input variables for multi-input mode */
-  inputVars?: Record<string, string>;
-}
-
-/**
  * Base metadata interface shared by all redteam providers
  */
 export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
+  /** Version 2 stores all attempts as a compact parent-linked graph. */
+  redteamHistoryVersion?: 2;
+  redteamHistoryKind?: RedteamHistoryKind;
+  /** Selected terminal attempt; omitted when no target attempt was retained. */
+  redteamFinalAttempt?: number;
   redteamHistory?: RedteamHistoryEntry[];
   sessionIds?: string[];
   sessionId?: string;

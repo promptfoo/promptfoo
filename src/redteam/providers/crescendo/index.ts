@@ -8,6 +8,21 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
+import {
+  type ApiProvider,
+  type AtomicTestCase,
+  type CallApiContextParams,
+  type CallApiOptionsParams,
+  type GradingResult,
+  getDisplayRedteamHistory,
+  type Inputs,
+  type NunjucksFilterMap,
+  type Prompt,
+  type ProviderResponse,
+  type RedteamFileConfig,
+  type TokenUsage,
+  type VarValue,
+} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject, isValidJson } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -34,7 +49,6 @@ import {
 import {
   applyRuntimeTransforms,
   type LayerConfig,
-  type MediaData,
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
@@ -71,22 +85,8 @@ import {
 } from '../tracingOptions';
 import { CRESCENDO_SYSTEM_PROMPT, EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from './prompts';
 
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  Inputs,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-  VarValue,
-} from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
-import type { BaseRedteamMetadata } from '../../types';
+import type { BaseRedteamMetadata, RedteamHistoryEntry } from '../../types';
 import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -325,6 +325,7 @@ export class CrescendoProvider implements ApiProvider {
     let lastResponse: TargetResponse = { output: '' };
     let lastRetainedResponse: TargetResponse = { output: '' };
     let lastRetainedFinalAttackPrompt: string | undefined;
+    let lastRetainedAttempt: number | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -336,15 +337,7 @@ export class CrescendoProvider implements ApiProvider {
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
     // Track redteamHistory entries with audio/image data for UI rendering
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      inputVars?: Record<string, string>;
-    }> = [];
+    const redteamHistory: RedteamHistoryEntry[] = [];
     let lastTransformResult: TransformResult | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
@@ -483,6 +476,7 @@ export class CrescendoProvider implements ApiProvider {
 
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
+        let historyPrompt = attackPrompt;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
 
         if (lastResponse.sessionId && this.stateful) {
@@ -497,6 +491,17 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         if (isConversationEndedResponse(lastResponse)) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'ended',
+            turn: roundNum,
+            prompt: historyPrompt,
+            output: lastResponse.output || '',
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+            guardrails: lastResponse.guardrails,
+          });
           logger.info('[Crescendo] Target ended conversation', {
             round: roundNum,
             reason: lastResponse.conversationEndReason,
@@ -518,6 +523,25 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
+          const blockedAttempt = redteamHistory.length + 1;
+          redteamHistory.push({
+            attempt: blockedAttempt,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'retained',
+            turn: roundNum,
+            prompt: historyPrompt,
+            output: lastResponse.output,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
+            inputVars: lastInputVars,
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+            guardrails: lastResponse.guardrails,
+          });
+          lastRetainedAttempt = blockedAttempt;
+          lastRetainedResponse = lastResponse;
+          lastRetainedFinalAttackPrompt = lastFinalAttackPrompt;
+          historyPrompt = unblockingResult.unblockingPrompt;
           // Target is asking a blocking question, send the unblocking answer
           logger.debug(
             `[Crescendo] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
@@ -543,6 +567,17 @@ export class CrescendoProvider implements ApiProvider {
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
           if (isConversationEndedResponse(lastResponse)) {
+            redteamHistory.push({
+              attempt: redteamHistory.length + 1,
+              parentAttempt: lastRetainedAttempt,
+              disposition: 'ended',
+              turn: roundNum,
+              prompt: historyPrompt,
+              output: lastResponse.output || '',
+              tokenUsage: lastResponse.tokenUsage,
+              cached: lastResponse.cached,
+              guardrails: lastResponse.guardrails,
+            });
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
               reason: lastResponse.conversationEndReason,
@@ -570,6 +605,28 @@ export class CrescendoProvider implements ApiProvider {
         );
 
         if (isRefusal && !this.stateful) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'backtracked',
+            turn: roundNum,
+            prompt: historyPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
+            output: lastResponse.output,
+            outputAudio:
+              lastResponse.audio?.data && lastResponse.audio?.format
+                ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
+                : undefined,
+            outputImage:
+              lastResponse.image?.data && lastResponse.image?.format
+                ? { data: lastResponse.image.data, format: lastResponse.image.format }
+                : undefined,
+            inputVars: lastInputVars,
+            guardrails: lastResponse.guardrails,
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+          });
           logger.debug('\n[Crescendo] Response Rejected, performing back tracking...\n');
           backtrackCount++;
           this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
@@ -669,13 +726,18 @@ export class CrescendoProvider implements ApiProvider {
             // Provide prior turns separately from the latest assistant output
             // under test. Context-aware graders can use this to reason over
             // provenance without duplicating the current turn in `llmOutput`.
-            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
+            const retainedHistory = getDisplayRedteamHistory({
+              redteamHistoryVersion: 2,
+              redteamFinalAttempt: lastRetainedAttempt,
+              redteamHistory,
+            }).filter((entry) => entry.turn !== roundNum);
+            const conversationHistoryForGrading = retainedHistory.map((turn) => ({
               prompt: turn.prompt,
               output: turn.output,
             }));
             gradingContext = {
               ...(gradingContext ?? {}),
-              redteamHistory: [...redteamHistory],
+              redteamHistory: [...retainedHistory],
               conversationHistory: conversationHistoryForGrading,
               conversationTranscript: formatRedteamHistoryAsTranscript(
                 conversationHistoryForGrading,
@@ -705,8 +767,13 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] graderPassed: ${graderPassed}`);
 
         // Store this turn in redteamHistory with audio/image data if present
+        const retainedAttempt = redteamHistory.length + 1;
         redteamHistory.push({
-          prompt: attackPrompt,
+          attempt: retainedAttempt,
+          ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+          disposition: 'retained',
+          turn: roundNum,
+          prompt: historyPrompt,
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
           output: lastResponse.output,
@@ -720,7 +787,11 @@ export class CrescendoProvider implements ApiProvider {
               : undefined,
           // Include input vars for multi-input mode (extracted from current prompt)
           inputVars: lastInputVars,
+          guardrails: lastResponse.guardrails,
+          tokenUsage: lastResponse.tokenUsage,
+          cached: lastResponse.cached,
         });
+        lastRetainedAttempt = retainedAttempt;
 
         if (graderPassed === false) {
           this.recordSuccessfulAttack(roundNum, attackPrompt, lastResponse.output);
@@ -811,6 +882,9 @@ export class CrescendoProvider implements ApiProvider {
         crescendoResult: evalFlag,
         crescendoConfidence: evalPercentage,
         stopReason: exitReason,
+        redteamHistoryVersion: 2,
+        redteamHistoryKind: 'conversation',
+        ...(lastRetainedAttempt !== undefined && { redteamFinalAttempt: lastRetainedAttempt }),
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,

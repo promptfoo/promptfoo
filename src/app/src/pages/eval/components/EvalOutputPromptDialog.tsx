@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { type GradingResult, getDisplayRedteamHistory, type Vars } from '@promptfoo/types';
 import { Check, Copy, X } from 'lucide-react';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -17,7 +18,6 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { GradingResult, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
@@ -25,15 +25,6 @@ import type { Citation } from './Citations';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const subtitleTypographyClassName = 'mb-2 font-medium text-base';
-
-interface RedteamHistoryEntry {
-  prompt?: string;
-  promptAudio?: { data?: string; format?: string };
-  promptImage?: { data?: string; format?: string };
-  output?: string;
-  outputAudio?: { data?: string; format?: string };
-  outputImage?: { data?: string; format?: string };
-}
 
 interface CodeDisplayProps {
   content: string;
@@ -336,24 +327,18 @@ export default function EvalOutputPromptDialog({
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
-    | RedteamHistoryEntry[]
-    | unknown[];
-  const redteamHistoryMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
-    .filter((entry): entry is RedteamHistoryEntry => {
-      const e = entry as RedteamHistoryEntry;
-      return Boolean(e?.prompt && e?.output);
-    })
-    .flatMap((entry: RedteamHistoryEntry) => [
+  const redteamHistoryMessages = getDisplayRedteamHistory(metadata)
+    .filter((entry) => Boolean(entry.prompt && entry.output))
+    .flatMap((entry) => [
       {
         role: 'user' as const,
-        content: entry.prompt!,
+        content: entry.prompt,
         audio: entry.promptAudio,
         image: entry.promptImage,
       },
       {
         role: 'assistant' as const,
-        content: entry.output!,
+        content: entry.output,
         audio: entry.outputAudio,
         image: entry.outputImage,
       },

@@ -15,6 +15,7 @@ import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   type EvaluateTableOutput,
   type GradingResult,
+  getFinalRedteamHistoryEntry,
   type ImageOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
@@ -1434,8 +1435,7 @@ function EvalOutputCell({
   const { failReasons, passReasons } = getFailAndPassReasons(output);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
-  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
-  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
+  const lastTurn = getFinalRedteamHistoryEntry(output.metadata);
   const responseAudio = lastTurn?.outputAudio as
     | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
     | undefined;

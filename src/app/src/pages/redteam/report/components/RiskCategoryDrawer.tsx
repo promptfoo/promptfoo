@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tab
 import { cn } from '@app/lib/utils';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { type GradingResult, getDisplayRedteamHistory } from '@promptfoo/types';
 import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
@@ -19,7 +20,6 @@ import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDia
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
-import type { GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -87,36 +87,20 @@ function getOutputDisplay(output: string | object): string {
   return JSON.stringify(output);
 }
 
-interface RedteamHistoryEntry {
-  prompt?: string;
-  promptAudio?: { data?: string; format?: string };
-  promptImage?: { data?: string; format?: string };
-  output?: string;
-  outputAudio?: { data?: string; format?: string };
-  outputImage?: { data?: string; format?: string };
-}
-
 function buildChatMessages(test: TestWithMetadata): Message[] {
   const metadata = test.result?.metadata;
-  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
-    | RedteamHistoryEntry[]
-    | unknown[];
-
-  const historyMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
-    .filter((entry): entry is RedteamHistoryEntry => {
-      const e = entry as RedteamHistoryEntry;
-      return Boolean(e?.prompt && e?.output);
-    })
-    .flatMap((entry: RedteamHistoryEntry): Message[] => [
+  const historyMessages = getDisplayRedteamHistory(metadata)
+    .filter((entry) => Boolean(entry.prompt && entry.output))
+    .flatMap((entry): Message[] => [
       {
         role: 'user' as const,
-        content: entry.prompt!,
+        content: entry.prompt,
         audio: entry.promptAudio,
         image: entry.promptImage,
       },
       {
         role: 'assistant' as const,
-        content: entry.output!,
+        content: entry.output,
         audio: entry.outputAudio,
         image: entry.outputImage,
       },

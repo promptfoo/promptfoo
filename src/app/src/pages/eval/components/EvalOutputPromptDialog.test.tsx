@@ -1059,6 +1059,41 @@ describe('EvalOutputPromptDialog redteamHistory messages rendering', () => {
     });
   });
 
+  it('shows only the selected conversation when later attempts were backtracked', async () => {
+    renderWithProviders(
+      <EvalOutputPromptDialog
+        {...defaultProps}
+        metadata={{
+          redteamHistoryVersion: 2,
+          redteamHistoryKind: 'conversation',
+          redteamFinalAttempt: 1,
+          redteamHistory: [
+            {
+              attempt: 1,
+              disposition: 'retained',
+              prompt: 'Selected prompt',
+              output: 'Selected response',
+            },
+            {
+              attempt: 2,
+              parentAttempt: 1,
+              disposition: 'backtracked',
+              prompt: 'Backtracked prompt',
+              output: 'Backtracked response',
+            },
+          ],
+        }}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Messages' }));
+
+    expect(screen.getByText('Selected prompt')).toBeInTheDocument();
+    expect(screen.getByText('Selected response')).toBeInTheDocument();
+    expect(screen.queryByText('Backtracked prompt')).not.toBeInTheDocument();
+    expect(screen.queryByText('Backtracked response')).not.toBeInTheDocument();
+  });
+
   it('should filter out entries without prompt or output from redteamHistory', async () => {
     const propsWithIncompleteEntries = {
       ...defaultProps,

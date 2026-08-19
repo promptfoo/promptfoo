@@ -31,7 +31,6 @@ import {
 import {
   applyRuntimeTransforms,
   type LayerConfig,
-  type MediaData,
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
@@ -71,7 +70,7 @@ import type {
   VarValue,
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
-import type { BaseRedteamMetadata } from '../../types';
+import type { BaseRedteamMetadata, RedteamHistoryEntry } from '../../types';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -92,17 +91,12 @@ interface HydraMetadata extends BaseRedteamMetadata {
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
-  redteamHistory: Array<{
-    prompt: string;
-    promptAudio?: MediaData;
-    promptImage?: MediaData;
-    output: string;
-    outputAudio?: MediaData;
-    outputImage?: MediaData;
-    graderPassed: boolean | undefined;
-    trace?: Record<string, unknown>;
-    traceSummary?: string;
-  }>;
+  redteamHistory: Array<
+    RedteamHistoryEntry & {
+      trace?: Record<string, unknown>;
+      traceSummary?: string;
+    }
+  >;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
 }
@@ -353,21 +347,16 @@ export class HydraProvider implements ApiProvider {
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let lastRetainedTargetResponse: TargetResponse | undefined = undefined;
     let lastRetainedFinalAttackPrompt: string | undefined;
+    let lastRetainedAttempt: number | undefined;
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
 
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      graderPassed: boolean | undefined;
-      trace?: Record<string, unknown>;
-      traceSummary?: string;
-      inputVars?: Record<string, string>;
-    }> = [];
+    const redteamHistory: Array<
+      RedteamHistoryEntry & {
+        trace?: Record<string, unknown>;
+        traceSummary?: string;
+      }
+    > = [];
     let lastTransformResult: TransformResult | undefined;
 
     // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
@@ -721,6 +710,17 @@ export class HydraProvider implements ApiProvider {
       });
 
       if (isConversationEndedResponse(targetResponse)) {
+        redteamHistory.push({
+          attempt: redteamHistory.length + 1,
+          ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+          disposition: 'ended',
+          turn,
+          prompt: nextMessage,
+          output: targetResponse.output || '',
+          tokenUsage: targetResponse.tokenUsage,
+          cached: targetResponse.cached,
+          guardrails: targetResponse.guardrails,
+        });
         logger.info(`${this.logPrefix} Target ended conversation`, {
           turn,
           reason: targetResponse.conversationEndReason,
@@ -730,6 +730,17 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (targetResponse.error) {
+        redteamHistory.push({
+          attempt: redteamHistory.length + 1,
+          ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+          disposition: 'error',
+          turn,
+          prompt: nextMessage,
+          output: targetResponse.output || '',
+          tokenUsage: targetResponse.tokenUsage,
+          cached: targetResponse.cached,
+          guardrails: targetResponse.guardrails,
+        });
         logger.info(`${this.logPrefix} Target error`, { turn, error: targetResponse.error });
         continue;
       }
@@ -810,6 +821,26 @@ export class HydraProvider implements ApiProvider {
       const isRefusal = isBasicRefusal(targetResponse.output);
 
       if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
+        redteamHistory.push({
+          attempt: redteamHistory.length + 1,
+          ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+          disposition: 'backtracked',
+          turn,
+          prompt: nextMessage,
+          promptAudio: lastTransformResult?.audio,
+          promptImage: lastTransformResult?.image,
+          output: historyOutput,
+          outputAudio: targetResponse.audio
+            ? {
+                data: targetResponse.audio.data || '',
+                format: targetResponse.audio.format || 'wav',
+              }
+            : undefined,
+          guardrails: targetResponse.guardrails,
+          tokenUsage: targetResponse.tokenUsage,
+          cached: targetResponse.cached,
+          inputVars: currentRenderInputVars,
+        });
         logger.debug(`${this.logPrefix} Response rejected (basic refusal), backtracking...`, {
           turn,
           backtrackCount: backtrackCount + 1,
@@ -850,8 +881,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Keep the reported response aligned with the retained conversation. A backtracked
-      // response still contributes token usage, but it is intentionally absent from both
-      // conversationHistory and redteamHistory.
+      // rejected response remains in the audit graph but not in the selected conversation.
       lastRetainedTargetResponse = targetResponse;
       lastRetainedFinalAttackPrompt = lastFinalAttackPrompt;
 
@@ -953,7 +983,12 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Store in redteam history (with audio/image if transforms were applied)
+      const retainedAttempt = redteamHistory.length + 1;
       redteamHistory.push({
+        attempt: retainedAttempt,
+        ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+        disposition: 'retained',
+        turn,
         prompt: nextMessage,
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
@@ -967,7 +1002,11 @@ export class HydraProvider implements ApiProvider {
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
+        guardrails: targetResponse.guardrails,
+        tokenUsage: targetResponse.tokenUsage,
+        cached: targetResponse.cached,
       });
+      lastRetainedAttempt = retainedAttempt;
 
       // Check if vulnerability was achieved
       if (graderResult?.pass === false) {
@@ -1068,6 +1107,9 @@ export class HydraProvider implements ApiProvider {
         successfulAttacks,
         totalSuccessfulAttacks: successfulAttacks.length,
         storedGraderResult,
+        redteamHistoryVersion: 2,
+        redteamHistoryKind: 'conversation',
+        ...(lastRetainedAttempt !== undefined && { redteamFinalAttempt: lastRetainedAttempt }),
         redteamHistory,
         sessionIds,
         traceSnapshots:

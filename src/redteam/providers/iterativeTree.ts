@@ -39,7 +39,6 @@ import {
 import {
   applyRuntimeTransforms,
   type LayerConfig,
-  type MediaData,
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
@@ -83,7 +82,7 @@ import type {
   VarValue,
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
-import type { BaseRedteamMetadata, RedteamFileConfig } from '../types';
+import type { BaseRedteamMetadata, RedteamFileConfig, RedteamHistoryEntry } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -478,17 +477,13 @@ export async function selectNodes(
 /**
  * Represents a node in the search tree output.
  */
-export interface TreeSearchOutput {
-  id: string; // UUID
-  prompt: string;
-  promptAudio?: MediaData;
-  promptImage?: MediaData;
-  output: string;
-  outputAudio?: MediaData;
-  outputImage?: MediaData;
+export interface TreeSearchOutput extends RedteamHistoryEntry {
+  /** Compact string alias retained for existing tree renderers. */
+  id: string;
   score: number;
   depth: number;
-  parentId?: string; // UUID
+  /** Compact alias matching parentAttempt for existing tree renderers. */
+  parentId?: string;
   improvement?: string;
   wasSelected: boolean;
   graderPassed?: boolean;
@@ -511,7 +506,7 @@ interface TreeIterativeMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   stopReason: StopReason;
   attempts: number;
-  redteamTreeHistory: TreeSearchOutput[];
+  redteamHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
   sessionIds: string[]; // All session IDs from the tree exploration
 }
@@ -620,6 +615,15 @@ async function runRedteamConversation({
   let stoppingReason: StopReason;
 
   const treeOutputs: TreeSearchOutput[] = [];
+  const attemptByNodeId = new Map<string, number>();
+  let bestAttempt: number | undefined;
+
+  const getHistoryMetadata = (finalAttempt: number | undefined = bestAttempt) => ({
+    redteamHistoryVersion: 2 as const,
+    redteamHistoryKind: 'search' as const,
+    ...(finalAttempt !== undefined && { redteamFinalAttempt: finalAttempt }),
+    redteamHistory: treeOutputs,
+  });
 
   // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
@@ -688,7 +692,7 @@ async function runRedteamConversation({
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
-              redteamTreeHistory: treeOutputs,
+              ...getHistoryMetadata(),
               stopReason: 'ATTACKER_ERROR',
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
@@ -832,6 +836,7 @@ async function runRedteamConversation({
           iterationContext,
           options,
         );
+        const targetAttempt = treeOutputs.length + 1;
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
           evalId: context?.evaluationId,
           testIdx: context?.testIdx,
@@ -847,22 +852,31 @@ async function runRedteamConversation({
           );
           // Push a node to history with the output we have, then skip scoring for this branch
           treeOutputs.push({
+            attempt: targetAttempt,
+            ...(attemptByNodeId.has(node.id) && {
+              parentAttempt: attemptByNodeId.get(node.id),
+            }),
+            disposition: 'error',
             depth,
             graderPassed: undefined,
-            id: crypto.randomUUID(),
+            id: String(targetAttempt),
             improvement,
             output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
                 ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                 : undefined,
-            parentId: node.id,
+            parentId: attemptByNodeId.has(node.id)
+              ? String(attemptByNodeId.get(node.id))
+              : undefined,
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
             score: 0,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
+            tokenUsage: targetResponse.tokenUsage,
+            cached: targetResponse.cached,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           continue;
@@ -888,17 +902,19 @@ async function runRedteamConversation({
         );
 
         // Create new node for the next level
-        nextLevelNodes.push(
-          createTreeNode(newInjectVar, score, depth + 1, undefined, {
-            inputMaterialization,
-            materializationHandled,
-            materializedVars,
-          }),
-        );
+        const childNode = createTreeNode(newInjectVar, score, depth + 1, undefined, {
+          inputMaterialization,
+          materializationHandled,
+          materializedVars,
+        });
+        nextLevelNodes.push(childNode);
+        attemptByNodeId.set(childNode.id, targetAttempt);
+        const parentAttempt = attemptByNodeId.get(node.id);
 
         if (score > maxScore) {
           maxScore = score;
           bestResponse = targetResponse.output;
+          bestAttempt = targetAttempt;
           bestNode.prompt = newInjectVar;
           bestNode.inputMaterialization = inputMaterialization;
           bestNode.materializationHandled = materializationHandled;
@@ -1022,21 +1038,26 @@ async function runRedteamConversation({
           stoppingReason = 'GRADER_FAILED';
 
           treeOutputs.push({
+            attempt: targetAttempt,
+            ...(parentAttempt !== undefined && { parentAttempt }),
+            disposition: 'retained',
             depth,
             graderPassed,
-            id: crypto.randomUUID(),
+            id: String(targetAttempt),
             output: targetResponse.output,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
                 ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                 : undefined,
-            parentId: node.id,
+            parentId: parentAttempt === undefined ? undefined : String(parentAttempt),
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
+            tokenUsage: targetResponse.tokenUsage,
+            cached: targetResponse.cached,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
@@ -1047,7 +1068,7 @@ async function runRedteamConversation({
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
-              redteamTreeHistory: treeOutputs,
+              ...getHistoryMetadata(targetAttempt),
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
@@ -1066,20 +1087,25 @@ async function runRedteamConversation({
           );
           stoppingReason = 'NO_IMPROVEMENT';
           treeOutputs.push({
-            id: crypto.randomUUID(),
+            attempt: targetAttempt,
+            ...(parentAttempt !== undefined && { parentAttempt }),
+            disposition: 'retained',
+            id: String(targetAttempt),
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
-            output: bestResponse,
+            output: targetResponse.output,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
                 ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                 : undefined,
             score,
             depth,
-            parentId: node.id,
+            parentId: parentAttempt === undefined ? undefined : String(parentAttempt),
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
+            tokenUsage: targetResponse.tokenUsage,
+            cached: targetResponse.cached,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
@@ -1090,7 +1116,7 @@ async function runRedteamConversation({
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
-              redteamTreeHistory: treeOutputs,
+              ...getHistoryMetadata(),
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
@@ -1109,21 +1135,26 @@ async function runRedteamConversation({
           );
           stoppingReason = 'MAX_ATTEMPTS';
           treeOutputs.push({
+            attempt: targetAttempt,
+            ...(parentAttempt !== undefined && { parentAttempt }),
+            disposition: 'retained',
             depth,
             graderPassed,
-            id: crypto.randomUUID(),
-            output: bestResponse,
+            id: String(targetAttempt),
+            output: targetResponse.output,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
                 ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                 : undefined,
-            parentId: node.id,
+            parentId: parentAttempt === undefined ? undefined : String(parentAttempt),
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
             guardrails: targetResponse?.guardrails,
+            tokenUsage: targetResponse.tokenUsage,
+            cached: targetResponse.cached,
             sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
@@ -1134,7 +1165,7 @@ async function runRedteamConversation({
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
               attempts,
-              redteamTreeHistory: treeOutputs,
+              ...getHistoryMetadata(),
               stopReason: stoppingReason,
               storedGraderResult,
               sessionIds: extractSessionIds(treeOutputs),
@@ -1159,28 +1190,41 @@ async function runRedteamConversation({
         );
 
         treeOutputs.push({
+          attempt: targetAttempt,
+          ...(parentAttempt !== undefined && { parentAttempt }),
+          disposition: 'retained',
           depth,
           graderPassed,
-          id: crypto.randomUUID(),
+          id: String(targetAttempt),
           improvement,
           output: targetResponse.output,
           outputAudio:
             targetResponse.audio?.data && targetResponse.audio?.format
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
-          parentId: node.id,
+          parentId: parentAttempt === undefined ? undefined : String(parentAttempt),
           prompt: targetPrompt,
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
           guardrails: targetResponse?.guardrails,
+          tokenUsage: targetResponse.tokenUsage,
+          cached: targetResponse.cached,
           sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
     }
 
     currentBestNodes = await selectNodes(nextLevelNodes, MAX_WIDTH);
+    const selectedNodeIds = new Set(currentBestNodes.map((node) => node.id));
+    for (const candidate of nextLevelNodes) {
+      const attempt = attemptByNodeId.get(candidate.id);
+      const output = attempt === undefined ? undefined : treeOutputs[attempt - 1];
+      if (output && output.attempt === attempt && output.disposition !== 'error') {
+        output.disposition = selectedNodeIds.has(candidate.id) ? 'retained' : 'pruned';
+      }
+    }
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
     );
@@ -1257,20 +1301,26 @@ async function runRedteamConversation({
   );
 
   stoppingReason = 'MAX_DEPTH';
+  const finalReplayAttempt = treeOutputs.length + 1;
   treeOutputs.push({
-    id: crypto.randomUUID(),
+    attempt: finalReplayAttempt,
+    ...(bestAttempt !== undefined && { parentAttempt: bestAttempt }),
+    disposition: 'retained',
+    id: String(finalReplayAttempt),
     prompt: finalTargetPrompt,
     // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
-    output: bestResponse,
+    output: typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : '',
     outputAudio:
       finalTargetResponse.audio?.data && finalTargetResponse.audio?.format
         ? { data: finalTargetResponse.audio.data, format: finalTargetResponse.audio.format }
         : undefined,
     score: maxScore,
     depth: MAX_DEPTH - 1,
-    parentId: bestNode.id,
+    parentId: bestAttempt === undefined ? undefined : String(bestAttempt),
     wasSelected: false,
     guardrails: finalTargetResponse?.guardrails,
+    tokenUsage: finalTargetResponse.tokenUsage,
+    cached: finalTargetResponse.cached,
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
@@ -1283,7 +1333,7 @@ async function runRedteamConversation({
       redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],
       attempts,
-      redteamTreeHistory: treeOutputs,
+      ...getHistoryMetadata(bestResponse ? bestAttempt : finalReplayAttempt),
       stopReason: stoppingReason,
       storedGraderResult,
       sessionIds: extractSessionIds(treeOutputs),

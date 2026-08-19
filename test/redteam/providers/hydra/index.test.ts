@@ -871,7 +871,13 @@ describe('HydraProvider', () => {
       expect(result.metadata?.stopReason).toBe('Max backtracks reached');
       expect(result.output).toBe('');
       expect(result.metadata?.messages).toEqual([]);
-      expect(result.metadata?.redteamHistory).toEqual([]);
+      expect(result.metadata?.redteamHistory).toHaveLength(3);
+      expect(result.metadata?.redteamHistory.map((entry) => entry.disposition)).toEqual([
+        'backtracked',
+        'backtracked',
+        'backtracked',
+      ]);
+      expect(result.metadata?.redteamFinalAttempt).toBeUndefined();
     });
 
     it('should return the last retained response after a terminal backtrack', async () => {
@@ -914,7 +920,15 @@ describe('HydraProvider', () => {
         role: 'assistant',
         content: 'Retained target response',
       });
-      expect(result.metadata?.redteamHistory.at(-1)?.output).toBe('Retained target response');
+      expect(result.metadata?.redteamFinalAttempt).toBe(1);
+      expect(result.metadata?.redteamHistory).toEqual([
+        expect.objectContaining({
+          attempt: 1,
+          disposition: 'retained',
+          output: 'Retained target response',
+        }),
+        expect.objectContaining({ attempt: 2, parentAttempt: 1, disposition: 'backtracked' }),
+      ]);
       expect(result.tokenUsage?.numRequests).toBe(2);
     });
 
@@ -1032,6 +1046,11 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
       // Agent is called for each turn + learning update
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(result.metadata?.redteamHistory).toEqual([
+        expect.objectContaining({ attempt: 1, disposition: 'error', output: '' }),
+        expect.objectContaining({ attempt: 2, disposition: 'retained', output: 'Valid response' }),
+      ]);
+      expect(result.metadata?.redteamFinalAttempt).toBe(2);
     });
 
     it('should stop when target ends conversation', async () => {
@@ -1062,6 +1081,10 @@ describe('HydraProvider', () => {
       };
 
       const result = await provider.callApi('', context);
+
+      expect(result.metadata?.redteamHistory).toEqual([
+        expect.objectContaining({ attempt: 1, disposition: 'ended', output: '' }),
+      ]);
 
       expect(result.metadata?.stopReason).toBe('Target ended conversation');
       expect(result.metadata?.hydraRoundsCompleted).toBe(1);
@@ -1182,7 +1205,9 @@ describe('HydraProvider', () => {
       ]);
 
       expect(result.metadata?.redteamHistory).toHaveLength(2);
-      expect(result.metadata?.redteamHistory?.[0]).toEqual({
+      expect(result.metadata?.redteamHistory?.[0]).toMatchObject({
+        attempt: 1,
+        disposition: 'retained',
         prompt: 'First attack',
         output: 'First response',
         graderPassed: true,

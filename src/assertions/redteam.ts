@@ -2,11 +2,16 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
+import {
+  type AssertionParams,
+  type AtomicTestCase,
+  type GradingResult,
+  getDisplayRedteamHistory,
+} from '../types/index';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
-import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
 
 /**
  * Analyzes grader errors in the redteam history.
@@ -86,9 +91,7 @@ export const handleRedteam = async ({
     const storedResult = providerResponse.metadata.storedGraderResult;
 
     // Check if any turns had grader errors (even though we have a stored result)
-    const redteamHistory = providerResponse.metadata?.redteamHistory as
-      | Array<{ graderError?: string }>
-      | undefined;
+    const redteamHistory = getDisplayRedteamHistory(providerResponse.metadata);
     const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
 
     return {
@@ -178,9 +181,7 @@ export const handleRedteam = async ({
   } catch (error) {
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
-    const redteamHistory = providerResponse.metadata?.redteamHistory as
-      | Array<{ graderError?: string }>
-      | undefined;
+    const redteamHistory = getDisplayRedteamHistory(providerResponse.metadata);
     const { hasAnyErrors, allTurnsHaveErrors } = analyzeGraderErrors(redteamHistory);
 
     // Only handle gracefully if this is an iterative test with SOME (not all) grader errors

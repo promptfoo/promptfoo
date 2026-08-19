@@ -45,7 +45,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../../types/index';
-import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
+import type { AudioGradingConfig, BaseRedteamMetadata, RedteamHistoryEntry } from '../../types';
 
 const DEFAULT_MAX_TURNS = 8;
 const DEFAULT_MAX_BACKTRACKS = 5;
@@ -506,6 +506,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
     const successfulTurns: VoiceCrescendoMetadata['successfulTurns'] = [];
+    const redteamHistory: RedteamHistoryEntry[] = [];
+    let lastRetainedAttempt: number | undefined;
 
     while (currentTurn < this.maxTurns && !objectiveAchieved) {
       currentTurn++;
@@ -543,6 +545,17 @@ export class VoiceCrescendoProvider implements ApiProvider {
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         if (targetResponse.conversationEnded) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'ended',
+            turn: currentTurn,
+            prompt: voicePrompt,
+            output: targetResponse.output || '',
+            tokenUsage: targetResponse.tokenUsage,
+            cached: targetResponse.cached,
+            guardrails: targetResponse.guardrails,
+          });
           logger.info('[VoiceCrescendo] Target ended conversation', {
             turn: currentTurn,
             reason: targetResponse.conversationEndReason,
@@ -553,6 +566,17 @@ export class VoiceCrescendoProvider implements ApiProvider {
         }
 
         if (targetResponse.error) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'error',
+            turn: currentTurn,
+            prompt: voicePrompt,
+            output: targetResponse.output || '',
+            tokenUsage: targetResponse.tokenUsage,
+            cached: targetResponse.cached,
+            guardrails: targetResponse.guardrails,
+          });
           logger.error(`[VoiceCrescendo] Target error: ${targetResponse.error}`);
           // Try backtracking
           if (backtrackCount < this.maxBacktracks) {
@@ -591,6 +615,17 @@ export class VoiceCrescendoProvider implements ApiProvider {
         if (isBasicRefusal(responseText)) {
           logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
           if (backtrackCount < this.maxBacktracks) {
+            redteamHistory.push({
+              attempt: redteamHistory.length + 1,
+              ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+              disposition: 'backtracked',
+              turn: currentTurn,
+              prompt: voicePrompt,
+              output: responseText,
+              tokenUsage: targetResponse.tokenUsage,
+              cached: targetResponse.cached,
+              guardrails: targetResponse.guardrails,
+            });
             backtrackCount++;
             this.conversationId = this.memory.duplicateConversationExcludingLastTurn(
               this.conversationId,
@@ -603,6 +638,19 @@ export class VoiceCrescendoProvider implements ApiProvider {
         // Only retained turns should become the top-level result. If a later attempt
         // ends in an error, keep the output aligned with the retained conversation.
         lastResponse = responseText;
+        const retainedAttempt = redteamHistory.length + 1;
+        redteamHistory.push({
+          attempt: retainedAttempt,
+          ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+          disposition: 'retained',
+          turn: currentTurn,
+          prompt: voicePrompt,
+          output: responseText,
+          tokenUsage: targetResponse.tokenUsage,
+          cached: targetResponse.cached,
+          guardrails: targetResponse.guardrails,
+        });
+        lastRetainedAttempt = retainedAttempt;
 
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);
@@ -664,13 +712,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
       voiceCrescendoConfidence: finalConfidence,
       audioHistory,
       successfulTurns,
-      redteamHistory: this.memory
-        .getConversation(this.conversationId)
-        .map((m) => ({
-          prompt: m.role === 'user' ? m.textContent : '',
-          output: m.role === 'assistant' ? m.textContent : '',
-        }))
-        .filter((m) => m.prompt || m.output),
+      redteamHistoryVersion: 2,
+      redteamHistoryKind: 'conversation',
+      ...(lastRetainedAttempt !== undefined && { redteamFinalAttempt: lastRetainedAttempt }),
+      redteamHistory,
     };
 
     return {

@@ -158,6 +158,39 @@ describe('handleGuardrail', () => {
     });
   });
 
+  it('uses guardrails from the selected attempt instead of a later backtracked attempt', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      providerResponse: {
+        metadata: {
+          redteamHistoryVersion: 2,
+          redteamHistoryKind: 'conversation',
+          redteamFinalAttempt: 1,
+          redteamHistory: [
+            {
+              attempt: 1,
+              disposition: 'retained',
+              prompt: 'retained',
+              output: 'accepted',
+              guardrails: { flagged: true },
+            },
+            {
+              attempt: 2,
+              parentAttempt: 1,
+              disposition: 'backtracked',
+              prompt: 'rejected',
+              output: 'refused',
+              guardrails: { flagged: false },
+            },
+          ],
+        },
+        output: 'accepted',
+      },
+    };
+
+    expect(await handleGuardrails(params)).toMatchObject({ pass: false });
+  });
+
   it('should pass with score 1 when no guardrails are present (defaults to flagged: false)', async () => {
     const params: AssertionParams = {
       ...defaultParams,

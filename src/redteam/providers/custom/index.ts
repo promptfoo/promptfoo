@@ -19,7 +19,6 @@ import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
-  type MediaData,
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
@@ -56,7 +55,7 @@ import type {
   VarValue,
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
-import type { BaseRedteamMetadata } from '../../types';
+import type { BaseRedteamMetadata, RedteamHistoryEntry } from '../../types';
 import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -325,6 +324,7 @@ export class CustomProvider implements ApiProvider {
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
     let lastRetainedResponse: TargetResponse = { output: '' };
+    let lastRetainedAttempt: number | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -336,14 +336,7 @@ export class CustomProvider implements ApiProvider {
     const totalTokenUsage = createEmptyTokenUsage();
 
     // Track redteamHistory entries with audio/image data for UI rendering
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-    }> = [];
+    const redteamHistory: RedteamHistoryEntry[] = [];
     let lastTransformResult: TransformResult | undefined;
 
     let assertToUse = test?.assert?.find(
@@ -430,8 +423,20 @@ export class CustomProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+        let historyPrompt = attackPrompt;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
         if (isConversationEndedResponse(lastResponse)) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'ended',
+            turn: roundNum,
+            prompt: historyPrompt,
+            output: lastResponse.output || '',
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+            guardrails: lastResponse.guardrails,
+          });
           logger.info('[Custom] Target ended conversation', {
             round: roundNum,
             reason: lastResponse.conversationEndReason,
@@ -440,6 +445,17 @@ export class CustomProvider implements ApiProvider {
           break;
         }
         if (lastResponse.error) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'error',
+            turn: roundNum,
+            prompt: historyPrompt,
+            output: lastResponse.output || '',
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+            guardrails: lastResponse.guardrails,
+          });
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
           logger.info(
             `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
@@ -473,6 +489,23 @@ export class CustomProvider implements ApiProvider {
         }
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
+          const blockedAttempt = redteamHistory.length + 1;
+          redteamHistory.push({
+            attempt: blockedAttempt,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'retained',
+            turn: roundNum,
+            prompt: historyPrompt,
+            output: lastResponse.output,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+            guardrails: lastResponse.guardrails,
+          });
+          lastRetainedAttempt = blockedAttempt;
+          lastRetainedResponse = lastResponse;
+          historyPrompt = unblockingResult.unblockingPrompt;
           // Target is asking a blocking question, send the unblocking answer
           logger.debug(
             `[Custom] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
@@ -495,6 +528,17 @@ export class CustomProvider implements ApiProvider {
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
           if (isConversationEndedResponse(lastResponse)) {
+            redteamHistory.push({
+              attempt: redteamHistory.length + 1,
+              parentAttempt: lastRetainedAttempt,
+              disposition: 'ended',
+              turn: roundNum,
+              prompt: historyPrompt,
+              output: lastResponse.output || '',
+              tokenUsage: lastResponse.tokenUsage,
+              cached: lastResponse.cached,
+              guardrails: lastResponse.guardrails,
+            });
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
               reason: lastResponse.conversationEndReason,
@@ -504,6 +548,17 @@ export class CustomProvider implements ApiProvider {
           }
 
           if (lastResponse.error) {
+            redteamHistory.push({
+              attempt: redteamHistory.length + 1,
+              parentAttempt: lastRetainedAttempt,
+              disposition: 'error',
+              turn: roundNum,
+              prompt: historyPrompt,
+              output: lastResponse.output || '',
+              tokenUsage: lastResponse.tokenUsage,
+              cached: lastResponse.cached,
+              guardrails: lastResponse.guardrails,
+            });
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
@@ -530,6 +585,23 @@ export class CustomProvider implements ApiProvider {
         );
 
         if (isRefusal && !this.stateful) {
+          redteamHistory.push({
+            attempt: redteamHistory.length + 1,
+            ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+            disposition: 'backtracked',
+            turn: roundNum,
+            prompt: historyPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
+            output: lastResponse.output,
+            outputAudio:
+              lastResponse.audio?.data && lastResponse.audio?.format
+                ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
+                : undefined,
+            guardrails: lastResponse.guardrails,
+            tokenUsage: lastResponse.tokenUsage,
+            cached: lastResponse.cached,
+          });
           logger.debug('\n[Custom] Response Rejected, performing back tracking...\n');
           backtrackCount++;
           this.targetConversationId = await this.backtrackMemory(this.targetConversationId);
@@ -591,8 +663,13 @@ export class CustomProvider implements ApiProvider {
         logger.debug(`[Custom] graderPassed: ${graderPassed}`);
 
         // Store this turn in redteamHistory with audio/image data if present
+        const retainedAttempt = redteamHistory.length + 1;
         redteamHistory.push({
-          prompt: attackPrompt,
+          attempt: retainedAttempt,
+          ...(lastRetainedAttempt !== undefined && { parentAttempt: lastRetainedAttempt }),
+          disposition: 'retained',
+          turn: roundNum,
+          prompt: historyPrompt,
           promptAudio: lastTransformResult?.audio,
           promptImage: lastTransformResult?.image,
           output: lastResponse.output,
@@ -600,8 +677,12 @@ export class CustomProvider implements ApiProvider {
             lastResponse.audio?.data && lastResponse.audio?.format
               ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
               : undefined,
+          guardrails: lastResponse.guardrails,
+          tokenUsage: lastResponse.tokenUsage,
+          cached: lastResponse.cached,
           // Note: outputImage not tracked as TargetResponse doesn't include image yet
         });
+        lastRetainedAttempt = retainedAttempt;
 
         const [evalScore] = await this.getEvalScore(lastResponse.output, totalTokenUsage, options);
 
@@ -687,6 +768,9 @@ export class CustomProvider implements ApiProvider {
         customResult: evalFlag,
         customConfidence: evalPercentage,
         stopReason: exitReason,
+        redteamHistoryVersion: 2,
+        redteamHistoryKind: 'conversation',
+        ...(lastRetainedAttempt !== undefined && { redteamFinalAttempt: lastRetainedAttempt }),
         redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,

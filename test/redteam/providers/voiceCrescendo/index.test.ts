@@ -358,6 +358,18 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(1);
     expect(result.metadata?.audioHistory).toBeDefined();
     expect(Array.isArray(result.metadata?.audioHistory)).toBe(true);
+    expect(result.metadata).toMatchObject({
+      redteamHistoryVersion: 2,
+      redteamHistoryKind: 'conversation',
+      redteamFinalAttempt: 1,
+      redteamHistory: [
+        expect.objectContaining({
+          attempt: 1,
+          disposition: 'retained',
+          output: 'Target response',
+        }),
+      ],
+    });
   });
 
   it('should not return a backtracked response when the next target attempt errors', async () => {
@@ -386,6 +398,16 @@ describe('VoiceCrescendoProvider', () => {
       role: 'assistant',
       content: 'Retained target response',
     });
+    expect(result.metadata?.redteamFinalAttempt).toBe(1);
+    expect(result.metadata?.redteamHistory).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        disposition: 'retained',
+        output: 'Retained target response',
+      }),
+      expect.objectContaining({ attempt: 2, parentAttempt: 1, disposition: 'backtracked' }),
+      expect.objectContaining({ attempt: 3, parentAttempt: 1, disposition: 'error' }),
+    ]);
   });
 
   it('should handle target provider errors and track token usage', async () => {
@@ -417,6 +439,13 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
     expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
     expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
+    expect(result.metadata?.redteamHistory).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        disposition: 'error',
+        tokenUsage: expect.objectContaining({ total: 5, numRequests: 1 }),
+      }),
+    ]);
   });
 
   it('should stop when target ends conversation', async () => {
@@ -445,6 +474,9 @@ describe('VoiceCrescendoProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Target ended conversation');
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(1);
+    expect(result.metadata?.redteamHistory).toEqual([
+      expect.objectContaining({ attempt: 1, disposition: 'ended', output: '' }),
+    ]);
   });
 
   it('should respect maxTurns configuration', async () => {

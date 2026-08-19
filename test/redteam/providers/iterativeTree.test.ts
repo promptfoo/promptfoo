@@ -357,7 +357,13 @@ describe('RedteamIterativeProvider', () => {
 
         expect(result).toMatchObject({
           error: 'Error from redteam provider: tree attacker failed after inference',
-          metadata: { stopReason: 'ATTACKER_ERROR', attempts: 0 },
+          metadata: {
+            stopReason: 'ATTACKER_ERROR',
+            attempts: 0,
+            redteamHistoryVersion: 2,
+            redteamHistoryKind: 'search',
+            redteamHistory: [],
+          },
           tokenUsage: {
             total: 0,
             numRequests: 0,
@@ -365,6 +371,99 @@ describe('RedteamIterativeProvider', () => {
           },
         });
         expect(targetProvider.callApi).not.toHaveBeenCalled();
+        expect(result.metadata).not.toHaveProperty('redteamTreeHistory');
+      } finally {
+        remoteGenerationSpy.mockRestore();
+        attackerProviderSpy.mockRestore();
+        gradingProviderSpy.mockRestore();
+      }
+    });
+
+    it('records search branches, pruning, and the final replay in one compact attempt graph', async () => {
+      let generatedPrompts = 0;
+      mockRedteamProvider.callApi.mockImplementation(async () => ({
+        output: JSON.stringify({
+          improvement: 'new approach',
+          prompt: `attack ${++generatedPrompts}`,
+        }),
+        tokenUsage: { total: 5, numRequests: 1 },
+      }));
+
+      const scores = [2, 8, 5, 6];
+      let gradedResponses = 0;
+      const gradingProvider = createMockProvider({
+        id: 'mock-grader',
+        callApi: async () => ({
+          output: JSON.stringify({
+            currentResponse: {
+              rating: scores[gradedResponses++] ?? 5,
+              explanation: 'evaluated',
+            },
+            previousBestResponse: { rating: 0, explanation: '' },
+          }),
+          tokenUsage: { total: 3, numRequests: 1 },
+        }),
+      });
+
+      let targetCalls = 0;
+      const targetProvider = createMockProvider({
+        id: 'mock-target',
+        callApi: async () => ({
+          output: `response ${++targetCalls}`,
+          tokenUsage: { total: 7, numRequests: 1 },
+        }),
+      });
+      const remoteGenerationSpy = vi
+        .spyOn(remoteGeneration, 'shouldGenerateRemote')
+        .mockReturnValue(false);
+      const attackerProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const gradingProviderSpy = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 2,
+          branchingFactor: 2,
+          maxWidth: 1,
+          maxNoImprovement: 10,
+        });
+        const result = await provider.callApi('test prompt', {
+          originalProvider: targetProvider,
+          vars: { goal: 'test objective' },
+          prompt: { raw: '{{goal}}', label: 'test' },
+        });
+
+        expect(result.metadata.redteamHistoryVersion).toBe(2);
+        expect(result.metadata.redteamHistoryKind).toBe('search');
+        expect(result.metadata).not.toHaveProperty('redteamTreeHistory');
+        expect(result.metadata.redteamHistory).toHaveLength(5);
+        expect(result.metadata.redteamHistory.map((entry) => entry.attempt)).toEqual([
+          1, 2, 3, 4, 5,
+        ]);
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          attempt: 1,
+          disposition: 'pruned',
+          wasSelected: true,
+        });
+        expect(result.metadata.redteamHistory[1]).toMatchObject({
+          attempt: 2,
+          disposition: 'retained',
+          wasSelected: true,
+        });
+        expect(result.metadata.redteamHistory[2]).toMatchObject({ parentAttempt: 2 });
+        expect(result.metadata.redteamHistory[3]).toMatchObject({ parentAttempt: 2 });
+        expect(result.metadata.redteamHistory[4]).toMatchObject({
+          attempt: 5,
+          parentAttempt: 2,
+          output: 'response 5',
+          wasSelected: false,
+        });
+        expect(result.metadata.redteamFinalAttempt).toBe(2);
+        expect(result.tokenUsage?.numRequests).toBe(5);
       } finally {
         remoteGenerationSpy.mockRestore();
         attackerProviderSpy.mockRestore();

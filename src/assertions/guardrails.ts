@@ -1,6 +1,9 @@
 import logger from '../logger';
-
-import type { AssertionParams, GradingResult } from '../types/index';
+import {
+  type AssertionParams,
+  type GradingResult,
+  getFinalRedteamHistoryEntry,
+} from '../types/index';
 
 export const handleGuardrails = async ({
   assertion,
@@ -8,8 +11,11 @@ export const handleGuardrails = async ({
   providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
   const guardrails = providerResponse.guardrails ||
-    providerResponse.metadata?.redteamHistory?.[providerResponse.metadata.redteamHistory.length - 1]
-      ?.guardrails || { flagged: false, flaggedInput: false, flaggedOutput: false };
+    getFinalRedteamHistoryEntry(providerResponse.metadata)?.guardrails || {
+      flagged: false,
+      flaggedInput: false,
+      flaggedOutput: false,
+    };
   logger.debug(`Guardrails from target response: ${JSON.stringify(guardrails, null, 2)}`);
 
   if (guardrails) {

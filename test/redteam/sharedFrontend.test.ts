@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
+import {
+  getAllRedteamHistoryEntries,
+  getDisplayRedteamHistory,
+  getFinalRedteamHistoryEntry,
+  getSelectedRedteamHistoryPath,
+  normalizeRedteamHistory,
+} from '../../src/types/index';
 
 import type { Plugin } from '../../src/redteam/constants';
 import type { SavedRedteamConfig } from '../../src/redteam/types';
@@ -8,6 +15,99 @@ import type { SavedRedteamConfig } from '../../src/redteam/types';
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetAllMocks();
+});
+
+describe('redteam history compatibility', () => {
+  it('loads older linear histories as a retained conversation', () => {
+    const metadata = {
+      redteamHistory: [
+        { prompt: 'first', output: 'one' },
+        { prompt: 'second', output: 'two' },
+      ],
+    };
+
+    expect(normalizeRedteamHistory(metadata)).toEqual({
+      kind: 'conversation',
+      version: 1,
+      finalAttempt: 2,
+      entries: [
+        { attempt: 1, disposition: 'retained', prompt: 'first', output: 'one' },
+        { attempt: 2, parentAttempt: 1, disposition: 'retained', prompt: 'second', output: 'two' },
+      ],
+    });
+    expect(getDisplayRedteamHistory(metadata)).toHaveLength(2);
+  });
+
+  it('continues displaying every entry from older tree histories', () => {
+    const metadata = {
+      redteamTreeHistory: [
+        { prompt: 'selected', output: 'one', wasSelected: true },
+        { prompt: 'other branch', output: 'two', wasSelected: false },
+      ],
+    };
+
+    expect(normalizeRedteamHistory(metadata).kind).toBe('search');
+    expect(getDisplayRedteamHistory(metadata).map((entry) => entry.prompt)).toEqual([
+      'selected',
+      'other branch',
+    ]);
+  });
+
+  it('keeps backtracked attempts available without placing them in the selected conversation', () => {
+    const metadata = {
+      redteamHistoryVersion: 2,
+      redteamHistoryKind: 'conversation',
+      redteamFinalAttempt: 3,
+      redteamHistory: [
+        { attempt: 1, disposition: 'retained', prompt: 'first', output: 'one' },
+        {
+          attempt: 2,
+          parentAttempt: 1,
+          disposition: 'backtracked',
+          prompt: 'rejected',
+          output: 'no',
+        },
+        {
+          attempt: 3,
+          parentAttempt: 1,
+          disposition: 'retained',
+          prompt: 'replacement',
+          output: 'yes',
+        },
+        { attempt: 4, parentAttempt: 3, disposition: 'backtracked', prompt: 'last', output: 'no' },
+      ],
+    };
+
+    expect(getAllRedteamHistoryEntries(metadata)).toHaveLength(4);
+    expect(getDisplayRedteamHistory(metadata).map((entry) => entry.attempt)).toEqual([1, 3]);
+    expect(getFinalRedteamHistoryEntry(metadata)?.output).toBe('yes');
+  });
+
+  it('does not select a rejected attempt when no conversation turn was retained', () => {
+    const metadata = {
+      redteamHistoryVersion: 2,
+      redteamHistoryKind: 'conversation',
+      redteamHistory: [
+        { attempt: 1, disposition: 'backtracked', prompt: 'rejected', output: 'no' },
+      ],
+    };
+
+    expect(getDisplayRedteamHistory(metadata)).toEqual([]);
+    expect(getFinalRedteamHistoryEntry(metadata)).toBeUndefined();
+  });
+
+  it('stops following malformed parent cycles', () => {
+    const metadata = {
+      redteamHistoryVersion: 2,
+      redteamFinalAttempt: 1,
+      redteamHistory: [
+        { attempt: 1, parentAttempt: 2, disposition: 'retained', prompt: 'one', output: 'one' },
+        { attempt: 2, parentAttempt: 1, disposition: 'retained', prompt: 'two', output: 'two' },
+      ],
+    };
+
+    expect(getSelectedRedteamHistoryPath(metadata)).toHaveLength(2);
+  });
 });
 
 describe('getRiskCategorySeverityMap', () => {

@@ -440,6 +440,21 @@ describe('CrescendoProvider', () => {
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2); // Original + unblocking response
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.metadata?.redteamFinalAttempt).toBe(2);
+      expect(result.metadata?.redteamHistory).toEqual([
+        expect.objectContaining({
+          attempt: 1,
+          disposition: 'retained',
+          prompt: 'test question',
+          output: 'What is your company registration number?',
+        }),
+        expect.objectContaining({
+          attempt: 2,
+          parentAttempt: 1,
+          disposition: 'retained',
+          prompt: 'Our company registration number is REG123456789',
+        }),
+      ]);
     });
 
     it('should continue without unblocking when no blocking question detected', async () => {
@@ -965,7 +980,12 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.stopReason).toBe('Max backtracks reached');
     expect(result.output).toBe('');
     expect(result.metadata?.messages).toEqual([]);
-    expect(result.metadata?.redteamHistory).toEqual([]);
+    expect(result.metadata?.redteamHistory).toHaveLength(2);
+    expect(result.metadata?.redteamHistory?.map((entry) => entry.disposition)).toEqual([
+      'backtracked',
+      'backtracked',
+    ]);
+    expect(result.metadata?.redteamFinalAttempt).toBeUndefined();
   });
 
   it('should return the last retained response after a terminal backtrack', async () => {
@@ -1017,7 +1037,15 @@ describe('CrescendoProvider', () => {
       role: 'assistant',
       content: 'Retained target response',
     });
-    expect(result.metadata?.redteamHistory?.at(-1)?.output).toBe('Retained target response');
+    expect(result.metadata?.redteamFinalAttempt).toBe(1);
+    expect(result.metadata?.redteamHistory).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        disposition: 'retained',
+        output: 'Retained target response',
+      }),
+      expect.objectContaining({ attempt: 2, parentAttempt: 1, disposition: 'backtracked' }),
+    ]);
     expect(result.tokenUsage?.numRequests).toBe(2);
   });
 

@@ -641,6 +641,42 @@ describe('EvalOutputCell', () => {
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64treeaudio');
   });
 
+  it('renders audio from the selected attempt instead of a later backtracked attempt', () => {
+    const propsWithBacktrackedHistory: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamHistoryVersion: 2,
+          redteamHistoryKind: 'conversation',
+          redteamFinalAttempt: 1,
+          redteamHistory: [
+            {
+              attempt: 1,
+              disposition: 'retained',
+              prompt: 'Selected prompt',
+              output: 'Selected response',
+              outputAudio: { data: 'selectedaudio', format: 'wav' },
+            },
+            {
+              attempt: 2,
+              parentAttempt: 1,
+              disposition: 'backtracked',
+              prompt: 'Rejected prompt',
+              output: 'Rejected response',
+              outputAudio: { data: 'rejectedaudio', format: 'wav' },
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithBacktrackedHistory} />);
+
+    const source = screen.getByTestId('response-audio-player').querySelector('source');
+    expect(source).toHaveAttribute('src', 'data:audio/wav;base64,selectedaudio');
+  });
+
   it('does not render response audio when redteamHistory has no audio in last turn', () => {
     const propsWithNoAudio: MockEvalOutputCellProps = {
       ...defaultProps,
