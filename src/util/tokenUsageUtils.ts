@@ -205,7 +205,10 @@ export function accumulateGradingResponseTokenUsage(
   const cachedTokens = response.tokenUsage?.cached ?? 0;
   const cachedResponse =
     response.cached === true ||
-    (response.tokenUsage?.numRequests === 0 && reportedTotal <= cachedTokens);
+    (response.cached === undefined &&
+      response.tokenUsage?.numRequests === 0 &&
+      cachedTokens > 0 &&
+      reportedTotal <= cachedTokens);
 
   target.assertions ??= createEmptyAssertions();
   if (cachedResponse) {

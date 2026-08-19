@@ -437,6 +437,34 @@ describe('tokenUsageUtils', () => {
       expect(target.assertions).toMatchObject({ total: 0, numRequests: 0 });
     });
 
+    it.each([false, undefined])('counts unmetered strategy grading when cached is %s', (cached) => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        cached,
+        tokenUsage: createEmptyTokenUsage(),
+      });
+
+      expect(target.assertions).toMatchObject({ total: 0, cached: 0, numRequests: 1 });
+    });
+
+    it('preserves explicitly fresh grading when avoided cached tokens exceed fresh usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        cached: false,
+        tokenUsage: { total: 50, prompt: 30, completion: 20, cached: 97, numRequests: 0 },
+      });
+
+      expect(target.assertions).toMatchObject({
+        total: 50,
+        prompt: 30,
+        completion: 20,
+        cached: 97,
+        numRequests: 1,
+      });
+    });
+
     it('counts fresh strategy grading tasks normalized to zero requests', () => {
       const target = createEmptyTokenUsage();
 
