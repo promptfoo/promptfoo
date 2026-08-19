@@ -379,6 +379,37 @@ describe('CloudConfig', () => {
         cloudConfigInstance.validateAndSetApiToken('invalid-token', 'https://test.api'),
       ).rejects.toThrow('Failed to validate API token: Unauthorized');
     });
+
+    it('should persist the auth header name resolved from PROMPTFOO_CLOUD_AUTH_HEADER on Web UI login', async () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_CLOUD_AUTH_HEADER: 'X-Env-Header' });
+      const cloudConfigInstanceWithEnv = new CloudConfig();
+
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+        text: () => Promise.resolve(JSON.stringify(mockResponse)),
+      } as Response;
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      await cloudConfigInstanceWithEnv.validateAndSetApiToken('test-token', 'https://test.api');
+
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://test.api/api/v1/users/me',
+        expect.objectContaining({
+          headers: { 'X-Env-Header': 'Bearer test-token' },
+        }),
+      );
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            authHeaderName: 'X-Env-Header',
+          }),
+        }),
+      );
+
+      restoreEnv();
+    });
   });
 
   describe('on-prem sharing behavior', () => {

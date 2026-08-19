@@ -333,11 +333,13 @@ export class CloudConfig {
     token: string,
     apiHost: string,
   ): Promise<CloudTokenValidation & { hasActiveLicense: boolean }> {
+    const authHeaderName = this.getAuthHeaderName();
     const { user, organization, app, hasActiveLicense } = await this.validateApiToken(
       token,
       apiHost,
+      authHeaderName,
     );
-    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
+    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense, authHeaderName);
 
     return {
       user,
