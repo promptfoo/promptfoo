@@ -71,7 +71,7 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const { protectedValue, restore } = protectNunjucksBlocks(value);
+      const { protectedValue, restore } = protectNunjucksBlocks(value, Object.values(variables));
       const match = regex.exec(protectedValue);
       if (match) {
         const [placeholder, varName] = match;
@@ -101,33 +101,72 @@ export function resolveVariables(
  * Nunjucks can correctly distinguish raw blocks and string literal expressions
  * from actual variable references.
  */
-function protectNunjucksBlocks(value: string): {
+function protectNunjucksBlocks(
+  value: string,
+  reservedValues: readonly VarValue[] = [],
+): {
   protectedValue: string;
   restore: (value: string) => string;
 } {
-  const protectedBlocks: string[] = [];
-  let protectedValue = value;
+  const protectedBlocks = new Map<string, string>();
   const patterns = [
-    /\{%\s*raw\s*%\}[\s\S]*?\{%\s*endraw\s*%\}/g,
+    /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}/g,
     /\{#[\s\S]*?#\}/g,
-    /\{\{\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*\}\}/g,
+    /\{\{\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')[\s\S]*?\}\}/g,
   ];
 
-  for (const pattern of patterns) {
-    protectedValue = protectedValue.replace(pattern, (block) => {
-      const placeholder = `\u0000promptfoo-nunjucks-block-${protectedBlocks.length}\u0000`;
-      protectedBlocks.push(block);
-      return placeholder;
-    });
+  const ranges = patterns.flatMap((pattern) =>
+    Array.from(value.matchAll(pattern), (match) => ({
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+      block: match[0],
+    })),
+  );
+  ranges.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const selectedRanges = ranges.filter((range, index) => {
+    const previousRanges = ranges.slice(0, index);
+    return !previousRanges.some(
+      (previous) => range.start < previous.end && range.end > previous.start,
+    );
+  });
+  selectedRanges.sort((a, b) => a.start - b.start);
+
+  const reservedStrings = [value, ...reservedValues]
+    .filter((reserved): reserved is string => typeof reserved === 'string')
+    .join('\n');
+  let protectedValue = '';
+  let cursor = 0;
+
+  for (const range of selectedRanges) {
+    protectedValue += value.slice(cursor, range.start);
+    let suffix = 0;
+    let placeholder: string;
+    do {
+      const suffixText = suffix === 0 ? '' : `-${suffix}`;
+      placeholder = `\u0000promptfoo-nunjucks-block-${protectedBlocks.size}${suffixText}\u0000`;
+      suffix++;
+    } while (reservedStrings.includes(placeholder));
+    protectedBlocks.set(placeholder, range.block);
+    protectedValue += placeholder;
+    cursor = range.end;
   }
+  protectedValue += value.slice(cursor);
 
   return {
     protectedValue,
-    restore: (renderedValue: string) =>
-      renderedValue.replace(
-        /\u0000promptfoo-nunjucks-block-(\d+)\u0000/g,
-        (_placeholder, index: string) => protectedBlocks[Number(index)] ?? _placeholder,
-      ),
+    restore: (renderedValue: string) => {
+      let restoredValue = renderedValue;
+      let previousValue;
+      do {
+        previousValue = restoredValue;
+        restoredValue = restoredValue.replace(
+          /\u0000promptfoo-nunjucks-block-\d+(?:-\d+)?\u0000/g,
+          (placeholder) => protectedBlocks.get(placeholder) ?? placeholder,
+        );
+      } while (restoredValue !== previousValue);
+      return restoredValue;
+    },
   };
 }
 
