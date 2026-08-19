@@ -240,16 +240,27 @@ function detectMimeFromBase64(base64Data: string): string | null {
  * top-level handling gated behind env vars, neither of which has a clear meaning
  * for a value buried inside a structure. Reading those as UTF-8 here would
  * corrupt them, so they are skipped rather than guessed at.
+ *
+ * Only arrays and plain records are traversed. Class instances (Date, Map, Set,
+ * Buffer, ...) are returned as-is: rebuilding them from their enumerable entries
+ * would silently turn a Date var into `{}` before the prompt ever sees it.
  */
 function isNestedLoadableFile(filePath: string): boolean {
+  // Extensions are compared lowercased so `report.PDF` is skipped like `report.pdf`.
+  const lower = filePath.toLowerCase();
   return !(
-    isJavascriptFile(filePath) ||
-    filePath.endsWith('.py') ||
-    filePath.endsWith('.pdf') ||
-    isImageFile(filePath) ||
-    isVideoFile(filePath) ||
-    isAudioFile(filePath)
+    isJavascriptFile(lower) ||
+    lower.endsWith('.py') ||
+    lower.endsWith('.pdf') ||
+    isImageFile(lower) ||
+    isVideoFile(lower) ||
+    isAudioFile(lower)
   );
+}
+
+function isPlainRecord(value: object): boolean {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
 async function loadNestedFileVars(
@@ -266,8 +277,15 @@ async function loadNestedFileVars(
     seen.add(value);
   }
 
+  // Sequential rather than Promise.all: a dataset-shaped var can hold hundreds of
+  // references, and firing every readFile at once risks EMFILE. The top-level
+  // loader is sequential too.
   if (Array.isArray(value)) {
-    return Promise.all(value.map((item) => loadNestedFileVars(item, varName, seen)));
+    const items: unknown[] = [];
+    for (const item of value) {
+      items.push(await loadNestedFileVars(item, varName, seen));
+    }
+    return items;
   }
 
   if (typeof value === 'string') {
@@ -296,11 +314,13 @@ async function loadNestedFileVars(
   }
 
   if (value && typeof value === 'object') {
-    const entries = await Promise.all(
-      Object.entries(value).map(
-        async ([key, nested]) => [key, await loadNestedFileVars(nested, varName, seen)] as const,
-      ),
-    );
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+    const entries: [string, unknown][] = [];
+    for (const [key, nested] of Object.entries(value)) {
+      entries.push([key, await loadNestedFileVars(nested, varName, seen)]);
+    }
     return Object.fromEntries(entries);
   }
 

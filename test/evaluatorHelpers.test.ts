@@ -360,6 +360,27 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ retries: 3, mode: 'strict' }));
     });
 
+    it('should leave class instances such as Date untouched', async () => {
+      const prompt = toPrompt('{{ when }}');
+      const when = new Date('2024-01-15T00:00:00.000Z');
+      const vars: Record<string, any> = { when, wrapper: { inner: when } };
+
+      await renderPrompt(prompt, vars, {});
+
+      expect(vars.when).toBeInstanceOf(Date);
+      expect(vars.wrapper.inner).toBeInstanceOf(Date);
+    });
+
+    it('should skip nested references whose extension is uppercase', async () => {
+      const prompt = toPrompt('{{ cfg.doc }} {{ cfg.pic }}');
+      const vars = { cfg: { doc: 'file://paper.PDF', pic: 'file://shot.PNG' } };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://paper.PDF file://shot.PNG');
+    });
+
     it('should not recurse forever on a self-referential object var', async () => {
       const prompt = toPrompt('{{ cfg.name }}');
       const cfg: Record<string, unknown> = { name: 'loop' };
