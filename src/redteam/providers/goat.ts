@@ -14,7 +14,11 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateAttackerTokenUsage,
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -39,9 +43,12 @@ import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import {
+  accumulateGraderResult,
   buildGraderResultAssertion,
+  callTargetProvider,
   getGraderAssertionValue,
   getLastMessageContent,
+  runRedteamGrader,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -282,6 +289,9 @@ export default class GoatProvider implements ApiProvider {
             purpose: context?.test?.metadata?.purpose,
             targetId: this.config.targetId,
           });
+          if (unblockingResult.attempted || unblockingResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, unblockingResult);
+          }
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -321,7 +331,8 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await targetProvider.callApi(
+            const unblockingResponse = await callTargetProvider(
+              targetProvider,
               unblockingTargetPrompt,
               context,
               options,
@@ -373,6 +384,10 @@ export default class GoatProvider implements ApiProvider {
             options?.abortSignal,
           );
           const data = (await response.json()) as ExtractAttackFailureResponse;
+          accumulateAttackerTokenUsage(totalTokenUsage, {
+            tokenUsage: (data as ExtractAttackFailureResponse & { tokenUsage?: TokenUsage })
+              .tokenUsage,
+          });
 
           if (!data.message) {
             logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -414,6 +429,7 @@ export default class GoatProvider implements ApiProvider {
           options?.abortSignal,
         );
         const data = await response.json();
+        accumulateAttackerTokenUsage(totalTokenUsage, { tokenUsage: data?.tokenUsage });
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
           continue;
@@ -586,7 +602,8 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await targetProvider.callApi(
+        const targetResponse = (await callTargetProvider(
+          targetProvider,
           targetPrompt,
           targetContext,
           options,
@@ -783,7 +800,8 @@ export default class GoatProvider implements ApiProvider {
             };
           }
 
-          const { grade, rubric } = await grader.getResult(
+          const { grade, rubric } = await runRedteamGrader(
+            grader,
             attackerMessage.content,
             finalOutput,
             test,
@@ -794,10 +812,10 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = {
+          storedGraderResult = accumulateGraderResult(storedGraderResult, {
             ...grade,
             assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          });
         }
 
         if (graderPassed === false) {

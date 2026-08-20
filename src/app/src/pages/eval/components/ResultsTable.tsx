@@ -2182,6 +2182,7 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
+                    isRedteam={isRedteam}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
@@ -2207,6 +2208,7 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    isRedteam,
     maxTextLength,
     metricTotals,
     numAsserts,

@@ -19,6 +19,11 @@ vi.mock('../../../../src/logger', () => ({
 }));
 
 vi.mock('../../../../src/redteam/providers/shared', () => ({
+  callGradingProvider: vi.fn((provider, prompt, context, options) =>
+    options === undefined
+      ? provider.callApi(prompt, context)
+      : provider.callApi(prompt, context, options),
+  ),
   redteamProviderManager: {
     getProvider: vi.fn(),
     getGradingProvider: vi.fn(),
@@ -194,6 +199,106 @@ describe('VoiceCrescendoProvider', () => {
     // Token totals still include internal calls.
     expect(result.tokenUsage?.total).toBeGreaterThan(0);
     expect(mockedSleep).not.toHaveBeenCalled();
+  });
+
+  it('keeps voice grading usage separate from target and attacker usage', async () => {
+    const gradingProvider = createMockProvider({
+      id: 'mock-grading-provider',
+      response: createProviderResponse({
+        output: JSON.stringify({
+          objectiveAchieved: true,
+          confidence: 0.9,
+          reason: 'objective achieved',
+          partialSuccess: false,
+        }),
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      }),
+    });
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(gradingProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 30,
+      prompt: 20,
+      completion: 10,
+      numRequests: 1,
+      attacker: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+      assertions: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+    });
+  });
+
+  it('does not recharge cached voice grading responses that retain historical usage', async () => {
+    const gradingProvider = createMockProvider({
+      id: 'mock-grading-provider',
+      response: {
+        output: JSON.stringify({
+          objectiveAchieved: true,
+          confidence: 0.9,
+          reason: 'cached objective evaluation',
+          partialSuccess: false,
+        }),
+        cached: true,
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      },
+    });
+    vi.mocked(redteamProviderManager.getGradingProvider).mockResolvedValue(gradingProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 30,
+      numRequests: 1,
+      attacker: { total: 15, numRequests: 1 },
+      assertions: { total: 0, prompt: 0, completion: 0, cached: 19, numRequests: 0 },
+    });
+  });
+
+  it('retains failed voice-attacker usage without creating a target probe', async () => {
+    mockRedteamProvider.callApi.mockResolvedValue({
+      error: 'voice attack failed after inference',
+      tokenUsage: { total: 16, prompt: 10, completion: 6, numRequests: 1 },
+    });
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 0,
+      numRequests: 0,
+      attacker: { total: 16, prompt: 10, completion: 6, numRequests: 1 },
+    });
+    expect(getTargetResponse).not.toHaveBeenCalled();
   });
 
   it('should track token usage even when audio generation fails', async () => {

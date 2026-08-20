@@ -51,6 +51,18 @@ export class OpenAiGenericProvider implements ApiProvider {
       : `openai:${this.modelName}`;
   }
 
+  /** Keep the actual backend separate from a customer-configured provider label. */
+  protected getGenAISystem(): string {
+    const providerPrototype = Object.getPrototypeOf(this) as OpenAiGenericProvider;
+    const defaultId = providerPrototype.id;
+    if (defaultId === OpenAiGenericProvider.prototype.id) {
+      return 'openai';
+    }
+
+    const providerId = defaultId.call(this);
+    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
+  }
+
   toString(): string {
     return `[OpenAI Provider ${this.modelName}]`;
   }

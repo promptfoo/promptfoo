@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -50,7 +51,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    let stop: string;
+    let stop: unknown;
     try {
       stop = getEnvString('OPENAI_STOP')
         ? JSON.parse(getEnvString('OPENAI_STOP') || '')
@@ -74,7 +75,43 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
     assertOpenAiApiModel(body.model, this.getApiUrl());
+    const asNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' ? value : undefined;
+    const stopSequences =
+      typeof body.stop === 'string'
+        ? [body.stop]
+        : Array.isArray(body.stop) &&
+            body.stop.every((item): item is string => typeof item === 'string')
+          ? body.stop
+          : undefined;
 
+    return withGenAISpan(
+      {
+        system: this.getGenAISystem(),
+        operationName: 'text_completion',
+        model: body.model,
+        providerId: this.id(),
+        maxTokens: asNumber(body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        presencePenalty: asNumber(body.presence_penalty),
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        evalId: context?.evaluationId,
+        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
+        promptLabel: context?.prompt?.label,
+        traceparent: context?.traceparent,
+        requestBody: prompt,
+      },
+      () => this.callApiInternal(body, context),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    body: Record<string, unknown>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     let data,
       cached = false,
       latencyMs: number | undefined;

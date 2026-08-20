@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { minVersion, satisfies, validRange } from 'semver';
+import { minVersion, satisfies, subset, validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 import { extractModuleSpecifiers } from '../scripts/architectureUtils';
 
@@ -19,6 +19,7 @@ function readPackageJson<T>(relativePath: string): T {
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.35.3';
+const PATCHED_JS_YAML_RANGE = '^3.15.1 || ^4.3.1 || >=5.2.3';
 const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 const SWC_PACKAGE_NAMES = [
@@ -192,6 +193,131 @@ describe('package manifests', () => {
     ).toBe(true);
   });
 
+  it('keeps Renovate on the npm major used by CI', () => {
+    const renovateConfig = readPackageJson<{
+      constraints?: {
+        npm?: string;
+      };
+      packageRules?: Array<{
+        enabled?: boolean;
+        matchFileNames?: string[];
+        matchPackageNames?: string[];
+        matchUpdateTypes?: string[];
+      }>;
+    }>('renovate.json');
+    const npmConstraint = renovateConfig.constraints?.npm;
+
+    expect(npmConstraint, 'Renovate must constrain its npm version').toBeDefined();
+    expect(validRange(npmConstraint)).not.toBeNull();
+    expect(satisfies('11.17.0', npmConstraint as string)).toBe(false);
+    expect(satisfies('11.18.0', npmConstraint as string)).toBe(true);
+    expect(satisfies('12.0.0', npmConstraint as string)).toBe(false);
+    expect(
+      renovateConfig.packageRules?.some(
+        (rule) =>
+          rule.enabled === false &&
+          rule.matchFileNames?.includes('renovate.json') &&
+          rule.matchPackageNames?.includes('npm') &&
+          rule.matchUpdateTypes?.includes('major'),
+      ),
+    ).toBe(true);
+  });
+
+  it('applies the npm release-age policy to Renovate lockfile maintenance', () => {
+    const renovateConfig = readPackageJson<{
+      npmrc?: string;
+      packageRules?: Array<{
+        matchDatasources?: string[];
+        minimumReleaseAge?: string;
+      }>;
+    }>('renovate.json');
+    const npmReleaseAgeRule = renovateConfig.packageRules?.find((rule) =>
+      rule.matchDatasources?.includes('npm'),
+    );
+
+    expect(npmReleaseAgeRule?.minimumReleaseAge).toBe('10 days');
+    expect(renovateConfig.npmrc).toMatch(/^min-release-age=10$/m);
+  });
+
+  it('keeps private npm registry endpoints out of the published lockfile', () => {
+    const packageLock = readPackageJson<{
+      packages: Record<string, { resolved?: string }>;
+    }>('package-lock.json');
+    const privateRegistryPackages = Object.entries(packageLock.packages)
+      .filter(([, packageInfo]) => {
+        if (!packageInfo.resolved || !URL.canParse(packageInfo.resolved)) {
+          return false;
+        }
+
+        const hostname = new URL(packageInfo.resolved).hostname;
+        return (
+          hostname === 'internal.api.openai.org' || hostname.endsWith('.internal.api.openai.org')
+        );
+      })
+      .map(([packagePath]) => packagePath);
+
+    expect(privateRegistryPackages).toEqual([]);
+  });
+
+  it('holds Knip below the incompatible public re-export audit', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const knipRange = packageJson.devDependencies?.knip;
+    const knipVersion = packageLock.packages['node_modules/knip']?.version;
+    const knipCap = renovateConfig.packageRules?.find(
+      (rule) => rule.matchPackageNames?.includes('knip') && rule.allowedVersions,
+    )?.allowedVersions;
+
+    expect(knipRange, 'the root manifest must constrain Knip').toBeDefined();
+    expect(satisfies('6.27.0', knipRange as string)).toBe(true);
+    expect(satisfies('6.28.0', knipRange as string)).toBe(false);
+    expect(knipCap).toBe('<6.28.0');
+    expect(knipVersion, 'the root lockfile must resolve Knip').toBeDefined();
+    expect(satisfies(knipVersion as string, knipRange as string)).toBe(true);
+  });
+
+  it('holds TanStack Table below v9 until the shared table migration is complete', () => {
+    const appPackageJson = readPackageJson<PackageManifest>('src/app/package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, { version?: string }>;
+    }>('package-lock.json');
+    const renovateConfig = readPackageJson<{
+      packageRules?: Array<{
+        allowedVersions?: string;
+        matchPackageNames?: string[];
+      }>;
+    }>('renovate.json');
+    const tablePackages = ['@tanstack/react-table', '@tanstack/table-core'];
+    const tableVersionCap = renovateConfig.packageRules?.find(
+      (rule) =>
+        rule.allowedVersions &&
+        tablePackages.every((packageName) => rule.matchPackageNames?.includes(packageName)),
+    )?.allowedVersions;
+
+    expect(tableVersionCap, 'Renovate must keep the TanStack Table packages on v8').toBe('<9');
+
+    for (const packageName of tablePackages) {
+      const packageRange = appPackageJson.devDependencies?.[packageName];
+      const packageVersion = packageLock.packages[`node_modules/${packageName}`]?.version;
+
+      expect(packageRange, `${packageName} must be declared in the app workspace`).toBeDefined();
+      expect(satisfies('9.0.0', packageRange as string), `${packageName} must exclude v9`).toBe(
+        false,
+      );
+      expect(packageVersion, `${packageName} must be present in the lockfile`).toBeDefined();
+      expect(satisfies(packageVersion as string, packageRange as string)).toBe(true);
+      expect(satisfies(packageVersion as string, tableVersionCap as string)).toBe(true);
+    }
+  });
+
   it('keeps jsdom on a release the supported Node floor can install', () => {
     const rootPackageJson = readPackageJson<PackageManifest & { engines?: Record<string, string> }>(
       'package.json',
@@ -359,7 +485,23 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
-  it('keeps the Excel parser above the XML entity decoding regression', () => {
+  it('keeps the protobuf runtime aligned with OTLP numeric and UTF-8 fixes', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const protobufRange = packageJson.dependencies?.protobufjs;
+
+    expect(protobufRange).toBeDefined();
+    expect(minVersion(protobufRange!)?.compare('8.7.2')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.protobufjs).toBe(protobufRange);
+    expect(packageLock.packages['node_modules/protobufjs'].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages['node_modules/protobufjs'].version!)?.compare('8.7.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the Excel parser aligned with Strict OpenXML and inline-string support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
       packages: Record<
@@ -375,12 +517,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('9.3.3')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('9.3.9')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.3'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.9'),
     ).toBeGreaterThanOrEqual(0);
   });
 
@@ -468,6 +610,32 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the OpenCode SDK optional at the upgraded release', () => {
+    const packageJson = readPackageJson<PackageManifest>('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<
+        string,
+        PackageManifest & {
+          version?: string;
+          optional?: boolean;
+        }
+      >;
+    }>('package-lock.json');
+    const dependencyName = '@opencode-ai/sdk';
+    const optionalRange = packageJson.optionalDependencies?.[dependencyName];
+    const installedVersion = packageLock.packages[`node_modules/${dependencyName}`].version;
+
+    expect(optionalRange).toBeDefined();
+    expect(minVersion(optionalRange!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBeUndefined();
+    expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
+    expect(installedVersion).toBeDefined();
+    expect(minVersion(installedVersion!)?.compare('1.18.15')).toBeGreaterThanOrEqual(0);
+    expect(satisfies(installedVersion!, optionalRange!)).toBe(true);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].optional).toBe(true);
+  });
+
   it('keeps MCP optional while locking its Node adapter to a patched release', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
@@ -482,20 +650,22 @@ describe('package manifests', () => {
     const sdkName = '@modelcontextprotocol/sdk';
     const adapterName = '@hono/node-server';
     const sdkRange = packageJson.optionalDependencies?.[sdkName];
+    const adapterVersion = packageJson.dependencies?.[adapterName];
     const lockedSdk = packageLock.packages[`node_modules/${sdkName}`];
     const lockedAdapter = packageLock.packages[`node_modules/${adapterName}`];
 
     expect(sdkRange).toBeDefined();
+    expect(adapterVersion).toBeDefined();
     expect(minVersion(sdkRange!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
     expect(packageJson.dependencies?.[sdkName]).toBeUndefined();
-    expect(packageJson.dependencies?.[adapterName]).toBe('2.0.12');
-    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe('2.0.12');
+    expect(minVersion(adapterVersion!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
+    expect(packageLock.packages[''].dependencies?.[adapterName]).toBe(adapterVersion);
     expect(packageJson.optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[adapterName]).toBeUndefined();
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBeUndefined();
     expect(packageLock.packages[''].optionalDependencies?.[sdkName]).toBe(sdkRange);
     expect(minVersion(lockedSdk.version!)?.compare('1.30.0')).toBeGreaterThanOrEqual(0);
-    expect(minVersion(lockedAdapter.version!)?.compare('2.0.12')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(lockedAdapter.version!)?.compare('2.1.0')).toBeGreaterThanOrEqual(0);
     expect(lockedAdapter.engines?.node).toBe('>=20');
 
     for (const manifestPath of [
@@ -504,7 +674,7 @@ describe('package manifests', () => {
     ]) {
       const manifest = readPackageJson<PackageManifest>(manifestPath);
       expect(manifest.dependencies?.[sdkName], manifestPath).toBe(sdkRange);
-      expect(manifest.dependencies?.[adapterName], manifestPath).toBe('2.0.12');
+      expect(manifest.dependencies?.[adapterName], manifestPath).toBe(adapterVersion);
     }
   });
 
@@ -585,6 +755,12 @@ describe('package manifests', () => {
 
     const parserVersion = chevrotainOverride?.['.'];
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
+    expect(generatorVersion, `${generatorName} must match the pinned parser version`).toBe(
+      parserVersion,
+    );
+    expect(packageLock.packages['node_modules/chevrotain']?.dependencies?.[generatorName]).toBe(
+      parserVersion,
+    );
 
     for (const dependencyName of ['@chevrotain/gast', '@chevrotain/types']) {
       expect(
@@ -592,6 +768,9 @@ describe('package manifests', () => {
         `${generatorName} must share the parser's ${dependencyName} version`,
       ).toBe(parserVersion);
       expect(packageLock.packages[`node_modules/${dependencyName}`]?.version).toBe(parserVersion);
+      expect(
+        packageLock.packages[`node_modules/${generatorName}`]?.dependencies?.[dependencyName],
+      ).toBe(parserVersion);
       expect(
         packageLock.packages[`node_modules/${generatorName}/node_modules/${dependencyName}`],
       ).toBeUndefined();
@@ -614,20 +793,14 @@ describe('package manifests', () => {
     const parserVersion = chevrotainOverride?.['.'];
     // chevrotain@X declares every @chevrotain/* sub-package at exactly X and all six reach npm
     // within about a minute of each other, so Renovate must not move any of them alone.
-    // @chevrotain/cst-dts-gen is frozen too but is excluded from the version assertion below: it
-    // is currently overridden to 13.1.0 under chevrotain 11.2.0 (#10345) and gets realigned when
-    // the family moves as a set.
     const pinnedGrammarPackages = [
+      '@chevrotain/cst-dts-gen',
       '@chevrotain/gast',
       '@chevrotain/types',
       '@chevrotain/regexp-to-ast',
       '@chevrotain/utils',
     ];
-    const pinnedParserPackages = [
-      'chevrotain',
-      ...pinnedGrammarPackages,
-      '@chevrotain/cst-dts-gen',
-    ];
+    const pinnedParserPackages = ['chevrotain', 'chevrotain-allstar', ...pinnedGrammarPackages];
 
     expect(parserVersion, 'Chevrotain must have a pinned parser version').toBeDefined();
 
@@ -711,7 +884,7 @@ describe('package manifests', () => {
     expect(readme).toContain(`Node.js >= ${exampleNodeMinimum?.version}`);
   });
 
-  it('requires patched WebSocket fragment limits in published and example manifests', () => {
+  it('requires patched WebSocket fragment limits and compression negotiation in manifests', () => {
     const rootPackageJson = readPackageJson<PackageManifest>('package.json');
     const lockfile = readPackageJson<{
       packages?: Record<string, PackageManifest>;
@@ -727,10 +900,55 @@ describe('package manifests', () => {
       const websocketRange = manifest.dependencies?.ws;
 
       expect(websocketRange, `${manifestPath} must depend on ws`).toBeDefined();
-      expect(minVersion(websocketRange as string)?.compare('8.21.1')).toBeGreaterThanOrEqual(0);
+      expect(minVersion(websocketRange as string)?.compare('8.21.3')).toBeGreaterThanOrEqual(0);
     }
 
     expect(lockfile.packages?.['']?.dependencies?.ws).toBe(rootPackageJson.dependencies?.ws);
+  });
+
+  it('keeps every direct and transitive js-yaml installation patched', () => {
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const workspaceManifests = [
+      { path: 'package.json', lockPath: '', field: 'dependencies' },
+      { path: 'site/package.json', lockPath: 'site', field: 'dependencies' },
+      { path: 'src/app/package.json', lockPath: 'src/app', field: 'devDependencies' },
+    ] as const;
+    const directVersions: string[] = [];
+
+    for (const { path: manifestPath, lockPath, field } of workspaceManifests) {
+      const manifest = readPackageJson<PackageManifest>(manifestPath);
+      const declaredVersion = manifest[field]?.['js-yaml'];
+
+      expect(declaredVersion, `${manifestPath} must declare js-yaml`).toBeDefined();
+      expect(packageLock.packages[lockPath]?.[field]?.['js-yaml']).toBe(declaredVersion);
+      expect(
+        validRange(declaredVersion as string),
+        `${manifestPath} must declare a valid js-yaml semver range`,
+      ).not.toBeNull();
+      expect(
+        subset(declaredVersion as string, PATCHED_JS_YAML_RANGE),
+        `${manifestPath} must not allow vulnerable js-yaml ${declaredVersion}`,
+      ).toBe(true);
+      directVersions.push(declaredVersion as string);
+    }
+
+    expect(new Set(directVersions).size, 'direct js-yaml versions must stay aligned').toBe(1);
+
+    const installations = Object.entries(packageLock.packages).filter(
+      ([packagePath]) =>
+        packagePath === 'node_modules/js-yaml' || packagePath.endsWith('/node_modules/js-yaml'),
+    );
+
+    expect(installations, 'the root lockfile must resolve js-yaml').not.toHaveLength(0);
+    for (const [packagePath, installation] of installations) {
+      expect(installation.version, `${packagePath} must have a version`).toBeDefined();
+      expect(
+        satisfies(installation.version as string, PATCHED_JS_YAML_RANGE),
+        `${packagePath} resolves vulnerable js-yaml ${installation.version}`,
+      ).toBe(true);
+    }
   });
 
   it('keeps the JSON Schema ref parser and its HTTP transport on patched versions', () => {
@@ -758,6 +976,13 @@ describe('package manifests', () => {
     // so it kept resolving 7.28.0 and stayed on five open Dependabot alerts. Both
     // projects override undici; assert the floors and the resolved copies together.
     const PATCHED_UNDICI = '7.29.0';
+    const rootPackageJson = readPackageJson<{
+      overrides?: Record<string, string | Record<string, string>>;
+    }>('package.json');
+    const providerUtilsOverride = rootPackageJson.overrides?.['@ai-sdk/provider-utils'];
+
+    expect(providerUtilsOverride).toMatchObject({ undici: '$undici' });
+
     const projects = [
       // The root declares undici directly; code-scan-action only pins it through an
       // override, since it arrives transitively via @actions/github.

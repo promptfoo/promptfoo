@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
   TEMPERATURE,
 } from '../../../src/redteam/providers/constants';
 import {
+  accumulateGraderResult,
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
+  callGradingProvider,
+  callTargetProvider,
   createIterationContext,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
@@ -16,14 +20,18 @@ import {
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
+  runRedteamGrader,
   setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { isRateLimitWrapped, RateLimitRegistry } from '../../../src/scheduler';
+import { withProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
 
+import type { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import type { ProviderCallTracingContext } from '../../../src/scheduler/providerCallExecutionContext';
 import type {
   ApiProvider,
   Assertion,
@@ -898,6 +906,54 @@ describe('shared redteam provider utilities', () => {
       expect(mockCallApi).toHaveBeenCalledWith('test prompt', context, options);
     });
 
+    it('traces target calls and forwards the target span traceparent', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const mockProvider = createMockProvider({ response: { output: 'test response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: 'target' },
+        vars: {},
+      };
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        () => getTargetResponse(mockProvider, 'test prompt', context),
+      );
+
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider: mockProvider, callContext: context },
+        expect.any(Function),
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledWith(
+        'test prompt',
+        { ...context, traceparent },
+        undefined,
+      );
+    });
+
+    it('keeps direct strategy target calls unmodified when tracing is disabled', async () => {
+      const response = { output: 'test response', metadata: { strategy: 'goat' } };
+      const mockProvider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: 'target' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callTargetProvider(mockProvider, 'test prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(mockProvider.callApi).toHaveBeenCalledWith('test prompt', context, options);
+    });
+
     it('stringifies non-string output', async () => {
       const mockProvider = createMockProvider({
         response: {
@@ -1227,6 +1283,58 @@ describe('shared redteam provider utilities', () => {
         BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
       );
     });
+
+    it('preserves analysis usage when no blocking question is found', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      const callApi = vi
+        .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+        .mockResolvedValue({
+          output: { isBlocking: false },
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
+        });
+
+      try {
+        const result = await tryUnblocking({
+          messages: [],
+          lastResponse: 'No additional questions.',
+          goal: 'test-goal',
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          tokenUsage: { total: 18, prompt: 11, completion: 7, numRequests: 1 },
+        });
+      } finally {
+        callApi.mockRestore();
+      }
+    });
+
+    it('preserves analysis usage when the unblocking provider returns an error', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      const callApi = vi
+        .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+        .mockResolvedValue({
+          error: 'analysis failed after inference',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+
+      try {
+        const result = await tryUnblocking({
+          messages: [],
+          lastResponse: 'What industry are you in?',
+          goal: 'test-goal',
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+      } finally {
+        callApi.mockRestore();
+      }
+    });
   });
 
   describe('grader assertion helpers', () => {
@@ -1269,6 +1377,360 @@ describe('shared redteam provider utilities', () => {
       ).toBeUndefined();
       expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
       expect(getGraderAssertionValue(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('callGradingProvider', () => {
+    it('preserves the provider request when tracing is disabled', async () => {
+      const response = { output: 'judge response' };
+      const provider = createMockProvider({ response });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'judge' },
+        vars: {},
+      };
+      const options: CallApiOptionsParams = {};
+
+      await expect(callGradingProvider(provider, 'judge prompt', context, options)).resolves.toBe(
+        response,
+      );
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', context, options);
+    });
+
+    it('places direct judge calls beneath grader and grader-provider spans', async () => {
+      const traceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const context: CallApiContextParams = {
+        prompt: { raw: 'judge prompt', label: 'refusal' },
+        vars: {},
+        evaluationId: 'eval-123',
+        testIdx: 4,
+      };
+      const options: CallApiOptionsParams = {};
+      const graderSpan = vi.fn();
+      const withProviderSpan: ProviderCallTracingContext['withProviderSpan'] = async (
+        { callContext },
+        invoke,
+      ) => invoke({ ...callContext!, traceparent });
+      const providerSpan = vi.fn(withProviderSpan);
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => traceparent,
+          testIndex: 9,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: providerSpan,
+        },
+        () => callGradingProvider(provider, 'judge prompt', context, options),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'refusal',
+        evalId: 'eval-123',
+        testIndex: 4,
+      });
+      expect(providerSpan).toHaveBeenCalledWith(
+        { provider, callContext: context, role: 'grader' },
+        expect.any(Function),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        'judge prompt',
+        { ...context, traceparent },
+        options,
+      );
+    });
+
+    it('uses the evaluation test index when no provider context was supplied', async () => {
+      const provider = createMockProvider({ response: { output: 'judge response' } });
+      const graderSpan = vi.fn();
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 7,
+          withGraderSpan: async (spanOptions, invoke) => {
+            graderSpan(spanOptions);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () => callGradingProvider(provider, 'judge prompt'),
+      );
+
+      expect(graderSpan).toHaveBeenCalledWith({
+        graderId: 'judge',
+        evalId: undefined,
+        testIndex: 7,
+      });
+      expect(provider.callApi).toHaveBeenCalledWith('judge prompt', undefined);
+    });
+  });
+
+  describe('runRedteamGrader', () => {
+    it('instruments graders that override the base implementation', async () => {
+      const grade = { pass: false, score: 0, reason: 'unsafe' };
+      const getResult = vi.fn().mockResolvedValue({ grade, rubric: 'custom rubric' });
+      const grader = { id: 'custom-override', getResult } as unknown as RedteamGraderBase;
+      const graderSpan = vi.fn();
+      const test = {
+        metadata: { evaluationId: 'eval-123' },
+        vars: { userInput: 'normal evaluation variable' },
+      };
+
+      const result = await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          testIndex: 7,
+          withGraderSpan: async (options, invoke) => {
+            graderSpan(options, invoke);
+            return invoke();
+          },
+          withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+        },
+        () =>
+          runRedteamGrader(grader, 'attack prompt', 'target output', test, undefined, undefined),
+      );
+
+      expect(result).toEqual({ grade, rubric: 'custom rubric' });
+      expect(graderSpan).toHaveBeenCalledWith(
+        { graderId: 'custom-override', evalId: 'eval-123', testIndex: 7 },
+        expect.any(Function),
+      );
+      expect(getResult).toHaveBeenCalledWith(
+        'attack prompt',
+        'target output',
+        test,
+        undefined,
+        undefined,
+      );
+    });
+  });
+
+  describe('accumulateGraderResult', () => {
+    it('retains the latest verdict while summing every turn and completion detail', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first turn was safe',
+        tokensUsed: {
+          total: 100,
+          prompt: 70,
+          completion: 30,
+          cached: 10,
+          numRequests: 1,
+          completionDetails: { reasoning: 12, cacheCreationInputTokens: 20 },
+        },
+      };
+      const second = {
+        pass: false,
+        score: 0,
+        reason: 'second turn exposed a vulnerability',
+        tokensUsed: {
+          total: 200,
+          prompt: 150,
+          completion: 50,
+          cached: 15,
+          numRequests: 2,
+          completionDetails: { reasoning: 18, cacheCreationInputTokens: 25 },
+        },
+      };
+
+      expect(accumulateGraderResult(first, second)).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'second turn exposed a vulnerability',
+        tokensUsed: {
+          total: 300,
+          prompt: 220,
+          completion: 80,
+          cached: 25,
+          numRequests: 2,
+          completionDetails: { reasoning: 30, cacheCreationInputTokens: 45 },
+        },
+      });
+      expect(first.tokensUsed.completionDetails).toEqual({
+        reasoning: 12,
+        cacheCreationInputTokens: 20,
+      });
+    });
+
+    it('retains prior usage when the final verdict did not require a model call', () => {
+      const previous = {
+        pass: true,
+        score: 1,
+        reason: 'graded by a model',
+        tokensUsed: { total: 75, prompt: 50, completion: 25, numRequests: 1 },
+      };
+      const current = { pass: false, score: 0, reason: 'deterministic verdict' };
+
+      expect(accumulateGraderResult(previous, current)).toMatchObject({
+        ...current,
+        tokensUsed: previous.tokensUsed,
+      });
+    });
+
+    it('infers request counts when accumulating legacy grader responses', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'safe',
+        tokensUsed: { total: 45, prompt: 30, completion: 15 },
+      };
+      const second = {
+        ...first,
+        reason: 'still safe',
+        tokensUsed: { total: 30, prompt: 20, completion: 10 },
+      };
+
+      expect(accumulateGraderResult(first, second).tokensUsed).toMatchObject({
+        total: 75,
+        prompt: 50,
+        completion: 25,
+        numRequests: 2,
+      });
+    });
+
+    it('counts one grading task when its first result includes multiple model calls', () => {
+      const result = {
+        pass: true,
+        score: 1,
+        reason: 'grading task passed',
+        tokensUsed: {
+          total: 75,
+          prompt: 50,
+          completion: 25,
+          numRequests: 4,
+          completionDetails: { reasoning: 8 },
+        },
+      };
+
+      expect(accumulateGraderResult(undefined, result)).toMatchObject({
+        ...result,
+        tokensUsed: { ...result.tokensUsed, numRequests: 1 },
+      });
+    });
+
+    it('counts the first legacy grading task when its usage omits the request count', () => {
+      const result = {
+        pass: true,
+        score: 1,
+        reason: 'legacy grading task passed',
+        tokensUsed: { total: 45, prompt: 30, completion: 15 },
+      };
+
+      expect(accumulateGraderResult(undefined, result)).toMatchObject({
+        ...result,
+        tokensUsed: { ...result.tokensUsed, numRequests: 1 },
+      });
+    });
+
+    it('counts every fresh grading turn when matcher normalization sets requests to zero', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first grading task',
+        tokensUsed: { total: 30, prompt: 20, completion: 10, numRequests: 0 },
+      };
+      const second = {
+        pass: true,
+        score: 1,
+        reason: 'second grading task',
+        tokensUsed: { total: 45, prompt: 30, completion: 15, numRequests: 0 },
+      };
+      const third = {
+        pass: false,
+        score: 0,
+        reason: 'third grading task',
+        tokensUsed: { total: 25, prompt: 15, completion: 10, numRequests: 0 },
+      };
+
+      const result = accumulateGraderResult(accumulateGraderResult(first, second), third);
+
+      expect(result.tokensUsed).toMatchObject({
+        total: 100,
+        prompt: 65,
+        completion: 35,
+        numRequests: 3,
+      });
+    });
+
+    it('keeps cached grading turns at zero requests while counting fresh turns', () => {
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        tokensUsed: { total: 35, cached: 35, numRequests: 0 },
+      };
+      const fresh = {
+        pass: false,
+        score: 0,
+        reason: 'fresh grading task',
+        tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 0 },
+      };
+
+      expect(accumulateGraderResult(cached, fresh).tokensUsed).toMatchObject({
+        total: 20,
+        cached: 35,
+        numRequests: 1,
+      });
+    });
+
+    it('does not recharge cached grader responses that retain original request and token counts', () => {
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 35, prompt: 20, completion: 15, numRequests: 1 },
+      };
+
+      expect(accumulateGraderResult(undefined, cached).tokensUsed).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 35,
+        numRequests: 0,
+      });
+    });
+
+    it('preserves fresh grading usage before and after a cached middle turn', () => {
+      const first = {
+        pass: true,
+        score: 1,
+        reason: 'first fresh grading task',
+        tokensUsed: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+      };
+      const cached = {
+        pass: true,
+        score: 1,
+        reason: 'cached grading task',
+        metadata: { cachedResponse: true },
+        tokensUsed: { total: 35, cached: 35, numRequests: 0 },
+      };
+      const last = {
+        pass: false,
+        score: 0,
+        reason: 'last fresh grading task',
+        tokensUsed: { total: 20, prompt: 15, completion: 5, numRequests: 1 },
+      };
+
+      const result = accumulateGraderResult(accumulateGraderResult(first, cached), last);
+
+      expect(result.tokensUsed).toMatchObject({
+        total: 60,
+        prompt: 40,
+        completion: 20,
+        cached: 35,
+        numRequests: 2,
+      });
+    });
+
+    it('leaves entirely deterministic grading results unchanged', () => {
+      const result = { pass: true, score: 1, reason: 'deterministic verdict' };
+
+      expect(accumulateGraderResult(undefined, result)).toBe(result);
     });
   });
 

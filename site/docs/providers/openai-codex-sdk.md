@@ -456,7 +456,7 @@ batched into one LLM round-trip.
 
 ### Deep Tracing
 
-To propagate OTEL context into the Codex CLI process and capture CLI-side spans when the installed Codex SDK supports them, enable `deep_tracing`:
+To propagate OTEL context into the Codex CLI process and capture CLI-side spans, enable `deep_tracing`:
 
 ```yaml
 providers:
@@ -466,7 +466,9 @@ providers:
       enable_streaming: true
 ```
 
-Codex configures its log exporter through the `config.toml` in `CODEX_HOME`. Point it at Promptfoo's JSON logs receiver using the complete `/v1/logs` endpoint:
+Promptfoo configures Codex's trace exporter automatically, pointing it at the active OTLP receiver unless you have already configured a different exporter. HTTP JSON, HTTP protobuf, and gRPC collector settings are supported.
+
+Codex configures its optional log exporter separately through the `config.toml` in `CODEX_HOME`. To also capture logs, point it at Promptfoo's JSON logs receiver using the complete `/v1/logs` endpoint:
 
 ```toml title="$CODEX_HOME/config.toml"
 [otel]
@@ -476,7 +478,7 @@ exporter = { otlp-http = { endpoint = "http://127.0.0.1:4318/v1/logs", protocol 
 
 If you override `cli_env.CODEX_HOME`, put this configuration in that directory. The endpoint is the complete logs URL, not merely the OTLP host and port.
 
-Deep tracing injects `TRACEPARENT` and `promptfoo.trace_id` / `promptfoo.parent_span_id` resource attributes into the Codex CLI process so log records remain linked even when Codex does not attach inline trace context. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span. Standard OpenTelemetry environment variables are also injected, but they do not replace Codex's `[otel]` exporter configuration.
+Deep tracing injects `TRACEPARENT` and `promptfoo.trace_id` / `promptfoo.parent_span_id` resource attributes into the Codex CLI process so spans and log records remain linked to the correct request. Promptfoo uses a fresh SDK client and thread per call in this mode. The trace exporter is configured automatically; any optional log exporter still needs its own Codex `[otel]` configuration.
 
 :::warning
 
