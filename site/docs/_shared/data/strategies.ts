@@ -285,7 +285,7 @@ export const strategies: Strategy[] = [
     displayName: 'Bijection Encoding',
     description: 'Temporary substitution language',
     longDescription:
-      'Tests whether a target follows requests encoded with a deterministic one-to-one letter or digit substitution mapping',
+      'Checks whether a target follows a request encoded with a one-to-one letter or digit mapping',
     cost: 'Variable',
     asrIncrease: 'Model-dependent',
     link: '/docs/red-team/strategies/bijection/',
@@ -296,7 +296,7 @@ export const strategies: Strategy[] = [
     displayName: 'Zero-Width Characters',
     description: 'Invisible Unicode format characters',
     longDescription:
-      'Tests normalization and filtering by inserting zero-width Unicode characters after selected letters and numbers',
+      'Inserts invisible Unicode characters to test normalization and input filtering',
     cost: 'Low',
     asrIncrease: 'Model-dependent',
     link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
@@ -307,7 +307,7 @@ export const strategies: Strategy[] = [
     displayName: 'Unicode Noise',
     description: 'Sparse combining marks',
     longDescription:
-      'Tests normalization and filtering by adding one Unicode combining mark to selected letters and numbers',
+      'Adds one combining mark to selected characters to test normalization and input filtering',
     cost: 'Low',
     asrIncrease: 'Model-dependent',
     link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
@@ -318,7 +318,7 @@ export const strategies: Strategy[] = [
     displayName: 'Zalgo Text',
     description: 'Dense combining marks',
     longDescription:
-      'Tests normalization and filtering by adding configurable stacks of Unicode combining marks',
+      'Stacks Unicode combining marks on selected characters to test normalization and input filtering',
     cost: 'Low',
     asrIncrease: 'Model-dependent',
     link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
@@ -329,7 +329,7 @@ export const strategies: Strategy[] = [
     displayName: 'Whitespace Obfuscation',
     description: 'Alternative Unicode spacing',
     longDescription:
-      'Tests normalization and filtering by replacing horizontal spaces with tabs and Unicode spacing characters',
+      'Replaces spaces with tabs or Unicode spacing characters to test normalization and input filtering',
     cost: 'Low',
     asrIncrease: 'Model-dependent',
     link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
@@ -339,8 +339,7 @@ export const strategies: Strategy[] = [
     strategy: 'random-case',
     displayName: 'Random Case',
     description: 'Deterministic mixed casing',
-    longDescription:
-      'Tests case normalization by changing selected ASCII letters to deterministic upper- or lowercase forms',
+    longDescription: 'Changes the case of selected ASCII letters to test case normalization',
     cost: 'Low',
     asrIncrease: 'Model-dependent',
     link: '/docs/red-team/strategies/text-mutations/#exact-behavior',

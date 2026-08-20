@@ -122,6 +122,17 @@ describe('getEstimatedProbes', () => {
 
     expect(getEstimatedProbes(config)).toBe(14); // 2 basic + (2 * 6) mutations
   });
+
+  it('should account for every strategy in the other-encodings collection', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: ['other-encodings'],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(10); // 2 basic + (2 * 4) encodings
+  });
 });
 
 describe('isStrategyConfigured', () => {

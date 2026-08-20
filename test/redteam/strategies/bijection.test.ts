@@ -34,12 +34,22 @@ describe('bijection strategy', () => {
     expect(new Set(Object.values(mapping)).size).toBe(26);
   });
 
+  it('supports one changed letter for digit mappings', () => {
+    const mapping = generateBijectionMapping(
+      { type: 'digit', dispersion: 1, encodingLength: 2 },
+      'single-digit',
+    );
+
+    expect(Object.entries(mapping).filter(([plain, encoded]) => plain !== encoded)).toHaveLength(1);
+  });
+
   it('encodes letters case-insensitively and preserves other characters', () => {
     const mapping = Object.fromEntries('abcdefghijklmnopqrstuvwxyz'.split('').map((c) => [c, c]));
     mapping.a = 'b';
     mapping.b = 'a';
 
     expect(encodeBijection('A bad cab. 42', mapping)).toBe('b abd cba. 42');
+    expect(encodeBijection('A 😀 café', mapping)).toBe('b 😀 cbfé');
   });
 
   it('supports fixed-width digit codewords', () => {

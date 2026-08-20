@@ -1,4 +1,4 @@
-import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { REDTEAM_DEFAULTS, STRATEGY_COLLECTION_MAPPINGS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
 import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
@@ -92,14 +92,14 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'mischievous-user': 5,
   morse: 1,
   multilingual: 1, // Deprecated: now handled by global language config
-  'other-encodings': 1,
+  'other-encodings': STRATEGY_COLLECTION_MAPPINGS['other-encodings'].length,
   emoji: 1,
   piglatin: 1,
   'prompt-injection': 1,
   'random-case': 1,
   retry: 1,
   rot13: 1,
-  'text-mutations': 6,
+  'text-mutations': STRATEGY_COLLECTION_MAPPINGS['text-mutations'].length,
   'unicode-noise': 1,
   video: 1,
   'whitespace-obfuscation': 1,

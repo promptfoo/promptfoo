@@ -30,6 +30,9 @@ import {
   MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
+  TEXT_MUTATION_DEFAULT_RATES,
+  TEXT_MUTATION_STRATEGIES,
+  type TextMutationStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
@@ -54,26 +57,9 @@ const getStepId = (step: StepType): string => {
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
 const EMPTY_PLUGINS_ARRAY: string[] = [];
 const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Partial<StrategyConfig> }> = [];
-const TEXT_MUTATION_STRATEGY_IDS = [
-  'zero-width',
-  'unicode-noise',
-  'zalgo',
-  'whitespace-obfuscation',
-  'random-case',
-] as const;
 
-type TextMutationStrategyId = (typeof TEXT_MUTATION_STRATEGY_IDS)[number];
-
-const TEXT_MUTATION_DEFAULT_RATES: Record<TextMutationStrategyId, number> = {
-  'zero-width': 0.2,
-  'unicode-noise': 0.15,
-  zalgo: 1,
-  'whitespace-obfuscation': 0.5,
-  'random-case': 0.5,
-};
-
-const isTextMutationStrategy = (value: string): value is TextMutationStrategyId =>
-  TEXT_MUTATION_STRATEGY_IDS.includes(value as TextMutationStrategyId);
+const isTextMutationStrategy = (value: string): value is TextMutationStrategy =>
+  TEXT_MUTATION_STRATEGIES.includes(value as TextMutationStrategy);
 
 interface StrategyConfigDialogProps {
   open: boolean;
@@ -1136,7 +1122,7 @@ export default function StrategyConfigDialog({
     );
   };
 
-  const renderTextMutationStrategyConfig = (strategyId: TextMutationStrategyId) => {
+  const renderTextMutationStrategyConfig = (strategyId: TextMutationStrategy) => {
     const defaultRate = TEXT_MUTATION_DEFAULT_RATES[strategyId];
 
     return (
@@ -1521,6 +1507,10 @@ export default function StrategyConfigDialog({
   );
 
   const renderStrategyConfig = () => {
+    if (strategy && isTextMutationStrategy(strategy)) {
+      return renderTextMutationStrategyConfig(strategy);
+    }
+
     switch (strategy) {
       case 'basic':
         return renderBasicStrategyConfig();
@@ -1543,12 +1533,6 @@ export default function StrategyConfigDialog({
         return renderGcgStrategyConfig();
       case 'bijection':
         return renderBijectionStrategyConfig();
-      case 'random-case':
-      case 'unicode-noise':
-      case 'whitespace-obfuscation':
-      case 'zalgo':
-      case 'zero-width':
-        return renderTextMutationStrategyConfig(strategy);
       case 'citation':
         return renderCitationStrategyConfig();
       case 'layer':

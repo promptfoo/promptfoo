@@ -1,34 +1,20 @@
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import { TEXT_MUTATION_DEFAULT_RATES } from '../constants/strategies';
+
+import type { TextMutationStrategy } from '../constants/strategies';
+import type { Strategy } from './types';
 
 // Independent implementation based on Unicode character properties and code-point ranges:
 // https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/
 // https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/
 
-export const TEXT_MUTATION_STRATEGIES = [
-  'zero-width',
-  'unicode-noise',
-  'zalgo',
-  'whitespace-obfuscation',
-  'random-case',
-] as const;
-
-export type TextMutationStrategy = (typeof TEXT_MUTATION_STRATEGIES)[number];
-
 type RandomSource = () => number;
+type StrategyTestCases = Parameters<Strategy['action']>[0];
 
 const ZERO_WIDTH_CHARACTERS = ['\u200B', '\u200C', '\u200D', '\u2060'] as const;
 const WHITESPACE_REPLACEMENTS = ['\t', '\u00A0', '\u2009', '\u200A', '\u202F', '\u3000'] as const;
 const COMBINING_MARKS = Array.from({ length: 0x70 }, (_, index) =>
   String.fromCodePoint(0x0300 + index),
 ).filter((character) => /\p{M}/u.test(character));
-
-const DEFAULT_RATES: Record<TextMutationStrategy, number> = {
-  'zero-width': 0.2,
-  'unicode-noise': 0.15,
-  zalgo: 1,
-  'whitespace-obfuscation': 0.5,
-  'random-case': 0.5,
-};
 
 const METRIC_SUFFIXES: Record<TextMutationStrategy, string> = {
   'zero-width': 'ZeroWidth',
@@ -60,7 +46,7 @@ export function createSeededRandom(seed: string): RandomSource {
 
 function resolveRate(value: unknown, strategy: TextMutationStrategy): number {
   if (value === undefined) {
-    return DEFAULT_RATES[strategy];
+    return TEXT_MUTATION_DEFAULT_RATES[strategy];
   }
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
     throw new Error(`${strategy} strategy rate must be a finite number from 0 to 1`);
@@ -89,7 +75,15 @@ function resolveSeed(value: unknown, strategy: TextMutationStrategy, text: strin
   return `${value ?? 'promptfoo'}\u0000${strategy}\u0000${text}`;
 }
 
-function selectPositions(candidates: number[], rate: number, random: RandomSource): Set<number> {
+function selectPositions(
+  characters: string[],
+  rate: number,
+  random: RandomSource,
+  isEligible: (character: string, index: number) => boolean,
+): Set<number> {
+  const candidates = characters.flatMap((character, index) =>
+    isEligible(character, index) ? [index] : [],
+  );
   if (rate === 0 || candidates.length === 0) {
     return new Set();
   }
@@ -107,15 +101,14 @@ function pick<T>(values: readonly T[], random: RandomSource): T {
 
 function mutateZeroWidth(text: string, rate: number, random: RandomSource): string {
   const characters = Array.from(text);
-  const candidates = characters
-    .map((character, index) => ({ character, index }))
-    .filter(
-      ({ character, index }) =>
-        /[\p{L}\p{N}]/u.test(character) &&
-        (characters[index + 1] === undefined || !/\p{M}/u.test(characters[index + 1])),
-    )
-    .map(({ index }) => index);
-  const selected = selectPositions(candidates, rate, random);
+  const selected = selectPositions(
+    characters,
+    rate,
+    random,
+    (character, index) =>
+      /[\p{L}\p{N}]/u.test(character) &&
+      (characters[index + 1] === undefined || !/\p{M}/u.test(characters[index + 1])),
+  );
 
   return characters
     .map((character, index) =>
@@ -131,11 +124,9 @@ function mutateCombiningMarks(
   random: RandomSource,
 ): string {
   const characters = Array.from(text);
-  const candidates = characters
-    .map((character, index) => ({ character, index }))
-    .filter(({ character }) => /[\p{L}\p{N}]/u.test(character))
-    .map(({ index }) => index);
-  const selected = selectPositions(candidates, rate, random);
+  const selected = selectPositions(characters, rate, random, (character) =>
+    /[\p{L}\p{N}]/u.test(character),
+  );
 
   return characters
     .map((character, index) => {
@@ -150,11 +141,9 @@ function mutateCombiningMarks(
 
 function mutateWhitespace(text: string, rate: number, random: RandomSource): string {
   const characters = Array.from(text);
-  const candidates = characters
-    .map((character, index) => ({ character, index }))
-    .filter(({ character }) => /[\t \f\v\u00A0]/u.test(character))
-    .map(({ index }) => index);
-  const selected = selectPositions(candidates, rate, random);
+  const selected = selectPositions(characters, rate, random, (character) =>
+    /[\t \f\v\u00A0]/u.test(character),
+  );
 
   return characters
     .map((character, index) => {
@@ -169,11 +158,9 @@ function mutateWhitespace(text: string, rate: number, random: RandomSource): str
 
 function mutateRandomCase(text: string, rate: number, random: RandomSource): string {
   const characters = Array.from(text);
-  const candidates = characters
-    .map((character, index) => ({ character, index }))
-    .filter(({ character }) => /[A-Za-z]/.test(character))
-    .map(({ index }) => index);
-  const selected = selectPositions(candidates, rate, random);
+  const selected = selectPositions(characters, rate, random, (character) =>
+    /[A-Za-z]/.test(character),
+  );
 
   const mutated = characters.map((character, index) => {
     if (!selected.has(index)) {
@@ -215,11 +202,11 @@ export function mutateText(
 }
 
 export function addTextMutation(
-  testCases: TestCaseWithPlugin[],
+  testCases: StrategyTestCases,
   injectVar: string,
   strategy: TextMutationStrategy,
   config: Record<string, unknown> = {},
-): TestCase[] {
+): StrategyTestCases {
   const metricSuffix = METRIC_SUFFIXES[strategy];
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars?.[injectVar]);

@@ -70,6 +70,24 @@ export const DATASET_PLUGINS = [
   'xstest',
 ] as const;
 
+export const TEXT_MUTATION_STRATEGIES = [
+  'zero-width',
+  'unicode-noise',
+  'zalgo',
+  'whitespace-obfuscation',
+  'random-case',
+] as const;
+
+export type TextMutationStrategy = (typeof TEXT_MUTATION_STRATEGIES)[number];
+
+export const TEXT_MUTATION_DEFAULT_RATES: Record<TextMutationStrategy, number> = {
+  'zero-width': 0.2,
+  'unicode-noise': 0.15,
+  zalgo: 1,
+  'whitespace-obfuscation': 0.5,
+  'random-case': 0.5,
+};
+
 export const ADDITIONAL_STRATEGIES = [
   'audio',
   'authoritative-markup-injection',
@@ -102,14 +120,10 @@ export const ADDITIONAL_STRATEGIES = [
   'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
-  'random-case',
   'retry',
   'rot13',
-  'unicode-noise',
   'video',
-  'whitespace-obfuscation',
-  'zalgo',
-  'zero-width',
+  ...TEXT_MUTATION_STRATEGIES,
 ] as const;
 
 export const STRATEGY_COLLECTIONS = ['other-encodings', 'text-mutations'] as const;
@@ -117,14 +131,7 @@ export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
   'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
-  'text-mutations': [
-    'zero-width',
-    'unicode-noise',
-    'zalgo',
-    'whitespace-obfuscation',
-    'random-case',
-    'homoglyph',
-  ],
+  'text-mutations': [...TEXT_MUTATION_STRATEGIES, 'homoglyph'],
 };
 
 const _ALL_STRATEGIES = [
@@ -139,11 +146,7 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
   'bijection',
-  'random-case',
-  'unicode-noise',
-  'whitespace-obfuscation',
-  'zalgo',
-  'zero-width',
+  ...TEXT_MUTATION_STRATEGIES,
   'layer',
   'best-of-n',
   'goat',
@@ -180,11 +183,7 @@ export const ENCODING_STRATEGIES = new Set([
   'reverse',
   'binary',
   'octal',
-  'random-case',
-  'unicode-noise',
-  'whitespace-obfuscation',
-  'zalgo',
-  'zero-width',
+  ...TEXT_MUTATION_STRATEGIES,
   'audio',
   'image',
   'video',

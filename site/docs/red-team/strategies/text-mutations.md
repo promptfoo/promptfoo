@@ -16,25 +16,25 @@ keywords:
 
 # Text Mutation Strategies
 
-Promptfoo includes five deterministic text mutations for testing whether safety controls normalize adversarial input consistently:
+Promptfoo offers five repeatable text mutations that test whether safety controls normalize adversarial input consistently:
 
 - `zero-width` inserts invisible Unicode format characters.
 - `unicode-noise` adds one combining mark to selected letters and numbers.
 - `zalgo` adds multiple combining marks to selected letters and numbers.
-- `whitespace-obfuscation` replaces horizontal whitespace with alternative Unicode spacing characters.
+- `whitespace-obfuscation` replaces horizontal whitespace with other spacing characters.
 - `random-case` changes the case of selected ASCII letters.
 
-The `text-mutations` collection enables all five strategies plus the existing [`homoglyph`](homoglyph.md) strategy:
+The `text-mutations` collection runs all five strategies plus [`homoglyph`](homoglyph.md):
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - text-mutations
 ```
 
-This is equivalent to:
+This is the same as listing each strategy:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - zero-width
@@ -47,23 +47,23 @@ redteam:
 
 ## Exact behavior
 
-All five strategies are local transformations. They do not call a generation model. Given the same strategy, seed, configuration, and input text, they produce the same result.
+Each mutation runs locally without calling a generation model. The same strategy, seed, settings, and input always produce the same result.
 
 | Strategy                 | Eligible input                            | Transformation                                                                                         | Default rate |
 | ------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------ |
 | `zero-width`             | Unicode letters and numbers               | Inserts U+200B, U+200C, U+200D, or U+2060 after selected characters                                    | 0.2          |
-| `unicode-noise`          | Unicode letters and numbers               | Appends one randomly selected combining mark from U+0300–U+036F whose Unicode category is `Mark`       | 0.15         |
+| `unicode-noise`          | Unicode letters and numbers               | Appends one combining mark from U+0300 to U+036F whose Unicode category is `Mark`                      | 0.15         |
 | `zalgo`                  | Unicode letters and numbers               | Appends `intensity` combining marks selected from the same range                                       | 1.0          |
 | `whitespace-obfuscation` | Space, tab, form feed, vertical tab, NBSP | Replaces selected characters with tab, NBSP, thin space, hair space, narrow NBSP, or ideographic space | 0.5          |
 | `random-case`            | ASCII letters                             | Chooses upper- or lowercase for each selected letter                                                   | 0.5          |
 
-Newlines are not whitespace-mutation candidates, so the original line structure is preserved. If `rate` is greater than zero and the input has eligible characters, the strategy always mutates at least one eligible position. Set `rate: 0` for an explicit no-op.
+Newlines stay unchanged. When `rate` is greater than zero and eligible characters exist, Promptfoo changes at least one of them. Set `rate: 0` to leave the input unchanged.
 
 ## Configuration
 
-Each strategy accepts a `rate` from 0 through 1 and a string or numeric `seed`. Zalgo also accepts an integer `intensity` from 1 through 8.
+Each strategy accepts a `rate` from 0 to 1 and a string or numeric `seed`. Zalgo also accepts an integer `intensity` from 1 to 8.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: zero-width
@@ -93,20 +93,15 @@ redteam:
         seed: normalization-suite
 ```
 
-The default seed is `promptfoo`. Promptfoo combines it with the strategy ID and original input before initializing the deterministic random stream, so unrelated prompts do not receive identical mutation positions.
+The default seed is `promptfoo`. Promptfoo combines it with the strategy ID and original input before selecting mutation positions.
 
 ## What to verify
 
-Compare each transformed result with the `basic` baseline and check whether:
-
-- input validation and policy classifiers normalize the same characters as the target model;
-- logs and review tools expose invisible or combining characters clearly;
-- Unicode normalization changes the security decision;
-- allowlists, blocklists, or routing rules behave differently after whitespace or case changes.
+Compare each transformed result with the `basic` baseline. Check whether filters and the target model normalize the same characters, whether logs expose invisible characters, and whether normalization, whitespace, or casing changes allowlists, blocklists, routing, or other security decisions.
 
 ## Implementation provenance
 
-Promptfoo's implementation was independently written under the project's MIT license from public Unicode behavior. It does not incorporate third-party AGPL source code or mutation tables. The relevant specifications are [Unicode Core Specification, Chapter 3](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/), [Unicode Core Specification, Chapter 23](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/), and [Unicode Technical Standard #39](https://unicode.org/reports/tr39/).
+This is an independent, MIT-licensed implementation of public Unicode behavior. It does not include third-party AGPL code or mutation tables. See [Unicode Core Specification, Chapter 3](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/), [Unicode Core Specification, Chapter 23](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/), and [Unicode Technical Standard #39](https://unicode.org/reports/tr39/).
 
 ## Related strategies
 

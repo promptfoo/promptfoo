@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  addTextMutation,
-  mutateText,
-  TEXT_MUTATION_STRATEGIES,
-} from '../../../src/redteam/strategies/textMutation';
+import { TEXT_MUTATION_STRATEGIES } from '../../../src/redteam/constants/strategies';
+import { addTextMutation, mutateText } from '../../../src/redteam/strategies/textMutation';
 
 import type { TestCaseWithPlugin } from '../../../src/types/index';
 
@@ -73,6 +70,23 @@ describe('text mutation strategies', () => {
 
   it.each(TEXT_MUTATION_STRATEGIES)('supports an explicit zero rate for %s', (strategy) => {
     expect(mutateText('Alpha beta 123', strategy, { rate: 0 })).toBe('Alpha beta 123');
+  });
+
+  it.each(TEXT_MUTATION_STRATEGIES)(
+    'changes at least one eligible character at a positive rate for %s',
+    (strategy) => {
+      expect(mutateText('Alpha beta 123', strategy, { rate: Number.MIN_VALUE })).not.toBe(
+        'Alpha beta 123',
+      );
+    },
+  );
+
+  it('preserves newline boundaries while replacing horizontal whitespace', () => {
+    const output = mutateText('first line\r\nsecond line\nthird line', 'whitespace-obfuscation', {
+      rate: 1,
+    });
+
+    expect(output.match(/\r?\n/g)).toEqual(['\r\n', '\n']);
   });
 
   it('leaves input unchanged when no eligible characters exist', () => {

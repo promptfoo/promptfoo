@@ -1,4 +1,5 @@
 import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
+import { TEXT_MUTATION_STRATEGIES } from './strategies';
 
 import type { CodingAgentPlugin } from './codingAgents';
 
@@ -450,11 +451,7 @@ export const CANARY_BREAKING_STRATEGY_IDS = [
   'rot13',
   'multilingual',
   'math-prompt',
-  'random-case',
-  'unicode-noise',
-  'whitespace-obfuscation',
-  'zalgo',
-  'zero-width',
+  ...TEXT_MUTATION_STRATEGIES,
   'jailbreak:composite',
 ] as const;
 

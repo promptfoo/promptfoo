@@ -1,6 +1,6 @@
 import { createSeededRandom } from './textMutation';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Strategy } from './types';
 
 // Independent implementation of the temporary substitution-language attack described in:
 // https://arxiv.org/abs/2410.01294
@@ -10,6 +10,8 @@ const DEFAULT_EXAMPLES = ['the map is ready', 'follow the marked path', 'return 
 
 export type BijectionMappingType = 'letter' | 'digit';
 export type BijectionMapping = Record<string, string>;
+
+type StrategyTestCases = Parameters<Strategy['action']>[0];
 
 export interface BijectionOptions {
   type: BijectionMappingType;
@@ -103,10 +105,7 @@ export function generateBijectionMapping(
 ): BijectionMapping {
   const resolved = resolveBijectionOptions(options);
   const random = createSeededRandom(seed);
-  const selectedIndices = shuffle(
-    Array.from({ length: ALPHABET.length }, (_, index) => index),
-    random,
-  ).slice(0, resolved.dispersion);
+  const selectedLetters = shuffle(ALPHABET, random).slice(0, resolved.dispersion);
   const mapping = Object.fromEntries(ALPHABET.map((letter) => [letter, letter]));
 
   if (resolved.dispersion === 0) {
@@ -114,34 +113,26 @@ export function generateBijectionMapping(
   }
 
   if (resolved.type === 'letter') {
-    const rotation = 1 + Math.floor(random() * (selectedIndices.length - 1));
-    selectedIndices.forEach((sourceIndex, index) => {
-      const targetIndex = selectedIndices[(index + rotation) % selectedIndices.length];
-      mapping[ALPHABET[sourceIndex]] = ALPHABET[targetIndex];
+    const rotation = 1 + Math.floor(random() * (selectedLetters.length - 1));
+    selectedLetters.forEach((letter, index) => {
+      mapping[letter] = selectedLetters[(index + rotation) % selectedLetters.length];
     });
     return mapping;
   }
 
   const numericTokens = generateNumericTokens(
-    selectedIndices.length,
+    selectedLetters.length,
     resolved.encodingLength,
     random,
   );
-  selectedIndices.forEach((sourceIndex, index) => {
-    mapping[ALPHABET[sourceIndex]] = numericTokens[index];
+  selectedLetters.forEach((letter, index) => {
+    mapping[letter] = numericTokens[index];
   });
   return mapping;
 }
 
 export function encodeBijection(text: string, mapping: BijectionMapping): string {
-  return Array.from(text)
-    .map((character) => {
-      if (!/[A-Za-z]/.test(character)) {
-        return character;
-      }
-      return mapping[character.toLowerCase()] ?? character;
-    })
-    .join('');
+  return text.replace(/[A-Za-z]/g, (character) => mapping[character.toLowerCase()] ?? character);
 }
 
 export function buildBijectionPrompt(
@@ -178,10 +169,10 @@ export function buildBijectionPrompt(
 }
 
 export function addBijectionTestCases(
-  testCases: TestCaseWithPlugin[],
+  testCases: StrategyTestCases,
   injectVar: string,
   config: Record<string, unknown> = {},
-): TestCase[] {
+): StrategyTestCases {
   const options = resolveBijectionOptions(config);
 
   return testCases.flatMap((testCase) => {

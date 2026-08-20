@@ -3,7 +3,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { isCustomStrategy } from '../constants/strategies';
+import { isCustomStrategy, TEXT_MUTATION_STRATEGIES } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
@@ -76,41 +76,15 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
-  {
-    id: 'zero-width',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding zero-width mutations to ${testCases.length} test cases`);
-      return addTextMutation(testCases, injectVar, 'zero-width', config);
-    },
-  },
-  {
-    id: 'unicode-noise',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding Unicode combining-mark noise to ${testCases.length} test cases`);
-      return addTextMutation(testCases, injectVar, 'unicode-noise', config);
-    },
-  },
-  {
-    id: 'zalgo',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding Zalgo mutations to ${testCases.length} test cases`);
-      return addTextMutation(testCases, injectVar, 'zalgo', config);
-    },
-  },
-  {
-    id: 'whitespace-obfuscation',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding whitespace mutations to ${testCases.length} test cases`);
-      return addTextMutation(testCases, injectVar, 'whitespace-obfuscation', config);
-    },
-  },
-  {
-    id: 'random-case',
-    action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding random-case mutations to ${testCases.length} test cases`);
-      return addTextMutation(testCases, injectVar, 'random-case', config);
-    },
-  },
+  ...TEXT_MUTATION_STRATEGIES.map(
+    (id): Strategy => ({
+      id,
+      action: async (testCases, injectVar, config) => {
+        logger.debug(`Adding ${id} mutations to ${testCases.length} test cases`);
+        return addTextMutation(testCases, injectVar, id, config);
+      },
+    }),
+  ),
   {
     id: 'homoglyph',
     action: async (testCases, injectVar) => {

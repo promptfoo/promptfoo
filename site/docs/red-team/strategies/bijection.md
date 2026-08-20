@@ -7,23 +7,23 @@ keywords: ['bijection', 'encoding', 'in-context learning', 'jailbreak', 'substit
 
 # Bijection Encoding Strategy
 
-The `bijection` strategy creates a temporary substitution language, encodes the original test prompt, and asks the target to decode the request and answer its meaning in ordinary language.
+The `bijection` strategy replaces letters with a temporary substitution alphabet and asks the target to decode the request. It asks for an answer in ordinary English, so Promptfoo can grade the response normally.
 
-This tests a boundary mismatch: a target model may infer the encoded request from the mapping and examples even when an upstream policy control does not recognize the same representation.
+Use it to find input filters that miss an encoded request the model still understands.
 
 ## Usage
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - bijection
 ```
 
-The default configuration changes 16 letters with a letter-to-letter permutation, includes three harmless translation examples, generates one variant per test, and uses the seed `promptfoo`.
+By default, Promptfoo permutes 16 letters, includes three harmless translation examples, generates one variant per test, and uses the seed `promptfoo`.
 
 ## Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: bijection
@@ -36,41 +36,41 @@ redteam:
         seed: regression-suite
 ```
 
-| Option            | Type             | Default     | Valid values                                                                 |
-| ----------------- | ---------------- | ----------- | ---------------------------------------------------------------------------- |
-| `type`            | string           | `letter`    | `letter` or `digit`                                                          |
-| `dispersion`      | integer          | `16`        | 0–26; `1` is invalid for `letter` because a one-item permutation cannot move |
-| `encodingLength`  | integer          | `2`         | 2–4; used by `digit` mappings                                                |
-| `includeExamples` | boolean          | `true`      | Include or omit three harmless in-context translations                       |
-| `n`               | integer          | `1`         | 1–20 independently seeded variants per source test                           |
-| `seed`            | string or number | `promptfoo` | Reproduce the same mappings                                                  |
+| Option            | Type             | Default     | Valid values                                                               |
+| ----------------- | ---------------- | ----------- | -------------------------------------------------------------------------- |
+| `type`            | string           | `letter`    | `letter` or `digit`                                                        |
+| `dispersion`      | integer          | `16`        | 0 to 26; `1` is invalid for `letter` because one letter cannot be permuted |
+| `encodingLength`  | integer          | `2`         | 2 to 4; used only by `digit` mappings                                      |
+| `includeExamples` | boolean          | `true`      | Include or omit three harmless translation examples                        |
+| `n`               | integer          | `1`         | 1 to 20 independently seeded variants per test                             |
+| `seed`            | string or number | `promptfoo` | Use the same seed to reproduce a mapping                                   |
 
 ## Exact behavior
 
-Promptfoo builds a complete mapping for the 26 lowercase English letters:
+Promptfoo maps all 26 lowercase English letters:
 
-- With `type: letter`, `dispersion` selected letters are permuted among themselves. Every selected letter changes, every unselected letter maps to itself, and every output letter has exactly one input letter.
-- With `type: digit`, selected letters map to unique, fixed-width numeric codewords. Unselected letters map to themselves.
-- Encoding is case-insensitive and emits lowercase letter codewords, so original letter casing is not preserved.
-- Spaces, punctuation, and non-letter characters in the request remain unchanged.
+- With `type: letter`, the selected letters map to one another. Each selected letter changes, unselected letters stay unchanged, and no two letters share an output.
+- With `type: digit`, selected letters map to unique, fixed-width numeric tokens. Unselected letters stay unchanged.
+- Encoding ignores letter case and produces lowercase letter tokens.
+- Spaces, punctuation, and other non-letter characters stay unchanged.
 
-For each test, the generated prompt contains original instructions for using the temporary language, the full mapping table, optional harmless examples, and the encoded request. Each `n` variant derives a separate deterministic mapping from the configured seed, original text, and variant index.
+Each prompt includes the complete mapping, optional examples, and the encoded request. Promptfoo derives each variant's mapping from its seed, the original text, and the variant index.
 
 ## Response and grading
 
-The target is asked to answer the decoded request directly in ordinary language. Promptfoo does not transform the response, so the test's normal assertions grade exactly what the target returned. A refusal, an attempted answer, an error, and structured output all retain the same semantics they would have in a basic red-team test.
+Promptfoo grades the target's unmodified answer with the test's original assertions. Refusals, answers, errors, and structured output keep their usual meaning.
 
-Keeping the response in ordinary language avoids introducing a second source of translation errors during grading. The strategy measures whether the target can infer and act on the encoded input, not whether it can encode its own answer perfectly.
+An ordinary-language response avoids translation errors during grading and keeps the test focused on whether the target acts on the encoded request.
 
 ## Cost and limitations
 
-The transformation itself is local and does not require remote generation. Each variant makes one target call, so `n: 3` triples the target calls for tests using this strategy.
+The transformation runs locally and does not require a generation model. Each variant makes one target call, so `n: 3` makes three target calls per source test.
 
-Digit mappings can be harder for models to follow than letter mappings. Because literal numbers in the request are left unchanged, a numeric sequence may resemble one of the generated codewords and make the request ambiguous. Use letter mappings when the original request contains important numeric values.
+Digit mappings can be harder for models to decode. Literal numbers in the request may also resemble generated tokens, so use letter mappings when those numbers matter.
 
 ## Implementation provenance
 
-Promptfoo's implementation was independently written under the project's MIT license from the attack formulation in the public paper [Endless Jailbreaks with Bijection Learning](https://arxiv.org/abs/2410.01294). The implementation, prompt wording, mapping generator, examples, response instructions, and tests are original to Promptfoo and do not incorporate third-party AGPL source code.
+This is an independent, MIT-licensed implementation of the attack described in [Endless Jailbreaks with Bijection Learning](https://arxiv.org/abs/2410.01294). It does not include third-party AGPL code, prompts, mapping generators, examples, or tests.
 
 ## Related strategies
 
