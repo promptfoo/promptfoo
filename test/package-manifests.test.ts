@@ -501,7 +501,7 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
-  it('keeps the Excel parser aligned with Strict OpenXML support', () => {
+  it('keeps the Excel parser aligned with Strict OpenXML and inline-string support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
       packages: Record<
@@ -517,12 +517,12 @@ describe('package manifests', () => {
 
     expect(developmentRange).toBeDefined();
     expect(optionalRange).toBe(developmentRange);
-    expect(minVersion(developmentRange!)?.compare('9.3.8')).toBeGreaterThanOrEqual(0);
+    expect(minVersion(developmentRange!)?.compare('9.3.9')).toBeGreaterThanOrEqual(0);
     expect(packageLock.packages[''].devDependencies?.[dependencyName]).toBe(developmentRange);
     expect(packageLock.packages[''].optionalDependencies?.[dependencyName]).toBe(optionalRange);
     expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
     expect(
-      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.8'),
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.3.9'),
     ).toBeGreaterThanOrEqual(0);
   });
 
