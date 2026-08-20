@@ -226,6 +226,108 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Loads `file://` references that are nested inside an object or array var.
+ *
+ * The top-level loader in `renderPrompt` only sees string values, so a reference
+ * sitting under a key (e.g. `reporting_period.previous.report`) used to reach the
+ * prompt as the raw path. This walks plain objects and arrays and replaces any
+ * `file://` string with the file's contents, mirroring the top-level behavior for
+ * text and YAML files.
+ *
+ * Only text and YAML files are loaded. Var scripts (JS/Python), PDFs, and
+ * image/video/audio files are left as the original `file://` string: the script
+ * forms are handed the var name and the base prompt, and the binary forms have
+ * top-level handling gated behind env vars, neither of which has a clear meaning
+ * for a value buried inside a structure. Reading those as UTF-8 here would
+ * corrupt them, so they are skipped rather than guessed at.
+ *
+ * Only arrays and plain records are traversed. Class instances (Date, Map, Set,
+ * Buffer, ...) are returned as-is: rebuilding them from their enumerable entries
+ * would silently turn a Date var into `{}` before the prompt ever sees it.
+ */
+function isNestedLoadableFile(filePath: string): boolean {
+  // Extensions are compared lowercased so `report.PDF` is skipped like `report.pdf`.
+  const lower = filePath.toLowerCase();
+  return !(
+    isJavascriptFile(lower) ||
+    lower.endsWith('.py') ||
+    lower.endsWith('.pdf') ||
+    isImageFile(lower) ||
+    isVideoFile(lower) ||
+    isAudioFile(lower)
+  );
+}
+
+function isPlainRecord(value: object): boolean {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+async function loadNestedFileVars(
+  value: unknown,
+  varName: string,
+  seen: WeakSet<object> = new WeakSet(),
+): Promise<unknown> {
+  // Vars can be self-referential (the evaluator logs circular structures on
+  // error paths); revisiting one would recurse until the stack blows.
+  if (value !== null && typeof value === 'object') {
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+  }
+
+  // Sequential rather than Promise.all: a dataset-shaped var can hold hundreds of
+  // references, and firing every readFile at once risks EMFILE. The top-level
+  // loader is sequential too.
+  if (Array.isArray(value)) {
+    const items: unknown[] = [];
+    for (const item of value) {
+      items.push(await loadNestedFileVars(item, varName, seen));
+    }
+    return items;
+  }
+
+  if (typeof value === 'string') {
+    if (!value.startsWith('file://')) {
+      return value;
+    }
+
+    const filePath = path.resolve(
+      process.cwd(),
+      cliState.basePath || '',
+      value.slice('file://'.length),
+    );
+
+    if (!isNestedLoadableFile(filePath)) {
+      logger.debug(`Leaving nested file reference in var ${varName} unloaded: ${filePath}`);
+      return value;
+    }
+
+    logger.debug(`Loading nested file reference in var ${varName} from file: ${filePath}`);
+    const contents = await fs.readFile(filePath, 'utf8');
+
+    if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+      return JSON.stringify(loadYaml(contents) as string | object);
+    }
+    return contents.trim();
+  }
+
+  if (value && typeof value === 'object') {
+    if (!isPlainRecord(value)) {
+      return value;
+    }
+    const entries: [string, unknown][] = [];
+    for (const [key, nested] of Object.entries(value)) {
+      entries.push([key, await loadNestedFileVars(nested, varName, seen)]);
+    }
+    return Object.fromEntries(entries);
+  }
+
+  return value;
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -381,6 +483,8 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (value && typeof value === 'object') {
+      vars[varName] = (await loadNestedFileVars(value, varName)) as VarValue;
     }
   }
 
