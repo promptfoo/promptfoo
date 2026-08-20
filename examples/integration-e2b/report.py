@@ -15,12 +15,12 @@ def gen_report(out_dir=".promptfoo_results", out_md="promptfoo_report.md"):
         except Exception:
             continue
     lines = [
-        "| task | provider | model | success | runtime_s |",
-        "|---|---|---|---|---|",
+        "| task | success | runtime_s |",
+        "|---|---|---|",
     ]
     for r in rows:
         lines.append(
-            f"|{r.get('task_id', '-')}|{r.get('provider', '-')}|{r.get('model', '-')}|{r.get('success')}|{r.get('runtime_s')}|"
+            f"|{r.get('task_id', '-')}|{r.get('success')}|{r.get('runtime_s')}|"
         )
     with open(out_md, "w", encoding="utf-8") as report_file:
         report_file.write("\n".join(lines))
