@@ -236,6 +236,32 @@ export async function matchesContextRecall(
   };
 }
 
+// Leading enumeration/bullet markers a grader may add when listing the sentences
+// it selected ("1. ", "2) ", "- ", "* "). They are formatting, not content, so
+// they are stripped before matching a segment back to the context.
+const LEADING_LIST_MARKER = /^\s*(?:\d+[.)]|[-*•])\s+/;
+// Quotes a grader may wrap an echoed sentence in, and trailing punctuation it may
+// add or drop. Both sides of a match are normalized so `Paris is the capital of
+// France` still matches a context reading `Paris is the capital of France.`
+const SURROUNDING_QUOTES = /^["'`]+|["'`]+$/g;
+const TRAILING_PUNCTUATION = /[\s.,;:!?]+$/;
+
+/** Lowercase and collapse all whitespace (including newlines) so a quoted span that
+ * wraps across lines in the source context still matches. */
+function normalizeForContextMatch(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Normalize one grader-emitted segment for comparison against the context. */
+function normalizeSegmentForContextMatch(segment: string): string {
+  return normalizeForContextMatch(
+    segment
+      .replace(LEADING_LIST_MARKER, '')
+      .replace(SURROUNDING_QUOTES, '')
+      .replace(TRAILING_PUNCTUATION, ''),
+  );
+}
+
 export async function matchesContextRelevance(
   question: string,
   context: string | string[],
@@ -295,9 +321,25 @@ export async function matchesContextRelevance(
   // would score 1/N instead of 1.0).
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
+  // A relevant unit must actually come from the context. The grading prompt does
+  // not constrain the response format, and graders routinely prefix their answer
+  // with a header of their own ("candidate sentences:", "Relevant sentences:").
+  // That header is a segment like any other, so counting it inflated the
+  // numerator: a header plus one genuinely relevant sentence scored 2/4 instead
+  // of 1/4, which flips a threshold-0.5 assertion from fail to pass purely on
+  // incidental formatting of the grader's prose.
+  //
+  // Segments are matched against the whole whitespace-normalized context rather
+  // than against individual units, because a grader legitimately quotes text
+  // that spans a unit boundary — a wrapped line in a formatted document, or two
+  // sentences of one chunk. Matching per unit would undercount those.
+  const normalizedContext = normalizeForContextMatch(contextUnits.join(' '));
   const relevantSentences = insufficientInformation
     ? []
-    : [...new Set(segmentRelevant(resp.output))];
+    : [...new Set(segmentRelevant(resp.output))].filter((sentence) => {
+        const normalized = normalizeSegmentForContextMatch(sentence);
+        return normalized.length > 0 && normalizedContext.includes(normalized);
+      });
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 
