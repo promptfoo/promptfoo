@@ -10,6 +10,22 @@ import { getLogDirectory, getLogFiles } from '../util/logs';
 import { createOutputData, writeOutput } from '../util/output';
 import type { Command } from 'commander';
 
+function encodeTarFileName(fileName: string): Buffer {
+  let encodedLength = 0;
+  let validEnd = 0;
+
+  for (const character of fileName) {
+    const characterLength = Buffer.byteLength(character);
+    if (encodedLength + characterLength > 100) {
+      break;
+    }
+    encodedLength += characterLength;
+    validEnd += character.length;
+  }
+
+  return Buffer.from(fileName.slice(0, validEnd));
+}
+
 /**
  * Creates a compressed tar.gz file containing log files
  */
@@ -57,7 +73,7 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
           const header = Buffer.alloc(512);
 
           // File name (100 bytes)
-          Buffer.from(fileName).copy(header, 0, 0, Math.min(fileName.length, 100));
+          encodeTarFileName(fileName).copy(header);
 
           // File mode (8 bytes) - default 644
           Buffer.from('0000644 ').copy(header, 100);
