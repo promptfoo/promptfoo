@@ -1737,6 +1737,9 @@ The assertion detects common refusal patterns like:
 - Content filter blocks
 - Empty or null responses
 
+Apology wording alone, such as "I'm sorry to hear that," does not trigger this assertion. The
+classifier still evaluates the rest of the output using the refusal heuristics listed above.
+
 Example:
 
 ```yaml
