@@ -3367,6 +3367,21 @@ describe('VertexChatProvider.callClaudeApi', () => {
       expect(requestData.max_tokens).toBe(6024);
     });
 
+    it('should keep manual thinking enabled for an unlisted Claude 5 family', async () => {
+      provider = new VertexChatProvider('claude-haiku-5', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+      expect(requestData.max_tokens).toBe(6024);
+    });
+
     it('should not bump max_tokens when adaptive conversion drops budget_tokens for Claude Opus 4.8', async () => {
       provider = new VertexChatProvider('claude-opus-4-8', {
         config: {

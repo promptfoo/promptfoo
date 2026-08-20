@@ -32,6 +32,7 @@ import {
   getTokenUsage,
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isDisabledThinkingRejectedAtEffort,
+  isManualThinkingDeprecatedClaudeModel,
   isSamplingParamsDeprecatedClaudeModel,
   normalizeAnthropicModelName,
   normalizeClaudeThinkingConfig,
@@ -248,6 +249,18 @@ function withMergedAnthropicUsage(
   return usage ? { ...response, usage } : response;
 }
 
+function isOfficialAnthropicApiBaseUrl(apiBaseUrl: string | undefined): boolean {
+  if (!apiBaseUrl) {
+    return true;
+  }
+
+  try {
+    return new URL(apiBaseUrl).hostname === 'api.anthropic.com';
+  } catch {
+    return false;
+  }
+}
+
 function getAnthropicCostFromMessage(
   modelName: string,
   config: AnthropicMessageOptions,
@@ -283,6 +296,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   // format (e.g. Meta's Anthropic-compatible endpoint) set this to false so
   // their model ids don't trigger the unknown-Anthropic-model warning.
   static readonly WARNS_ON_UNKNOWN_MODEL: boolean = true;
+
+  /**
+   * Whether this provider's model name is authoritative enough for the forward-looking Claude 5+
+   * sampling fallback. Compatible gateways may use arbitrary aliases; forwarding providers can
+   * override this when they preserve the upstream Anthropic model ID.
+   */
+  protected usesAuthoritativeModelIds(): boolean {
+    return isOfficialAnthropicApiBaseUrl(this.getApiBaseUrl());
+  }
 
   constructor(
     modelName: string,
@@ -583,7 +605,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     requested: Anthropic.Messages.ThinkingConfigParam | undefined,
     effort: ClaudeEffort | undefined,
     flags: {
-      samplingParamsDeprecated: boolean;
+      manualThinkingDeprecated: boolean;
       alwaysOnAdaptiveThinking: boolean;
       modelWarningName: string;
     },
@@ -602,9 +624,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
      */
     thinkingConsumesTokens: boolean;
   } {
-    const { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
+    const { manualThinkingDeprecated, alwaysOnAdaptiveThinking, modelWarningName } = flags;
 
-    if (samplingParamsDeprecated && requested?.type === 'enabled') {
+    if (manualThinkingDeprecated && requested?.type === 'enabled') {
       if (!this.manualThinkingConversionWarned) {
         logger.warn(
           alwaysOnAdaptiveThinking
@@ -717,11 +739,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       context?.vars,
     );
 
-    // Newer Claude models are adaptive-only — manual budget-based thinking
-    // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Translate a
-    // migrated Opus 4.6 config to adaptive thinking so it keeps working; effort
-    // controls reasoning depth on these models.
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    // Some newer Claude models are adaptive-only — manual budget-based thinking
+    // (`thinking: { type: 'enabled', budget_tokens }`) returns a 400. Keep this
+    // capability separate from the forward-looking sampling-parameter fallback:
+    // a new family may reject sampling controls before its thinking behavior is known.
+    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      allowUnknownFamilyFallback: this.usesAuthoritativeModelIds(),
+    });
+    const manualThinkingDeprecated = isManualThinkingDeprecatedClaudeModel(this.modelName);
     const alwaysOnAdaptiveThinking = isAlwaysOnAdaptiveThinkingClaudeModel(this.modelName);
     const modelWarningName = getClaudeModelWarningName(this.modelName) ?? 'this Claude model';
     const {
@@ -732,7 +757,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Provider config wins over a thinking block embedded in the prompt.
       config.thinking ?? thinking,
       config.effort,
-      { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
+      { manualThinkingDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
 
     // Validate and warn about thinking-incompatible params. Skip when the model

@@ -407,6 +407,34 @@ describe('CloudflareGateway Provider', () => {
         expect.any(Object),
       );
     });
+
+    it.each(['claude-haiku-5', 'claude-opus-4-9', 'claude-opus-4-10'])(
+      'applies sampling deprecations to authoritative model ID %s forwarded to Anthropic',
+      async (modelName) => {
+        const provider = new CloudflareGatewayAnthropicProvider(modelName, {
+          config: { ...minimumConfig, temperature: 0.5 },
+        });
+        const responsePayload = {
+          id: 'msg_123',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'Test' }],
+          model: modelName,
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 5, output_tokens: 5 },
+        };
+        mockFetch.mockResolvedValue({
+          ...defaultMockResponse,
+          text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+          ok: true,
+        });
+
+        await provider.callApi('Test prompt');
+
+        const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+        expect(requestBody).not.toHaveProperty('temperature');
+      },
+    );
   });
 
   describe('Error Handling', () => {

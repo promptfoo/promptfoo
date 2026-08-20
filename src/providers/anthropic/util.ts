@@ -186,15 +186,22 @@ export const ANTHROPIC_MODELS = [
 
 // Model-ID matchers for each Claude family, across Anthropic, Bedrock (incl. the
 // `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure deployment
-// names. The leading `(^|[^a-z0-9])` boundary and a trailing lookahead guard (`(?![0-9])`,
-// or `(?![a-z0-9])` for the dateless Fable/Mythos IDs) keep a family from matching a longer
-// neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and `claude-sonnet-4-5` is not Sonnet 5)
-// while still matching dated snapshots like `claude-opus-4-8-20260528`.
+// names. The leading `(^|[^a-z0-9])` boundary and trailing lookahead guards keep a family
+// from matching a longer neighbor (e.g. `claude-opus-4-80` is not Opus 4.8, and
+// `claude-sonnet-5x` is not Sonnet 5) while still matching dated snapshots like
+// `claude-opus-4-8-20260528`.
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
-const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![0-9])/i;
-const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![0-9])/i;
+const CLAUDE_OPUS_5_PATTERN = /(^|[^a-z0-9])claude-opus-5(?![a-z0-9])/i;
+const CLAUDE_SONNET_5_PATTERN = /(^|[^a-z0-9])claude-sonnet-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_48_PATTERN = /(^|[^a-z0-9])claude-opus-4-8(?![0-9])/i;
 const CLAUDE_OPUS_47_PATTERN = /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i;
+// Anthropic deprecates non-default sampling controls on models released after Opus 4.6. Keep a
+// forward-compatible fallback for post-4.6 Claude 4.x and Claude 5+ family names so providers do
+// not send rejected parameters while waiting for a model-specific capability row. Accept every
+// numeric 4.x minor after 4.6, while keeping later major generations to one or two digits so
+// date-stamped aliases are not mistaken for future models.
+const CLAUDE_POST_46_OR_5_PLUS_PATTERN =
+  /(^|[^a-z0-9])claude-[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*-(?:4-(?:[7-9]|[1-9][0-9]+)|[5-9]|[1-9][0-9])(?![a-z0-9])/i;
 // Opus/Sonnet 4.5 and 4.6, and Haiku 4.5 — regional premium only (no other deprecations).
 const CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN =
   /(^|[^a-z0-9])claude-(?:opus|sonnet|haiku)-4-(?:5|6)(?![0-9])/i;
@@ -206,6 +213,8 @@ interface ClaudeModelFamily {
   warningName?: string;
   /** Rejects `temperature`/`top_p`/`top_k` at the model level (the API returns 400). */
   samplingParamsDeprecated?: boolean;
+  /** Rejects manual budget thinking (`thinking.type: 'enabled'`) in favor of adaptive thinking. */
+  manualThinkingDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
   /**
@@ -235,6 +244,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_FABLE_MYTHOS_5_PATTERN,
     warningName: 'Claude Fable 5 and Claude Mythos 5',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     alwaysOnAdaptiveThinking: true,
     regionalPremium: true,
   },
@@ -244,6 +254,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_OPUS_5_PATTERN,
     warningName: 'Claude Opus 5',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
     regionalPremium: true,
@@ -252,6 +263,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_SONNET_5_PATTERN,
     warningName: 'Claude Sonnet 5',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     regionalPremium: true,
   },
   // Opus 4.7 and 4.8 share behavior and warning wording.
@@ -259,12 +271,14 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     match: CLAUDE_OPUS_48_PATTERN,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     regionalPremium: true,
   },
   {
     match: CLAUDE_OPUS_47_PATTERN,
     warningName: 'Claude Opus 4.7 and 4.8',
     samplingParamsDeprecated: true,
+    manualThinkingDeprecated: true,
     regionalPremium: true,
   },
   { match: CLAUDE_4_5_AND_4_6_REGIONAL_PREMIUM_PATTERN, regionalPremium: true },
@@ -371,15 +385,31 @@ export function normalizeAnthropicModelName(modelName: string): string {
   return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
 }
 
+interface SamplingParamsDeprecationOptions {
+  /** Apply the forward-looking post-4.6 family matcher to values known to be model IDs. */
+  allowUnknownFamilyFallback?: boolean;
+}
+
 /**
- * Claude Opus 4.7/4.8, Claude Opus 5, Claude Sonnet 5, and Claude 5 Fable/Mythos deprecate manual sampling
- * controls at the model level — `temperature`, `top_p`, and `top_k` return 400
- * `invalid_request_error` (including promptfoo's built-in `temperature` default of 0). Shared
- * by the Anthropic, Bedrock, Vertex, and Azure providers; support for a new model lands as a
- * row in CLAUDE_MODEL_FAMILIES above.
+ * Claude models released after Opus 4.6 deprecate manual sampling controls at the model
+ * level — `temperature`, `top_p`, and `top_k` return 400 `invalid_request_error` (including
+ * promptfoo's built-in `temperature` default of 0). Shared by the Anthropic, Bedrock, Vertex,
+ * and Azure providers. Known families use the capability table above; the generation fallback
+ * keeps newly released post-4.6 family names safe before their model-specific rows land.
  */
-export function isSamplingParamsDeprecatedClaudeModel(modelId: string): boolean {
-  return hasClaudeCapability(modelId, 'samplingParamsDeprecated');
+export function isSamplingParamsDeprecatedClaudeModel(
+  modelId: string,
+  { allowUnknownFamilyFallback = true }: SamplingParamsDeprecationOptions = {},
+): boolean {
+  return (
+    hasClaudeCapability(modelId, 'samplingParamsDeprecated') ||
+    (allowUnknownFamilyFallback && CLAUDE_POST_46_OR_5_PLUS_PATTERN.test(modelId))
+  );
+}
+
+/** True when the model rejects manual budget thinking and requires adaptive thinking instead. */
+export function isManualThinkingDeprecatedClaudeModel(modelId: string): boolean {
+  return hasClaudeCapability(modelId, 'manualThinkingDeprecated');
 }
 
 /**
@@ -399,7 +429,7 @@ export function normalizeClaudeThinkingConfig<
   thinking: T | undefined,
   effort: ClaudeEffort | null | undefined,
 ): T | { type: 'adaptive'; display?: 'summarized' | 'omitted' } | undefined {
-  if (thinking?.type === 'enabled' && isSamplingParamsDeprecatedClaudeModel(modelId)) {
+  if (thinking?.type === 'enabled' && isManualThinkingDeprecatedClaudeModel(modelId)) {
     return { type: 'adaptive', ...(thinking.display ? { display: thinking.display } : {}) };
   }
   if (

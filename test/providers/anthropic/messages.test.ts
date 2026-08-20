@@ -3071,6 +3071,75 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.budget_tokens).toBe(5000);
     });
 
+    it('preserves manual thinking for an unlisted Claude 5 family', async () => {
+      const provider = createProvider('claude-haiku-5', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, max_tokens: 10000 },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-haiku-5' });
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as {
+        thinking?: { type?: string; budget_tokens?: number };
+        temperature?: number;
+      };
+      expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Manual extended thinking'));
+    });
+
+    it('keeps sampling params for a custom gateway alias configured with apiBaseUrl', async () => {
+      const provider = createProvider('claude-prod-4-9', {
+        config: {
+          apiBaseUrl: 'https://gateway.example.com/anthropic',
+          temperature: 0.5,
+        },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-prod-4-9' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0.5);
+    });
+
+    it('keeps sampling params for a custom gateway alias configured from the environment', async () => {
+      const provider = createProvider('claude-prod-5', {
+        config: { temperature: 0.5 },
+        env: { ANTHROPIC_BASE_URL: 'https://gateway.example.com/anthropic' },
+      });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-prod-5' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0.5);
+    });
+
+    it.each(['claude-haiku-5', 'claude-opus-4-9', 'claude-opus-4-10'])(
+      'keeps the fallback for %s on an explicitly configured official Anthropic endpoint',
+      async (modelName) => {
+        const provider = createProvider(modelName, {
+          config: { apiBaseUrl: 'https://api.anthropic.com', temperature: 0.5 },
+        });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model: modelName });
+
+        await provider.callApi('Hello');
+
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params).not.toHaveProperty('temperature');
+      },
+    );
+
     it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
       // Regression for the live-API 400: `temperature` is deprecated for this model.
       const provider = createProvider('claude-sonnet-5', { config: {} });

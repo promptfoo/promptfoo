@@ -762,6 +762,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return `[AWS Bedrock Converse Provider ${this.modelName}]`;
   }
 
+  private isSamplingParamsDeprecatedClaudeModel(): boolean {
+    return isSamplingParamsDeprecatedClaudeModel(this.modelName, {
+      // Application inference profile names are user-defined aliases, not model IDs.
+      allowUnknownFamilyFallback: !this.modelName.includes(':application-inference-profile/'),
+    });
+  }
+
   private async initializeMCP(): Promise<void> {
     if (!this.config.mcp) {
       return;
@@ -969,7 +976,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // level — a request that pins `temperature` or `topP` on Bedrock returns
     // ValidationException. Drop both regardless of where they came from (config
     // or AWS_BEDROCK_TEMPERATURE / AWS_BEDROCK_TOP_P).
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(this.modelName);
+    const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel();
     const temperature = reasoningEnabled || samplingParamsDeprecated ? undefined : temperatureValue;
     const topP = reasoningEnabled || samplingParamsDeprecated ? undefined : topPValue;
 
@@ -1097,7 +1104,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // sampling-deprecated Claude model (Fable/Mythos 5, Sonnet 5, Opus 4.7/4.8) rejects
     // temperature/top_p/top_k, so strip them from the raw fields too; normalizeClaudeThinkingConfig
     // then converts enabled -> adaptive and drops disabled only on the always-on Fable/Mythos models.
-    if (isSamplingParamsDeprecatedClaudeModel(this.modelName)) {
+    if (this.isSamplingParamsDeprecatedClaudeModel()) {
       delete fields.temperature;
       delete fields.top_p;
       delete fields.top_k;

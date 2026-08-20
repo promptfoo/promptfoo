@@ -676,6 +676,47 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.temperature).toBeUndefined();
     });
 
+    it('omits temperature for Claude Opus 5 on the reported Bedrock path', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', temperature: 0.5 },
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-5',
+      );
+
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('omits temperature for unlisted Claude 5+ models on Bedrock invokeModel', async () => {
+      for (const modelName of [
+        'us.anthropic.claude-haiku-5',
+        'global.anthropic.claude-research-preview-6',
+      ]) {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+
+        expect(params.temperature).toBeUndefined();
+      }
+    });
+
+    it.each(['claude-prod-5', 'claude-prod-25'])(
+      'keeps temperature for custom application inference profile alias %s',
+      async (profileName) => {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${profileName}`,
+        );
+
+        expect(params.temperature).toBe(0.5);
+      },
+    );
+
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
       // `thinking` field, so the bare 1024 default would truncate ordinary answers.
@@ -790,6 +831,19 @@ describe('AwsBedrockGenericProvider', () => {
         'hi',
         undefined,
         'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+    });
+
+    it('keeps manual thinking enabled for an unlisted Claude 5 family on Bedrock invokeModel', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+        'hi',
+        undefined,
+        'us.anthropic.claude-haiku-5',
       );
       expect(params.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
     });

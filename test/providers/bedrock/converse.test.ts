@@ -1894,6 +1894,37 @@ Third line`;
       expect(call?.inferenceConfig?.maxTokens).toBe(1024);
     });
 
+    it.each(['claude-prod-5', 'claude-prod-25'])(
+      'keeps sampling params for custom application inference profile alias %s',
+      async (profileName) => {
+        const provider = new AwsBedrockConverseProvider(
+          `arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/${profileName}`,
+          {
+            config: {
+              region: 'us-east-1',
+              max_tokens: 1024,
+              temperature: 0.5,
+              topP: 0.9,
+            },
+          },
+        );
+
+        mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+        await provider.callApi('Test');
+
+        const { ConverseCommand } = (await import(
+          '@aws-sdk/client-bedrock-runtime'
+        )) as unknown as MockBedrockModule;
+        const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+          -1,
+        )?.[0] as { inferenceConfig?: Record<string, unknown> };
+        expect(call?.inferenceConfig?.temperature).toBe(0.5);
+        expect(call?.inferenceConfig?.topP).toBe(0.9);
+        expect(call?.inferenceConfig?.maxTokens).toBe(1024);
+      },
+    );
+
     it.each(['any', { tool: { name: 'test_tool' } }])(
       'omits forced tool choice for Claude Fable 5 while preserving tools: %j',
       async (toolChoice) => {
@@ -2405,6 +2436,36 @@ Third line`;
       // explicit budget_tokens thinking config must pass through untouched
       // rather than being downgraded to adaptive.
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 12000,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          additionalModelRequestFields: {
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 12000,
+            },
+          },
+        }),
+      );
+    });
+
+    it('should keep manual thinking enabled for an unlisted Claude 5 family', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-haiku-5', {
         config: {
           region: 'us-east-1',
           thinking: {

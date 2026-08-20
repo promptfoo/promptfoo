@@ -1985,9 +1985,10 @@ describe('Anthropic utilities', () => {
       ]) {
         expect(getClaudeModelWarningName(id)).not.toBe('Claude Opus 4.7 and 4.8');
       }
-      // `claude-opus-4-80` is not a recognized family at all, and keeps sampling params.
+      // `claude-opus-4-80` is not a recognized capability-table family, so it has no
+      // family-specific warning even though the forward-compatible sampling fallback covers it.
       expect(getClaudeModelWarningName('claude-opus-4-80')).toBeUndefined();
-      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-80')).toBe(false);
+      expect(isSamplingParamsDeprecatedClaudeModel('claude-opus-4-80')).toBe(true);
     });
 
     it('still detects dated Opus 4.8 snapshots', () => {
@@ -2028,6 +2029,58 @@ describe('Anthropic utilities', () => {
         'claude-opus-4-6-20260205',
         'claude-sonnet-4-6',
         'claude-opus-4-5-20251101',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('future-proofs sampling deprecation for unlisted Claude 5+ model families', () => {
+      for (const id of [
+        'claude-haiku-5',
+        'anthropic:messages:claude-haiku-5-20260801',
+        'us.anthropic.claude-research-preview-5',
+        'vertex:claude-sonnet-6',
+        'global.anthropic.claude-opus-10',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('future-proofs sampling deprecation for post-4.6 Claude 4.x families', () => {
+      for (const id of [
+        'claude-opus-4-9',
+        'claude-opus-4-10',
+        'claude-opus-4-50',
+        'anthropic:messages:claude-haiku-4-9-20260901',
+        'us.anthropic.claude-research-preview-4-9',
+        'vertex:claude-sonnet-4-9',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('can disable the unknown-family fallback for alias-based providers', () => {
+      for (const alias of ['claude-prod-4-9', 'claude-prod-5', 'claude-prod-25']) {
+        expect(
+          isSamplingParamsDeprecatedClaudeModel(alias, {
+            allowUnknownFamilyFallback: false,
+          }),
+        ).toBe(false);
+      }
+
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-opus-5', {
+          allowUnknownFamilyFallback: false,
+        }),
+      ).toBe(true);
+    });
+
+    it('does not mistake legacy or lookalike IDs for sampling-deprecated models', () => {
+      for (const id of [
+        'claude-3-5-sonnet-20241022',
+        'claude-sonnet-5x',
+        'claude-prod-20260811',
+        'notclaude-opus-5',
       ]) {
         expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
       }
@@ -2175,7 +2228,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('normalizes thinking configs per model family and effort', () => {
-      // Manual budget thinking converts to adaptive on every sampling-deprecated family,
+      // Manual budget thinking converts to adaptive on families known to reject it,
       // preserving `display`.
       expect(
         normalizeClaudeThinkingConfig(
@@ -2184,6 +2237,16 @@ describe('Anthropic utilities', () => {
           undefined,
         ),
       ).toEqual({ type: 'adaptive', display: 'summarized' });
+
+      // The sampling fallback does not imply adaptive-thinking support. Preserve a user's
+      // explicit budget until a new family has a model-specific capability row.
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-haiku-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'enabled', budget_tokens: 8000 });
 
       // Fable/Mythos reject `disabled` outright, at any effort.
       expect(
