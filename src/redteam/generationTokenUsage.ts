@@ -67,3 +67,8 @@ export function recordGenerationTokenUsage(
 ): void {
   (provider as TrackedGenerationProvider)[generationUsageRecorder]?.(response);
 }
+
+/** Preserve usage reported by a failed remote generation request. */
+export function recordFailedGenerationTokenUsage(provider: ApiProvider, error: unknown): void {
+  recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+}
