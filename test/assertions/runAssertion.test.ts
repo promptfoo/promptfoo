@@ -3763,13 +3763,13 @@ describe('runAssertion', () => {
     it('should find templates nested inside a parsed JSON value', async () => {
       const assertion: Assertion = {
         type: 'is-json',
-        value: 'file://schema.json',
+        value: 'file://nested-schema.json',
       };
 
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({ properties: { name: { const: '{{expected}}' } } }),
       );
-      vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/nested-schema.json');
       vi.mocked(path.extname).mockReturnValue('.json');
 
       await runAssertion({
@@ -3782,7 +3782,7 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ templateType: '{{ ... }}' }),
+        expect.objectContaining({ file: '/base/path/nested-schema.json', templateType: '{{ ... }}' }),
       );
     });
 
@@ -3862,6 +3862,30 @@ describe('runAssertion', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ file: '/base/path/keyed.json' }),
+      );
+    });
+
+    it('should still warn for a tag whose body is very long', async () => {
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://long-tag.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue(`{% if ${'a'.repeat(500)} %}yes{% endif %}`);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/long-tag.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Anything.' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ file: '/base/path/long-tag.txt', templateType: '{% ... %}' }),
       );
     });
 

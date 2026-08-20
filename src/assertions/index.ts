@@ -406,24 +406,37 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
+/** Files already scanned, so a shared assertion file is walked once rather than once per test case. */
+const scannedTemplateFiles = new Set<string>();
+
+const NUNJUCKS_TAGS = [
+  { open: '{{', close: '}}', label: '{{ ... }}' },
+  { open: '{%', close: '%}', label: '{% ... %}' },
+];
+
 /**
- * Bounded on purpose. An unbounded lazy body rescans the whole remaining file
- * from every unmatched `{{`, which is quadratic on a file full of stray
- * openers, and this runs synchronously before any assertion does.
+ * Linear delimiter scan rather than a regex. A lazy regex body rescans the
+ * rest of the file from every unmatched opener, and capping the body to bound
+ * that would silently stop matching valid long tags.
  */
-const UNRENDERED_TEMPLATE = /\{\{[^{}]{0,200}\}\}|\{%[^{}]{0,200}%\}/;
+function templateTypeIn(text: string): string | undefined {
+  for (const { open, close, label } of NUNJUCKS_TAGS) {
+    const opened = text.indexOf(open);
+    if (opened !== -1 && text.indexOf(close, opened + open.length) !== -1) {
+      return label;
+    }
+  }
+  return undefined;
+}
 
-/** Resolved file paths already warned about, so a shared rubric warns once and not once per test case. */
-const warnedTemplateFiles = new Set<string>();
-
-/** Whether a loaded value contains a Nunjucks tag anywhere, including inside a parsed JSON or YAML structure. */
-function findTemplateTag(value: unknown): string | undefined {
+/** The kind of Nunjucks tag in a loaded value, looking inside parsed JSON and YAML as well. */
+function findTemplateType(value: unknown): string | undefined {
   if (typeof value === 'string') {
-    return value.match(UNRENDERED_TEMPLATE)?.[0];
+    return templateTypeIn(value);
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findTemplateTag(item);
+      const found = findTemplateType(item);
       if (found) {
         return found;
       }
@@ -432,7 +445,7 @@ function findTemplateTag(value: unknown): string | undefined {
   }
   if (value && typeof value === 'object') {
     // Entries, not values: a schema can template a mapping key too.
-    return findTemplateTag(Object.entries(value).flat());
+    return findTemplateType(Object.entries(value).flat());
   }
   return undefined;
 }
@@ -450,18 +463,18 @@ function findTemplateTag(value: unknown): string | undefined {
  * value, and the file path is what makes the warning actionable anyway.
  */
 function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
-  if (warnedTemplateFiles.has(source)) {
+  if (scannedTemplateFiles.has(source)) {
     return;
   }
-  const tag = findTemplateTag(value);
-  if (!tag) {
+  scannedTemplateFiles.add(source);
+  const templateType = findTemplateType(value);
+  if (!templateType) {
     return;
   }
-  warnedTemplateFiles.add(source);
   logger.warn(
     'Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ' +
       'Inline the value in your config if you need variables substituted.',
-    { file: source, templateType: tag.startsWith('{{') ? '{{ ... }}' : '{% ... %}' },
+    { file: source, templateType },
   );
 }
 
@@ -590,8 +603,9 @@ async function runAssertionInternal({
           };
         }
       } else {
+        const loadedFrom = path.resolve(basePath, fileRef);
         renderedValue = processFileReference(renderedValue);
-        warnIfTemplateWasNotRendered(renderedValue, filePath);
+        warnIfTemplateWasNotRendered(renderedValue, loadedFrom);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
