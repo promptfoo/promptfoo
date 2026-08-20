@@ -53,7 +53,7 @@ export async function postRemoteGenerationTask<T>(
 
     // Some remote tasks are deterministic, so an absent usage payload cannot be treated as a
     // model request. Only the service knows whether or how many provider calls actually ran.
-    if (provider && data?.tokenUsage) {
+    if (provider && data?.tokenUsage && !response.coalesced) {
       responseRecorded = true;
       recordGenerationTokenUsage(provider, {
         tokenUsage: data.tokenUsage,

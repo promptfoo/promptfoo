@@ -71,6 +71,30 @@ describe('postRemoteGenerationTask', () => {
     expect(usage).toEqual({});
   });
 
+  it('records coalesced concurrent generation usage only for the request owner', async () => {
+    const usage: TokenUsage = {};
+    const runtimeContext = createTrackedContext(usage);
+    const response = {
+      cached: false,
+      data: {
+        result: [],
+        tokenUsage: { total: 30, prompt: 20, completion: 10, numRequests: 3 },
+      },
+      status: 200,
+      statusText: 'OK',
+    };
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce(response)
+      .mockResolvedValueOnce({ ...response, coalesced: true });
+
+    await Promise.all([
+      postRemoteGenerationTask({ task: 'citation', topic: 'duplicate' }, runtimeContext),
+      postRemoteGenerationTask({ task: 'citation', topic: 'duplicate' }, runtimeContext),
+    ]);
+
+    expect(usage).toMatchObject({ total: 30, prompt: 20, completion: 10, numRequests: 3 });
+  });
+
   it('does not invent model requests for deterministic tasks without reported usage', async () => {
     const usage: TokenUsage = {};
     vi.mocked(fetchWithCache).mockResolvedValue({
@@ -102,6 +126,20 @@ describe('postRemoteGenerationTask', () => {
     expect(usage).toMatchObject({ total: 12, prompt: 8, completion: 4, numRequests: 1 });
   });
 
+  it('does not invent model usage for an unsuccessful HTTP response without usage', async () => {
+    const usage: TokenUsage = {};
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      data: { error: 'request was rejected before model execution' },
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+
+    await postRemoteGenerationTask({ task: 'citation' }, createTrackedContext(usage));
+
+    expect(usage).toEqual({});
+  });
+
   it('preserves token usage carried by a rejected remote request', async () => {
     const usage: TokenUsage = {};
     const error = Object.assign(new Error('generation failed'), {
@@ -116,7 +154,7 @@ describe('postRemoteGenerationTask', () => {
     expect(usage).toMatchObject({ total: 14, prompt: 9, completion: 5, numRequests: 1 });
   });
 
-  it('counts a failed remote request when no token breakdown is available', async () => {
+  it('does not invent model usage when a remote request fails without a token breakdown', async () => {
     const usage: TokenUsage = {};
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('generation timed out'));
 
@@ -124,7 +162,7 @@ describe('postRemoteGenerationTask', () => {
       postRemoteGenerationTask({ task: 'citation' }, createTrackedContext(usage)),
     ).rejects.toThrow('generation timed out');
 
-    expect(usage).toEqual({ numRequests: 1 });
+    expect(usage).toEqual({});
   });
 
   it('preserves custom headers and cache-busting for GCG requests', async () => {

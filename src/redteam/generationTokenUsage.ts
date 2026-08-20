@@ -70,5 +70,8 @@ export function recordGenerationTokenUsage(
 
 /** Preserve usage reported by a failed remote generation request. */
 export function recordFailedGenerationTokenUsage(provider: ApiProvider, error: unknown): void {
-  recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
+  const tokenUsage = getErrorTokenUsage(error);
+  if (tokenUsage) {
+    recordGenerationTokenUsage(provider, { tokenUsage });
+  }
 }
