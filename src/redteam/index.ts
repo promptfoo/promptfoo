@@ -1018,17 +1018,24 @@ export async function synthesize({
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
+  const explicitStrategyIds = new Set(
+    strategies
+      .filter((strategy) => !isStrategyCollection(strategy.id))
+      .map((strategy) => strategy.id),
+  );
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
       const aliasedStrategies = STRATEGY_COLLECTION_MAPPINGS[strategy.id];
       if (aliasedStrategies) {
-        aliasedStrategies.forEach((strategyId) => {
-          expandedStrategies.push({
-            ...strategy,
-            id: strategyId,
-          });
-        });
+        expandedStrategies.push(
+          ...aliasedStrategies
+            .filter((strategyId) => !explicitStrategyIds.has(strategyId))
+            .map((strategyId) => ({
+              ...strategy,
+              id: strategyId,
+            })),
+        );
       } else {
         logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
       }

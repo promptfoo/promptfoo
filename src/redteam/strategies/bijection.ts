@@ -1,4 +1,4 @@
-import { createSeededRandom } from './textMutation';
+import { createSeededRandom, transformStrategyInput } from './textMutation';
 
 import type { Strategy } from './types';
 
@@ -180,12 +180,13 @@ export function addBijectionTestCases(
     return Array.from({ length: options.n }, (_, variant) => {
       const variantSeed = `${options.seed}\u0000${originalText}\u0000${variant}`;
       const mapping = generateBijectionMapping(options, variantSeed);
-      const encodedRequest = encodeBijection(originalText, mapping);
       return {
         ...testCase,
         vars: {
           ...testCase.vars,
-          [injectVar]: buildBijectionPrompt(encodedRequest, mapping, options.includeExamples),
+          [injectVar]: transformStrategyInput(testCase, injectVar, 'bijection', (value) =>
+            buildBijectionPrompt(encodeBijection(value, mapping), mapping, options.includeExamples),
+          ),
         },
         metadata: {
           ...testCase.metadata,

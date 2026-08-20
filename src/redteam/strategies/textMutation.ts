@@ -1,3 +1,4 @@
+import { MULTI_INPUT_VAR } from '../constants/plugins';
 import { TEXT_MUTATION_DEFAULT_RATES } from '../constants/strategies';
 
 import type { TextMutationStrategy } from '../constants/strategies';
@@ -101,13 +102,25 @@ function pick<T>(values: readonly T[], random: RandomSource): T {
 
 function mutateZeroWidth(text: string, rate: number, random: RandomSource): string {
   const characters = Array.from(text);
-  const selected = selectPositions(
-    characters,
-    rate,
-    random,
-    (character, index) =>
-      /[\p{L}\p{N}]/u.test(character) &&
-      (characters[index + 1] === undefined || !/\p{M}/u.test(characters[index + 1])),
+  const insertionPositions = new Set<number>();
+
+  for (let index = 0; index < characters.length; index++) {
+    if (!/[\p{L}\p{N}]/u.test(characters[index])) {
+      continue;
+    }
+
+    let insertionIndex = index;
+    while (
+      insertionIndex + 1 < characters.length &&
+      /\p{M}/u.test(characters[insertionIndex + 1])
+    ) {
+      insertionIndex++;
+    }
+    insertionPositions.add(insertionIndex);
+  }
+
+  const selected = selectPositions(characters, rate, random, (_character, index) =>
+    insertionPositions.has(index),
   );
 
   return characters
@@ -201,6 +214,56 @@ export function mutateText(
   }
 }
 
+export function transformStrategyInput(
+  testCase: StrategyTestCases[number],
+  injectVar: string,
+  strategy: string,
+  transform: (value: string) => string,
+): string {
+  const originalText = String(testCase.vars?.[injectVar]);
+  const inputs = testCase.metadata?.pluginConfig?.inputs;
+
+  if (
+    injectVar !== MULTI_INPUT_VAR ||
+    !inputs ||
+    typeof inputs !== 'object' ||
+    Array.isArray(inputs)
+  ) {
+    return transform(originalText);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(originalText);
+  } catch {
+    throw new Error(`${strategy} strategy requires a valid multi-input JSON object`);
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${strategy} strategy requires a valid multi-input JSON object`);
+  }
+
+  const definitions = inputs as Record<string, unknown>;
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(parsed).map(([key, value]) => {
+        const definition = definitions[key];
+        const benign =
+          typeof definition === 'object' &&
+          definition !== null &&
+          (definition as { config?: { benign?: boolean } }).config?.benign === true;
+
+        return [
+          key,
+          Object.hasOwn(definitions, key) && typeof value === 'string' && !benign
+            ? transform(value)
+            : value,
+        ];
+      }),
+    ),
+  );
+}
+
 export function addTextMutation(
   testCases: StrategyTestCases,
   injectVar: string,
@@ -214,7 +277,9 @@ export function addTextMutation(
       ...testCase,
       vars: {
         ...testCase.vars,
-        [injectVar]: mutateText(originalText, strategy, config),
+        [injectVar]: transformStrategyInput(testCase, injectVar, strategy, (value) =>
+          mutateText(value, strategy, config),
+        ),
       },
       metadata: {
         ...testCase.metadata,

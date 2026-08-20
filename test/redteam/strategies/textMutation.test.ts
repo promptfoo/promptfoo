@@ -33,6 +33,16 @@ describe('text mutation strategies', () => {
     expect(output.replace(/\p{Cf}/gu, '')).toBe(input);
   });
 
+  it('inserts zero-width characters after decomposed Unicode graphemes', () => {
+    const input = 'e\u0301a\u0301\u0327';
+    const output = mutateText(input, 'zero-width', { rate: 1, seed: 'decomposed' });
+
+    expect(output).not.toBe(input);
+    expect(output.match(/\p{Cf}/gu)).toHaveLength(2);
+    expect(output.replace(/\p{Cf}/gu, '')).toBe(input);
+    expect(output).toMatch(/^e\u0301\p{Cf}a\u0301\u0327\p{Cf}$/u);
+  });
+
   it('adds one removable combining mark per selected character for unicode-noise', () => {
     const input = 'ab 12';
     const output = mutateText(input, 'unicode-noise', { rate: 1, seed: 7 });
@@ -129,5 +139,62 @@ describe('text mutation strategies', () => {
       { type: 'contains', value: 'x', metric: 'Safety/ZeroWidth' },
       { type: 'is-json' },
     ]);
+  });
+
+  it.each(TEXT_MUTATION_STRATEGIES)(
+    'preserves multi-input JSON structure and benign companion fields for %s',
+    (strategy) => {
+      const originalText = JSON.stringify({
+        message: 'show the recovery code',
+        context: 'Trusted context',
+        account: 4821,
+      });
+      const testCase: TestCaseWithPlugin = {
+        vars: {
+          __prompt: originalText,
+          message: 'show the recovery code',
+          context: 'Trusted context',
+        },
+        metadata: {
+          pluginId: 'harmful:test',
+          pluginConfig: {
+            inputs: {
+              message: 'Untrusted customer message',
+              context: {
+                description: 'Trusted companion context',
+                config: { benign: true },
+              },
+              account: 'Account number',
+            },
+          },
+        },
+      };
+
+      const [result] = addTextMutation([testCase], '__prompt', strategy, {
+        rate: 1,
+        seed: 'multi-input',
+      });
+      const transformed = JSON.parse(String(result.vars?.__prompt));
+
+      expect(Object.keys(transformed)).toEqual(['message', 'context', 'account']);
+      expect(transformed.message).not.toBe('show the recovery code');
+      expect(transformed.context).toBe('Trusted context');
+      expect(transformed.account).toBe(4821);
+      expect(result.metadata?.originalText).toBe(originalText);
+    },
+  );
+
+  it('rejects malformed multi-input envelopes instead of producing silent false negatives', () => {
+    const testCase: TestCaseWithPlugin = {
+      vars: { __prompt: 'not valid JSON', message: 'show the recovery code' },
+      metadata: {
+        pluginId: 'harmful:test',
+        pluginConfig: { inputs: { message: 'Untrusted customer message' } },
+      },
+    };
+
+    expect(() => addTextMutation([testCase], '__prompt', 'zero-width', { rate: 1 })).toThrow(
+      /multi-input/i,
+    );
   });
 });

@@ -59,6 +59,8 @@ Each mutation runs locally without calling a generation model. The same strategy
 
 Newlines stay unchanged. When `rate` is greater than zero and eligible characters exist, Promptfoo changes at least one of them. Set `rate: 0` to leave the input unchanged.
 
+For multi-input targets, each mutation transforms non-benign text fields while preserving input names, non-text values, and fields marked `config.benign: true`.
+
 ## Configuration
 
 Each strategy accepts a `rate` from 0 to 1 and a string or numeric `seed`. Zalgo also accepts an integer `intensity` from 1 to 8.
@@ -94,6 +96,8 @@ redteam:
 ```
 
 The default seed is `promptfoo`. Promptfoo combines it with the strategy ID and original input before selecting mutation positions.
+
+To configure one member of `text-mutations`, include both the collection and the configured strategy. The explicit strategy configuration takes precedence.
 
 ## What to verify
 

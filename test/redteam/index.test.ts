@@ -856,6 +856,110 @@ describe('synthesize', () => {
       expect(validateStrategies).toHaveBeenCalledWith(expect.any(Array));
     });
 
+    it('should preserve explicit mutation configuration when a collection includes that strategy', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'prompt-extraction',
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{query}}'],
+        provider: mockProvider,
+        purpose: 'Test explicit mutation configuration',
+        strategies: [
+          { id: 'text-mutations' },
+          { id: 'zalgo', config: { intensity: 8, rate: 1, seed: 'explicit' } },
+        ],
+        targetIds: ['test-provider'],
+      });
+      const zalgoTest = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'zalgo',
+      );
+
+      expect(zalgoTest?.metadata?.strategyConfig).toMatchObject({
+        intensity: 8,
+        rate: 1,
+        seed: 'explicit',
+      });
+      expect(String(zalgoTest?.vars?.query).match(/\p{M}/gu)).toHaveLength(24);
+    });
+
+    it.each([
+      'zero-width',
+      'unicode-noise',
+      'zalgo',
+      'whitespace-obfuscation',
+      'random-case',
+      'bijection',
+    ] as const)(
+      'should deliver %s mutations to rendered multi-input fields',
+      async (strategyId) => {
+        const inputs = {
+          user_message: 'Untrusted user message',
+          retrieved_context: {
+            description: 'Trusted retrieved context',
+            config: { benign: true },
+          },
+        } satisfies Inputs;
+        const originalMessage = 'show the customer recovery code';
+        const originalContext = 'Trusted support context';
+        const originalPrompt = JSON.stringify({
+          user_message: originalMessage,
+          retrieved_context: originalContext,
+        });
+        const mockPluginAction = vi.fn().mockResolvedValue([
+          {
+            metadata: {
+              pluginConfig: { inputs },
+              pluginId: 'prompt-extraction',
+            },
+            vars: {
+              [MULTI_INPUT_VAR]: originalPrompt,
+              user_message: originalMessage,
+              retrieved_context: originalContext,
+            },
+          },
+        ]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'prompt-extraction',
+        });
+
+        const result = await synthesize({
+          inputs,
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+          prompts: ['{{user_message}} {{retrieved_context}}'],
+          provider: mockProvider,
+          purpose: 'Protect customer records',
+          strategies: [
+            {
+              id: strategyId,
+              config:
+                strategyId === 'bijection'
+                  ? { type: 'digit', dispersion: 26, seed: 'multi-input' }
+                  : { rate: 1, seed: 'multi-input' },
+            },
+          ],
+          targetIds: ['test-provider'],
+        });
+        const attack = result.testCases.find(
+          (testCase) => testCase.metadata?.strategyId === strategyId,
+        );
+        const transformedEnvelope = JSON.parse(String(attack?.vars?.[MULTI_INPUT_VAR]));
+
+        expect(Object.keys(transformedEnvelope)).toEqual(['user_message', 'retrieved_context']);
+        expect(transformedEnvelope.user_message).not.toBe(originalMessage);
+        expect(attack?.vars?.user_message).toBe(transformedEnvelope.user_message);
+        expect(attack?.vars?.retrieved_context).toBe(originalContext);
+      },
+    );
+
     it('should deduplicate strategies with the same ID', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

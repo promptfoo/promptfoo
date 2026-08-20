@@ -56,6 +56,8 @@ Promptfoo maps all 26 lowercase English letters:
 
 Each prompt includes the complete mapping, optional examples, and the encoded request. Promptfoo derives each variant's mapping from its seed, the original text, and the variant index.
 
+For multi-input targets, Promptfoo encodes each non-benign text field separately and preserves field names, non-text values, and fields marked `config.benign: true`.
+
 ## Response and grading
 
 Promptfoo grades the target's unmodified answer with the test's original assertions. Refusals, answers, errors, and structured output keep their usual meaning.
