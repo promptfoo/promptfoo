@@ -3782,7 +3782,10 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ file: '/base/path/nested-schema.json', templateType: '{{ ... }}' }),
+        expect.objectContaining({
+          file: '/base/path/nested-schema.json',
+          templateType: '{{ ... }}',
+        }),
       );
     });
 
@@ -3837,6 +3840,32 @@ describe('runAssertion', () => {
       const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
       expect(logged).toContain('/base/path/secret.txt');
       expect(logged).not.toContain('hunter2');
+    });
+
+    it('should not tell object-valued references to inline the value, which would not help', async () => {
+      const assertion: Assertion = {
+        type: 'is-json',
+        value: 'file://object-remedy.json',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ properties: { name: { const: '{{expected}}' } } }),
+      );
+      vi.mocked(path.resolve).mockReturnValue('/base/path/object-remedy.json');
+      vi.mocked(path.extname).mockReturnValue('.json');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { expected: 'capybara' } } as AtomicTestCase,
+        providerResponse: { output: '{"name": "capybara"}' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('not interpolated even when written inline'),
+        expect.objectContaining({ file: '/base/path/object-remedy.json' }),
+      );
     });
 
     it('should find a template used as a mapping key', async () => {

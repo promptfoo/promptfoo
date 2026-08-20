@@ -471,9 +471,14 @@ function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
   if (!templateType) {
     return;
   }
+  // Only string and array-of-string values are ever rendered, so telling the
+  // author of a JSON or YAML reference to inline it would not fix anything.
+  const remedy =
+    typeof value === 'string'
+      ? 'Inline the value in your config if you need variables substituted.'
+      : 'Object values are not interpolated even when written inline, so the variable has to be resolved before the file is loaded.';
   logger.warn(
-    'Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ' +
-      'Inline the value in your config if you need variables substituted.',
+    `Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ${remedy}`,
     { file: source, templateType },
   );
 }

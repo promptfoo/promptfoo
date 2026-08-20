@@ -328,7 +328,10 @@ This is easiest to miss on model-graded assertions, where the grader still retur
 pass or fail by judging the rest of the rubric. promptfoo logs a warning the first
 time it loads a file whose value still contains a Nunjucks tag.
 
-Write the value inline if you need variables:
+Write the value inline if you need variables. This works for string and
+array-of-string values. Values that parse to an object, such as a JSON or YAML
+schema, are not interpolated even when written inline, so a template in one has to
+be resolved before promptfoo loads it:
 
 ```yaml
 - assert:
