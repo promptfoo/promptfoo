@@ -3918,6 +3918,56 @@ describe('runAssertion', () => {
       );
     });
 
+    it('should warn for a Nunjucks comment tag, which rendering would have stripped', async () => {
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://commented.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('{# internal grading note #}Grade it.');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/commented.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Anything.' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ file: '/base/path/commented.txt', templateType: '{# ... #}' }),
+      );
+    });
+
+    it('should warn for a templated JSON file even though it cannot be parsed', async () => {
+      const assertion: Assertion = {
+        type: 'is-json',
+        value: 'file://templated.json',
+      };
+
+      // Not valid JSON, so processFileReference throws. The author should still
+      // be told why, rather than only seeing a parser error.
+      vi.mocked(fs.readFileSync).mockReturnValue('{"minimum": {{limit}}}');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/templated.json');
+      vi.mocked(path.extname).mockReturnValue('.json');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { limit: 3 } } as AtomicTestCase,
+        providerResponse: { output: '{"minimum": 3}' },
+      }).catch(() => undefined);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('not interpolated even when written inline'),
+        expect.objectContaining({ file: '/base/path/templated.json' }),
+      );
+    });
+
     it('should not warn when a file-loaded value contains no template', async () => {
       const assertion: Assertion = {
         type: 'equals',

@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -406,12 +407,13 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-/** Files already scanned, so a shared assertion file is walked once rather than once per test case. */
+/** Files already scanned, so a shared assertion file is read once rather than once per test case. */
 const scannedTemplateFiles = new Set<string>();
 
 const NUNJUCKS_TAGS = [
   { open: '{{', close: '}}', label: '{{ ... }}' },
   { open: '{%', close: '%}', label: '{% ... %}' },
+  { open: '{#', close: '#}', label: '{# ... #}' },
 ];
 
 /**
@@ -429,27 +431,6 @@ function templateTypeIn(text: string): string | undefined {
   return undefined;
 }
 
-/** The kind of Nunjucks tag in a loaded value, looking inside parsed JSON and YAML as well. */
-function findTemplateType(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    return templateTypeIn(value);
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findTemplateType(item);
-      if (found) {
-        return found;
-      }
-    }
-    return undefined;
-  }
-  if (value && typeof value === 'object') {
-    // Entries, not values: a schema can template a mapping key too.
-    return findTemplateType(Object.entries(value).flat());
-  }
-  return undefined;
-}
-
 /**
  * Assertion values loaded from a file are not passed through Nunjucks, so a
  * template in one reaches the assertion as literal text. That is easy to miss
@@ -459,24 +440,36 @@ function findTemplateType(value: unknown): string | undefined {
  * Warn rather than render: some assertions legitimately compare against text
  * that contains braces.
  *
+ * Scans the file's raw text, before it is parsed, for three reasons. A
+ * templated JSON or YAML file is usually not valid JSON or YAML, so parsing
+ * throws and the author sees a parser error instead of this warning. Raw text
+ * also covers a template used as a mapping key. And a flat string scan cannot
+ * overflow the stack or loop forever on a YAML alias cycle, which walking the
+ * parsed object graph can.
+ *
  * The tag's contents are deliberately not logged. A tag can hold a literal
  * value, and the file path is what makes the warning actionable anyway.
  */
-function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
+function warnIfTemplateWillNotBeRendered(source: string): void {
   if (scannedTemplateFiles.has(source)) {
     return;
   }
   scannedTemplateFiles.add(source);
-  const templateType = findTemplateType(value);
+
+  // Not guarded: an unreadable file throws here exactly as it would one line
+  // later inside processFileReference, and swallowing it would hide real bugs.
+  const templateType = templateTypeIn(readFileSync(source, 'utf8'));
   if (!templateType) {
     return;
   }
+
   // Only string and array-of-string values are ever rendered, so telling the
   // author of a JSON or YAML reference to inline it would not fix anything.
-  const remedy =
-    typeof value === 'string'
-      ? 'Inline the value in your config if you need variables substituted.'
-      : 'Object values are not interpolated even when written inline, so the variable has to be resolved before the file is loaded.';
+  const parsesToObject = ['.json', '.yaml', '.yml'].includes(path.extname(source));
+  const remedy = parsesToObject
+    ? 'Object values are not interpolated even when written inline, so the variable has to be resolved before the file is loaded.'
+    : 'Inline the value in your config if you need variables substituted.';
+
   logger.warn(
     `Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ${remedy}`,
     { file: source, templateType },
@@ -608,9 +601,9 @@ async function runAssertionInternal({
           };
         }
       } else {
-        const loadedFrom = path.resolve(basePath, fileRef);
+        // Before the load: a templated JSON or YAML file usually fails to parse.
+        warnIfTemplateWillNotBeRendered(path.resolve(basePath, fileRef));
         renderedValue = processFileReference(renderedValue);
-        warnIfTemplateWasNotRendered(renderedValue, loadedFrom);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -631,12 +624,10 @@ async function runAssertionInternal({
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
-          const loaded = processFileReference(v);
-          warnIfTemplateWasNotRendered(
-            loaded,
+          warnIfTemplateWillNotBeRendered(
             path.resolve(cliState.basePath || '', v.slice('file://'.length)),
           );
-          return loaded;
+          return processFileReference(v);
         }
         return nunjucks.renderString(v, resolvedVars);
       }
