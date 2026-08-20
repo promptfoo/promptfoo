@@ -3732,7 +3732,7 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('values loaded from a file are not interpolated'),
-        expect.objectContaining({ file: '/base/path/rubric.txt', template: '{{topic}}' }),
+        expect.objectContaining({ file: '/base/path/rubric.txt', templateType: '{{ ... }}' }),
       );
     });
 
@@ -3756,7 +3756,7 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ template: '{% if premium %}' }),
+        expect.objectContaining({ templateType: '{% ... %}' }),
       );
     });
 
@@ -3782,7 +3782,7 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ template: '{{expected}}' }),
+        expect.objectContaining({ templateType: '{{ ... }}' }),
       );
     });
 
@@ -3816,14 +3816,14 @@ describe('runAssertion', () => {
       expect(warnings).toHaveLength(1);
     });
 
-    it('should truncate a long template rather than logging file contents', async () => {
+    it('should not log the template contents, which can hold a literal value', async () => {
       const assertion: Assertion = {
         type: 'llm-rubric',
-        value: 'file://long.txt',
+        value: 'file://secret.txt',
       };
 
-      vi.mocked(fs.readFileSync).mockReturnValue(`{{ ${'x'.repeat(200)} }}`);
-      vi.mocked(path.resolve).mockReturnValue('/base/path/long.txt');
+      vi.mocked(fs.readFileSync).mockReturnValue('Grade against {{ "hunter2" }} please.');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/secret.txt');
       vi.mocked(path.extname).mockReturnValue('.txt');
 
       await runAssertion({
@@ -3834,13 +3834,35 @@ describe('runAssertion', () => {
         providerResponse: { output: 'Anything.' },
       });
 
-      const [, context] = vi
-        .mocked(logger.warn)
-        .mock.calls.find(([, ctx]) =>
-          Boolean(ctx && (ctx as { file?: string }).file === '/base/path/long.txt'),
-        )!;
-      expect((context as { template: string }).template).toHaveLength(63);
-      expect((context as { template: string }).template.endsWith('...')).toBe(true);
+      const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
+      expect(logged).toContain('/base/path/secret.txt');
+      expect(logged).not.toContain('hunter2');
+    });
+
+    it('should find a template used as a mapping key', async () => {
+      const assertion: Assertion = {
+        type: 'is-json',
+        value: 'file://keyed.json',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ properties: { '{{field}}': { type: 'string' } } }),
+      );
+      vi.mocked(path.resolve).mockReturnValue('/base/path/keyed.json');
+      vi.mocked(path.extname).mockReturnValue('.json');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { field: 'name' } } as AtomicTestCase,
+        providerResponse: { output: '{"name": "capybara"}' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ file: '/base/path/keyed.json' }),
+      );
     });
 
     it('should not warn when a file-loaded value contains no template', async () => {
@@ -3887,7 +3909,7 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ template: '{{topic}}' }),
+        expect.objectContaining({ templateType: '{{ ... }}' }),
       );
     });
 

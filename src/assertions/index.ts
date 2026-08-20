@@ -406,12 +406,17 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-const UNRENDERED_TEMPLATE = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}/;
+/**
+ * Bounded on purpose. An unbounded lazy body rescans the whole remaining file
+ * from every unmatched `{{`, which is quadratic on a file full of stray
+ * openers, and this runs synchronously before any assertion does.
+ */
+const UNRENDERED_TEMPLATE = /\{\{[^{}]{0,200}\}\}|\{%[^{}]{0,200}%\}/;
 
 /** Resolved file paths already warned about, so a shared rubric warns once and not once per test case. */
 const warnedTemplateFiles = new Set<string>();
 
-/** First Nunjucks tag anywhere in a loaded value, including inside a parsed JSON or YAML structure. */
+/** Whether a loaded value contains a Nunjucks tag anywhere, including inside a parsed JSON or YAML structure. */
 function findTemplateTag(value: unknown): string | undefined {
   if (typeof value === 'string') {
     return value.match(UNRENDERED_TEMPLATE)?.[0];
@@ -426,7 +431,8 @@ function findTemplateTag(value: unknown): string | undefined {
     return undefined;
   }
   if (value && typeof value === 'object') {
-    return findTemplateTag(Object.values(value));
+    // Entries, not values: a schema can template a mapping key too.
+    return findTemplateTag(Object.entries(value).flat());
   }
   return undefined;
 }
@@ -439,6 +445,9 @@ function findTemplateTag(value: unknown): string | undefined {
  *
  * Warn rather than render: some assertions legitimately compare against text
  * that contains braces.
+ *
+ * The tag's contents are deliberately not logged. A tag can hold a literal
+ * value, and the file path is what makes the warning actionable anyway.
  */
 function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
   if (warnedTemplateFiles.has(source)) {
@@ -452,14 +461,8 @@ function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
   logger.warn(
     'Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ' +
       'Inline the value in your config if you need variables substituted.',
-    { file: source, template: truncateTemplateTag(tag) },
+    { file: source, templateType: tag.startsWith('{{') ? '{{ ... }}' : '{% ... %}' },
   );
-}
-
-/** Enough of the tag to identify it, never enough to dump a file's contents into the log. */
-function truncateTemplateTag(tag: string): string {
-  const singleLine = tag.replace(/\s+/g, ' ');
-  return singleLine.length > 60 ? `${singleLine.slice(0, 60)}...` : singleLine;
 }
 
 async function runAssertionInternal({
@@ -610,7 +613,10 @@ async function runAssertionInternal({
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
           const loaded = processFileReference(v);
-          warnIfTemplateWasNotRendered(loaded, v);
+          warnIfTemplateWasNotRendered(
+            loaded,
+            path.resolve(cliState.basePath || '', v.slice('file://'.length)),
+          );
           return loaded;
         }
         return nunjucks.renderString(v, resolvedVars);

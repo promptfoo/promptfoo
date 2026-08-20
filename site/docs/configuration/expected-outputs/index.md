@@ -313,7 +313,7 @@ The `value` of an assertion can be loaded directly from a file using the `file:/
 
 #### Variables are not substituted in raw files
 
-promptfoo uses a raw file's contents as-is. Nunjucks tags such as `{{topic}}` or
+promptfoo does not run a raw file through Nunjucks. Tags such as `{{topic}}` or
 `{% if premium %}` are not substituted, so the assertion receives the template text
 literally:
 
