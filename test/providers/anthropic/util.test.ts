@@ -2033,6 +2033,54 @@ describe('Anthropic utilities', () => {
       }
     });
 
+    it('future-proofs sampling deprecation for unlisted Claude 5+ model families', () => {
+      for (const id of [
+        'claude-haiku-5',
+        'anthropic:messages:claude-haiku-5-20260801',
+        'us.anthropic.claude-research-preview-5',
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-haiku-5',
+        'vertex:claude-sonnet-6',
+        'global.anthropic.claude-opus-10',
+        'claude-haiku-99',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(true);
+      }
+    });
+
+    it('does not mistake legacy or lookalike model IDs for Claude 5+', () => {
+      for (const id of [
+        'claude-3-5-sonnet-20241022',
+        'claude-opus-4-50',
+        'claude-sonnet-5x',
+        'notclaude-opus-5',
+        'claude-prod-20260811',
+        'claude-release-2026',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-5',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+      ]) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id)).toBe(false);
+      }
+    });
+
+    it('disables generation fallback for alias-based Claude providers', () => {
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-5', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-prod-25', { allowGenerationFallback: false }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-team-blue-12', {
+          allowGenerationFallback: false,
+        }),
+      ).toBe(false);
+      expect(
+        isSamplingParamsDeprecatedClaudeModel('claude-opus-5', { allowGenerationFallback: false }),
+      ).toBe(true);
+    });
+
     it('detects Claude Sonnet 5 across provider naming schemes', () => {
       for (const id of [
         'claude-sonnet-5',
@@ -2184,6 +2232,29 @@ describe('Anthropic utilities', () => {
           undefined,
         ),
       ).toEqual({ type: 'adaptive', display: 'summarized' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-haiku-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+        ),
+      ).toEqual({ type: 'adaptive' });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-prod-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+          { allowGenerationFallback: false },
+        ),
+      ).toEqual({ type: 'enabled', budget_tokens: 8000 });
+      expect(
+        normalizeClaudeThinkingConfig(
+          'claude-opus-5',
+          { type: 'enabled', budget_tokens: 8000 } as any,
+          undefined,
+          { allowGenerationFallback: false },
+        ),
+      ).toEqual({ type: 'adaptive' });
 
       // Fable/Mythos reject `disabled` outright, at any effort.
       expect(

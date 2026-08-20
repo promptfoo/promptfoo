@@ -407,6 +407,44 @@ describe('CloudflareGateway Provider', () => {
         expect.any(Object),
       );
     });
+
+    it('keeps future Claude compatibility through the trusted Anthropic passthrough', async () => {
+      const provider = new CloudflareGatewayAnthropicProvider('claude-haiku-5', {
+        config: { ...minimumConfig, max_tokens: 10000, temperature: 0.5, top_p: 0.9 },
+      });
+      const responsePayload = {
+        id: 'msg_123',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Test' }],
+        model: 'claude-haiku-5',
+        stop_reason: 'end_turn',
+        usage: { input_tokens: 5, output_tokens: 5 },
+      };
+      mockFetch.mockResolvedValue({
+        ...defaultMockResponse,
+        text: vi.fn().mockResolvedValue(JSON.stringify(responsePayload)),
+        ok: true,
+      });
+
+      await provider.callApi(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: 'Test prompt',
+            thinking: { type: 'enabled', budget_tokens: 5000 },
+          },
+        ]),
+      );
+
+      const requestBody = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(requestBody).toMatchObject({
+        model: 'claude-haiku-5',
+        thinking: { type: 'adaptive' },
+      });
+      expect(requestBody).not.toHaveProperty('temperature');
+      expect(requestBody).not.toHaveProperty('top_p');
+    });
   });
 
   describe('Error Handling', () => {
