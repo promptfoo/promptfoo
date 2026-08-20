@@ -895,6 +895,7 @@ describe('synthesize', () => {
       'whitespace-obfuscation',
       'random-case',
       'bijection',
+      'homoglyph',
     ] as const)(
       'should deliver %s mutations to rendered multi-input fields',
       async (strategyId) => {
@@ -939,7 +940,7 @@ describe('synthesize', () => {
           purpose: 'Protect customer records',
           strategies: [
             {
-              id: strategyId,
+              id: strategyId === 'homoglyph' ? 'text-mutations' : strategyId,
               config:
                 strategyId === 'bijection'
                   ? { type: 'digit', dispersion: 26, seed: 'multi-input' }

@@ -110,11 +110,18 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
 export function getEstimatedProbes(config: Config) {
   const numTests = config.numTests ?? 5;
   const baseProbes = numTests * config.plugins.length;
+  const selectedStrategyIds = new Set(config.strategies.map(getStrategyId));
 
   // Calculate total multiplier for all active strategies
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
+    const collection =
+      STRATEGY_COLLECTION_MAPPINGS[strategyId as keyof typeof STRATEGY_COLLECTION_MAPPINGS];
+    if (collection) {
+      return total + collection.filter((member) => !selectedStrategyIds.has(member)).length;
+    }
+
     const configuredBijectionVariants =
       strategyId === 'bijection' && typeof strategy === 'object' ? strategy.config?.n : undefined;
     const multiplier =

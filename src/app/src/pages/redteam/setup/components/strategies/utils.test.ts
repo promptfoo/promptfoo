@@ -133,6 +133,23 @@ describe('getEstimatedProbes', () => {
 
     expect(getEstimatedProbes(config)).toBe(10); // 2 basic + (2 * 4) encodings
   });
+
+  it.each([
+    ['text-mutations', 'zalgo', 14],
+    ['other-encodings', 'morse', 10],
+  ] as const)(
+    'should count an explicitly configured %s collection member only once',
+    (collection, strategy, expectedProbes) => {
+      const config = {
+        ...baseConfig,
+        numTests: 2,
+        plugins: ['plugin1'],
+        strategies: [collection, { id: strategy, config: { seed: 'override' } }],
+      } as Config;
+
+      expect(getEstimatedProbes(config)).toBe(expectedProbes);
+    },
+  );
 });
 
 describe('isStrategyConfigured', () => {

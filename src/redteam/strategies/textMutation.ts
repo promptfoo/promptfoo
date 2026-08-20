@@ -10,6 +10,7 @@ import type { Strategy } from './types';
 
 type RandomSource = () => number;
 type StrategyTestCases = Parameters<Strategy['action']>[0];
+type TransformableTestCase = Awaited<ReturnType<Strategy['action']>>[number];
 
 const ZERO_WIDTH_CHARACTERS = ['\u200B', '\u200C', '\u200D', '\u2060'] as const;
 const WHITESPACE_REPLACEMENTS = ['\t', '\u00A0', '\u2009', '\u200A', '\u202F', '\u3000'] as const;
@@ -215,7 +216,7 @@ export function mutateText(
 }
 
 export function transformStrategyInput(
-  testCase: StrategyTestCases[number],
+  testCase: TransformableTestCase,
   injectVar: string,
   strategy: string,
   transform: (value: string) => string,
@@ -255,7 +256,9 @@ export function transformStrategyInput(
 
         return [
           key,
-          Object.hasOwn(definitions, key) && typeof value === 'string' && !benign
+          Object.prototype.hasOwnProperty.call(definitions, key) &&
+          typeof value === 'string' &&
+          !benign
             ? transform(value)
             : value,
         ];
