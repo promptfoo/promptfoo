@@ -322,6 +322,36 @@ describe('calculateFilteredMetrics', () => {
         assertions: { total: 0, cached: 18, numRequests: 0 },
       });
     });
+
+    it('preserves fresh provider-side cached prompts when request counts are omitted', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: {
+          prompt: 10,
+          completion: 0,
+          cached: 10,
+          attacker: { prompt: 8, completion: 0, cached: 8 },
+          assertions: { prompt: 6, completion: 0, cached: 6 },
+        },
+        gradingUsage: { prompt: 4, completion: 0, cached: 4 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 10,
+        cached: 10,
+        numRequests: 1,
+        attacker: { total: 8, cached: 8, numRequests: 1 },
+        assertions: { total: 10, cached: 10, numRequests: 2 },
+      });
+    });
   });
 
   describe('named scores aggregation', () => {

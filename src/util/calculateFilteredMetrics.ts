@@ -51,7 +51,7 @@ function jsonUsageTotal(column: SQL, usagePath: string, cachedResponsePath?: str
   const prompt = jsonUsageNumber(column, usagePath, 'prompt');
   const completion = jsonUsageNumber(column, usagePath, 'completion');
   const cached = jsonUsageNumber(column, usagePath, 'cached');
-  const requests = jsonUsageNumber(column, usagePath, 'numRequests');
+  const requests = sql`CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER)`;
   const explicitlyCached = cachedResponsePath
     ? sql`COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1`
     : sql`0`;
