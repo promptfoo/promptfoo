@@ -406,7 +406,30 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-const UNRENDERED_TEMPLATE = /\{\{[\s\S]*?\}\}/;
+const UNRENDERED_TEMPLATE = /\{\{[\s\S]*?\}\}|\{%[\s\S]*?%\}/;
+
+/** Resolved file paths already warned about, so a shared rubric warns once and not once per test case. */
+const warnedTemplateFiles = new Set<string>();
+
+/** First Nunjucks tag anywhere in a loaded value, including inside a parsed JSON or YAML structure. */
+function findTemplateTag(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.match(UNRENDERED_TEMPLATE)?.[0];
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findTemplateTag(item);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  if (value && typeof value === 'object') {
+    return findTemplateTag(Object.values(value));
+  }
+  return undefined;
+}
 
 /**
  * Assertion values loaded from a file are not passed through Nunjucks, so a
@@ -418,17 +441,25 @@ const UNRENDERED_TEMPLATE = /\{\{[\s\S]*?\}\}/;
  * that contains braces.
  */
 function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
-  if (typeof value !== 'string') {
+  if (warnedTemplateFiles.has(source)) {
     return;
   }
-  const match = value.match(UNRENDERED_TEMPLATE);
-  if (!match) {
+  const tag = findTemplateTag(value);
+  if (!tag) {
     return;
   }
+  warnedTemplateFiles.add(source);
   logger.warn(
-    `Assertion value loaded from ${source} contains ${match[0]}, but values loaded from a file are not interpolated. ` +
-      `Inline the value in your config if you need variables substituted.`,
+    'Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ' +
+      'Inline the value in your config if you need variables substituted.',
+    { file: source, template: truncateTemplateTag(tag) },
   );
+}
+
+/** Enough of the tag to identify it, never enough to dump a file's contents into the log. */
+function truncateTemplateTag(tag: string): string {
+  const singleLine = tag.replace(/\s+/g, ' ');
+  return singleLine.length > 60 ? `${singleLine.slice(0, 60)}...` : singleLine;
 }
 
 async function runAssertionInternal({

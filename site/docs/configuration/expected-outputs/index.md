@@ -311,6 +311,32 @@ The `value` of an assertion can be loaded directly from a file using the `file:/
       value: file://gettysburg_address.txt
 ```
 
+#### Variables are not substituted in raw files
+
+promptfoo uses a raw file's contents as-is. Nunjucks tags such as `{{topic}}` or
+`{% if premium %}` are not substituted, so the assertion receives the template text
+literally:
+
+```yaml
+# rubric.txt: Does the output mention {{topic}}?
+- assert:
+    - type: llm-rubric
+      value: file://rubric.txt # the grader sees the characters {{topic}}
+```
+
+This is easiest to miss on model-graded assertions, where the grader still returns a
+pass or fail by judging the rest of the rubric. promptfoo logs a warning the first
+time it loads a file whose value still contains a Nunjucks tag.
+
+Write the value inline if you need variables:
+
+```yaml
+- assert:
+    - type: llm-rubric
+      value: |
+        Does the output mention {{topic}}?
+```
+
 #### Javascript
 
 If the file ends in `.js`, the Javascript is executed:

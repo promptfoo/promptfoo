@@ -3732,8 +3732,115 @@ describe('runAssertion', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('values loaded from a file are not interpolated'),
+        expect.objectContaining({ file: '/base/path/rubric.txt', template: '{{topic}}' }),
       );
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('{{topic}}'));
+    });
+
+    it('should warn for Nunjucks block tags, not just interpolation', async () => {
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://conditional.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('{% if premium %}Check the upsell.{% endif %}');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/conditional.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { premium: true } } as AtomicTestCase,
+        providerResponse: { output: 'Anything.' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ template: '{% if premium %}' }),
+      );
+    });
+
+    it('should find templates nested inside a parsed JSON value', async () => {
+      const assertion: Assertion = {
+        type: 'is-json',
+        value: 'file://schema.json',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ properties: { name: { const: '{{expected}}' } } }),
+      );
+      vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+      vi.mocked(path.extname).mockReturnValue('.json');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { expected: 'capybara' } } as AtomicTestCase,
+        providerResponse: { output: '{"name": "capybara"}' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ template: '{{expected}}' }),
+      );
+    });
+
+    it('should warn once per file rather than once per test case', async () => {
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://shared-rubric.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('Does the output mention {{topic}}?');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/shared-rubric.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      for (const topic of ['capybaras', 'otters', 'wombats']) {
+        await runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: { vars: { topic } } as AtomicTestCase,
+          providerResponse: { output: `${topic} are large rodents.` },
+        });
+      }
+
+      const warnings = vi
+        .mocked(logger.warn)
+        .mock.calls.filter(([, context]) =>
+          Boolean(
+            context && (context as { file?: string }).file === '/base/path/shared-rubric.txt',
+          ),
+        );
+      expect(warnings).toHaveLength(1);
+    });
+
+    it('should truncate a long template rather than logging file contents', async () => {
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://long.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue(`{{ ${'x'.repeat(200)} }}`);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/long.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Anything.' },
+      });
+
+      const [, context] = vi
+        .mocked(logger.warn)
+        .mock.calls.find(([, ctx]) =>
+          Boolean(ctx && (ctx as { file?: string }).file === '/base/path/long.txt'),
+        )!;
+      expect((context as { template: string }).template).toHaveLength(63);
+      expect((context as { template: string }).template.endsWith('...')).toBe(true);
     });
 
     it('should not warn when a file-loaded value contains no template', async () => {
@@ -3756,6 +3863,7 @@ describe('runAssertion', () => {
 
       expect(logger.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('values loaded from a file are not interpolated'),
+        expect.anything(),
       );
     });
 
@@ -3777,7 +3885,10 @@ describe('runAssertion', () => {
         providerResponse: { output: 'plain string' },
       });
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('{{topic}}'));
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ template: '{{topic}}' }),
+      );
     });
 
     it('should handle file reference in string value', async () => {
