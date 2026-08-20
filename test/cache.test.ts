@@ -18,6 +18,7 @@ import {
   enableCache,
   fetchWithCache,
   getCache,
+  getHeadersForCacheKey,
   isCacheEnabled,
   withCacheEnabled,
   withCacheNamespace,
@@ -1257,6 +1258,51 @@ describe('fetchWithCache', () => {
 
         restoreEnv();
       } finally {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
+    it('should fingerprint a custom cloud auth header even when a caller pre-sets it explicitly', () => {
+      // Regression guard: resolveGuardrailsApi() (src/guardrails.ts) attaches the cloud
+      // auth header itself, via cloudConfig.getAuthHeaders(), before the request reaches
+      // getHeadersForCacheKey. The header is then already present, so the old
+      // `!headers.has(cloudAuthHeaderName)` injection guard must not gate fingerprinting —
+      // otherwise this falls through to the generic isSecretField/looksLikeSecret
+      // heuristics, which miss both a custom header name and a short token.
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok' });
+      try {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+        const headers = getHeadersForCacheKey('https://api.promptfoo.app/api/v1/task', {
+          headers: { 'X-Promptfoo-Api-Key': 'Bearer short-tok' },
+        });
+
+        const entry = headers.find(([name]) => name === 'x-promptfoo-api-key');
+        expect(entry).toBeDefined();
+        expect(entry?.[1]).toEqual({ __promptfooSecretFingerprint: expect.any(String) });
+      } finally {
+        restoreEnv();
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
+      }
+    });
+
+    it('should fingerprint an injected cloud auth header under a mixed-case configured name', () => {
+      // Regression guard: Headers.entries() always lowercases names, but the header name
+      // this function injects under is recorded with whatever casing getAuthHeaderName()
+      // returns. A mixed-case configured name must still match at fingerprint time.
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'short-tok' });
+      try {
+        vi.mocked(cloudConfig.getAuthHeaderName).mockReturnValue('X-Promptfoo-Api-Key');
+
+        const headers = getHeadersForCacheKey('https://api.promptfoo.app/api/v1/task', {
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+        const entry = headers.find(([name]) => name === 'x-promptfoo-api-key');
+        expect(entry).toBeDefined();
+        expect(entry?.[1]).toEqual({ __promptfooSecretFingerprint: expect.any(String) });
+      } finally {
+        restoreEnv();
         vi.mocked(cloudConfig.getAuthHeaderName).mockReset().mockReturnValue('Authorization');
       }
     });
