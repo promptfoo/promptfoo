@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addBijectionTestCases,
-  BIJECTION_RESPONSE_END,
-  BIJECTION_RESPONSE_START,
   buildBijectionPrompt,
-  decodeBijection,
   encodeBijection,
   generateBijectionMapping,
   resolveBijectionOptions,
@@ -37,14 +34,20 @@ describe('bijection strategy', () => {
     expect(new Set(Object.values(mapping)).size).toBe(26);
   });
 
-  it.each(['letter', 'digit'] as const)('round-trips lowercase text with %s mappings', (type) => {
-    const mapping = generateBijectionMapping(
-      { type, dispersion: 20, encodingLength: 3 },
-      `roundtrip-${type}`,
-    );
-    const input = 'follow the marked path.';
+  it('encodes letters case-insensitively and preserves other characters', () => {
+    const mapping = Object.fromEntries('abcdefghijklmnopqrstuvwxyz'.split('').map((c) => [c, c]));
+    mapping.a = 'b';
+    mapping.b = 'a';
 
-    expect(decodeBijection(encodeBijection(input, mapping), mapping)).toBe(input);
+    expect(encodeBijection('A bad cab. 42', mapping)).toBe('b abd cba. 42');
+  });
+
+  it('supports fixed-width digit codewords', () => {
+    const mapping = Object.fromEntries('abcdefghijklmnopqrstuvwxyz'.split('').map((c) => [c, c]));
+    mapping.a = '01';
+    mapping.b = '02';
+
+    expect(encodeBijection('A b2', mapping)).toBe('01 022');
   });
 
   it('builds an original instruction prompt with optional harmless examples', () => {
@@ -58,8 +61,7 @@ describe('bijection strategy', () => {
 
     expect(withExamples).toContain('Substitution table:');
     expect(withExamples).toContain('Practice translations:');
-    expect(withExamples).toContain(BIJECTION_RESPONSE_START);
-    expect(withExamples).toContain(BIJECTION_RESPONSE_END);
+    expect(withExamples).toContain('answer its meaning directly in ordinary English');
     expect(withExamples).toContain(encoded);
     expect(withoutExamples).not.toContain('Practice translations:');
   });
@@ -106,13 +108,7 @@ describe('bijection strategy', () => {
     expect(new Set(results.map((result) => result.vars?.prompt)).size).toBe(3);
     for (const [variant, result] of results.entries()) {
       expect(result.vars?.untouched).toBe('value');
-      expect(result.provider).toMatchObject({
-        id: 'promptfoo:redteam:bijection',
-        config: {
-          responseStart: BIJECTION_RESPONSE_START,
-          responseEnd: BIJECTION_RESPONSE_END,
-        },
-      });
+      expect(result.provider).toBeUndefined();
       expect(result.metadata).toMatchObject({
         pluginId: 'harmful:test',
         existing: true,

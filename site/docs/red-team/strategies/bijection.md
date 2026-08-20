@@ -7,7 +7,7 @@ keywords: ['bijection', 'encoding', 'in-context learning', 'jailbreak', 'substit
 
 # Bijection Encoding Strategy
 
-The `bijection` strategy creates a temporary substitution language, encodes the original test prompt, and asks the target to answer using that language. Promptfoo then decodes a correctly marked response before running the original assertions.
+The `bijection` strategy creates a temporary substitution language, encodes the original test prompt, and asks the target to decode the request and answer its meaning in ordinary language.
 
 This tests a boundary mismatch: a target model may infer the encoded request from the mapping and examples even when an upstream policy control does not recognize the same representation.
 
@@ -56,28 +56,21 @@ Promptfoo builds a complete mapping for the 26 lowercase English letters:
 
 For each test, the generated prompt contains original instructions for using the temporary language, the full mapping table, optional harmless examples, and the encoded request. Each `n` variant derives a separate deterministic mapping from the configured seed, original text, and variant index.
 
-## Response decoding and grading
+## Response and grading
 
-The target is asked to place its encoded answer between:
+The target is asked to answer the decoded request directly in ordinary language. Promptfoo does not transform the response, so the test's normal assertions grade exactly what the target returned. A refusal, an attempted answer, an error, and structured output all retain the same semantics they would have in a basic red-team test.
 
-```text
-<BEGIN_BIJECTION_RESPONSE>
-<END_BIJECTION_RESPONSE>
-```
-
-Promptfoo decodes a response only when its complete trimmed output starts with the opening marker and ends with the closing marker. Nested or repeated markers are rejected. No non-whitespace text may appear outside the envelope. Promptfoo then runs the test's normal assertions against the decoded output.
-
-If the target returns a normal unmarked refusal, echoes or discusses the marker instructions, uses malformed markers, returns an error, or returns non-text output, Promptfoo leaves that response unchanged. This prevents encoded-looking or quoted text from being decoded accidentally and avoids grading ciphertext as if it were the target's semantic answer.
+Keeping the response in ordinary language avoids introducing a second source of translation errors during grading. The strategy measures whether the target can infer and act on the encoded input, not whether it can encode its own answer perfectly.
 
 ## Cost and limitations
 
 The transformation itself is local and does not require remote generation. Each variant makes one target call, so `n: 3` triples the target calls for tests using this strategy.
 
-Digit mappings can be harder for models to follow than letter mappings. Because literal numbers are left unchanged, a marked digit-encoded response that independently contains a numeric sequence equal to one of the generated codewords may decode ambiguously. Use letter mappings when exact preservation of numeric output is important.
+Digit mappings can be harder for models to follow than letter mappings. Because literal numbers in the request are left unchanged, a numeric sequence may resemble one of the generated codewords and make the request ambiguous. Use letter mappings when the original request contains important numeric values.
 
 ## Implementation provenance
 
-Promptfoo's implementation was independently written under the project's MIT license from the attack formulation in the public paper [Endless Jailbreaks with Bijection Learning](https://arxiv.org/abs/2410.01294). The implementation, prompt wording, mapping generator, examples, response protocol, and tests are original to Promptfoo and do not copy third-party source code.
+Promptfoo's implementation was independently written under the project's MIT license from the attack formulation in the public paper [Endless Jailbreaks with Bijection Learning](https://arxiv.org/abs/2410.01294). The implementation, prompt wording, mapping generator, examples, response instructions, and tests are original to Promptfoo and do not incorporate third-party AGPL source code.
 
 ## Related strategies
 

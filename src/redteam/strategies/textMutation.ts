@@ -1,6 +1,6 @@
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 
-// Clean-room implementation based on Unicode character properties and code-point ranges:
+// Independent implementation based on Unicode character properties and code-point ranges:
 // https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/
 // https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/
 

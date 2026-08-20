@@ -270,6 +270,67 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it('should configure and save a random-case strategy', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="random-case"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'random-case',
+          name: 'Random Case',
+          description: 'Deterministic mixed casing',
+        }}
+      />,
+    );
+
+    const rate = screen.getByRole('spinbutton', { name: 'Mutation Rate' });
+    await user.click(rate);
+    await user.keyboard('{Control>}a{/Control}0.75');
+
+    const seed = screen.getByRole('textbox', { name: 'Seed' });
+    await user.clear(seed);
+    await user.type(seed, 'qa-seed');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('random-case', {
+      rate: 0.75,
+      seed: 'qa-seed',
+    });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should configure and save Zalgo intensity', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="zalgo"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'zalgo',
+          name: 'Zalgo Text',
+          description: 'Dense combining marks',
+        }}
+      />,
+    );
+
+    const intensity = screen.getByRole('spinbutton', {
+      name: 'Combining Marks per Character',
+    });
+    await user.click(intensity);
+    await user.keyboard('{Control>}a{/Control}5');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('zalgo', { intensity: 5 });
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
   it("should call onSave with the correct arguments and then onClose when Save is clicked for a valid 'custom' strategy", async () => {
     const user = userEvent.setup();
     const initialConfig = {};

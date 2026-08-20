@@ -100,6 +100,28 @@ describe('getEstimatedProbes', () => {
     } as Config;
     expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
   });
+
+  it('should account for configured bijection variants', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: [{ id: 'bijection', config: { n: 3 } }],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(8); // 2 basic + (2 * 3) bijection variants
+  });
+
+  it('should account for every strategy in the text-mutations collection', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: ['text-mutations'],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(14); // 2 basic + (2 * 6) mutations
+  });
 });
 
 describe('isStrategyConfigured', () => {

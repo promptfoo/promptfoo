@@ -106,7 +106,7 @@ Compare each transformed result with the `basic` baseline and check whether:
 
 ## Implementation provenance
 
-Promptfoo's implementation was independently written under the project's MIT license from public Unicode behavior. It does not copy third-party mutation tables or source code. The relevant specifications are [Unicode Core Specification, Chapter 3](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/), [Unicode Core Specification, Chapter 23](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/), and [Unicode Technical Standard #39](https://unicode.org/reports/tr39/).
+Promptfoo's implementation was independently written under the project's MIT license from public Unicode behavior. It does not incorporate third-party AGPL source code or mutation tables. The relevant specifications are [Unicode Core Specification, Chapter 3](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/), [Unicode Core Specification, Chapter 23](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/), and [Unicode Technical Standard #39](https://unicode.org/reports/tr39/).
 
 ## Related strategies
 

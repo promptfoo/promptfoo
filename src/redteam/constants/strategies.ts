@@ -139,6 +139,11 @@ export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
   'bijection',
+  'random-case',
+  'unicode-noise',
+  'whitespace-obfuscation',
+  'zalgo',
+  'zero-width',
   'layer',
   'best-of-n',
   'goat',

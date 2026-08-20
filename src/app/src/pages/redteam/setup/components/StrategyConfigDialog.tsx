@@ -54,6 +54,26 @@ const getStepId = (step: StepType): string => {
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
 const EMPTY_PLUGINS_ARRAY: string[] = [];
 const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Partial<StrategyConfig> }> = [];
+const TEXT_MUTATION_STRATEGY_IDS = [
+  'zero-width',
+  'unicode-noise',
+  'zalgo',
+  'whitespace-obfuscation',
+  'random-case',
+] as const;
+
+type TextMutationStrategyId = (typeof TEXT_MUTATION_STRATEGY_IDS)[number];
+
+const TEXT_MUTATION_DEFAULT_RATES: Record<TextMutationStrategyId, number> = {
+  'zero-width': 0.2,
+  'unicode-noise': 0.15,
+  zalgo: 1,
+  'whitespace-obfuscation': 0.5,
+  'random-case': 0.5,
+};
+
+const isTextMutationStrategy = (value: string): value is TextMutationStrategyId =>
+  TEXT_MUTATION_STRATEGY_IDS.includes(value as TextMutationStrategyId);
 
 interface StrategyConfigDialogProps {
   open: boolean;
@@ -431,6 +451,7 @@ export default function StrategyConfigDialog({
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
       strategy === 'bijection' ||
+      isTextMutationStrategy(strategy) ||
       strategy === 'goat' ||
       strategy === 'crescendo' ||
       strategy === 'custom' ||
@@ -991,7 +1012,7 @@ export default function StrategyConfigDialog({
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
           Configure a deterministic one-to-one substitution language. The target is asked to decode
-          the request and return an encoded response, which Promptfoo decodes before grading.
+          the request and answer its meaning directly in ordinary language.
         </p>
 
         <div className="space-y-2">
@@ -1110,6 +1131,67 @@ export default function StrategyConfigDialog({
               Adds short demonstrations to teach the temporary language in context.
             </p>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTextMutationStrategyConfig = (strategyId: TextMutationStrategyId) => {
+    const defaultRate = TEXT_MUTATION_DEFAULT_RATES[strategyId];
+
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Configure a deterministic text mutation. A nonzero rate always changes at least one
+          eligible character when the input contains one.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor={`${strategyId}-rate`}>Mutation Rate</Label>
+          <Input
+            id={`${strategyId}-rate`}
+            type="number"
+            value={localConfig.rate === undefined ? defaultRate : Number(localConfig.rate)}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseFloat(e.target.value) : defaultRate;
+              setLocalConfig({ ...localConfig, rate: clampValue(value, 0, 1) });
+            }}
+            min={0}
+            max={1}
+            step={0.05}
+          />
+          <p className="text-xs text-muted-foreground">
+            Probability from 0 to 1 that each eligible position is selected.
+          </p>
+        </div>
+
+        {strategyId === 'zalgo' && (
+          <div className="space-y-2">
+            <Label htmlFor="zalgo-intensity">Combining Marks per Character</Label>
+            <Input
+              id="zalgo-intensity"
+              type="number"
+              value={localConfig.intensity === undefined ? 3 : Number(localConfig.intensity)}
+              onChange={(e) => {
+                const value = e.target.value ? Number.parseInt(e.target.value, 10) : 3;
+                setLocalConfig({ ...localConfig, intensity: clampValue(value, 1, 8) });
+              }}
+              min={1}
+              max={8}
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor={`${strategyId}-seed`}>Seed</Label>
+          <Input
+            id={`${strategyId}-seed`}
+            value={localConfig.seed === undefined ? 'promptfoo' : String(localConfig.seed)}
+            onChange={(e) => setLocalConfig({ ...localConfig, seed: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Reuse a seed to reproduce the same mutation.
+          </p>
         </div>
       </div>
     );
@@ -1461,6 +1543,12 @@ export default function StrategyConfigDialog({
         return renderGcgStrategyConfig();
       case 'bijection':
         return renderBijectionStrategyConfig();
+      case 'random-case':
+      case 'unicode-noise':
+      case 'whitespace-obfuscation':
+      case 'zalgo':
+      case 'zero-width':
+        return renderTextMutationStrategyConfig(strategy);
       case 'citation':
         return renderCitationStrategyConfig();
       case 'layer':

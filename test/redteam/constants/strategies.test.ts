@@ -3,6 +3,7 @@ import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
+  CONFIGURABLE_STRATEGIES_SET,
   getDefaultNFanout,
   isCustomStrategy,
   isFanoutStrategy,
@@ -50,5 +51,18 @@ describe('strategies constants', () => {
       'random-case',
       'homoglyph',
     ]);
+  });
+
+  it('should expose configuration controls for parameterized mutation strategies', () => {
+    for (const strategy of [
+      'bijection',
+      'zero-width',
+      'unicode-noise',
+      'zalgo',
+      'whitespace-obfuscation',
+      'random-case',
+    ]) {
+      expect(CONFIGURABLE_STRATEGIES_SET.has(strategy)).toBe(true);
+    }
   });
 });

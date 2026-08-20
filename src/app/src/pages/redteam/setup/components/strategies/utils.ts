@@ -115,7 +115,16 @@ export function getEstimatedProbes(config: Config) {
   const strategyMultiplier = config.strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
+    const configuredBijectionVariants =
+      strategyId === 'bijection' && typeof strategy === 'object' ? strategy.config?.n : undefined;
+    const multiplier =
+      typeof configuredBijectionVariants === 'number' &&
+      Number.isInteger(configuredBijectionVariants) &&
+      configuredBijectionVariants >= 1 &&
+      configuredBijectionVariants <= 20
+        ? configuredBijectionVariants
+        : STRATEGY_PROBE_MULTIPLIER[strategyId];
+    return total + multiplier;
   }, 0);
 
   // Get number of languages from global language config
