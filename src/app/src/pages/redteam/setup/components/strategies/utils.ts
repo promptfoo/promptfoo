@@ -66,6 +66,7 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   base64: 1,
   basic: 1,
   'best-of-n': 1,
+  bijection: 1,
   camelcase: 1,
   citation: 1,
   crescendo: 10,
@@ -95,9 +96,15 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   emoji: 1,
   piglatin: 1,
   'prompt-injection': 1,
+  'random-case': 1,
   retry: 1,
   rot13: 1,
+  'text-mutations': 6,
+  'unicode-noise': 1,
   video: 1,
+  'whitespace-obfuscation': 1,
+  zalgo: 1,
+  'zero-width': 1,
 };
 
 export function getEstimatedProbes(config: Config) {

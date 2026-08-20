@@ -45,6 +45,13 @@ const rawRedteamProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:bijection',
+    create: async (_providerPath, providerOptions) => {
+      const { default: BijectionProvider } = await import('./bijection');
+      return new BijectionProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === 'promptfoo:redteam:crescendo',
     create: async (_providerPath, providerOptions) => {
       const { CrescendoProvider } = await import('./crescendo/index');

@@ -6,6 +6,7 @@ import {
   getDefaultNFanout,
   isCustomStrategy,
   isFanoutStrategy,
+  STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
 } from '../../../src/redteam/constants/strategies';
 
@@ -38,5 +39,16 @@ describe('strategies constants', () => {
     expect(getDefaultNFanout('gcg')).toBeGreaterThanOrEqual(1);
 
     expect(isFanoutStrategy('base64')).toBe(false);
+  });
+
+  it('should expand the text-mutations collection to every supported mutation', () => {
+    expect(STRATEGY_COLLECTION_MAPPINGS['text-mutations']).toEqual([
+      'zero-width',
+      'unicode-noise',
+      'zalgo',
+      'whitespace-obfuscation',
+      'random-case',
+      'homoglyph',
+    ]);
   });
 });

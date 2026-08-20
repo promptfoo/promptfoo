@@ -7,6 +7,7 @@ import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
+import { addBijectionTestCases } from './bijection';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
@@ -32,6 +33,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { addTextMutation } from './textMutation';
 import { withPersistableGenerationProvider } from './types';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
@@ -63,6 +65,50 @@ export const Strategies: Strategy[] = [
       const newTestCases = addBase64Encoding(testCases, injectVar);
       logger.debug(`Added ${newTestCases.length} Base64 encoded test cases`);
       return newTestCases;
+    },
+  },
+  {
+    id: 'bijection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Bijection encoding to ${testCases.length} test cases`);
+      const newTestCases = addBijectionTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Bijection encoded test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'zero-width',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding zero-width mutations to ${testCases.length} test cases`);
+      return addTextMutation(testCases, injectVar, 'zero-width', config);
+    },
+  },
+  {
+    id: 'unicode-noise',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Unicode combining-mark noise to ${testCases.length} test cases`);
+      return addTextMutation(testCases, injectVar, 'unicode-noise', config);
+    },
+  },
+  {
+    id: 'zalgo',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Zalgo mutations to ${testCases.length} test cases`);
+      return addTextMutation(testCases, injectVar, 'zalgo', config);
+    },
+  },
+  {
+    id: 'whitespace-obfuscation',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding whitespace mutations to ${testCases.length} test cases`);
+      return addTextMutation(testCases, injectVar, 'whitespace-obfuscation', config);
+    },
+  },
+  {
+    id: 'random-case',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding random-case mutations to ${testCases.length} test cases`);
+      return addTextMutation(testCases, injectVar, 'random-case', config);
     },
   },
   {

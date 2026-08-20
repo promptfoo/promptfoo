@@ -281,6 +281,72 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'bijection',
+    displayName: 'Bijection Encoding',
+    description: 'Temporary substitution language',
+    longDescription:
+      'Tests whether a target follows requests encoded with a deterministic one-to-one letter or digit substitution mapping',
+    cost: 'Variable',
+    asrIncrease: 'Model-dependent',
+    link: '/docs/red-team/strategies/bijection/',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'zero-width',
+    displayName: 'Zero-Width Characters',
+    description: 'Invisible Unicode format characters',
+    longDescription:
+      'Tests normalization and filtering by inserting zero-width Unicode characters after selected letters and numbers',
+    cost: 'Low',
+    asrIncrease: 'Model-dependent',
+    link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'unicode-noise',
+    displayName: 'Unicode Noise',
+    description: 'Sparse combining marks',
+    longDescription:
+      'Tests normalization and filtering by adding one Unicode combining mark to selected letters and numbers',
+    cost: 'Low',
+    asrIncrease: 'Model-dependent',
+    link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'zalgo',
+    displayName: 'Zalgo Text',
+    description: 'Dense combining marks',
+    longDescription:
+      'Tests normalization and filtering by adding configurable stacks of Unicode combining marks',
+    cost: 'Low',
+    asrIncrease: 'Model-dependent',
+    link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'whitespace-obfuscation',
+    displayName: 'Whitespace Obfuscation',
+    description: 'Alternative Unicode spacing',
+    longDescription:
+      'Tests normalization and filtering by replacing horizontal spaces with tabs and Unicode spacing characters',
+    cost: 'Low',
+    asrIncrease: 'Model-dependent',
+    link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'random-case',
+    displayName: 'Random Case',
+    description: 'Deterministic mixed casing',
+    longDescription:
+      'Tests case normalization by changing selected ASCII letters to deterministic upper- or lowercase forms',
+    cost: 'Low',
+    asrIncrease: 'Model-dependent',
+    link: '/docs/red-team/strategies/text-mutations/#exact-behavior',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'basic',
     displayName: 'Basic',
     description: 'Plugin-generated test cases',

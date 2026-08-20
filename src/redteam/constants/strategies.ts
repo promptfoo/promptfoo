@@ -75,6 +75,7 @@ export const ADDITIONAL_STRATEGIES = [
   'authoritative-markup-injection',
   'base64',
   'best-of-n',
+  'bijection',
   'camelcase',
   'citation',
   'crescendo',
@@ -101,16 +102,29 @@ export const ADDITIONAL_STRATEGIES = [
   'multilingual', // Deprecated: Use top-level language config instead
   'piglatin',
   'prompt-injection', // Deprecated: Use 'jailbreak-templates' instead
+  'random-case',
   'retry',
   'rot13',
+  'unicode-noise',
   'video',
+  'whitespace-obfuscation',
+  'zalgo',
+  'zero-width',
 ] as const;
 
-export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
+export const STRATEGY_COLLECTIONS = ['other-encodings', 'text-mutations'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
   'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
+  'text-mutations': [
+    'zero-width',
+    'unicode-noise',
+    'zalgo',
+    'whitespace-obfuscation',
+    'random-case',
+    'homoglyph',
+  ],
 };
 
 const _ALL_STRATEGIES = [
@@ -124,6 +138,7 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
+  'bijection',
   'layer',
   'best-of-n',
   'goat',
@@ -156,9 +171,15 @@ export const ENCODING_STRATEGIES = new Set([
   'piglatin',
   'camelcase',
   'emoji',
+  'bijection',
   'reverse',
   'binary',
   'octal',
+  'random-case',
+  'unicode-noise',
+  'whitespace-obfuscation',
+  'zalgo',
+  'zero-width',
   'audio',
   'image',
   'video',

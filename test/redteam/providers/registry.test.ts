@@ -30,6 +30,11 @@ describe('redteamProviderFactories', () => {
       maxBacktracks: 2,
       redteamProvider: 'test-provider',
       strategyText: 'test-strategy',
+      mapping: Object.fromEntries(
+        'abcdefghijklmnopqrstuvwxyz'.split('').map((letter) => [letter, letter]),
+      ),
+      responseStart: '<BEGIN_BIJECTION_RESPONSE>',
+      responseEnd: '<END_BIJECTION_RESPONSE>',
     },
   };
 
@@ -49,6 +54,7 @@ describe('redteamProviderFactories', () => {
       expectedId: 'promptfoo:redteam:authoritative-markup-injection',
     },
     { path: 'promptfoo:redteam:best-of-n', expectedId: 'promptfoo:redteam:best-of-n' },
+    { path: 'promptfoo:redteam:bijection', expectedId: 'promptfoo:redteam:bijection' },
     { path: 'promptfoo:redteam:crescendo', expectedId: 'promptfoo:redteam:crescendo' },
     { path: 'promptfoo:redteam:custom', expectedId: 'promptfoo:redteam:custom' },
     { path: 'promptfoo:redteam:custom:my-strategy', expectedId: 'promptfoo:redteam:custom' },

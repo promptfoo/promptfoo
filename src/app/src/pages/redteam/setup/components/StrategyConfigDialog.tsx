@@ -430,6 +430,7 @@ export default function StrategyConfigDialog({
       strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
+      strategy === 'bijection' ||
       strategy === 'goat' ||
       strategy === 'crescendo' ||
       strategy === 'custom' ||
@@ -983,6 +984,137 @@ export default function StrategyConfigDialog({
     </div>
   );
 
+  const renderBijectionStrategyConfig = () => {
+    const mappingType = localConfig.type === 'digit' ? 'digit' : 'letter';
+
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Configure a deterministic one-to-one substitution language. The target is asked to decode
+          the request and return an encoded response, which Promptfoo decodes before grading.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-type">Mapping Type</Label>
+          <Select
+            value={mappingType}
+            onValueChange={(value) => {
+              const dispersion = Number(localConfig.dispersion ?? 16);
+              setLocalConfig({
+                ...localConfig,
+                type: value,
+                dispersion: value === 'letter' && dispersion === 1 ? 2 : dispersion,
+              });
+            }}
+          >
+            <SelectTrigger id="bijection-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="letter">Letter substitution</SelectItem>
+              <SelectItem value="digit">Fixed-width digit tokens</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Letter mappings permute letters. Digit mappings replace selected letters with numeric
+            tokens.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-dispersion">Changed Letters</Label>
+          <Input
+            id="bijection-dispersion"
+            type="number"
+            value={localConfig.dispersion === undefined ? 16 : Number(localConfig.dispersion)}
+            onChange={(e) => {
+              const parsed = e.target.value ? Number.parseInt(e.target.value, 10) : 16;
+              const value = clampValue(parsed, 0, 26);
+              setLocalConfig({
+                ...localConfig,
+                dispersion: mappingType === 'letter' && value === 1 ? 2 : value,
+              });
+            }}
+            min={0}
+            max={26}
+          />
+          <p className="text-xs text-muted-foreground">
+            Number of alphabet letters whose representation changes. Letter mappings skip 1 because
+            a one-item permutation cannot change itself.
+          </p>
+        </div>
+
+        {mappingType === 'digit' && (
+          <div className="space-y-2">
+            <Label htmlFor="bijection-encoding-length">Digit Token Length</Label>
+            <Input
+              id="bijection-encoding-length"
+              type="number"
+              value={
+                localConfig.encodingLength === undefined ? 2 : Number(localConfig.encodingLength)
+              }
+              onChange={(e) => {
+                const value = e.target.value ? Number.parseInt(e.target.value, 10) : 2;
+                setLocalConfig({
+                  ...localConfig,
+                  encodingLength: clampValue(value, 2, 4),
+                });
+              }}
+              min={2}
+              max={4}
+            />
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-n">Variants per Test</Label>
+          <Input
+            id="bijection-n"
+            type="number"
+            value={localConfig.n === undefined ? 1 : Number(localConfig.n)}
+            onChange={(e) => {
+              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 1;
+              setLocalConfig({ ...localConfig, n: clampValue(value, 1, 20) });
+            }}
+            min={1}
+            max={20}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="bijection-seed">Seed</Label>
+          <Input
+            id="bijection-seed"
+            value={localConfig.seed === undefined ? 'promptfoo' : String(localConfig.seed)}
+            onChange={(e) => setLocalConfig({ ...localConfig, seed: e.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Reuse a seed to reproduce the same mappings.
+          </p>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <Switch
+            id="bijection-examples"
+            checked={localConfig.includeExamples !== false}
+            onCheckedChange={(checked) =>
+              setLocalConfig({ ...localConfig, includeExamples: checked })
+            }
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor="bijection-examples" className="text-sm font-normal">
+              Include harmless translation examples
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Adds short demonstrations to teach the temporary language in context.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCitationStrategyConfig = () => (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
@@ -1327,6 +1459,8 @@ export default function StrategyConfigDialog({
         return renderTreeStrategyConfig();
       case 'gcg':
         return renderGcgStrategyConfig();
+      case 'bijection':
+        return renderBijectionStrategyConfig();
       case 'citation':
         return renderCitationStrategyConfig();
       case 'layer':

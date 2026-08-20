@@ -443,12 +443,18 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 // Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goblin, goat, crescendo).
 export const CANARY_BREAKING_STRATEGY_IDS = [
   'base64',
+  'bijection',
   'hex',
   'homoglyph',
   'leetspeak',
   'rot13',
   'multilingual',
   'math-prompt',
+  'random-case',
+  'unicode-noise',
+  'whitespace-obfuscation',
+  'zalgo',
+  'zero-width',
   'jailbreak:composite',
 ] as const;
 
