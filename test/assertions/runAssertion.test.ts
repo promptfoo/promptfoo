@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
+import logger from '../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
@@ -10,6 +11,8 @@ import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
 import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
+
+vi.mock('../../src/logger');
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -3709,6 +3712,74 @@ describe('runAssertion', () => {
   });
 
   describe('file references', () => {
+    it('should warn when a file-loaded value still contains a template', async () => {
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://rubric.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('Does the output mention {{topic}}?');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/rubric.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { topic: 'capybaras' } } as AtomicTestCase,
+        providerResponse: { output: 'Capybaras are large rodents.' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('values loaded from a file are not interpolated'),
+      );
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('{{topic}}'));
+    });
+
+    it('should not warn when a file-loaded value contains no template', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'file://expected_output.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('Expected output');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('values loaded from a file are not interpolated'),
+      );
+    });
+
+    it('should warn for a templated file reference inside an array value', async () => {
+      const assertion: Assertion = {
+        type: 'contains-any',
+        value: ['plain string', 'file://snippet.txt'],
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('mentions {{topic}}');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/snippet.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { topic: 'capybaras' } } as AtomicTestCase,
+        providerResponse: { output: 'plain string' },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('{{topic}}'));
+    });
+
     it('should handle file reference in string value', async () => {
       const assertion: Assertion = {
         type: 'equals',

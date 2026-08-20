@@ -406,6 +406,31 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
+const UNRENDERED_TEMPLATE = /\{\{[\s\S]*?\}\}/;
+
+/**
+ * Assertion values loaded from a file are not passed through Nunjucks, so a
+ * template in one reaches the assertion as literal text. That is easy to miss
+ * with model-graded assertions, where the grader still returns a confident
+ * verdict on whatever prose surrounds the placeholder.
+ *
+ * Warn rather than render: some assertions legitimately compare against text
+ * that contains braces.
+ */
+function warnIfTemplateWasNotRendered(value: unknown, source: string): void {
+  if (typeof value !== 'string') {
+    return;
+  }
+  const match = value.match(UNRENDERED_TEMPLATE);
+  if (!match) {
+    return;
+  }
+  logger.warn(
+    `Assertion value loaded from ${source} contains ${match[0]}, but values loaded from a file are not interpolated. ` +
+      `Inline the value in your config if you need variables substituted.`,
+  );
+}
+
 async function runAssertionInternal({
   prompt,
   provider,
@@ -532,6 +557,7 @@ async function runAssertionInternal({
         }
       } else {
         renderedValue = processFileReference(renderedValue);
+        warnIfTemplateWasNotRendered(renderedValue, filePath);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -552,7 +578,9 @@ async function runAssertionInternal({
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
-          return processFileReference(v);
+          const loaded = processFileReference(v);
+          warnIfTemplateWasNotRendered(loaded, v);
+          return loaded;
         }
         return nunjucks.renderString(v, resolvedVars);
       }
