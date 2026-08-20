@@ -161,7 +161,7 @@
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^7.1.4",
     "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.4.0",
+    "ip-address": "10.5.0",
     "mongoose": {
       "gcp-metadata": "^9.0.1"
     },
