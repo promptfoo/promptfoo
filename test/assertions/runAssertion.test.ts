@@ -3863,7 +3863,7 @@ describe('runAssertion', () => {
       });
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('not interpolated even when written inline'),
+        expect.stringContaining('not interpolated even when inlined'),
         expect.objectContaining({ file: '/base/path/object-remedy.json' }),
       );
     });
@@ -3963,7 +3963,7 @@ describe('runAssertion', () => {
       }).catch(() => undefined);
 
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('not interpolated even when written inline'),
+        expect.stringContaining('not interpolated even when inlined'),
         expect.objectContaining({ file: '/base/path/templated.json' }),
       );
     });

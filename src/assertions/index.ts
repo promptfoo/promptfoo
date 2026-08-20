@@ -463,11 +463,12 @@ function warnIfTemplateWillNotBeRendered(source: string): void {
     return;
   }
 
-  // Only string and array-of-string values are ever rendered, so telling the
-  // author of a JSON or YAML reference to inline it would not fix anything.
-  const parsesToObject = ['.json', '.yaml', '.yml'].includes(path.extname(source));
-  const remedy = parsesToObject
-    ? 'Object values are not interpolated even when written inline, so the variable has to be resolved before the file is loaded.'
+  // Only string and array-of-string values are ever rendered. The scan runs
+  // before the parse, so the shape is not known yet for a structured file:
+  // say what holds for both shapes rather than guessing from the extension.
+  const structured = ['.json', '.yaml', '.yml'].includes(path.extname(source));
+  const remedy = structured
+    ? 'Inline the value if it is a string or a list of strings. Object values are not interpolated even when inlined, so a template in one has to be resolved before the file is loaded.'
     : 'Inline the value in your config if you need variables substituted.';
 
   logger.warn(
