@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useResultsViewSettingsStore } from '../../store';
+import type { CostDisplayUnit } from '@app/utils/cost';
 
 interface SettingsState {
   maxTextLength: number;
   wordBreak: string;
   showInferenceDetails: boolean;
+  costDisplayUnit: CostDisplayUnit;
+  showRunsPerCostUnit: boolean;
   renderMarkdown: boolean;
   prettifyJson: boolean;
   showPrompts: boolean;
@@ -26,6 +29,10 @@ export const useSettingsState = (isOpen: boolean) => {
     setWordBreak,
     showInferenceDetails,
     setShowInferenceDetails,
+    costDisplayUnit,
+    setCostDisplayUnit,
+    showRunsPerCostUnit,
+    setShowRunsPerCostUnit,
     renderMarkdown,
     setRenderMarkdown,
     prettifyJson,
@@ -60,6 +67,8 @@ export const useSettingsState = (isOpen: boolean) => {
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    costDisplayUnit,
+    showRunsPerCostUnit,
     renderMarkdown,
     prettifyJson,
     showPrompts,
@@ -77,6 +86,8 @@ export const useSettingsState = (isOpen: boolean) => {
         maxTextLength,
         wordBreak,
         showInferenceDetails,
+        costDisplayUnit,
+        showRunsPerCostUnit,
         renderMarkdown,
         prettifyJson,
         showPrompts,
@@ -93,6 +104,8 @@ export const useSettingsState = (isOpen: boolean) => {
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    costDisplayUnit,
+    showRunsPerCostUnit,
     renderMarkdown,
     prettifyJson,
     showPrompts,
@@ -110,6 +123,8 @@ export const useSettingsState = (isOpen: boolean) => {
       maxTextLength !== initialState.maxTextLength ||
       wordBreak !== initialState.wordBreak ||
       showInferenceDetails !== initialState.showInferenceDetails ||
+      costDisplayUnit !== initialState.costDisplayUnit ||
+      showRunsPerCostUnit !== initialState.showRunsPerCostUnit ||
       renderMarkdown !== initialState.renderMarkdown ||
       prettifyJson !== initialState.prettifyJson ||
       showPrompts !== initialState.showPrompts ||
@@ -124,6 +139,8 @@ export const useSettingsState = (isOpen: boolean) => {
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    costDisplayUnit,
+    showRunsPerCostUnit,
     renderMarkdown,
     prettifyJson,
     showPrompts,
@@ -157,6 +174,8 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPassReasons(false);
     setShowMetricPills(true);
     setShowInferenceDetails(true);
+    setCostDisplayUnit('dollars');
+    setShowRunsPerCostUnit(false);
     setMaxTextLength(500);
     setLocalMaxTextLength(500);
     setMaxImageWidth(500);
@@ -171,6 +190,8 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPassReasons,
     setShowMetricPills,
     setShowInferenceDetails,
+    setCostDisplayUnit,
+    setShowRunsPerCostUnit,
     setMaxTextLength,
     setMaxImageWidth,
     setMaxImageHeight,
