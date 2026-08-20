@@ -287,6 +287,9 @@
         "DOCKER_MODEL_RUNNER_API_KEY": {
           "type": "string"
         },
+        "EDENAI_API_KEY": {
+          "type": "string"
+        },
         "ELEVENLABS_API_KEY": {
           "type": "string"
         },
@@ -1759,6 +1762,9 @@
                       "type": "string"
                     },
                     "DOCKER_MODEL_RUNNER_API_KEY": {
+                      "type": "string"
+                    },
+                    "EDENAI_API_KEY": {
                       "type": "string"
                     },
                     "ELEVENLABS_API_KEY": {
