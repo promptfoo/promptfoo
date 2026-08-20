@@ -12,7 +12,7 @@ import logger from '../../logger';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { MediaData } from '../../storage/types';
-import type { TestCaseWithPlugin } from '../../types';
+import type { Inputs, TestCaseWithPlugin } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
 
@@ -59,6 +59,8 @@ export interface RuntimeTransformContext {
   purpose?: string;
   /** The goal/target of the attack */
   goal?: string;
+  /** Multi-input definitions used to preserve the JSON envelope and benign fields. */
+  inputs?: Inputs;
 }
 
 /**
@@ -118,6 +120,7 @@ export async function applyRuntimeTransforms(
       testCaseId: context?.testCaseId,
       purpose: context?.purpose,
       goal: context?.goal,
+      ...(context?.inputs && { pluginConfig: { inputs: context.inputs } }),
     },
   };
 

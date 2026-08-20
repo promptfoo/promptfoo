@@ -270,6 +270,87 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it.each([10, 16, 19])(
+    'should preserve two-digit letter bijection dispersion %i while editing',
+    async (value) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="bijection"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'bijection',
+            name: 'Bijection Encoding',
+            description: 'Temporary substitution language',
+          }}
+        />,
+      );
+
+      const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+      await user.click(dispersion);
+      await user.keyboard(`{Control>}a{/Control}${value}`);
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).toHaveBeenCalledWith('bijection', { dispersion: value });
+    },
+  );
+
+  it('should normalize a single-letter bijection dispersion only when saving', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="bijection"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'bijection',
+          name: 'Bijection Encoding',
+          description: 'Temporary substitution language',
+        }}
+      />,
+    );
+
+    const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+    await user.click(dispersion);
+    await user.keyboard('{Control>}a{/Control}1');
+
+    expect(dispersion).toHaveValue(1);
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('bijection', { dispersion: 2 });
+  });
+
+  it('should allow a single-digit bijection dispersion when saving', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="bijection"
+        config={{ type: 'digit' }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'bijection',
+          name: 'Bijection Encoding',
+          description: 'Temporary substitution language',
+        }}
+      />,
+    );
+
+    const dispersion = screen.getByRole('spinbutton', { name: 'Changed Letters' });
+    await user.click(dispersion);
+    await user.keyboard('{Control>}a{/Control}1');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(mockOnSave).toHaveBeenCalledWith('bijection', { type: 'digit', dispersion: 1 });
+  });
+
   it('should configure and save a random-case strategy', async () => {
     const user = userEvent.setup();
     renderWithProviders(

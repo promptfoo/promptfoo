@@ -448,7 +448,11 @@ export default function StrategyConfigDialog({
       if (!isCustomStrategyValid()) {
         return;
       }
-      onSave(strategy, localConfig);
+      const strategyConfig =
+        strategy === 'bijection' && localConfig.type !== 'digit' && localConfig.dispersion === 1
+          ? { ...localConfig, dispersion: 2 }
+          : localConfig;
+      onSave(strategy, strategyConfig);
     } else if (strategy === 'layer') {
       const layerConfig: Partial<StrategyConfig> = {
         ...localConfig,
@@ -1037,10 +1041,7 @@ export default function StrategyConfigDialog({
             onChange={(e) => {
               const parsed = e.target.value ? Number.parseInt(e.target.value, 10) : 16;
               const value = clampValue(parsed, 0, 26);
-              setLocalConfig({
-                ...localConfig,
-                dispersion: mappingType === 'letter' && value === 1 ? 2 : value,
-              });
+              setLocalConfig({ ...localConfig, dispersion: value });
             }}
             min={0}
             max={26}
