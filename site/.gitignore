@@ -9,6 +9,7 @@
 .cache-loader
 /static/docs
 /src/.generated-stats.json
+/src/.generated-examples.json
 
 # Misc
 .DS_Store

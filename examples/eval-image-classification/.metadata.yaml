@@ -1,0 +1,7 @@
+title: 'Image Classification Evaluation'
+description: 'Classify Fashion MNIST images using GPT-4o vision with structured JSON schema output and accuracy metrics'
+tags:
+  - Evaluation
+  - Multimodal
+  - Structured Output
+  - Python

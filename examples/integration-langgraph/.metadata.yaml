@@ -1,0 +1,7 @@
+title: 'LangGraph Agent Evaluation'
+description: 'Evaluate a LangGraph research agent with structured JSON output validation'
+tags:
+  - Integrations
+  - Agents
+  - Python
+  - Structured Output

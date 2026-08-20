@@ -1,0 +1,4 @@
+title: 'Loading Tests from External Files'
+description: 'Using file:// paths and glob wildcards to load test cases, variables, and assertions from separate files'
+tags:
+  - Configuration

@@ -1,0 +1,5 @@
+title: 'Function and Tool Calling'
+description: 'Evaluate function calling and tool use across OpenAI, Anthropic, and Groq providers with finish-reason assertions'
+tags:
+  - Tool Use
+  - Providers
