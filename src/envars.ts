@@ -111,6 +111,7 @@ type EnvVars = {
   PROMPTFOO_CACHE_TTL?: number;
   PROMPTFOO_CACHE_TYPE?: 'memory' | 'disk';
   PROMPTFOO_CLOUD_API_URL?: string;
+  PROMPTFOO_CLOUD_AUTH_HEADER?: string;
   PROMPTFOO_CONFIG_DIR?: string;
   PROMPTFOO_CSV_DELIMITER?: string;
   PROMPTFOO_CSV_STRICT?: boolean;
