@@ -677,7 +677,23 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const targetTokens = getTokenUsageTotal(selectedTokenUsage);
   const attackerTokens = getTokenUsageTotal(selectedTokenUsage?.attacker);
   const gradingTokens = getTokenUsageTotal(selectedTokenUsage?.assertions);
-  const totalTokens = targetTokens + attackerTokens + gradingTokens;
+  const selectedTargetTokens = targetTokens + attackerTokens + gradingTokens;
+  const scanTokenUsage = evalData.results.stats?.tokenUsage;
+  const generationTokens = getTokenUsageTotal(scanTokenUsage?.generation);
+  const evaluationTokens = scanTokenUsage
+    ? getTokenUsageTotal(scanTokenUsage) +
+      getTokenUsageTotal(scanTokenUsage.attacker) +
+      getTokenUsageTotal(scanTokenUsage.assertions)
+    : prompts.reduce((total, prompt) => {
+        const tokenUsage = prompt.metrics?.tokenUsage;
+        return (
+          total +
+          getTokenUsageTotal(tokenUsage) +
+          getTokenUsageTotal(tokenUsage?.attacker) +
+          getTokenUsageTotal(tokenUsage?.assertions)
+        );
+      }, 0);
+  const totalTokens = evaluationTokens + generationTokens;
   const tableData =
     (evalData.version >= 4
       ? convertResultsToTable(evalData).body
@@ -804,6 +820,21 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                           <span>
                             <strong>Grading Tokens:</strong> {gradingTokens.toLocaleString()}
                           </span>
+                          {prompts.length > 1 || generationTokens > 0 ? (
+                            <>
+                              <span>
+                                <strong>Selected Target Subtotal:</strong>{' '}
+                                {selectedTargetTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Generation Tokens (scan-wide):</strong>{' '}
+                                {generationTokens.toLocaleString()}
+                              </span>
+                              <span>
+                                <strong>Scan Total Tokens:</strong> {totalTokens.toLocaleString()}
+                              </span>
+                            </>
+                          ) : null}
                         </div>
                       </TooltipContent>
                     </Tooltip>

@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/util/eval/summary';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { stripAnsi } from '../../util/utils';
 
 import type { EvalSummaryParams } from '../../../src/util/eval/summary';
@@ -367,6 +368,16 @@ describe('generateEvalSummary', () => {
     });
 
     it('derives category totals from prompt and completion usage when total is absent', () => {
+      const aggregatedUsage = createEmptyTokenUsage();
+      accumulateTokenUsage(aggregatedUsage, {
+        prompt: 60,
+        completion: 40,
+        numRequests: 2,
+        attacker: { prompt: 30, completion: 20, numRequests: 3 },
+        assertions: { prompt: 15, completion: 10 },
+        generation: { prompt: 25, completion: 15, numRequests: 4 },
+      });
+
       const lines = generateEvalSummary({
         evalId: 'eval-derived-token-totals',
         isRedteam: true,
@@ -375,14 +386,7 @@ describe('generateEvalSummary', () => {
         wantsToShare: false,
         hasExplicitDisable: false,
         cloudEnabled: false,
-        tokenUsage: {
-          prompt: 60,
-          completion: 40,
-          numRequests: 2,
-          attacker: { prompt: 30, completion: 20, numRequests: 3 },
-          assertions: { prompt: 15, completion: 10 },
-          generation: { prompt: 25, completion: 15, numRequests: 4 },
-        },
+        tokenUsage: aggregatedUsage,
         successes: 1,
         failures: 0,
         errors: 0,

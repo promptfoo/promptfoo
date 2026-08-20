@@ -736,6 +736,58 @@ describe('App component target selector rendering', () => {
     expect(await screen.findByLabelText('0 target probes')).toHaveTextContent('Depth: 0 probes');
   });
 
+  it('counts scan-wide generation once across multiple targets', async () => {
+    const user = userEvent.setup();
+    const results = [
+      createComponentMockResult(0, 'plugin1', true),
+      createComponentMockResult(1, 'plugin1', false),
+    ];
+    const evalData = createComponentMockEvalData(2, results);
+    evalData.results.stats = {
+      successes: 1,
+      failures: 1,
+      errors: 0,
+      tokenUsage: {
+        total: 200,
+        prompt: 150,
+        completion: 50,
+        cached: 0,
+        numRequests: 20,
+        completionDetails: {},
+        assertions: {},
+        generation: {
+          total: 40,
+          prompt: 30,
+          completion: 10,
+          cached: 0,
+          numRequests: 1,
+        },
+      },
+    };
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const tokenBadge = await screen.findByLabelText('240 total tokens');
+    expect(tokenBadge).toHaveTextContent('Total Tokens: 240');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Target Tokens: 100');
+    expect(tooltip).toHaveTextContent('Selected Target Subtotal: 100');
+    expect(tooltip).toHaveTextContent('Generation Tokens (scan-wide): 40');
+    expect(tooltip).toHaveTextContent('Scan Total Tokens: 240');
+
+    await user.unhover(tokenBadge);
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Provider 1' }));
+
+    expect(await screen.findByLabelText('240 total tokens')).toHaveTextContent('Total Tokens: 240');
+  });
+
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
