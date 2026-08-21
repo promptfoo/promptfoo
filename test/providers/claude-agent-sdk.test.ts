@@ -20,6 +20,7 @@ import * as traceStore from '../../src/tracing/store';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { mockProcessEnv } from '../util/utils';
 import type {
+  ModelUsage,
   NonNullableUsage,
   Query,
   SDKAssistantMessageError,
@@ -143,6 +144,22 @@ const createMockUsage = (input = 0, output = 0): MockUsage => ({
   inference_geo: '',
   iterations: [],
   output_tokens_details: { thinking_tokens: 0 },
+});
+
+const createMockModelUsage = (
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadInputTokens = 0,
+  cacheCreationInputTokens = 0,
+): ModelUsage => ({
+  inputTokens,
+  outputTokens,
+  cacheReadInputTokens,
+  cacheCreationInputTokens,
+  webSearchRequests: 0,
+  costUSD: 0,
+  contextWindow: 200000,
+  maxOutputTokens: 8192,
 });
 
 // Helper to create a mock BetaMessage with required fields
@@ -467,6 +484,82 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(JSON.parse(result.raw as string).terminal_reason).toBe('completed');
       });
 
+      it('should count cumulative model and subagent usage, including prompt-cache tokens', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery({
+            type: 'result',
+            subtype: 'success',
+            session_id: 'test-session-123',
+            uuid: '12345678-1234-1234-1234-123456789abc',
+            result: 'Test response',
+            usage: createMockUsage(10, 20),
+            modelUsage: {
+              'claude-sonnet-4-5': createMockModelUsage(10, 20, 3, 2),
+              'claude-haiku-4-5': createMockModelUsage(40, 60, 7, 5),
+            },
+            total_cost_usd: 0.002,
+            duration_ms: 1000,
+            duration_api_ms: 800,
+            is_error: false,
+            num_turns: 2,
+            permission_denials: [],
+          }),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage).toEqual({
+          prompt: 67,
+          completion: 80,
+          total: 147,
+          completionDetails: {
+            cacheReadInputTokens: 10,
+            cacheCreationInputTokens: 7,
+          },
+        });
+      });
+
+      it('should preserve cumulative model usage when an SDK call fails', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery({
+            type: 'result',
+            subtype: 'error_during_execution',
+            session_id: 'error-session',
+            uuid: '87654321-4321-4321-4321-210987654321',
+            usage: createMockUsage(10, 0),
+            modelUsage: {
+              'claude-sonnet-4-5': createMockModelUsage(35, 0, 5),
+            },
+            total_cost_usd: 0.001,
+            duration_ms: 500,
+            duration_api_ms: 400,
+            is_error: true,
+            num_turns: 1,
+            permission_denials: [],
+            errors: ['Model failed before generating output'],
+          }),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
+        expect(result.tokenUsage).toEqual({
+          prompt: 40,
+          completion: 0,
+          total: 40,
+          completionDetails: {
+            cacheReadInputTokens: 5,
+            cacheCreationInputTokens: 0,
+          },
+        });
+      });
+
       it('should handle SDK error response', async () => {
         mockQuery.mockReturnValue(createMockErrorResponse('error_during_execution'));
 
@@ -479,7 +572,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.tokenUsage).toEqual({
           prompt: 10,
           completion: 0,
-          total: undefined,
+          total: 10,
         });
       });
 
