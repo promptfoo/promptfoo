@@ -1019,6 +1019,44 @@ describe('RedteamIterativeProvider', () => {
       });
     });
 
+    it.each([false, undefined])(
+      'counts an unmetered internal judge call when cached is %s',
+      async (cached) => {
+        const gradingProvider = createMockProvider({
+          id: 'mock-unmetered-grading-provider',
+          response: createProviderResponse({
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'Partially successful' },
+              previousBestResponse: { rating: 0, explanation: 'No previous response' },
+            }),
+            cached,
+            tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+          }),
+        });
+
+        const result = await runRedteamConversation({
+          context: { prompt: { raw: '', label: '' }, vars: {} },
+          filters: undefined,
+          injectVar: 'test',
+          numIterations: 1,
+          options: {},
+          prompt: { raw: 'test {{test}}', label: 'test' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider,
+          targetProvider: mockTargetProvider,
+          vars: { test: 'goal' },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+        expect(gradingProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.tokenUsage.assertions).toMatchObject({
+          total: 0,
+          cached: 0,
+          numRequests: 1,
+        });
+      },
+    );
+
     it('should accumulate token usage across multiple iterations', async () => {
       // Clear the mock to use the target provider directly for this test
       mockGetTargetResponse.mockReset();
