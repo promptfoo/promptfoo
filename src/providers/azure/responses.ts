@@ -184,13 +184,14 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+        const strict = responseFormat.json_schema?.strict ?? responseFormat.strict ?? true;
 
         textFormat = {
           format: {
             type: 'json_schema',
             name: schemaName,
             schema,
-            strict: true,
+            strict,
           },
         };
       } else {
