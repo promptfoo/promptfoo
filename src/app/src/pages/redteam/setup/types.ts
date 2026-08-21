@@ -9,16 +9,12 @@ import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfo
  * to track which input method the user has selected for each field.
  */
 interface TlsConfigUI {
-  enabled?: boolean;
   certInputType?: 'upload' | 'path' | 'inline';
   keyInputType?: 'upload' | 'path' | 'inline';
   jksInputType?: 'upload' | 'path';
   pfxInputType?: 'upload' | 'path' | 'base64';
   caInputType?: 'upload' | 'path' | 'inline';
-  jksContent?: string;
   jksFileName?: string;
-  jksPath?: string;
-  keyAlias?: string;
   jksExtractConfigured?: boolean;
   certificateType?: 'pem' | 'pfx' | 'pkcs12' | 'jks';
 }
@@ -29,7 +25,7 @@ interface TlsConfigUI {
  */
 interface HttpProviderConfigUI extends Omit<HttpProviderConfig, 'signatureAuth' | 'tls'> {
   signatureAuth?: HttpProviderConfig['signatureAuth'];
-  tls?: HttpProviderConfig['tls'] & TlsConfigUI;
+  tls?: Partial<NonNullable<HttpProviderConfig['tls']>> & TlsConfigUI;
 }
 
 /**
