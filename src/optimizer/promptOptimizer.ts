@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { withCacheEnabled } from '../cache';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
@@ -721,11 +722,26 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
 function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
   return {
     ...config.evaluateOptions,
-    cache: false,
     eventSource: 'library',
     showProgressBar: false,
     silent: true,
   };
+}
+
+/**
+ * Run an internal optimizer evaluation with provider caching disabled.
+ *
+ * Optimization compares the baseline prompt against generated candidates, so
+ * every candidate (and the baseline itself) must be scored from fresh provider
+ * calls. The optimizer invokes `evaluate()` from `../evaluator` directly, which
+ * bypasses the `evaluateWithSource` wrapper in `../evaluate` that normally seeds
+ * the `withCacheEnabled` AsyncLocalStorage. Without this wrapper the optimizer
+ * would score prompts from stale cached provider outputs. The `cache` flag on
+ * `InternalEvaluateOptions` is not read by `evaluate()`, so caching must be
+ * disabled here via `withCacheEnabled` instead.
+ */
+function evaluateWithoutCache(...args: Parameters<typeof evaluate>): ReturnType<typeof evaluate> {
+  return withCacheEnabled(false, () => evaluate(...args));
 }
 
 function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
@@ -762,14 +778,14 @@ export async function optimizePromptTestSuite(
   const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
 
   logger.info('Running baseline evaluation for prompt optimization...');
-  const baselineEval = await evaluate(
+  const baselineEval = await evaluateWithoutCache(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
   assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
-    ? await evaluate(
+    ? await evaluateWithoutCache(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(optimizationConfig, { persisted: false }),
         createEvaluationOptions(config),
@@ -840,13 +856,13 @@ export async function optimizePromptTestSuite(
       currentPromptSource,
       candidates,
     );
-    const candidateEval = await evaluate(
+    const candidateEval = await evaluateWithoutCache(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(optimizationConfig, { persisted: false }),
       createEvaluationOptions(config),
     );
     const candidateValidationEval = validationTestSuite
-      ? await evaluate(
+      ? await evaluateWithoutCache(
           cloneOptimizationTestSuite(
             createCandidateTestSuite(
               validationTestSuite,
