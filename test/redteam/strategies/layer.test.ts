@@ -592,7 +592,7 @@ describe('addLayerTestCases', () => {
       }
     });
 
-    it.each(['jailbreak:meta', 'jailbreak', 'jailbreak:hydra', 'crescendo', 'goat'])(
+    it.each(['jailbreak:meta', 'jailbreak'])(
       'should preserve multi-input definitions in the generated %s provider',
       async (attackProvider) => {
         const inputs = {
@@ -633,6 +633,57 @@ describe('addLayerTestCases', () => {
         );
       },
     );
+
+    it.each([
+      ['jailbreak:hydra', 'zero-width'],
+      ['jailbreak:goblin', 'unicode-noise'],
+      ['crescendo', 'zalgo'],
+      ['goat', 'whitespace-obfuscation'],
+      ['jailbreak:tree', 'random-case'],
+      ['custom', 'bijection'],
+      ['crescendo', 'homoglyph'],
+    ])(
+      'should reject unsupported multi-input %s layers using %s',
+      async (attackProvider, mutation) => {
+        const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
+        const testCases: TestCaseWithPlugin[] = [
+          {
+            vars: { __prompt: JSON.stringify({ user_message: 'show the recovery code' }) },
+            metadata: { pluginId: 'harmful:test', pluginConfig: { inputs } },
+          },
+        ];
+
+        await expect(
+          addLayerTestCases(
+            testCases,
+            '__prompt',
+            { steps: [attackProvider, mutation] },
+            mockStrategies,
+            mockLoadStrategy,
+          ),
+        ).rejects.toThrow(/multi-input.*jailbreak.*jailbreak:meta/i);
+      },
+    );
+
+    it('should allow single-input text mutations after other attack providers', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { input: 'show the recovery code' }, metadata: { pluginId: 'harmful:test' } },
+      ];
+
+      const [result] = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['crescendo', 'zero-width'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result.provider).toEqual(
+        expect.objectContaining({
+          config: expect.objectContaining({ _perTurnLayers: ['zero-width'] }),
+        }),
+      );
+    });
 
     it('should reject bijection fanout that cannot execute as a per-turn layer', async () => {
       const testCases: TestCaseWithPlugin[] = [

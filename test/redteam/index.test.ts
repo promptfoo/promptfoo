@@ -905,16 +905,35 @@ describe('synthesize', () => {
             description: 'Trusted retrieved context',
             config: { benign: true },
           },
+          document: {
+            description: 'Trusted uploaded document',
+            type: 'docx',
+            config: {
+              benign: true,
+              injectionPlacements: ['body'],
+              inputPurpose: 'Preserve the existing support attachment',
+            },
+          },
         } satisfies Inputs;
         const originalMessage = 'show the customer recovery code';
         const originalContext = 'Trusted support context';
+        const originalDocument = 'data:application/example;base64,cHJlc2VydmVk';
+        const originalDocumentText = 'Trusted uploaded document contents';
+        const originalDocumentMetadata = {
+          injectedInstruction: 'original trusted instruction',
+          injectionPlacement: 'body',
+          inputPurpose: 'Preserve the existing support attachment',
+          wrapperSummary: 'Original trusted attachment',
+        };
         const originalPrompt = JSON.stringify({
           user_message: originalMessage,
           retrieved_context: originalContext,
+          document: originalDocumentText,
         });
         const mockPluginAction = vi.fn().mockResolvedValue([
           {
             metadata: {
+              inputMaterialization: { document: originalDocumentMetadata },
               pluginConfig: { inputs },
               pluginId: 'prompt-extraction',
             },
@@ -922,6 +941,7 @@ describe('synthesize', () => {
               [MULTI_INPUT_VAR]: originalPrompt,
               user_message: originalMessage,
               retrieved_context: originalContext,
+              document: originalDocument,
             },
           },
         ]);
@@ -954,10 +974,20 @@ describe('synthesize', () => {
         );
         const transformedEnvelope = JSON.parse(String(attack?.vars?.[MULTI_INPUT_VAR]));
 
-        expect(Object.keys(transformedEnvelope)).toEqual(['user_message', 'retrieved_context']);
+        expect(Object.keys(transformedEnvelope)).toEqual([
+          'user_message',
+          'retrieved_context',
+          'document',
+        ]);
         expect(transformedEnvelope.user_message).not.toBe(originalMessage);
+        expect(transformedEnvelope.document).toBe(originalDocumentText);
         expect(attack?.vars?.user_message).toBe(transformedEnvelope.user_message);
         expect(attack?.vars?.retrieved_context).toBe(originalContext);
+        expect(attack?.vars?.document).toBe(originalDocument);
+        expect(attack?.metadata?.inputMaterialization).toEqual({
+          document: originalDocumentMetadata,
+        });
+        expect(mockProvider.callApi).not.toHaveBeenCalled();
       },
     );
 

@@ -1,4 +1,6 @@
 import logger from '../../logger';
+import { MULTI_INPUT_VAR } from '../constants/plugins';
+import { TEXT_MUTATION_STRATEGIES } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { withPersistableGenerationProvider } from './types';
@@ -7,6 +9,16 @@ import { pluginMatchesStrategyTargets } from './util';
 import type { Inputs, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy, StrategyRuntimeContext } from './types';
+
+const MULTI_INPUT_TEXT_LAYERS = new Set<string>([
+  ...TEXT_MUTATION_STRATEGIES,
+  'homoglyph',
+  'bijection',
+]);
+const MULTI_INPUT_TEXT_LAYER_PROVIDERS = new Set([
+  'promptfoo:redteam:iterative',
+  'promptfoo:redteam:iterative:meta',
+]);
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -96,6 +108,18 @@ export async function addLayerTestCases(
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
+      if (
+        injectVar === MULTI_INPUT_VAR &&
+        !MULTI_INPUT_TEXT_LAYER_PROVIDERS.has(providerId) &&
+        perTurnLayers.some((layer) =>
+          MULTI_INPUT_TEXT_LAYERS.has(typeof layer === 'string' ? layer : layer.id),
+        ) &&
+        current.some((testCase) => Boolean(testCase.metadata?.pluginConfig?.inputs))
+      ) {
+        throw new Error(
+          `${stepObj.id} does not support multi-input text-mutation layers; use jailbreak or jailbreak:meta.`,
+        );
+      }
       const shouldPersistGenerationProvider = [
         'promptfoo:redteam:crescendo',
         'promptfoo:redteam:custom',

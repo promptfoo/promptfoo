@@ -153,9 +153,21 @@ async function rematerializeStrategyInputVars(
 
   try {
     const parsed = JSON.parse(String(currentInjectVar));
+    const previousInputs = promptChangedSinceMaterialization
+      ? (JSON.parse(materializedPromptSnapshot as string) as Record<string, unknown>)
+      : undefined;
+    const inputsToMaterialize = previousInputs
+      ? Object.fromEntries(
+          Object.entries(inputs).filter(
+            ([key]) =>
+              !Object.hasOwn(testCase.vars ?? {}, key) ||
+              !Object.is(parsed[key], previousInputs[key]),
+          ),
+        )
+      : inputs;
     const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
       parsed,
-      inputs,
+      inputsToMaterialize,
       {
         materializationIndex,
         pluginId: String(testCase.metadata?.pluginId || 'unknown-plugin'),
