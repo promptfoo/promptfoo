@@ -86,10 +86,6 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
       };
     }
 
-    // A 200 with an empty or missing choices array (soft moderation block or
-    // upstream hiccup) must surface as a clean malformed-response error, not
-    // an opaque TypeError from choices[0].message. Mirrors the sibling fix in
-    // openrouter.ts / snowflake.ts (#10418).
     if (!data.choices?.[0]?.message) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,

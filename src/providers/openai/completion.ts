@@ -144,10 +144,6 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         error: formatOpenAiError(data),
       };
     }
-    // A 200 with an empty choices array (soft moderation block, upstream
-    // hiccup) must surface as a clean malformed-response error, not an opaque
-    // TypeError from choices[0]. Mirrors the sibling fix in openrouter.ts /
-    // snowflake.ts (#10418).
     if (!data.choices?.[0]) {
       return {
         error: `Malformed response data: ${JSON.stringify(data)}`,

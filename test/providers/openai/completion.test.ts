@@ -233,22 +233,25 @@ describe('OpenAI Provider', () => {
       ['davinci-002', 2, 2],
       ['ft:babbage-002:company::model', 1.6, 1.6],
       ['ft:davinci-002:company::model', 12, 12],
-    ])('should call and price supported Completions model %s', async (model, inputRate, outputRate) => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        ...mockResponse,
-        data: {
-          choices: [{ text: 'Test output' }],
-          usage: { total_tokens: 3_000, prompt_tokens: 2_000, completion_tokens: 1_000 },
-        },
-      });
+    ])(
+      'should call and price supported Completions model %s',
+      async (model, inputRate, outputRate) => {
+        mockFetchWithCache.mockResolvedValueOnce({
+          ...mockResponse,
+          data: {
+            choices: [{ text: 'Test output' }],
+            usage: { total_tokens: 3_000, prompt_tokens: 2_000, completion_tokens: 1_000 },
+          },
+        });
 
-      const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
-      const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+        const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
+        const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
 
-      expect(request[0]).toContain('/completions');
-      expect(JSON.parse(request[1].body)).toMatchObject({ model, prompt: 'Test prompt' });
-      expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
-    });
+        expect(request[0]).toContain('/completions');
+        expect(JSON.parse(request[1].body)).toMatchObject({ model, prompt: 'Test prompt' });
+        expect(result.cost).toBeCloseTo((2_000 * inputRate + 1_000 * outputRate) / 1e6, 10);
+      },
+    );
 
     it('should handle API errors', async () => {
       mockFetchWithCache.mockResolvedValue({
@@ -281,8 +284,6 @@ describe('OpenAI Provider', () => {
     });
 
     it('returns a clean error on an empty choices array instead of an opaque TypeError', async () => {
-      // A 200 with empty choices (soft moderation block or upstream hiccup)
-      // must not surface as "API error: TypeError: Cannot read ...".
       mockFetchWithCache.mockResolvedValue({
         data: { choices: [] },
         cached: false,
@@ -455,8 +456,6 @@ describe('OpenAI Provider', () => {
       const provider = new OpenAiCompletionProvider('text-davinci-003');
       const result = await provider.callApi('Test prompt');
 
-      // A missing choices array now reads as a clean malformed-response error
-      // rather than an opaque "API error: TypeError: ..." from choices[0].
       expect(result.error).toContain('Malformed response data');
     });
 
