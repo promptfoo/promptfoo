@@ -3,7 +3,6 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
 import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
@@ -121,8 +120,8 @@ describe('resolveTestsWatchPaths', () => {
 
   it('deduplicates and tolerates an absent tests field', () => {
     expect(resolve(undefined)).toEqual([]);
-    expect(
-      resolve(['file://cases.yaml', 'file://cases.yaml'] as TestSuiteConfig['tests']),
-    ).toEqual([path.join(base, 'cases.yaml')]);
+    expect(resolve(['file://cases.yaml', 'file://cases.yaml'] as TestSuiteConfig['tests'])).toEqual(
+      [path.join(base, 'cases.yaml')],
+    );
   });
 });

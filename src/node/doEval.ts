@@ -36,11 +36,10 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
-  renderConfigEnvTemplates,
   maybeReadConfig,
+  renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
-import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,
@@ -59,6 +58,7 @@ import {
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
+import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
