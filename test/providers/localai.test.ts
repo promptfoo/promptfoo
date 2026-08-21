@@ -124,8 +124,6 @@ describe('LocalAI empty choices handling', () => {
   });
 
   it('returns a clean malformed-response error on empty choices (chat)', async () => {
-    // A 200 with an empty choices array (soft moderation block or upstream
-    // hiccup) must not become an opaque TypeError from choices[0].message.
     vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
 
     const provider = new LocalAiChatProvider('test-model', { config: {} });
