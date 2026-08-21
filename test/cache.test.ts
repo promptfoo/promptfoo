@@ -305,6 +305,98 @@ describe('cache configuration', () => {
     rmSync.mockRestore();
   });
 
+  it('should prune disk-backed claims older than the cache TTL', async () => {
+    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    const claimsDir = path.join('/custom/cache/path', 'claims');
+    const now = Date.now();
+    const readdirSync = vi
+      .spyOn(fs, 'readdirSync')
+      .mockReturnValue(['stale-claim', 'fresh-claim'] as unknown as never);
+    const statSync = vi
+      .spyOn(fs, 'statSync')
+      .mockImplementation(
+        (target) =>
+          ({ mtimeMs: String(target).includes('stale-claim') ? 0 : now }) as unknown as fs.Stats,
+      );
+    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+
+    expect(cacheModule.claimCacheKeyOnce(`background-billing-prune:${now}`)).toBe(true);
+
+    expect(readdirSync).toHaveBeenCalledWith(claimsDir);
+    // The stale claim (older than the TTL) is removed; the fresh one is left in place.
+    expect(rmSync).toHaveBeenCalledWith(path.join(claimsDir, 'stale-claim'), { force: true });
+    expect(rmSync).not.toHaveBeenCalledWith(path.join(claimsDir, 'fresh-claim'), { force: true });
+
+    readdirSync.mockRestore();
+    statSync.mockRestore();
+    rmSync.mockRestore();
+    openSync.mockRestore();
+    closeSync.mockRestore();
+  });
+
+  it('should sweep claims at most once per throttle interval', async () => {
+    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    const readdirSync = vi.spyOn(fs, 'readdirSync').mockReturnValue([] as unknown as never);
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+
+    cacheModule.claimCacheKeyOnce('background-billing-throttle-a');
+    cacheModule.claimCacheKeyOnce('background-billing-throttle-b');
+
+    // Both claims happen within the same interval, so the directory is only swept once.
+    expect(readdirSync).toHaveBeenCalledTimes(1);
+
+    readdirSync.mockRestore();
+    openSync.mockRestore();
+    closeSync.mockRestore();
+  });
+
+  it('should not prune claims when the cache TTL is disabled', async () => {
+    mockProcessEnv({
+      NODE_ENV: 'production',
+      PROMPTFOO_CACHE_PATH: '/custom/cache/path',
+      PROMPTFOO_CACHE_TTL: '0',
+    });
+    const readdirSync = vi
+      .spyOn(fs, 'readdirSync')
+      .mockReturnValue(['stale-claim'] as unknown as never);
+    const rmSync = vi.spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+
+    expect(cacheModule.claimCacheKeyOnce('background-billing-ttl0')).toBe(true);
+
+    // With expiry disabled, claims live as long as their (non-expiring) cache entries.
+    expect(readdirSync).not.toHaveBeenCalled();
+    expect(rmSync).not.toHaveBeenCalled();
+
+    readdirSync.mockRestore();
+    rmSync.mockRestore();
+    openSync.mockRestore();
+    closeSync.mockRestore();
+  });
+
+  it('should still claim when the claims directory cannot be swept', async () => {
+    mockProcessEnv({ NODE_ENV: 'production', PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    const readdirSync = vi.spyOn(fs, 'readdirSync').mockImplementation(() => {
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    const openSync = vi.spyOn(fs, 'openSync').mockReturnValue(42);
+    const closeSync = vi.spyOn(fs, 'closeSync').mockImplementation(() => undefined);
+    const cacheModule = await import('../src/cache');
+
+    expect(cacheModule.claimCacheKeyOnce('background-billing-sweep-error')).toBe(true);
+
+    readdirSync.mockRestore();
+    openSync.mockRestore();
+    closeSync.mockRestore();
+  });
+
   it('should respect custom cache path', async () => {
     mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
     mockProcessEnv({ NODE_ENV: 'production' });
