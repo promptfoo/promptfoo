@@ -124,6 +124,10 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (this.disabled) {
+      return;
+    }
+
     const ciFlag = isCI();
     const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {
