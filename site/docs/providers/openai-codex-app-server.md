@@ -90,6 +90,14 @@ providers:
 
 The same notes as the [Codex SDK Bedrock setup](/docs/providers/openai-codex-sdk/#option-3-run-on-amazon-bedrock) apply: use the `openai.`-prefixed model IDs, request model access in a supported Region (Sol: `us-east-1`/`us-east-2`; Terra and Luna also support `us-west-2`), forward `AWS_SESSION_TOKEN` as well when using temporary/SSO credentials, and remember that credentials in `cli_env` are exposed to the agent's shell environment.
 
+### Computer Use Plugin Eval
+
+The [`computer-use` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-app-server/computer-use) runs the real macOS Computer Use plugin against an intentionally vulnerable native chatbot with no chat API or network endpoint. The runner creates an owner-only Codex home and disposable local marketplace for the supplied plugin, installs it through the Codex CLI, compiles a disposable AppKit target, and performs a no-cache eval from an empty workspace.
+
+Use a current Codex CLI with plugin support. Until a Promptfoo release contains the example and its app-server elicitation allowlists, run it from a Promptfoo source checkout; after that release, initialize it with `promptfoo init --example openai-codex-app-server/computer-use`. Follow the example README and its `run-e2e.sh` runner rather than invoking the config directly.
+
+Run this only in a dedicated disposable macOS VM or OS account with no sensitive user data or unrelated apps. `sandbox_mode: read-only` prevents writes but does not contain host reads, and UI trajectory assertions run after the interaction. The config disables shell, browser, and multi-agent feature paths, accepts only the exact target elicitation, and rejects recorded trajectories that leave the generated app path, but those controls are defense in depth rather than OS isolation. The example does not copy local Codex login state or proprietary plugin payloads into the repository. Windows Computer Use uses a separate native-pipe path and is out of scope.
+
 ## Basic Usage
 
 ```yaml title="promptfooconfig.yaml"
@@ -247,6 +255,10 @@ providers:
           severity: high
         mcp_elicitation:
           action: accept
+          allowed_server_names:
+            - forms
+          allowed_messages:
+            - Provide project metadata
           content:
             severity: low
           _meta:
@@ -279,6 +291,8 @@ server_request_policy:
 ```
 
 Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled for older app-server versions. Advanced command decision objects are only supported on the modern `item/commandExecution/requestApproval` flow.
+
+`mcp_elicitation.allowed_server_names` and `mcp_elicitation.allowed_messages` are optional exact-match allowlists. When either allowlist is present, Promptfoo declines elicitation requests that do not match it. Use them to keep unattended fixtures narrow.
 
 `permissions.strict_auto_review` maps to the app-server `strictAutoReview` response field and asks Codex to review every subsequent command in the current turn before normal sandboxed execution.
 
