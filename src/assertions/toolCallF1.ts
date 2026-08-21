@@ -220,7 +220,9 @@ export const handleToolCallF1 = ({
 
   return {
     pass,
-    score: f1,
+    // F1 is structurally within [0, 1], so plain 1 - f1 matches the
+    // bleu/gleu inversion convention without clamping.
+    score: inverse ? 1 - f1 : f1,
     reason: pass
       ? `Tool Call F1: ${f1.toFixed(3)} (precision=${precision.toFixed(3)}, recall=${recall.toFixed(3)}). ` +
         `Expected: [${expectedList}], Called: [${actualList}]`
