@@ -249,14 +249,20 @@ export function transformStrategyInput(
     Object.fromEntries(
       Object.entries(parsed).map(([key, value]) => {
         const definition = definitions[key];
-        const benign =
-          typeof definition === 'object' &&
-          definition !== null &&
-          (definition as { config?: { benign?: boolean } }).config?.benign === true;
+        const typedDefinition =
+          typeof definition === 'object' && definition !== null
+            ? (definition as { type?: unknown; config?: { benign?: boolean } })
+            : undefined;
+        const textInput =
+          typeof definition === 'string' ||
+          (typedDefinition !== undefined &&
+            (typedDefinition.type === undefined || typedDefinition.type === 'text'));
+        const benign = typedDefinition?.config?.benign === true;
 
         return [
           key,
           Object.prototype.hasOwnProperty.call(definitions, key) &&
+          textInput &&
           typeof value === 'string' &&
           !benign
             ? transform(value)

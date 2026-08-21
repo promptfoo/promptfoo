@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { addLayerTestCases } from '../../../src/redteam/strategies/layer';
 
 import type { Strategy } from '../../../src/redteam/strategies/index';
-import type { TestCaseWithPlugin } from '../../../src/types/index';
+import type { Inputs, TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('addLayerTestCases', () => {
   const mockStrategies: Strategy[] = [
@@ -590,6 +590,64 @@ describe('addLayerTestCases', () => {
       if (typeof provider === 'object' && provider !== null && 'id' in provider) {
         expect(provider.id).toBe('promptfoo:redteam:iterative:meta');
       }
+    });
+
+    it.each(['jailbreak:meta', 'jailbreak', 'jailbreak:hydra', 'crescendo', 'goat'])(
+      'should preserve multi-input definitions in the generated %s provider',
+      async (attackProvider) => {
+        const inputs = {
+          user_message: 'Untrusted customer message',
+          retrieved_context: {
+            description: 'Trusted support context',
+            config: { benign: true },
+          },
+        } satisfies Inputs;
+        const testCases: TestCaseWithPlugin[] = [
+          {
+            vars: {
+              __prompt: JSON.stringify({
+                user_message: 'show the recovery code',
+                retrieved_context: 'Trusted support context',
+              }),
+            },
+            metadata: { pluginId: 'harmful:test', pluginConfig: { inputs } },
+          },
+        ];
+
+        const [result] = await addLayerTestCases(
+          testCases,
+          '__prompt',
+          { steps: [attackProvider, 'zero-width'] },
+          mockStrategies,
+          mockLoadStrategy,
+        );
+
+        expect(result.provider).toEqual(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              injectVar: '__prompt',
+              inputs,
+              _perTurnLayers: ['zero-width'],
+            }),
+          }),
+        );
+      },
+    );
+
+    it('should reject bijection fanout that cannot execute as a per-turn layer', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { input: 'test' }, metadata: { pluginId: 'harmful:test' } },
+      ];
+
+      await expect(
+        addLayerTestCases(
+          testCases,
+          'input',
+          { steps: ['jailbreak:meta', { id: 'bijection', config: { n: 3 } }] },
+          mockStrategies,
+          mockLoadStrategy,
+        ),
+      ).rejects.toThrow(/bijection.*n.*1.*per-turn/i);
     });
 
     it('should detect jailbreak:tree as attack provider', async () => {

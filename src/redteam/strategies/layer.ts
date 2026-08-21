@@ -4,7 +4,7 @@ import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProvi
 import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Inputs, TestCase, TestCaseWithPlugin } from '../../types/index';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy, StrategyRuntimeContext } from './types';
 
@@ -80,6 +80,20 @@ export async function addLayerTestCases(
         typeof s === 'string' ? s : { id: s.id, config: s.config },
       );
 
+      if (
+        perTurnLayers.some(
+          (layer) =>
+            typeof layer !== 'string' &&
+            layer.id === 'bijection' &&
+            typeof layer.config?.n === 'number' &&
+            layer.config.n > 1,
+        )
+      ) {
+        throw new Error(
+          'The bijection strategy n must be 1 when used as a per-turn layer; use a standalone bijection strategy for multiple variants.',
+        );
+      }
+
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
       const shouldPersistGenerationProvider = [
@@ -104,6 +118,7 @@ export async function addLayerTestCases(
       // with per-turn layers configured
       return current.map((testCase) => {
         const originalText = String(testCase.vars?.[injectVar] ?? '');
+        const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
         return {
           ...testCase,
           provider: {
@@ -117,6 +132,7 @@ export async function addLayerTestCases(
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
+              ...(inputs && { inputs }),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },

@@ -59,7 +59,7 @@ Each mutation runs locally without calling a generation model. The same strategy
 
 Newlines stay unchanged. When `rate` is greater than zero and eligible characters exist, Promptfoo changes at least one of them. Set `rate: 0` to leave the input unchanged.
 
-For multi-input targets, each mutation, including `homoglyph`, transforms non-benign text fields while preserving input names, non-text values, and fields marked `config.benign: true`. This also applies when the mutation is layered after `jailbreak:meta`.
+For multi-input targets, each mutation, including `homoglyph`, transforms non-benign text fields while preserving input names, typed document or image inputs, and fields marked `config.benign: true`. This also applies when the mutation is layered after `jailbreak` or `jailbreak:meta`.
 
 ## Configuration
 

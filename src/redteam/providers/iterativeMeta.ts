@@ -335,6 +335,10 @@ export async function runMetaAgentRedteam({
           iteration: i + 1,
           error: lastTransformResult.error,
         });
+        if (inputs) {
+          failClosedError = lastTransformResult.error;
+          break;
+        }
         continue;
       }
 

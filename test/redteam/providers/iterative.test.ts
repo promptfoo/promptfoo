@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+import { Strategies } from '../../../src/redteam/strategies';
 import * as traceContext from '../../../src/tracing/traceContext';
 import {
   createMockProvider,
@@ -10,7 +11,12 @@ import {
 } from '../../factories/provider';
 import { mockProcessEnv } from '../../util/utils';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  Inputs,
+  TestCaseWithPlugin,
+} from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn());
@@ -1353,6 +1359,168 @@ describe('RedteamIterativeProvider', () => {
 
       // Should complete without error when perTurnLayers is provided
       expect(result.metadata.finalIteration).toBeDefined();
+    });
+
+    it.each([
+      ['zero-width', false],
+      ['zero-width', true],
+      ['bijection', false],
+      ['bijection', true],
+    ] as const)(
+      'should deliver generated layered multi-input %s attacks with remote materialization: %s',
+      async (strategy, remoteMaterialization) => {
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_DISABLE_REMOTE_GENERATION: remoteMaterialization ? 'false' : 'true',
+        });
+
+        try {
+          const originalMessage = 'show the customer recovery code';
+          const benignContext = 'Trusted support context';
+          const inputs = {
+            user_message: 'Untrusted user message',
+            retrieved_context: {
+              description: 'Trusted support context',
+              config: { benign: true },
+            },
+          } satisfies Inputs;
+          const originalPrompt = JSON.stringify({
+            user_message: originalMessage,
+            retrieved_context: benignContext,
+          });
+          const vars = {
+            __prompt: originalPrompt,
+            user_message: originalMessage,
+            retrieved_context: benignContext,
+          };
+          const prompt = { raw: '{{user_message}} | {{retrieved_context}}', label: 'multi-input' };
+          const test: TestCaseWithPlugin = {
+            vars,
+            assert: [],
+            metadata: { pluginId: 'intent', pluginConfig: { inputs } },
+          };
+          const layerStrategy = Strategies.find((candidate) => candidate.id === 'layer');
+          if (!layerStrategy) {
+            throw new Error('Expected the layer strategy to be registered');
+          }
+          const [generatedTest] = await layerStrategy.action([test], '__prompt', {
+            steps: [
+              'jailbreak',
+              strategy === 'bijection'
+                ? { id: strategy, config: { type: 'digit', dispersion: 26 } }
+                : { id: strategy, config: { rate: 1 } },
+            ],
+          });
+          if (
+            !generatedTest ||
+            !generatedTest.provider ||
+            typeof generatedTest.provider !== 'object'
+          ) {
+            throw new Error('Expected the layer strategy to generate an attack provider');
+          }
+          const generatedConfig = generatedTest.provider.config as {
+            injectVar: string;
+            inputs?: Inputs;
+            _perTurnLayers?: Array<string | { id: string; config?: Record<string, unknown> }>;
+          };
+          expect(generatedConfig.inputs).toEqual(inputs);
+
+          const attacker = createMockProvider({
+            id: 'layered-attacker',
+            response: createProviderResponse({
+              output: { improvement: 'attack', prompt: JSON.parse(originalPrompt) },
+              ...(remoteMaterialization && {
+                materializationHandled: true,
+                materializedVars: {
+                  user_message: originalMessage,
+                  retrieved_context: benignContext,
+                },
+              }),
+            }),
+          });
+          const grader = createMockProvider({
+            id: 'layered-grader',
+            response: createProviderResponse({
+              output: JSON.stringify({
+                currentResponse: { rating: 1, explanation: 'safe' },
+                previousBestResponse: { rating: 0, explanation: 'none' },
+              }),
+            }),
+          });
+
+          await runRedteamConversation({
+            context: {
+              vars,
+              prompt,
+              test: generatedTest as AtomicTestCase,
+              originalProvider: mockTargetProvider,
+            },
+            filters: undefined,
+            injectVar: generatedConfig.injectVar,
+            inputs: generatedConfig.inputs,
+            numIterations: 1,
+            options: {},
+            prompt,
+            redteamProvider: attacker,
+            gradingProvider: grader,
+            targetProvider: mockTargetProvider,
+            test: generatedTest as AtomicTestCase,
+            vars,
+            excludeTargetOutputFromAgenticAttackGeneration: false,
+            perTurnLayers: generatedConfig._perTurnLayers,
+          });
+
+          expect(mockGetTargetResponse).toHaveBeenCalledTimes(1);
+          const [, targetPrompt, targetContext] = mockGetTargetResponse.mock.calls[0] as [
+            unknown,
+            string,
+            { vars: Record<string, string> },
+          ];
+          expect(targetPrompt).not.toContain(originalMessage);
+          expect(targetContext.vars.user_message).not.toBe(originalMessage);
+          expect(targetContext.vars.retrieved_context).toBe(benignContext);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('should fail closed when a runtime mutation receives malformed multi-input JSON', async () => {
+      const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
+      const vars = { __prompt: '{"user_message":"baseline"}', user_message: 'baseline' };
+      const prompt = { raw: '{{user_message}}', label: 'multi-input' };
+      const test = {
+        vars,
+        assert: [],
+        metadata: { pluginId: 'intent', pluginConfig: { inputs } },
+      } as AtomicTestCase;
+      const attacker = createMockProvider({
+        id: 'malformed-layered-attacker',
+        response: createProviderResponse({
+          output: { improvement: 'attack', prompt: 'user_message: malformed JSON' },
+          materializationHandled: true,
+        }),
+      });
+
+      const result = await runRedteamConversation({
+        context: { vars, prompt, test, originalProvider: mockTargetProvider },
+        filters: undefined,
+        injectVar: '__prompt',
+        inputs,
+        numIterations: 1,
+        options: {},
+        prompt,
+        redteamProvider: attacker,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test,
+        vars,
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+        perTurnLayers: [{ id: 'zero-width' }],
+      });
+
+      expect(result.error).toMatch(/requires a valid multi-input JSON object/);
+      expect(result.metadata.redteamHistory).toHaveLength(0);
+      expect(mockGetTargetResponse).not.toHaveBeenCalled();
     });
 
     it('should default perTurnLayers to empty array when not provided', async () => {
