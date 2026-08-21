@@ -64,23 +64,37 @@ describe('eval routes', () => {
     vi.resetAllMocks();
   });
 
-  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
+  // Forces the oversized-payload RangeError (#7649) for matching JSON.stringify
+  // calls without allocating a ~512MB string.
+  function mockJsonStringifyRangeError(
+    matches: (value: unknown) => boolean,
+    shouldThrow: (attempt: number) => boolean = () => true,
+  ) {
     const originalStringify = JSON.stringify;
-    let tablePayloadAttempts = 0;
+    let matchingAttempts = 0;
 
     return vi
       .spyOn(JSON, 'stringify')
       .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
-        const value = args[0];
-        if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
-          tablePayloadAttempts += 1;
-          if (shouldThrow(tablePayloadAttempts)) {
+        if (matches(args[0])) {
+          matchingAttempts += 1;
+          if (shouldThrow(matchingAttempts)) {
             throw new RangeError('Invalid string length');
           }
         }
         return originalStringify.apply(JSON, args);
       });
   }
+
+  const isTablePayload = (value: unknown): boolean =>
+    !!value && typeof value === 'object' && 'table' in value && 'totalCount' in value;
+
+  const isJsonExportPayload = (value: unknown): boolean =>
+    !!value &&
+    typeof value === 'object' &&
+    'head' in value &&
+    'body' in value &&
+    !('table' in value);
 
   async function setResultPromptRaws(eval_: Eval, raws: string[]) {
     const results = await eval_.getResults();
@@ -449,7 +463,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockTablePayloadRangeError((attempt) => attempt === 1);
+      mockJsonStringifyRangeError(isTablePayload, (attempt) => attempt === 1);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -472,7 +486,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
 
-      mockTablePayloadRangeError((attempt) => attempt <= 2);
+      mockJsonStringifyRangeError(isTablePayload, (attempt) => attempt <= 2);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -492,7 +506,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      mockTablePayloadRangeError(() => true);
+      mockJsonStringifyRangeError(isTablePayload);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -500,6 +514,42 @@ describe('eval routes', () => {
       expect(res.body).toEqual({
         error: 'Eval too large to display. Try reducing the page size.',
       });
+    });
+
+    it('returns the full JSON export for a normal eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['json export prompt one', 'json export prompt two']);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-disposition']).toBe(`attachment; filename="${eval_.id}.json"`);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+      expect(res.body).toHaveProperty('head');
+      expect(res.body).toHaveProperty('body');
+      const prompts: Array<string | undefined> = res.body.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts).toHaveLength(2);
+      expect(prompts).toEqual(
+        expect.arrayContaining(['json export prompt one', 'json export prompt two']),
+      );
+    });
+
+    it('returns 413 when the JSON export exceeds the serialization limit (#7649)', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 2 });
+      testEvalIds.add(eval_.id);
+
+      mockJsonStringifyRangeError(isJsonExportPayload);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table?format=json`);
+
+      expect(res.status).toBe(413);
+      expect(res.body).toEqual({ error: 'Eval JSON export is too large to serialize.' });
+      expect(res.headers['content-disposition']).toBeUndefined();
+      expect(res.headers['cache-control']).toBeUndefined();
     });
   });
 
