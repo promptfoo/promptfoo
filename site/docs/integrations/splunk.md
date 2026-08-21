@@ -153,4 +153,4 @@ Forward webhook payloads to HEC with metadata like this:
 
 - Treat exported red team results as sensitive. Attack prompts and target outputs can contain harmful content or application data.
 - Restrict the Splunk index and HEC token to the teams that need access.
-- Use `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true` or `PROMPTFOO_STRIP_TEST_VARS=true` if you need to reduce what leaves the CI environment.
+- Set `PROMPTFOO_STRIP_RESPONSE_OUTPUT=true` or `PROMPTFOO_STRIP_TEST_VARS=true` to reduce data in selected results and exports. These flags do not stop sharing or remove the same data from every trace and shared eval.
