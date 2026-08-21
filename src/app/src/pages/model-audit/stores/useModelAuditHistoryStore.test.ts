@@ -34,9 +34,7 @@ describe('useModelAuditHistoryStore', () => {
       historyError: null,
       totalCount: 0,
       pageSize: 25,
-      currentPage: 0,
       sortModel: [{ field: 'createdAt', sort: 'desc' }],
-      searchQuery: '',
     });
   });
 
@@ -94,7 +92,7 @@ describe('useModelAuditHistoryStore', () => {
       expect(result.current.historyError).toBeNull();
     });
 
-    it('should include search query in request', async () => {
+    it('fetches the first virtualized page', async () => {
       mockCallApi.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ scans: [], total: 0 }),
@@ -102,45 +100,42 @@ describe('useModelAuditHistoryStore', () => {
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
-      act(() => {
-        result.current.setSearchQuery('test query');
-      });
-
       await act(async () => {
         await result.current.fetchHistoricalScans();
       });
 
       expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('search=test+query'),
+        '/model-audit/scans?limit=25&offset=0&sort=createdAt&order=desc',
         expect.any(Object),
       );
     });
+  });
 
-    it('should include pagination params in request', async () => {
+  describe('fetchHistoricalScanRange', () => {
+    it('preserves server-side virtualization and sorting', async () => {
+      const scans = [createMockScan('26', 'Scan 26')];
       mockCallApi.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ scans: [], total: 0 }),
+        json: () => Promise.resolve({ scans, total: 80 }),
       } as Response);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
       act(() => {
-        result.current.setPageSize(50);
-        result.current.setCurrentPage(2);
+        result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
       });
 
+      let range;
       await act(async () => {
-        await result.current.fetchHistoricalScans();
+        range = await result.current.fetchHistoricalScanRange({ startIndex: 25, endIndex: 49 });
       });
 
       expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('limit=50'),
+        '/model-audit/scans?limit=25&offset=25&sort=name&order=asc',
         expect.any(Object),
       );
-      expect(mockCallApi).toHaveBeenCalledWith(
-        expect.stringContaining('offset=100'),
-        expect.any(Object),
-      );
+      expect(range).toEqual({ scans, offset: 25, total: 80 });
+      expect(result.current.totalCount).toBe(80);
     });
   });
 
@@ -300,82 +295,15 @@ describe('useModelAuditHistoryStore', () => {
     });
   });
 
-  describe('pagination and filtering', () => {
-    it('should set page size and reset page', () => {
+  describe('server-side sorting', () => {
+    it('updates the active sort model', () => {
       const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(5);
-      });
-
-      expect(result.current.currentPage).toBe(5);
-
-      act(() => {
-        result.current.setPageSize(50);
-      });
-
-      expect(result.current.pageSize).toBe(50);
-      expect(result.current.currentPage).toBe(0); // Reset to first page
-    });
-
-    it('should set current page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(3);
-      });
-
-      expect(result.current.currentPage).toBe(3);
-    });
-
-    it('should set sort model and reset page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(5);
-      });
 
       act(() => {
         result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
       });
 
       expect(result.current.sortModel).toEqual([{ field: 'name', sort: 'asc' }]);
-      expect(result.current.currentPage).toBe(0); // Reset to first page
-    });
-
-    it('should set search query and reset page', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setCurrentPage(5);
-      });
-
-      act(() => {
-        result.current.setSearchQuery('test');
-      });
-
-      expect(result.current.searchQuery).toBe('test');
-      expect(result.current.currentPage).toBe(0); // Reset to first page
-    });
-
-    it('should reset all filters', () => {
-      const { result } = renderHook(() => useModelAuditHistoryStore());
-
-      act(() => {
-        result.current.setPageSize(100);
-        result.current.setCurrentPage(5);
-        result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
-        result.current.setSearchQuery('test');
-      });
-
-      act(() => {
-        result.current.resetFilters();
-      });
-
-      expect(result.current.pageSize).toBe(25);
-      expect(result.current.currentPage).toBe(0);
-      expect(result.current.sortModel).toEqual([{ field: 'createdAt', sort: 'desc' }]);
-      expect(result.current.searchQuery).toBe('');
     });
   });
 });
