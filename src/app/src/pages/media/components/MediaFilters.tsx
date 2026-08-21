@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -79,7 +80,14 @@ export function MediaFilters({
   total,
 }: MediaFiltersProps) {
   const [evalSearchOpen, setEvalSearchOpen] = useState(false);
+  const [highlightedEvalIndex, setHighlightedEvalIndex] = useState(-1);
   const currentSortValue = `${sort.field}:${sort.order}`;
+  const evalFilterListboxId = useId();
+  const evalFilterDescriptionId = useId();
+  const evalSearchInputId = useId();
+  const evalFilterTriggerRef = useRef<HTMLButtonElement>(null);
+  const evalSearchInputRef = useRef<HTMLInputElement>(null);
+  const evalListboxRef = useRef<HTMLDivElement>(null);
 
   // Find selected eval for display. Cache the description so it persists
   // when the evals list changes due to server-side search.
@@ -91,6 +99,92 @@ export function MediaFilters({
     selectedEvalDescriptionRef.current = null;
   }
   const selectedEvalLabel = selectedEval?.description ?? selectedEvalDescriptionRef.current;
+  const evalOptions = [
+    { value: '', label: 'All Evaluations' },
+    ...(!evalsLoading && !evalsError
+      ? evals.map((evalOption) => ({
+          value: evalOption.evalId,
+          label: evalOption.description,
+        }))
+      : []),
+  ];
+
+  useEffect(() => {
+    if (highlightedEvalIndex >= evalOptions.length) {
+      setHighlightedEvalIndex(-1);
+    }
+  }, [evalOptions.length, highlightedEvalIndex]);
+
+  useEffect(() => {
+    if (highlightedEvalIndex < 0) {
+      return;
+    }
+
+    const highlightedOption = evalListboxRef.current?.children[
+      highlightedEvalIndex
+    ] as HTMLElement | null;
+    highlightedOption?.scrollIntoView?.({ block: 'nearest' });
+  }, [highlightedEvalIndex]);
+
+  const closeEvalFilter = () => {
+    setEvalSearchOpen(false);
+    setHighlightedEvalIndex(-1);
+  };
+
+  const selectEvalOption = (evalId: string) => {
+    onEvalFilterChange(evalId);
+    closeEvalFilter();
+    onEvalSearchQueryChange('');
+    evalFilterTriggerRef.current?.focus();
+  };
+
+  const moveHighlightedEval = (direction: 1 | -1) => {
+    setHighlightedEvalIndex((currentIndex) => {
+      if (currentIndex === -1) {
+        return direction === 1 ? 0 : evalOptions.length - 1;
+      }
+
+      if (direction === 1) {
+        return Math.min(currentIndex + 1, evalOptions.length - 1);
+      }
+
+      return Math.max(currentIndex - 1, 0);
+    });
+  };
+
+  const handleEvalFilterKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!evalSearchOpen) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        setEvalSearchOpen(true);
+        event.preventDefault();
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        moveHighlightedEval(1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        moveHighlightedEval(-1);
+        break;
+      case 'Enter': {
+        const highlightedEval = evalOptions[highlightedEvalIndex];
+        if (highlightedEval) {
+          event.preventDefault();
+          selectEvalOption(highlightedEval.value);
+        }
+        break;
+      }
+      case 'Escape':
+        event.preventDefault();
+        closeEvalFilter();
+        evalFilterTriggerRef.current?.focus();
+        break;
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -127,7 +221,7 @@ export function MediaFilters({
             }
           }}
         >
-          <SelectTrigger className="w-[160px] h-9">
+          <SelectTrigger aria-label="Sort media" className="w-[160px] h-9">
             <div className="flex items-center gap-1.5">
               {sort.order === 'desc' ? (
                 <ArrowDownAZ className="h-3.5 w-3.5 text-muted-foreground" />
@@ -147,13 +241,27 @@ export function MediaFilters({
         </Select>
 
         {/* Eval Filter with Search */}
-        <Popover open={evalSearchOpen} onOpenChange={setEvalSearchOpen}>
+        <Popover
+          open={evalSearchOpen}
+          onOpenChange={(open) => {
+            setEvalSearchOpen(open);
+            if (!open) {
+              setHighlightedEvalIndex(-1);
+            }
+          }}
+        >
+          <span id={evalFilterDescriptionId} className="sr-only">
+            Filter media by evaluation
+          </span>
           <PopoverTrigger asChild>
             <Button
+              ref={evalFilterTriggerRef}
               variant="outline"
-              role="combobox"
+              aria-describedby={evalFilterDescriptionId}
               aria-expanded={evalSearchOpen}
-              aria-controls="eval-filter-listbox"
+              aria-haspopup="listbox"
+              aria-controls={evalFilterListboxId}
+              onKeyDown={handleEvalFilterKeyDown}
               className={cn(
                 'w-[160px] sm:w-[220px] h-9 justify-between font-normal bg-white dark:bg-zinc-900',
                 !evalFilter && 'text-muted-foreground',
@@ -163,53 +271,98 @@ export function MediaFilters({
               <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[280px] sm:w-[320px] p-0" align="start">
+          <PopoverContent
+            className="w-[280px] sm:w-[320px] p-0"
+            align="start"
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              evalSearchInputRef.current?.focus();
+            }}
+          >
             <div className="flex items-center border-b px-3 py-2">
-              <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+              <label htmlFor={evalSearchInputId} className="sr-only">
+                Search evaluations
+              </label>
+              <Search aria-hidden="true" className="mr-2 h-4 w-4 shrink-0 opacity-50" />
               <Input
+                id={evalSearchInputId}
+                ref={evalSearchInputRef}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls={evalFilterListboxId}
+                aria-expanded={evalSearchOpen}
+                aria-activedescendant={
+                  highlightedEvalIndex >= 0
+                    ? `${evalFilterListboxId}-option-${highlightedEvalIndex}`
+                    : undefined
+                }
                 placeholder="Search evaluations..."
                 value={evalSearchQuery}
-                onChange={(e) => onEvalSearchQueryChange(e.target.value)}
+                onChange={(e) => {
+                  setHighlightedEvalIndex(-1);
+                  onEvalSearchQueryChange(e.target.value);
+                }}
+                onKeyDown={handleEvalFilterKeyDown}
                 className="h-8 border-0 p-0 shadow-none focus-visible:ring-0"
               />
               {evalSearchQuery && (
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Clear evaluation search"
                   className="h-6 w-6 p-0"
-                  onClick={() => onEvalSearchQueryChange('')}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setHighlightedEvalIndex(-1);
+                    onEvalSearchQueryChange('');
+                    evalSearchInputRef.current?.focus();
+                  }}
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X aria-hidden="true" className="h-3.5 w-3.5" />
                 </Button>
               )}
             </div>
             <div
-              id="eval-filter-listbox"
+              ref={evalListboxRef}
+              id={evalFilterListboxId}
               role="listbox"
               aria-label="Evaluations"
               className="max-h-[300px] overflow-y-auto p-1"
             >
-              {/* All Evaluations option */}
-              <button
-                type="button"
-                role="option"
-                aria-selected={!evalFilter}
-                className={cn(
-                  'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
-                  'hover:bg-accent hover:text-accent-foreground',
-                  !evalFilter && 'bg-accent',
-                )}
-                onClick={() => {
-                  onEvalFilterChange('');
-                  setEvalSearchOpen(false);
-                  onEvalSearchQueryChange('');
-                }}
-              >
-                <Check className={cn('mr-2 h-4 w-4', evalFilter ? 'opacity-0' : 'opacity-100')} />
-                <span>All Evaluations</span>
-              </button>
+              {evalOptions.map((option, optionIndex) => {
+                const isSelected = evalFilter === option.value;
 
-              {/* Filtered eval options */}
+                return (
+                  <button
+                    key={`evaluation:${option.value}`}
+                    id={`${evalFilterListboxId}-option-${optionIndex}`}
+                    type="button"
+                    role="option"
+                    tabIndex={-1}
+                    aria-selected={isSelected}
+                    data-highlighted={highlightedEvalIndex === optionIndex || undefined}
+                    className={cn(
+                      'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
+                      'hover:bg-accent hover:text-accent-foreground',
+                      highlightedEvalIndex === optionIndex && 'bg-accent text-accent-foreground',
+                      isSelected && 'bg-accent',
+                    )}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setHighlightedEvalIndex(optionIndex)}
+                    onClick={() => selectEvalOption(option.value)}
+                  >
+                    <Check
+                      className={cn(
+                        'mr-2 h-4 w-4',
+                        optionIndex > 0 && 'shrink-0',
+                        isSelected ? 'opacity-100' : 'opacity-0',
+                      )}
+                    />
+                    <span className={cn(optionIndex > 0 && 'truncate')}>{option.label}</span>
+                  </button>
+                );
+              })}
+
               {evalsLoading ? (
                 <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                   <Spinner className="h-4 w-4" />
@@ -224,34 +377,7 @@ export function MediaFilters({
                 <div className="py-6 text-center text-sm text-muted-foreground">
                   No evaluations found
                 </div>
-              ) : (
-                evals.map((e) => (
-                  <button
-                    key={e.evalId}
-                    type="button"
-                    role="option"
-                    aria-selected={evalFilter === e.evalId}
-                    className={cn(
-                      'relative flex w-full cursor-pointer select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none',
-                      'hover:bg-accent hover:text-accent-foreground',
-                      evalFilter === e.evalId && 'bg-accent',
-                    )}
-                    onClick={() => {
-                      onEvalFilterChange(e.evalId);
-                      setEvalSearchOpen(false);
-                      onEvalSearchQueryChange('');
-                    }}
-                  >
-                    <Check
-                      className={cn(
-                        'mr-2 h-4 w-4 shrink-0',
-                        evalFilter === e.evalId ? 'opacity-100' : 'opacity-0',
-                      )}
-                    />
-                    <span className="truncate">{e.description}</span>
-                  </button>
-                ))
-              )}
+              ) : null}
               {evalsTruncated && !evalsLoading && !evalsError && (
                 <div className="border-t px-2 py-1.5 text-xs text-muted-foreground">
                   {evalSearchQuery
