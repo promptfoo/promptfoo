@@ -319,7 +319,7 @@ plugins:
   - owasp:llm # Entire OWASP LLM Top 10
   - owasp:llm:01 # Prompt Injection
   - owasp:llm:02 # Sensitive Information Disclosure
-  - owasp:llm:06 # Excessive Agency
+  - owasp:llm:03 # Excessive Agency
   - nist:ai:measure:2.7 # Cybercrime vulnerabilities
   - eu:ai-act # EU AI Act compliance
 ```
