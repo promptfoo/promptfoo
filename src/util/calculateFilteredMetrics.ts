@@ -131,7 +131,12 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(CAST(json_extract(response, '$.tokenUsage.prompt') AS INTEGER)) as prompt_tokens,
       SUM(CAST(json_extract(response, '$.tokenUsage.completion') AS INTEGER)) as completion_tokens,
       SUM(CAST(json_extract(response, '$.tokenUsage.cached') AS INTEGER)) as cached_tokens,
-      COUNT(CASE WHEN json_extract(response, '$.tokenUsage') IS NOT NULL THEN 1 END) as num_requests_with_tokens
+      SUM(
+        COALESCE(
+          CAST(json_extract(response, '$.tokenUsage.numRequests') AS INTEGER),
+          CASE WHEN json_extract(response, '$.tokenUsage') IS NOT NULL THEN 1 ELSE 0 END
+        )
+      ) as num_requests
     FROM eval_results
     WHERE ${whereSql}
     GROUP BY prompt_idx
@@ -151,7 +156,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     prompt_tokens: number | null;
     completion_tokens: number | null;
     cached_tokens: number | null;
-    num_requests_with_tokens: number;
+    num_requests: number;
   }>;
 
   // Populate basic metrics
@@ -174,7 +179,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
         prompt: row.prompt_tokens || 0,
         completion: row.completion_tokens || 0,
         cached: row.cached_tokens || 0,
-        numRequests: row.num_requests_with_tokens || 0,
+        numRequests: row.num_requests || 0,
       },
       namedScores: {},
       namedScoresCount: {},
