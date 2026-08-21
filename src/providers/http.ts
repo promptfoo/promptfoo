@@ -18,6 +18,7 @@ import {
   maybeLoadFromExternalFile,
   pathExists,
 } from '../util/file';
+import { isPythonFile } from '../util/fileExtensions';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -2256,7 +2257,7 @@ export class HttpProvider implements ApiProvider {
     invariant(cacheKey, 'File auth cache key should be defined');
 
     const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
-    const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
+    const defaultFunctionName = isPythonFile(filePath) ? 'get_auth' : 'default';
 
     try {
       logger.debug(
