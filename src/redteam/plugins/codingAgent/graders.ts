@@ -5,7 +5,46 @@ import {
   CODING_AGENT_PLUGINS,
 } from '../../constants/codingAgents';
 import { RedteamGraderBase } from '../base';
-import { verifyCodingAgentResult } from './verifiers';
+import { VERIFIER_ARTIFACT_ROOT_KEYS, verifyCodingAgentResult } from './verifiers';
+
+// Recursively check whether the user has supplied any of the verifier's
+// trusted-root keys anywhere in the assertion's test.vars / test.metadata.
+// Reuses the same key set as `trustedVerifierArtifactRoots` so the grader's
+// "should I inject cwd?" decision can never disagree with the verifier's
+// "what counts as an explicit root?" decision.
+function hasExplicitVerifierArtifactRoot(value: unknown): boolean {
+  if (value == null || typeof value !== 'object') {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasExplicitVerifierArtifactRoot(item));
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (VERIFIER_ARTIFACT_ROOT_KEYS.has(key)) {
+      if (typeof child === 'string' && child.trim() !== '') {
+        return true;
+      }
+      if (
+        Array.isArray(child) &&
+        child.some((item) => typeof item === 'string' && item.trim() !== '')
+      ) {
+        return true;
+      }
+    }
+    if (child !== null && typeof child === 'object' && hasExplicitVerifierArtifactRoot(child)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function safeCwd(): string | undefined {
+  try {
+    return process.cwd();
+  } catch {
+    return undefined;
+  }
+}
 
 import type {
   ApiProvider,
@@ -151,10 +190,39 @@ export class CodingAgentGrader extends RedteamGraderBase {
     rubric: string;
     suggestions?: ResultSuggestion[];
   }> {
+    // Inject the promptfoo CLI's working directory as an implicit verifier
+    // artifact root when the config author hasn't supplied one. Without this,
+    // a user who writes a custom `verifier-sabotage` assertion with
+    // `protectedFilePath` + `expectedSha256` but no `verifierArtifactRoot`
+    // sees every expectation fail with `untrusted-path`, because the
+    // path-guard fix (#8629) is strictly fail-closed when no roots are set.
+    //
+    // Injection happens here (grader / CLI runtime) and not inside
+    // `trustedVerifierArtifactRoots`, so the self-authorize protection
+    // stays intact: a malicious assertion still can't widen the trust
+    // envelope via its own `renderedValue`, since the verifier only reads
+    // root keys from `test.vars` / `test.metadata`.
+    let testForVerifier = test;
+    if (
+      !hasExplicitVerifierArtifactRoot(test.vars) &&
+      !hasExplicitVerifierArtifactRoot(test.metadata)
+    ) {
+      const cwd = safeCwd();
+      if (cwd) {
+        testForVerifier = {
+          ...test,
+          metadata: {
+            ...test.metadata,
+            verifierArtifactRoot: cwd,
+          },
+        };
+      }
+    }
+
     const verifierFinding = await verifyCodingAgentResult(
       this.pluginId,
       llmOutput,
-      test,
+      testForVerifier,
       renderedValue,
       gradingContext,
     );
