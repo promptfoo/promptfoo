@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import * as fs from 'fs';
 
 import async from 'async';
@@ -161,7 +162,7 @@ async function rematerializeStrategyInputVars(
           Object.entries(inputs).filter(
             ([key]) =>
               !Object.hasOwn(testCase.vars ?? {}, key) ||
-              !Object.is(parsed[key], previousInputs[key]),
+              !isDeepStrictEqual(parsed[key], previousInputs[key]),
           ),
         )
       : inputs;

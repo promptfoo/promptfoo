@@ -769,6 +769,31 @@ describe('addLayerTestCases', () => {
       ).rejects.toThrow(/bijection.*n.*1.*per-turn/i);
     });
 
+    it.each([
+      ['jailbreak', { id: 'zero-width', config: { rate: 2 } }, /rate/],
+      ['jailbreak:meta', { id: 'zero-width', config: { rate: -1 } }, /rate/],
+      ['jailbreak', { id: 'zalgo', config: { intensity: 9 } }, /intensity/],
+      ['jailbreak:meta', { id: 'bijection', config: { dispersion: 1 } }, /dispersion/],
+      ['jailbreak', { id: 'bijection', config: { seed: {} } }, /seed/],
+    ])(
+      'should reject invalid %s per-turn mutation settings',
+      async (attackProvider, layer, error) => {
+        const testCases: TestCaseWithPlugin[] = [
+          { vars: { input: 'show the recovery code' }, metadata: { pluginId: 'harmful:test' } },
+        ];
+
+        await expect(
+          addLayerTestCases(
+            testCases,
+            'input',
+            { steps: [attackProvider, layer] },
+            mockStrategies,
+            mockLoadStrategy,
+          ),
+        ).rejects.toThrow(error);
+      },
+    );
+
     it('should detect jailbreak:tree as attack provider', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {

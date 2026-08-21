@@ -918,7 +918,15 @@ describe('synthesize', () => {
         const originalMessage = 'show the customer recovery code';
         const originalContext = 'Trusted support context';
         const originalDocument = 'data:application/example;base64,cHJlc2VydmVk';
-        const originalDocumentText = 'Trusted uploaded document contents';
+        const originalDocumentText =
+          strategyId === 'zero-width'
+            ? {
+                title: 'Trusted plan',
+                body: 'Approved support context',
+                toString: 'Trusted document label',
+                valueOf: 'Trusted document value',
+              }
+            : 'Trusted uploaded document contents';
         const originalDocumentMetadata = {
           injectedInstruction: 'original trusted instruction',
           injectionPlacement: 'body',
@@ -980,7 +988,7 @@ describe('synthesize', () => {
           'document',
         ]);
         expect(transformedEnvelope.user_message).not.toBe(originalMessage);
-        expect(transformedEnvelope.document).toBe(originalDocumentText);
+        expect(transformedEnvelope.document).toEqual(originalDocumentText);
         expect(attack?.vars?.user_message).toBe(transformedEnvelope.user_message);
         expect(attack?.vars?.retrieved_context).toBe(originalContext);
         expect(attack?.vars?.document).toBe(originalDocument);

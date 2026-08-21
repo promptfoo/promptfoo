@@ -3,10 +3,13 @@ import { MULTI_INPUT_VAR } from '../constants/plugins';
 import { TEXT_MUTATION_STRATEGIES } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { resolveBijectionOptions } from './bijection';
+import { mutateText } from './textMutation';
 import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
 import type { Inputs, TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { TextMutationStrategy } from '../constants/strategies';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy, StrategyRuntimeContext } from './types';
 
@@ -37,6 +40,23 @@ function assertCompatibleMultiInputLayers(
     throw new Error(
       'Multi-input text-mutation layers cannot be combined with whole-prompt strategies.',
     );
+  }
+}
+
+function validatePerTurnMutationLayers(layers: LayerConfig[]): void {
+  for (const layer of layers) {
+    const layerId = typeof layer === 'string' ? layer : layer.id;
+    const layerConfig = typeof layer === 'string' ? {} : (layer.config ?? {});
+
+    if (layerId === 'bijection') {
+      if (resolveBijectionOptions(layerConfig).n > 1) {
+        throw new Error(
+          'The bijection strategy n must be 1 when used as a per-turn layer; use a standalone bijection strategy for multiple variants.',
+        );
+      }
+    } else if (TEXT_MUTATION_STRATEGIES.includes(layerId as TextMutationStrategy)) {
+      mutateText('', layerId as TextMutationStrategy, layerConfig);
+    }
   }
 }
 
@@ -113,6 +133,7 @@ export async function addLayerTestCases(
       const perTurnLayers: LayerConfig[] = remainingSteps.map((s) =>
         typeof s === 'string' ? s : { id: s.id, config: s.config },
       );
+      validatePerTurnMutationLayers(perTurnLayers);
       const applicableTestCases = current.filter((testCase) =>
         perTurnLayers.every((layer) => {
           const layerId = typeof layer === 'string' ? layer : layer.id;
@@ -125,20 +146,6 @@ export async function addLayerTestCases(
           );
         }),
       );
-
-      if (
-        perTurnLayers.some(
-          (layer) =>
-            typeof layer !== 'string' &&
-            layer.id === 'bijection' &&
-            typeof layer.config?.n === 'number' &&
-            layer.config.n > 1,
-        )
-      ) {
-        throw new Error(
-          'The bijection strategy n must be 1 when used as a per-turn layer; use a standalone bijection strategy for multiple variants.',
-        );
-      }
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
