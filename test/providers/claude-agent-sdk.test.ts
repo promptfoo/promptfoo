@@ -560,6 +560,35 @@ describe('ClaudeCodeSDKProvider', () => {
         });
       });
 
+      it('should treat missing legacy per-model cache counts as zero', async () => {
+        mockQuery.mockReturnValue(
+          createMockQuery({
+            type: 'result',
+            subtype: 'success',
+            session_id: 'legacy-session',
+            uuid: '12345678-1234-1234-1234-123456789abc',
+            result: 'Test response',
+            usage: createMockUsage(10, 20),
+            modelUsage: {
+              'claude-sonnet-4-5': { inputTokens: 35, outputTokens: 5 } as ModelUsage,
+            },
+            total_cost_usd: 0.001,
+            duration_ms: 500,
+            duration_api_ms: 400,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+          }),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage).toEqual({ prompt: 35, completion: 5, total: 40 });
+      });
+
       it('should handle SDK error response', async () => {
         mockQuery.mockReturnValue(createMockErrorResponse('error_during_execution'));
 

@@ -1793,12 +1793,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             modelUsages.length > 0
               ? modelUsages.reduce(
                   (total, modelUsage) => ({
-                    inputTokens: total.inputTokens + modelUsage.inputTokens,
-                    outputTokens: total.outputTokens + modelUsage.outputTokens,
+                    inputTokens: total.inputTokens + (modelUsage.inputTokens ?? 0),
+                    outputTokens: total.outputTokens + (modelUsage.outputTokens ?? 0),
                     cacheReadInputTokens:
-                      total.cacheReadInputTokens + modelUsage.cacheReadInputTokens,
+                      total.cacheReadInputTokens + (modelUsage.cacheReadInputTokens ?? 0),
                     cacheCreationInputTokens:
-                      total.cacheCreationInputTokens + modelUsage.cacheCreationInputTokens,
+                      total.cacheCreationInputTokens + (modelUsage.cacheCreationInputTokens ?? 0),
                   }),
                   {
                     inputTokens: 0,
