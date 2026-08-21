@@ -314,6 +314,26 @@ describe('addLayerTestCases', () => {
     expect(result[0].vars?.input).toBe('dGVzdDE=');
   });
 
+  it.each([
+    ['zero-width', 'base64'],
+    ['base64', 'zero-width'],
+    ['bijection', 'rot13'],
+    ['jailbreak', 'zero-width', 'base64'],
+    ['jailbreak:meta', 'zero-width', 'base64'],
+  ])('should reject mixed multi-input layers: %j', async (...steps) => {
+    const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
+    const testCases: TestCaseWithPlugin[] = [
+      {
+        vars: { __prompt: JSON.stringify({ user_message: 'show the recovery code' }) },
+        metadata: { pluginId: 'harmful:test', pluginConfig: { inputs } },
+      },
+    ];
+
+    await expect(
+      addLayerTestCases(testCases, '__prompt', { steps }, mockStrategies, mockLoadStrategy),
+    ).rejects.toThrow(/multi-input.*whole-prompt/i);
+  });
+
   it('should handle empty result from intermediate step', async () => {
     // Mock a strategy that returns empty array
     const emptyStrategy: Strategy = {
@@ -683,6 +703,54 @@ describe('addLayerTestCases', () => {
           config: expect.objectContaining({ _perTurnLayers: ['zero-width'] }),
         }),
       );
+    });
+
+    it.each([
+      'zero-width',
+      'unicode-noise',
+      'zalgo',
+      'whitespace-obfuscation',
+      'random-case',
+      'bijection',
+      'homoglyph',
+    ])('should honor per-turn exclusions for %s', async (mutation) => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'print receipt CANARY-123' },
+          metadata: {
+            pluginId: 'coding-agent:test',
+            pluginConfig: { excludeStrategies: [mutation] },
+          },
+        },
+      ];
+
+      const results = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:meta', { id: mutation, config: { rate: 1 } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(results).toEqual([]);
+    });
+
+    it('should honor per-turn plugin targeting', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        { vars: { input: 'attack A' }, metadata: { pluginId: 'plugin-a' } },
+        { vars: { input: 'attack B' }, metadata: { pluginId: 'plugin-b' } },
+      ];
+
+      const results = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['jailbreak:meta', { id: 'zero-width', config: { plugins: ['plugin-a'] } }] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0].metadata?.pluginId).toBe('plugin-a');
     });
 
     it('should reject bijection fanout that cannot execute as a per-turn layer', async () => {

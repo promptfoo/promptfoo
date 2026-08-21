@@ -56,7 +56,7 @@ Promptfoo maps all 26 lowercase English letters:
 
 Each prompt includes the complete mapping, optional examples, and the encoded request. Promptfoo derives each variant's mapping from its seed, the original text, and the variant index.
 
-For multi-input targets, Promptfoo encodes each non-benign text field separately and preserves field names, typed document or image inputs, and fields marked `config.benign: true`. Multi-input per-turn layers work after `jailbreak` or `jailbreak:meta`. Other attack providers reject this combination because they cannot deliver the transformed input safely.
+For multi-input targets, Promptfoo encodes each non-benign text field separately and preserves field names, typed document or image inputs, and fields marked `config.benign: true`. Multi-input per-turn layers work after `jailbreak` or `jailbreak:meta`. Other attack providers reject this combination because they cannot deliver the transformed input safely. Whole-prompt transformations, such as `base64`, cannot be combined with multi-input mutation layers.
 
 ## Response and grading
 
