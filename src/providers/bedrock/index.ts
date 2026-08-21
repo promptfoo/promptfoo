@@ -289,6 +289,11 @@ interface TextConfiguration {
 }
 
 export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions {
+  inferenceConfig?: {
+    maxTokens?: number;
+    temperature?: number;
+    topP?: number;
+  };
   interfaceConfig?: {
     max_new_tokens?: number;
     temperature?: number;

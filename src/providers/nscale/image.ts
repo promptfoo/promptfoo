@@ -51,15 +51,16 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     options: { config?: NscaleImageOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const nscaleConfig = options.config || {};
+    const mergedConfig = {
+      ...nscaleConfig,
+      apiBaseUrl: nscaleConfig.apiBaseUrl ?? 'https://inference.api.nscale.com/v1',
+      apiKey: NscaleImageProvider.getApiKey(options),
+    };
     super(modelName, {
       ...options,
-      config: {
-        ...nscaleConfig,
-        apiBaseUrl: 'https://inference.api.nscale.com/v1',
-        apiKey: NscaleImageProvider.getApiKey(options),
-      } as any, // Use type assertion since Nscale supports OpenAI-compatible parameters
+      config: mergedConfig as any, // Nscale supports OpenAI-compatible parameters.
     });
-    this.config = nscaleConfig;
+    this.config = mergedConfig;
   }
 
   /**
