@@ -1670,14 +1670,14 @@ The HTTP provider automatically retries failed requests in the following scenari
 - Network failures
 - Transient server errors (502, 503, 504, 524)
 
-By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
+The adaptive scheduler attempts up to 3 retries with exponential backoff by default. When the scheduler is disabled, the HTTP transport defaults to 4 retries. Configure the retry budget with `maxRetries`:
 
 ```yaml
 providers:
   - id: http
     config:
       url: https://api.example.com/v1/chat
-      maxRetries: 2 # Override default of 4 retries
+      maxRetries: 2
 ```
 
 ### Transient Error Handling
@@ -1785,7 +1785,7 @@ Supported config options:
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
-| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 3 with the adaptive scheduler, or 4 when it is disabled.                                                          |
 | validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
 | auth              | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
 | signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |

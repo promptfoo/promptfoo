@@ -1313,6 +1313,77 @@ describe('fetchWithRetries', () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
+  it('should leave retries to the scheduler even when an explicit fetch budget is provided', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(2, () => fetchWithRetries('https://example.com', {}, 1000, 2), {
+        schedulerOwnsRetries: true,
+      }),
+    ).rejects.toThrow('Request failed after 0 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should preserve a successful mutation that exhausts the current rate-limit window', async () => {
+    const acceptedResponse = new Response('accepted', {
+      headers: { 'x-ratelimit-remaining-requests': '0' },
+    });
+    vi.mocked(global.fetch).mockResolvedValueOnce(acceptedResponse);
+
+    const result = await withFetchRetryContext(
+      2,
+      () => fetchWithRetries('https://example.com/jobs', { method: 'POST' }, 1000, 2),
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(await result.text()).toBe('accepted');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should retry a nested request without replaying a previously accepted mutation', async () => {
+    const acceptedResponse = new Response('created');
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(acceptedResponse)
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce(new Response('downloaded'));
+
+    const result = await withFetchRetryContext(
+      2,
+      async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        return fetchWithRetries('https://example.com/jobs/123/content', {}, 1000, 2);
+      },
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(await result.text()).toBe('downloaded');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry transient HTTP responses after an accepted mutation', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(new Response('created'))
+      .mockResolvedValueOnce(new Response(null, { status: 503, statusText: 'Service Unavailable' }))
+      .mockResolvedValueOnce(new Response('downloaded'));
+
+    const result = await withFetchRetryContext(
+      2,
+      async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        return fetchWithRetries('https://example.com/jobs/123/content', {}, 1000, 2);
+      },
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(await result.text()).toBe('downloaded');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
   it('should make retries+1 total attempts', async () => {
     vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
@@ -2395,6 +2466,54 @@ describe('fetchWithProxy transient error retries', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should leave transient retries to the scheduler', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(transientResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(
+      2,
+      () => fetchWithProxy('https://example.com', { disableTransientRetries: false }),
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should retry a download without replaying an accepted non-idempotent request', async () => {
+    const createdResponse = createMockResponse({ ok: true });
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const downloadResponse = createMockResponse({ ok: true });
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(createdResponse)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(downloadResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(
+      2,
+      async () => {
+        await fetchWithProxy('https://example.com/jobs', { method: 'POST' });
+        return fetchWithProxy('https://example.com/jobs/123/content');
+      },
+      { schedulerOwnsRetries: true },
+    );
+
+    expect(result).toBe(downloadResponse);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 

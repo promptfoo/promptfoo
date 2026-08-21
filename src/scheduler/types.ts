@@ -11,6 +11,8 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  abortSignal?: AbortSignal;
+  maxRetries?: number;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
@@ -71,7 +73,7 @@ export function isProviderResponseRateLimited(
   );
 }
 
-export { isTransientConnectionError } from '../util/fetch/errors';
+export { isHttpRateLimitError, isTransientConnectionError } from '../util/fetch/errors';
 
 /**
  * Extract rate limit headers from ProviderResponse.
