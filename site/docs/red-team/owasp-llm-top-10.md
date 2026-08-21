@@ -389,23 +389,26 @@ Test for potential DoS vulnerabilities:
 
 - **Resource consumption testing**: Generate prompts designed to consume excessive resources.
 - **Rate limiting checks**: Verify that proper rate limiting is in place using the [`--repeat` argument](/docs/usage/command-line/#promptfoo-eval).
+- **Unbounded output testing**: Use the `resource-exhaustion` plugin to test whether a model follows requests for excessive output.
 - **Divergent repetition testing**: Use the `divergent-repetition` plugin to test for vulnerabilities related to repetitive pattern exploitation.
 
-### Divergent Repetition Testing
+### Resource Exhaustion Testing
 
-The [divergent repetition plugin](/docs/red-team/plugins/divergent-repetition/) helps identify vulnerabilities where an attacker could exploit repetitive patterns to:
+The [resource exhaustion plugin](/docs/red-team/plugins/resource-exhaustion/) helps identify vulnerabilities where an attacker can induce excessive generation to:
 
 - Cause excessive token generation
-- Trigger memory-based responses that may leak training data
-- Create resource-intensive loops that could lead to Denial-of-Wallet attacks
+- Create resource-intensive loops that lead to denial-of-wallet attacks
+- Continue despite output-length or service-limit expectations
 
 Example configuration:
 
 ```yaml
 redteam:
   plugins:
-    - divergent-repetition
+    - resource-exhaustion
 ```
+
+Use the [divergent repetition plugin](/docs/red-team/plugins/divergent-repetition/) alongside it when you also need to test for training-data leakage caused by repetitive prompts.
 
 ### Testing with Promptfoo Evals
 
