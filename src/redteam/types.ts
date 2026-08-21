@@ -289,6 +289,7 @@ export interface RedteamFileConfig extends CommonOptions {
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   graderExamples?: Array<{ output: string; pass: boolean; score: number; reason: string }>;
+  graderLanguage?: string;
 }
 
 export interface SynthesizeOptions extends CommonOptions {
@@ -362,6 +363,7 @@ export interface SavedRedteamConfig {
   maxCharsPerMessage?: number;
   maxConcurrency?: number;
   language?: string | string[];
+  graderLanguage?: string;
   provider?: string | ProviderOptions;
   applicationDefinition: {
     purpose?: string;
