@@ -43,7 +43,7 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
-import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, maybeReadConfig, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
@@ -115,6 +115,7 @@ vi.mock('chokidar', () => ({
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
+  maybeReadConfig: vi.fn(),
 }));
 vi.mock('../../src/util/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/index')>()),
@@ -184,6 +185,7 @@ describe('evalCommand', () => {
         return chokidarMocks.watcher;
       });
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
+    vi.mocked(maybeReadConfig).mockReset().mockResolvedValue(undefined);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
@@ -543,13 +545,23 @@ describe('evalCommand', () => {
     // (`path.dirname(configPaths[0])`), not from the resolveConfigs mock.
     const watchBase = path.dirname(defaultConfigPath);
 
-    async function watchedPathsFor(tests: UnifiedConfig['tests']) {
-      const config = { prompts: [], providers: [], tests } as UnifiedConfig;
+    async function watchedPathsFor(
+      resolvedTests: UnifiedConfig['tests'],
+      rawTests?: UnifiedConfig['tests'],
+    ) {
+      const config = { prompts: [], providers: [], tests: resolvedTests } as UnifiedConfig;
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
         testSuite: { prompts: [], providers: [] } as TestSuite,
         basePath: watchBase,
       });
+      if (rawTests !== undefined) {
+        vi.mocked(maybeReadConfig).mockResolvedValue({
+          prompts: [],
+          providers: [],
+          tests: rawTests,
+        } as UnifiedConfig);
+      }
       vi.mocked(evaluate).mockImplementationOnce(
         async (_testSuite, evalRecord) => evalRecord as Eval,
       );
@@ -561,38 +573,55 @@ describe('evalCommand', () => {
       return lastCall?.[0] ?? [];
     }
 
-    it('watches a scalar tests file reference', async () => {
-      // `tests: file://cases.yaml` is valid config and evaluates fine, but the
-      // watch list was built with an Array.isArray guard, so the file was silently
-      // excluded and edits never triggered a re-run.
-      const watched = await watchedPathsFor('file://cases.yaml' as UnifiedConfig['tests']);
+    it('recovers a scalar reference that combineConfigs already expanded', async () => {
+      // This is the shape that matters. With an explicit -c/--config, resolveConfigs
+      // has already run combineConfigs(), which reads `tests: file://cases.yaml` and
+      // replaces it with concrete test cases. By the time watch mode looks at
+      // `config.tests` the reference is gone, so the file it came from has to be
+      // recovered from the config on disk or it is never watched.
+      const watched = await watchedPathsFor(
+        [{ vars: { question: 'expanded from cases.yaml' } }] as UnifiedConfig['tests'],
+        'file://cases.yaml' as UnifiedConfig['tests'],
+      );
       expect(watched).toContain(path.resolve(watchBase, 'cases.yaml'));
     });
 
-    it('watches a scalar test-generator reference, without the function suffix', async () => {
+    it('recovers a generator object that combineConfigs already expanded', async () => {
       const watched = await watchedPathsFor(
-        'file://tests.py:generate_tests' as UnifiedConfig['tests'],
+        [{ vars: { question: 'generated' } }] as UnifiedConfig['tests'],
+        { path: 'file://gen.py:make_tests' } as unknown as UnifiedConfig['tests'],
       );
-      expect(watched).toContain(path.resolve(watchBase, 'tests.py'));
-      expect(watched).not.toContain(path.resolve(watchBase, 'tests.py:generate_tests'));
-    });
-
-    it('watches test-generator entries inside the array form', async () => {
-      // The array branch only matched bare strings and `vars`, so a generator entry
-      // was dropped even though the array form is the documented shape for it.
-      const watched = await watchedPathsFor([
-        { path: 'file://gen.py:make_tests' },
-      ] as UnifiedConfig['tests']);
       expect(watched).toContain(path.resolve(watchBase, 'gen.py'));
+      expect(watched).not.toContain(path.resolve(watchBase, 'gen.py:make_tests'));
     });
 
-    it('still watches the array form and vars files', async () => {
+    it('watches vars files from the array form, which survives combineConfigs', async () => {
       const watched = await watchedPathsFor([
-        'file://cases.yaml',
         { vars: { data: 'file://vars.csv' } },
       ] as UnifiedConfig['tests']);
-      expect(watched).toContain(path.resolve(watchBase, 'cases.yaml'));
       expect(watched).toContain(path.resolve(watchBase, 'vars.csv'));
+    });
+
+    it('watches command-line tests relative to the working directory', async () => {
+      // resolveConfigs loads cmdObj.tests with no base path, so it resolves against
+      // cwd rather than the directory holding the config file.
+      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [] } as TestSuite,
+        basePath: watchBase,
+      });
+      vi.mocked(evaluate).mockImplementationOnce(
+        async (_testSuite, evalRecord) => evalRecord as Eval,
+      );
+      await doEval(
+        { watch: true, write: false, tests: 'file://cases.csv' },
+        config,
+        defaultConfigPath,
+        {},
+      );
+      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
+      expect(lastCall?.[0] ?? []).toContain(path.resolve(process.cwd(), 'cases.csv'));
     });
 
     it('tolerates tests being absent', async () => {

@@ -665,3 +665,143 @@ export async function readTests(
 
   return ret;
 }
+
+/**
+ * Strip a trailing `:functionName` suffix from a resolved path.
+ *
+ * Mirrors the last-colon rule used by `getStandaloneTestsFileMetadata` and
+ * `loadTestsFromGlob`, including their Windows drive-letter guard.
+ */
+function stripFunctionSuffix(resolvedPath: string): string {
+  const lastColonIndex = resolvedPath.lastIndexOf(':');
+  const isWindowsDriveColon = lastColonIndex === 1 && /^[A-Za-z]:/.test(resolvedPath);
+  return lastColonIndex > 1 && !isWindowsDriveColon
+    ? resolvedPath.slice(0, lastColonIndex)
+    : resolvedPath;
+}
+
+/**
+ * Strip an Excel `#SheetName` selector from a path.
+ *
+ * Sheet specifiers apply only to xlsx/xls basenames, so this inspects the basename and
+ * preserves `#` characters in parent directories and in non-Excel filenames, matching
+ * `getStandaloneTestsFileMetadata`.
+ */
+function stripSheetSelector(resolvedPath: string): string {
+  const base = path.basename(resolvedPath);
+  const hashIndex = base.indexOf('#');
+  if (hashIndex === -1) {
+    return resolvedPath;
+  }
+  const baseWithoutSheet = base.slice(0, hashIndex);
+  const ext = parsePath(baseWithoutSheet).ext.slice(1).toLowerCase();
+  if (ext !== 'xlsx' && ext !== 'xls') {
+    return resolvedPath;
+  }
+  return path.join(path.dirname(resolvedPath), baseWithoutSheet);
+}
+
+/** References the loader fetches over the network rather than reading from disk. */
+function isRemoteTestsReference(reference: string): boolean {
+  return (
+    reference.startsWith('http://') ||
+    reference.startsWith('https://') ||
+    reference.startsWith('az://') ||
+    reference.startsWith('huggingface://') ||
+    reference.startsWith('hf://')
+  );
+}
+
+/**
+ * Resolve a single `tests` string reference to the file paths the loader will read.
+ *
+ * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
+ * chokidar v5 does not expand glob patterns itself. When a pattern matches nothing the
+ * literal path is returned so that creating the file later still triggers a rerun.
+ */
+function resolveTestsFileReference(reference: string, basePath: string): string[] {
+  const withoutScheme = reference.replace(/^file:\/\//, '');
+  if (isRemoteTestsReference(withoutScheme)) {
+    return [];
+  }
+
+  const resolved = path.resolve(basePath, withoutScheme);
+  const matches = globSync(resolved, { windowsPathsNoEscape: true });
+  if (matches.length > 0) {
+    return matches.map((match) => stripSheetSelector(match));
+  }
+
+  // No glob matches: fall back to the concrete path the loader would open. Only strip a
+  // `:functionName` suffix for script references, so that a vars file whose name legally
+  // contains a colon is still watched in full.
+  const withoutSheet = stripSheetSelector(resolved);
+  const withoutFunction = stripFunctionSuffix(withoutSheet);
+  const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
+  return [isScript ? withoutFunction : withoutSheet];
+}
+
+/**
+ * Collect `file://` references nested inside a test generator's `config` object.
+ *
+ * `readStandaloneTestsFile` passes `config` through `maybeLoadConfigFromExternalFile`
+ * before invoking the generator, so those files change the generated cases and need to
+ * be watched alongside the generator script itself.
+ */
+function collectConfigFileReferences(value: unknown, basePath: string): string[] {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') ? resolveTestsFileReference(value, basePath) : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectConfigFileReferences(item, basePath));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).flatMap((item) => collectConfigFileReferences(item, basePath));
+  }
+  return [];
+}
+
+/**
+ * Resolve the filesystem paths that a `tests` config reads, for watch mode.
+ *
+ * `readTests` accepts a bare file reference, a test-generator object, or an array of
+ * either plus inline test cases. This mirrors that resolution so the watcher and the
+ * loader agree on which files feed an evaluation, rather than duplicating the rules.
+ *
+ * Must be called with the raw `tests` value from the config file. `combineConfigs`
+ * expands scalar and generator references into concrete test cases, after which the
+ * original reference is no longer available.
+ */
+export function resolveTestsWatchPaths(
+  tests: TestSuiteConfig['tests'],
+  basePath: string = '',
+): string[] {
+  if (tests == null) {
+    return [];
+  }
+
+  const entries = Array.isArray(tests) ? tests : [tests];
+  const paths = entries.flatMap((entry): string[] => {
+    if (typeof entry === 'string') {
+      return resolveTestsFileReference(entry, basePath);
+    }
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+    if ('path' in entry && typeof entry.path === 'string') {
+      return [
+        ...resolveTestsFileReference(entry.path, basePath),
+        ...collectConfigFileReferences((entry as { config?: unknown }).config, basePath),
+      ];
+    }
+    if ('vars' in entry && entry.vars && typeof entry.vars === 'object') {
+      return Object.values(entry.vars).flatMap((value) =>
+        typeof value === 'string' && value.startsWith('file://')
+          ? resolveTestsFileReference(value, basePath)
+          : [],
+      );
+    }
+    return [];
+  });
+
+  return Array.from(new Set(paths.filter(Boolean)));
+}

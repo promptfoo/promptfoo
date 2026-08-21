@@ -37,8 +37,10 @@ import {
   ConfigResolutionError,
   logConfigResolutionError,
   renderConfigEnvTemplates,
+  maybeReadConfig,
   resolveConfigs,
 } from '../util/config/load';
+import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import {
   filterProviders,
   getPersistedProviderFilterOptions,
@@ -230,21 +232,6 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
       `,
     );
   }
-}
-
-/**
- * Resolve a `file://` test reference to the path that should be watched.
- *
- * Test-generator references carry a `:functionName` suffix (`file://tests.py:generate`),
- * which is not part of the filename. Strip it using the same last-colon rule as
- * `getStandaloneTestsFileMetadata`, taking care not to mistake a Windows drive letter
- * (`C:\\...`) for a function separator.
- */
-export function resolveTestFilePath(basePath: string, ref: string): string {
-  const resolved = path.resolve(basePath, ref.replace(/^file:\/\//, ''));
-  const lastColonIndex = resolved.lastIndexOf(':');
-  const isWindowsDriveColon = lastColonIndex === 1 && /^[A-Za-z]:/.test(resolved);
-  return lastColonIndex > 1 && !isWindowsDriveColon ? resolved.slice(0, lastColonIndex) : resolved;
 }
 
 export async function doEval(
@@ -1171,33 +1158,31 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
-        // `tests` may be a bare file reference, a test-generator object, or an array of
-        // either plus inline test cases (see TestSuiteConfig). Only the array form was
-        // collected here, so `tests: file://cases.yaml` -- valid config that evaluates
-        // fine -- was silently left unwatched, and generator entries were missed in both
-        // the scalar and array forms. Normalise to an array first, then resolve each shape.
-        const testEntries = config.tests == null ? [] : [config.tests].flat();
-        const varPaths = testEntries
-          .flatMap((t) => {
-            if (typeof t === 'string') {
-              return t.startsWith('file://') ? resolveTestFilePath(basePath, t) : [];
-            }
-            if (t && typeof t === 'object') {
-              // Test-generator entry: { path: 'file://tests.py:generate' }
-              if ('path' in t && typeof t.path === 'string' && t.path.startsWith('file://')) {
-                return resolveTestFilePath(basePath, t.path);
-              }
-              if ('vars' in t && t.vars) {
-                return Object.values(t.vars).flatMap((v) =>
-                  typeof v === 'string' && v.startsWith('file://')
-                    ? resolveTestFilePath(basePath, v)
-                    : [],
-                );
-              }
-            }
-            return [];
-          })
-          .filter(Boolean);
+        // `config.tests` here has already been through combineConfigs(), which expands a
+        // scalar reference (`tests: file://cases.yaml`) and a generator object into
+        // concrete test cases. Re-read each config file to recover the raw `tests` value,
+        // otherwise the source those cases came from is invisible to the watcher and
+        // editing it never triggers a rerun.
+        const varPaths: string[] = [];
+        // The array form survives combineConfigs() untouched, so inline test cases and
+        // their `vars` file references are still readable from the resolved config.
+        varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
+        // A scalar reference (`tests: file://cases.yaml`) and a generator object are
+        // expanded into concrete test cases by combineConfigs(), so by this point the
+        // reference they came from is gone. Re-read each config file to recover it,
+        // otherwise editing the file those cases came from never triggers a rerun.
+        for (const configPath of configPaths) {
+          const rawConfig = await maybeReadConfig(path.resolve(process.cwd(), configPath));
+          if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
+            varPaths.push(...resolveTestsWatchPaths(rawConfig.tests, path.dirname(configPath)));
+          }
+        }
+        // Tests supplied on the command line are loaded with no base path (see
+        // resolveConfigs), so they resolve against the working directory rather than the
+        // directory holding the config file.
+        if (cmdObj.tests) {
+          varPaths.push(...resolveTestsWatchPaths(cmdObj.tests, process.cwd()));
+        }
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
