@@ -2011,12 +2011,58 @@ describe('sanitizeUrl', () => {
       );
     });
 
-    it('should sanitize parameters containing sensitive words', () => {
+    it('should sanitize parameters whose name segments are sensitive words', () => {
       const url = 'https://example.com/api?tokens_available=100&secret_santa=john';
       const result = sanitizeUrl(url);
-      // The regex in sanitizeUrl is broad and matches substrings, so these will be redacted
-      expect(result).toContain('tokens_available=%5BREDACTED%5D');
+      // `secret_santa` carries `secret` as its own `_`-delimited segment, so it is
+      // treated as a credential name. `tokens_available` does not — `tokens` is not
+      // `token` — and it is a plain count, so redacting it would destroy ordinary
+      // data in persisted eval results for no security benefit.
+      expect(result).toContain('tokens_available=100');
       expect(result).toContain('secret_santa=%5BREDACTED%5D');
+    });
+
+    it('should not redact ordinary parameters that merely contain a sensitive word', () => {
+      // Regression: the name matcher used unanchored substrings, so `design`,
+      // `signal` and `significance` matched `sig`, `tokenizer` matched `token`,
+      // `secretary` matched `secret`, and `passwordless_flow` matched `password`.
+      const url =
+        'https://example.com/api?design=modern&signal=on&tokenizer=bpe&secretary=jane&significance=0.05&passwordless_flow=true';
+      const result = sanitizeUrl(url);
+
+      expect(result).not.toContain('REDACTED');
+      expect(result).toContain('design=modern');
+      expect(result).toContain('signal=on');
+      expect(result).toContain('tokenizer=bpe');
+      expect(result).toContain('secretary=jane');
+      expect(result).toContain('significance=0.05');
+      expect(result).toContain('passwordless_flow=true');
+    });
+
+    it('should redact compound credential names in both the plain and templated paths', () => {
+      // Regression: the two paths used different matchers. sanitizeUrl matched only
+      // the name regex (so bare `auth` leaked), while the templated path matched
+      // only exact SECRET_FIELD_NAMES (so `my_api_key_param` and `session_token`
+      // leaked). Both now share one matcher.
+      for (const key of ['my_api_key_param', 'session_token', 'auth', 'x-api-key']) {
+        expect(sanitizeUrl(`https://example.com/api?${key}=supersecretvalue123`)).toContain(
+          `${key}=%5BREDACTED%5D`,
+        );
+        expect(sanitizeUrl(`https://example.com/{{ path }}?${key}=supersecretvalue123`)).toContain(
+          `${key}=%5BREDACTED%5D`,
+        );
+      }
+    });
+
+    it('should keep the broader URL param matcher out of body sanitization', () => {
+      // The URL param-name matcher must NOT be applied by sanitizeUrlEncodedString,
+      // which also scrubs request/response bodies. Coding-agent redteam plugins
+      // plant canaries like PROMPTFOO_SYNTHETIC_SECRET and grade on whether the
+      // agent echoed them back; redacting a planted canary would turn a detected
+      // credential leak into a silent pass.
+      expect(sanitizeUrlEncodedString('PROMPTFOO_SYNTHETIC_SECRET=synthetic-value')).toBe(
+        'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+      );
     });
   });
 

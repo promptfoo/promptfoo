@@ -13,8 +13,37 @@ export const REDACTED = '[REDACTED]';
 
 // Query-parameter names that imply a credential value. Shared by sanitizeUrl's
 // per-param redaction and the fail-closed decision for unparseable URLs.
+//
+// Each alternative must sit on a word boundary — the start/end of the name or a
+// non-alphanumeric separator. Matching these as bare substrings redacted any
+// name that merely CONTAINS one: `design`, `signal`, `designer` and
+// `significance` all contain `sig`; `tokenizer` and `tokens_used` contain
+// `token`; `secretary` contains `secret`; `passwordless_flow` contains
+// `password`. Those are ordinary parameters, and destroying them corrupts
+// persisted eval results and debug logs for no security benefit.
 const SENSITIVE_URL_PARAM_NAMES =
-  /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+  /(?:^|[^a-z0-9])(?:api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization|signature|private[_-]?key|signing[_-]?key|credential|password|passwd|bearer|secret|token|auth|pwd|sig)(?:$|[^a-z0-9])/i;
+
+/**
+ * Whether a query-parameter or form-field name implies a credential value.
+ *
+ * Unifies the two matchers that had drifted apart: `sanitizeUrl` checked only
+ * the name regex above, while `sanitizeUrlEncodedString` checked only
+ * {@link isSecretField} (exact names from `SECRET_FIELD_NAMES`). Each caught
+ * credentials the other missed — `auth=` leaked from the plain-URL path, while
+ * `my_api_key_param=` and `session_token=` leaked from the templated path.
+ */
+function isSensitiveParamName(name: string): boolean {
+  if (SENSITIVE_URL_PARAM_NAMES.test(name)) {
+    return true;
+  }
+  // Split nested-key syntax (`user[password]`, `a.b.password`) so the leaf name
+  // can be matched against the shared secret-field list.
+  return name
+    .split(/[.\[\]]+/)
+    .filter(Boolean)
+    .some(isSecretField);
+}
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
@@ -871,6 +900,13 @@ export function sanitizeUrlEncodedString(value: string): string {
     const decodedKey = decodeFormComponent(rawKey);
     // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so we
     // can match the leaf name against SECRET_FIELD_NAMES.
+    //
+    // Deliberately does NOT use the broader isSensitiveParamName() matcher that
+    // sanitizeUrl uses. This function also scrubs request/response BODIES, where
+    // over-redaction is harmful rather than merely noisy: coding-agent redteam
+    // plugins plant canaries such as `PROMPTFOO_SYNTHETIC_SECRET=<value>` and
+    // grade on whether the agent echoed them back. Redacting a planted canary
+    // would turn a detected credential leak into a silent pass.
     const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
     const keyIsSecret = keyParts.some(isSecretField);
 
@@ -1068,6 +1104,36 @@ function getSecretLookingRawQueryKeys(search: string): Set<string> {
   return secretKeys;
 }
 
+/**
+ * Redact `key=value` pairs in a URL query/fragment whose KEY names a credential,
+ * using the same matcher as the non-templated branch of {@link sanitizeUrl}.
+ *
+ * Pure Nunjucks placeholders are preserved: `password={{ user_password }}` is an
+ * unresolved config template, not a rendered secret.
+ */
+function redactSensitiveNamedPairs(queryString: string): string {
+  if (!queryString.includes('=')) {
+    return queryString;
+  }
+
+  return queryString
+    .split('&')
+    .map((pair) => {
+      const separatorIndex = pair.indexOf('=');
+      if (separatorIndex === -1) {
+        return pair;
+      }
+      const rawKey = pair.slice(0, separatorIndex);
+      const rawValue = pair.slice(separatorIndex + 1);
+      if (rawValue.length === 0 || isPureTemplateValue(rawValue)) {
+        return pair;
+      }
+      const decodedKey = decodeFormComponent(rawKey) ?? rawKey;
+      return isSensitiveParamName(decodedKey) ? `${rawKey}=${encodeURIComponent(REDACTED)}` : pair;
+    })
+    .join('&');
+}
+
 function sanitizeTemplatedUrl(url: string): string {
   // A template may coexist with an already-rendered env credential. Avoid URL
   // parsing here because it encodes the remaining Nunjucks syntax, but still
@@ -1083,8 +1149,14 @@ function sanitizeTemplatedUrl(url: string): string {
   const queryIndex = beforeHash.indexOf('?');
   const beforeQuery = queryIndex === -1 ? beforeHash : beforeHash.slice(0, queryIndex);
   const query = queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1);
-  const sanitizedQuery = query ? sanitizeUrlEncodedString(query) : query;
-  const sanitizedHash = hash ? sanitizeUrlEncodedString(hash) : hash;
+  // sanitizeUrlEncodedString only matches exact SECRET_FIELD_NAMES on the key,
+  // because it also scrubs bodies where over-redaction destroys redteam canaries.
+  // A URL query is not a body, so apply the same param-name matcher the
+  // non-templated branch of sanitizeUrl uses; otherwise a credential leaks into
+  // persisted results purely because its URL also carried a Nunjucks template.
+  const scrubQuery = (value: string) => redactSensitiveNamedPairs(sanitizeUrlEncodedString(value));
+  const sanitizedQuery = query ? scrubQuery(query) : query;
+  const sanitizedHash = hash ? scrubQuery(hash) : hash;
 
   return `${beforeQuery}${queryIndex === -1 ? '' : `?${sanitizedQuery}`}${hashIndex === -1 ? '' : `#${sanitizedHash}`}`;
 }
@@ -1122,7 +1194,7 @@ export function sanitizeUrl(url: string): string {
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
-          SENSITIVE_URL_PARAM_NAMES.test(key) ||
+          isSensitiveParamName(key) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
