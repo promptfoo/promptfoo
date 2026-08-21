@@ -14,7 +14,7 @@ To use the `answer-relevance` assertion type, add it to your test configuration 
 ```yaml
 assert:
   - type: answer-relevance
-    threshold: 0.7 # Score between 0 and 1
+    threshold: 0.7 # Optional, defaults to 0.7. Score between 0 and 1
 ```
 
 ### How it works
@@ -25,7 +25,7 @@ The answer relevance checker:
 2. Compares these questions with the original query using embedding similarity
 3. Calculates a relevance score based on the similarity scores
 
-A higher threshold requires the output to be more closely related to the original query.
+The assertion passes if the relevance score meets or exceeds the threshold (default 0.7). A higher threshold requires the output to be more closely related to the original query.
 
 ### Example Configuration
 
