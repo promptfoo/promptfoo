@@ -47,6 +47,16 @@ describe('homoglyph strategy', () => {
       expect(toHomoglyphs('9')).toBe(homoglyphMap['9']);
     });
 
+    it('should map every alphanumeric character to a non-ASCII homoglyph', () => {
+      const alphanumeric = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      for (const char of alphanumeric) {
+        const mapped = homoglyphMap[char];
+        expect(mapped, `missing homoglyph for '${char}'`).toBeDefined();
+        expect(toHomoglyphs(char), `'${char}' left as ASCII`).not.toBe(char);
+        expect(mapped.codePointAt(0) ?? 0, `'${char}' maps to ASCII`).toBeGreaterThan(127);
+      }
+    });
+
     it('should handle empty strings', () => {
       expect(toHomoglyphs('')).toBe('');
     });

@@ -10,16 +10,16 @@ import { getEnvString } from '../envars';
 import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
+  addActiveSpanRoleAttribute,
   emitTurnMarkerSpan,
+  GenAIAttributes,
   getGenAITracer,
   getTraceparent,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
-import {
-  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
-  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
-} from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -30,6 +30,11 @@ import {
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
+import {
+  getConfiguredTracingExport,
+  isActiveTracingExport,
+  waitForNativeTraceExport,
+} from './tracing';
 import type {
   AgentDefinition,
   CanUseTool,
@@ -37,7 +42,6 @@ import type {
   HookEvent,
   OnElicitation,
   OutputFormat,
-  PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
   SDKAssistantMessage,
@@ -91,6 +95,8 @@ export interface AssistantErrorEntry {
 
 /** Hard cap for attribute body length on synthesized tool spans. */
 const TOOL_SPAN_BODY_LIMIT = 4096;
+const REDACTED_SUBAGENT_TRANSCRIPT =
+  '[Subagent transcript omitted; set forward_subagent_text: true to include it]';
 
 /**
  * Append promptfoo-specific resource-attribute kvs to a W3C-style
@@ -166,6 +172,9 @@ function emitToolSpan(
   try {
     const tracer = getGenAITracer();
     const attributes: Record<string, string | number | boolean> = {
+      'gen_ai.operation.name': 'execute_tool',
+      'gen_ai.tool.call.id': entry.id,
+      'gen_ai.tool.name': entry.name,
       'tool.name': entry.name,
       'tool.is_error': isError,
     };
@@ -189,7 +198,7 @@ function emitToolSpan(
 
     const span = tracer.startSpan(`tool ${entry.name}`, {
       startTime: startTimeMs,
-      attributes,
+      attributes: addActiveSpanRoleAttribute(attributes),
     });
     span.setStatus({
       code: isError || incomplete ? SpanStatusCode.ERROR : SpanStatusCode.OK,
@@ -198,6 +207,64 @@ function emitToolSpan(
   } catch (err) {
     logger.warn(`[ClaudeAgentSDK] Failed to emit tool span for ${entry.name}: ${err}`);
   }
+}
+
+function isRawSubagentTranscript(result: unknown): boolean {
+  if (typeof result !== 'object' || result === null) {
+    return false;
+  }
+  if ('isRawTranscript' in result && result.isRawTranscript === true) {
+    return true;
+  }
+  return (
+    'task' in result &&
+    typeof result.task === 'object' &&
+    result.task !== null &&
+    'isRawTranscript' in result.task &&
+    result.task.isRawTranscript === true
+  );
+}
+
+function redactRawSubagentToolOutput(result: unknown): unknown {
+  if (!isRawSubagentTranscript(result)) {
+    return result;
+  }
+
+  const output = result as Record<string, unknown>;
+  const nestedTask = 'task' in output && typeof output.task === 'object' && output.task !== null;
+  const task = (nestedTask ? output.task : output) as Record<string, unknown>;
+  const redactedTask = {
+    ...task,
+    output: REDACTED_SUBAGENT_TRANSCRIPT,
+    ...('result' in task ? { result: REDACTED_SUBAGENT_TRANSCRIPT } : {}),
+    isRawTranscript: false,
+  };
+
+  return nestedTask ? { ...output, task: redactedTask } : redactedTask;
+}
+
+function createTaskOutputTranscriptRedactionHook(): HookCallbackMatcher {
+  return {
+    matcher: 'TaskOutput',
+    hooks: [
+      async (input) => {
+        if (
+          input.hook_event_name !== 'PostToolUse' ||
+          input.tool_name !== 'TaskOutput' ||
+          !isRawSubagentTranscript(input.tool_response)
+        ) {
+          return {};
+        }
+
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PostToolUse',
+            updatedToolOutput: redactRawSubagentToolOutput(input.tool_response),
+          },
+        };
+      },
+    ],
+  };
 }
 
 function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
@@ -293,7 +360,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -325,6 +392,13 @@ export interface ClaudeCodeOptions {
   max_turns?: number;
   max_thinking_tokens?: number;
 
+  /**
+   * Enable the Claude subprocess's native model, tool, and subagent OpenTelemetry spans.
+   * Existing OTEL environment settings take precedence over Promptfoo's local defaults.
+   * @default false
+   */
+  deep_tracing?: boolean;
+
   mcp?: MCPConfig;
   strict_mcp_config?: boolean; // only allow MCP servers that are explicitly configured—no discovery; true by default
 
@@ -339,13 +413,21 @@ export interface ClaudeCodeOptions {
   /**
    * Permission mode for controlling how tool executions are handled:
    * - 'default' - Standard behavior, prompts for dangerous operations
+   * - 'manual' - Alias for 'default', prompts for dangerous operations
    * - 'plan' - Planning mode, no actual tool execution
    * - 'acceptEdits' - Auto-accept file edit operations
    * - 'bypassPermissions' - Bypass all permission checks (requires allow_dangerously_skip_permissions)
    * - 'dontAsk' - Don't prompt for permissions, deny if not pre-approved
    * - 'auto' - Use a model classifier to approve or deny permission prompts
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
+  permission_mode?:
+    | 'default'
+    | 'manual'
+    | 'plan'
+    | 'acceptEdits'
+    | 'bypassPermissions'
+    | 'dontAsk'
+    | 'auto';
 
   /**
    * Custom workflow instructions for plan mode. Only takes effect when
@@ -473,6 +555,18 @@ export interface ClaudeCodeOptions {
    * Keys are agent names, values are agent definitions with description, tools, and prompt.
    */
   agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Maximum nesting depth for subagents. Defaults to five to preserve the
+   * behavior of Claude Agent SDK versions before 0.3.217.
+   */
+  max_subagent_spawn_depth?: number;
+
+  /**
+   * Maximum number of subagents that can run concurrently. When omitted, the
+   * Claude Agent SDK applies its own default (20 as of version 0.3.217).
+   */
+  max_concurrent_subagents?: number;
 
   /**
    * Output format specification for structured outputs.
@@ -700,6 +794,9 @@ export interface ClaudeCodeOptions {
    *   - `allowAllUnixSockets` - Allow all Unix socket connections
    *   - `httpProxyPort` - HTTP proxy port for network access
    *   - `socksProxyPort` - SOCKS proxy port for network access
+   * - `credentials` - Credential protection configuration:
+   *   - `envVars` - Environment variables to deny or mask, with optional `injectHosts`
+   *   - `allowPlaintextInject` - Allow masked credentials over plain HTTP (unsafe)
    * - `ripgrep` - Custom ripgrep configuration:
    *   - `command` - Path to ripgrep executable
    *   - `args` - Additional arguments for ripgrep
@@ -920,7 +1017,7 @@ function createAskUserQuestionCanUseTool(
   behavior: 'first_option' | 'random' | 'deny' = 'first_option',
   wrappedCanUseTool?: CanUseTool,
 ): CanUseTool {
-  return async (toolName, input, options): Promise<PermissionResult> => {
+  return async (toolName, input, options) => {
     // Only handle AskUserQuestion tool
     if (toolName !== 'AskUserQuestion') {
       // Defer to wrapped callback or allow by default
@@ -1060,6 +1157,49 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     }
 
+    if (config.deep_tracing) {
+      const receiverExport = getConfiguredTracingExport();
+
+      env.CLAUDE_CODE_ENABLE_TELEMETRY ??= '1';
+      env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA ??= '1';
+      env.OTEL_TRACES_EXPORTER ??= 'otlp';
+      env.OTEL_EXPORTER_OTLP_ENDPOINT ??= receiverExport?.endpoint ?? 'http://127.0.0.1:4318';
+      env.OTEL_EXPORTER_OTLP_PROTOCOL ??=
+        receiverExport?.format === 'json' ? 'http/json' : 'http/protobuf';
+      // The SDK's five-second default is longer than Promptfoo's three-second fetch delay.
+      env.OTEL_TRACES_EXPORT_INTERVAL ??= '1000';
+    }
+
+    const sdkExportsNativeSpans =
+      env.CLAUDE_CODE_ENABLE_TELEMETRY === '1' &&
+      (env.CLAUDE_CODE_ENHANCED_TELEMETRY_BETA === '1' ||
+        env.ENABLE_ENHANCED_TELEMETRY_BETA === '1') &&
+      env.OTEL_TRACES_EXPORTER?.split(',').some((exporter) => exporter.trim() === 'otlp') &&
+      isActiveTracingExport(
+        env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ?? env.OTEL_EXPORTER_OTLP_ENDPOINT,
+        env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL ?? env.OTEL_EXPORTER_OTLP_PROTOCOL,
+      );
+
+    const subagentLimits = [
+      ['max_subagent_spawn_depth', 'CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH'],
+      ['max_concurrent_subagents', 'CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS'],
+    ] as const;
+
+    for (const [option, environmentVariable] of subagentLimits) {
+      const value = config[option];
+      if (value === undefined) {
+        continue;
+      }
+      if (!Number.isSafeInteger(value) || value < 1) {
+        throw new Error(`${option} must be a positive safe integer`);
+      }
+      env[environmentVariable] = String(value);
+    }
+
+    // Claude Agent SDK 0.3.217 lowered this default from five to one. Keep
+    // existing nested-agent evals working unless an env override opts out.
+    env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH ??= '5';
+
     // Ensure API key is available to Claude Agent SDK
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
@@ -1126,6 +1266,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       ).sort();
     }
 
+    // Bare allowedTools entries bypass canUseTool, so keep AskUserQuestion out of
+    // the allow list when the convenience callback needs to answer it.
+    if (config.ask_user_question) {
+      allowedTools = allowedTools?.filter((tool) => tool !== 'AskUserQuestion');
+    }
+
     const disallowedTools = config.disallowed_tools
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
@@ -1151,6 +1297,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
+    // Sanitize raw background-agent transcripts before TaskOutput reaches the
+    // main model. User-provided hook matchers remain installed after this one.
+    const hooks = config.forward_subagent_text
+      ? config.hooks
+      : {
+          ...config.hooks,
+          PostToolUse: [
+            createTaskOutputTranscriptRedactionHook(),
+            ...(config.hooks?.PostToolUse ?? []),
+          ],
+        };
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     // Keys listed here are excluded from the cache key because they're either
@@ -1171,7 +1329,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode,
+      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt
@@ -1199,7 +1357,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       continue: config.continue,
       agents: config.agents,
       outputFormat: config.output_format,
-      hooks: config.hooks,
+      hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
       forwardSubagentText: config.forward_subagent_text,
@@ -1338,8 +1496,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       return await withGenAISpan(
         {
           system: 'anthropic',
-          operationName: 'chat',
-          model: config.model || 'default',
+          operationName: 'invoke_agent',
+          model: config.model || 'Claude Code',
+          agentName: 'Claude Code',
           providerId: this.providerId,
           traceparent: context?.traceparent,
           maxTokens: config.max_thinking_tokens,
@@ -1397,12 +1556,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // Tool spans are tagged with the active turn index via `toolTurnIndex`.
           let turnCount = 0;
           const toolTurnIndex = new Map<string, number>();
+          const deferredSyntheticSpans: Array<() => void> = [];
+          const emitOrDeferSyntheticSpan = (emit: () => void): void => {
+            if (sdkExportsNativeSpans) {
+              deferredSyntheticSpans.push(emit);
+            } else {
+              emit();
+            }
+          };
           const emitTurnSpan = (msg: SDKAssistantMessage): number => {
             const index = turnCount + 1;
             turnCount = index;
             const attributes: Record<string, string | number | boolean> = {
               'gen_ai.turn.index': index,
-              'gen_ai.system': 'anthropic',
+              [GenAIAttributes.PROVIDER_NAME]: 'anthropic',
             };
             if (msg.parent_tool_use_id) {
               attributes['gen_ai.turn.parent_tool_use_id'] = msg.parent_tool_use_id;
@@ -1432,14 +1599,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             }
             // A turn marker is a point-in-time event, so start and end at the same instant.
             const now = Date.now();
-            emitTurnMarkerSpan({
-              tracer: getGenAITracer(),
-              index,
-              startTime: now,
-              endTime: now,
-              attributes,
-              errorMessage: msg.error,
-              logLabel: 'ClaudeAgentSDK',
+            emitOrDeferSyntheticSpan(() => {
+              emitTurnMarkerSpan({
+                tracer: getGenAITracer(),
+                index,
+                startTime: now,
+                endTime: now,
+                attributes,
+                errorMessage: msg.error,
+                logLabel: 'ClaudeAgentSDK',
+              });
             });
             return index;
           };
@@ -1454,14 +1623,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             for (const [toolUseId, startMs] of toolStartTimes) {
               const entry = toolCallsMap.get(toolUseId);
               if (entry) {
-                emitToolSpan(
-                  entry,
-                  startMs,
-                  endedAt,
-                  false,
-                  /* incomplete */ true,
-                  toolTurnIndex.get(toolUseId),
-                );
+                const turnIndex = toolTurnIndex.get(toolUseId);
+                emitOrDeferSyntheticSpan(() => {
+                  emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true, turnIndex);
+                });
               }
             }
             toolStartTimes.clear();
@@ -1520,18 +1685,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                   if (block.type === 'tool_result') {
                     const entry = toolCallsMap.get(block.tool_use_id);
                     if (entry) {
-                      entry.output = block.content;
+                      entry.output =
+                        entry.name === 'TaskOutput' &&
+                        isRawSubagentTranscript(msg.tool_use_result) &&
+                        !config.forward_subagent_text
+                          ? REDACTED_SUBAGENT_TRANSCRIPT
+                          : block.content;
                       entry.is_error = block.is_error ?? false;
                       const startMs = toolStartTimes.get(block.tool_use_id);
                       if (startMs !== undefined) {
-                        emitToolSpan(
-                          entry,
-                          startMs,
-                          Date.now(),
-                          entry.is_error,
-                          false,
-                          toolTurnIndex.get(block.tool_use_id),
-                        );
+                        const endedAt = Date.now();
+                        const turnIndex = toolTurnIndex.get(block.tool_use_id);
+                        emitOrDeferSyntheticSpan(() => {
+                          emitToolSpan(entry, startMs, endedAt, entry.is_error, false, turnIndex);
+                        });
                         toolStartTimes.delete(block.tool_use_id);
                         toolTurnIndex.delete(block.tool_use_id);
                       }
@@ -1565,6 +1732,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           if (!finalMsg) {
             return { error: "Claude Agent SDK call didn't return a result" };
+          }
+
+          if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
+            let nativeSpansArrived = false;
+            try {
+              nativeSpansArrived = await waitForNativeTraceExport(
+                tpTraceId,
+                tpSpanId,
+                env,
+                callOptions?.abortSignal,
+              );
+            } catch (error) {
+              logger.debug('[ClaudeAgentSDK] Unable to inspect native trace export', {
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+
+            if (!nativeSpansArrived && !callOptions?.abortSignal?.aborted) {
+              logger.warn(
+                '[ClaudeAgentSDK] Native trace spans did not reach the receiver before grading; emitting synthetic turn and tool spans.',
+              );
+              for (const emit of deferredSyntheticSpans) {
+                emit();
+              }
+            }
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -1711,17 +1903,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const metadata = response.metadata ?? {};
           const additional: Record<string, string | number | boolean> = {};
           if (typeof metadata.numTurns === 'number') {
-            additional['gen_ai.agent.num_turns'] = metadata.numTurns;
+            additional['promptfoo.agent.num_turns'] = metadata.numTurns;
           }
           if (typeof metadata.durationApiMs === 'number') {
-            additional['gen_ai.agent.duration_api_ms'] = metadata.durationApiMs;
+            additional['promptfoo.agent.duration_api_ms'] = metadata.durationApiMs;
           }
           if (typeof response.cost === 'number' && response.cost > 0) {
-            additional['gen_ai.agent.cost_usd'] = response.cost;
+            additional['promptfoo.agent.cost_usd'] = response.cost;
           }
           const toolCalls = metadata.toolCalls;
           if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-            additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
+            additional['promptfoo.agent.tool_call_count'] = toolCalls.length;
           }
           // Response model: the SDK reports per-model usage keyed by model name.
           // Pick the key with the largest token usage rather than iteration order —

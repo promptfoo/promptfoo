@@ -4,7 +4,7 @@ import confirm from '@inquirer/confirm';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
@@ -208,5 +208,25 @@ describe('redteamInit', () => {
     await expect(redteamInit(undefined)).resolves.toBeUndefined();
 
     expect(process.exitCode).toBe(1);
+  });
+
+  it('offers supported Anthropic targets instead of retired Opus 4.1', async () => {
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await redteamInit(undefined);
+
+    const providerPrompt = vi
+      .mocked(select)
+      .mock.calls.find(([options]) => options.message === 'Choose a model to target:');
+    const choices = providerPrompt?.[0].choices as Array<{ value: string }>;
+
+    expect(choices).toEqual(
+      expect.arrayContaining([
+        { name: 'anthropic:claude-opus-4-6', value: 'anthropic:messages:claude-opus-4-6' },
+      ]),
+    );
+    expect(choices.map((choice) => choice.value)).not.toContain(
+      'anthropic:messages:claude-opus-4-1-20250805',
+    );
   });
 });

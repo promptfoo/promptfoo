@@ -3,7 +3,8 @@
  */
 
 export interface UpdateCommandOptions {
-  selfHosted: boolean;
+  isContainer: boolean;
+  isOfficialDockerImage: boolean;
   isNpx: boolean;
 }
 
@@ -11,16 +12,29 @@ export interface UpdateCommandResult {
   primary: string;
   alternative: string | null;
   commandType: 'docker' | 'npx' | 'npm';
+  isCustomContainer?: boolean;
 }
 
 export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandResult {
-  const { selfHosted, isNpx } = options;
+  const { isContainer, isOfficialDockerImage, isNpx } = options;
 
-  if (selfHosted) {
+  // Preserve compatibility with existing official images, where the official marker is sufficient.
+  if (isOfficialDockerImage) {
     return {
-      primary: 'docker pull promptfoo/promptfoo:latest',
+      primary: 'docker pull ghcr.io/promptfoo/promptfoo:latest',
       alternative: null,
       commandType: 'docker',
+    };
+  }
+
+  if (isContainer) {
+    return {
+      // Keep the existing public response fields backward-compatible. New clients use the
+      // additive marker, while older Web UIs already hide empty commands.
+      primary: '',
+      alternative: null,
+      commandType: 'npm',
+      isCustomContainer: true,
     };
   }
 
@@ -29,11 +43,4 @@ export function getUpdateCommands(options: UpdateCommandOptions): UpdateCommandR
     alternative: isNpx ? 'npm install -g promptfoo@latest' : 'npx promptfoo@latest',
     commandType: isNpx ? 'npx' : 'npm',
   };
-}
-
-export function getUpdateCommandLabel(isNpx: boolean, isPrimary: boolean): string {
-  if (isPrimary) {
-    return 'Copy Command';
-  }
-  return isNpx ? 'or global install' : 'or npx';
 }

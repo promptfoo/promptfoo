@@ -621,6 +621,28 @@ describe('StrategyConfigDialog', () => {
     expect(statefulSwitch).not.toBeChecked();
   });
 
+  it("should render Goblin configuration fields when strategy is 'jailbreak:goblin'", () => {
+    renderWithProviders(
+      <StrategyConfigDialog
+        open={true}
+        strategy="jailbreak:goblin"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{
+          id: 'jailbreak:goblin',
+          name: 'Goblin',
+          description:
+            'Multi-turn jailbreak strategy focused on encoding techniques, math, and logic problems',
+        }}
+      />,
+    );
+
+    expect(screen.getByText('Configure Goblin')).toBeInTheDocument();
+    expect(screen.getByText(/Goblin tracks its own attack history/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Max Turns')).toHaveValue(10);
+  });
+
   it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", async () => {
     const user = userEvent.setup();
     renderWithProviders(

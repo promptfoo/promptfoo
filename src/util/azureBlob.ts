@@ -15,7 +15,7 @@ export type AzureBlobUriParts = {
   sasToken: string;
 };
 
-function sanitizeAzureBlobUriForError(uri: string): string {
+export function sanitizeAzureBlobUriForError(uri: string): string {
   const queryStart = uri.indexOf('?');
   if (queryStart < 0) {
     return uri;

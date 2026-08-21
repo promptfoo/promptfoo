@@ -33,7 +33,12 @@ function formatSpan(span: TraceSpan): string {
     parts.push(`tool=${tool}`);
   }
 
-  const model = span.attributes['model'] || span.attributes['llm.model'];
+  const model =
+    span.attributes['gen_ai.request.model'] ||
+    span.attributes['gen_ai.response.model'] ||
+    span.attributes['ai.model.id'] ||
+    span.attributes['model'] ||
+    span.attributes['llm.model'];
   if (model) {
     parts.push(`model=${model}`);
   }

@@ -43,7 +43,7 @@ redteam:
     - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
     - 'bfla' # Tests for Broken Function Level Authorization issues
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -78,7 +78,7 @@ redteam:
     - 'rag-poisoning' # Tests if RAG-based agents can be poisoned with malicious documents
     - 'rag-document-exfiltration' # Checks if sensitive documents can be extracted from RAG systems
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
     - 'jailbreak:tree' # Uses a tree-based approach to test complex jailbreak attempts
 ```
@@ -184,7 +184,7 @@ redteam:
     - 'tool-discovery' # Tests if the agent reveals available tools to unauthorized users
     - 'mcp' # Tests Model Context Protocol implementations for security vulnerabilities
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -209,7 +209,7 @@ redteam:
     - 'excessive-agency' # Detects if the agent takes actions beyond its intended scope
     - 'harmful' # Checks for harmful or malicious behavior
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -237,7 +237,7 @@ redteam:
       config:
         policy: 'The agent must not reveal any information from its prompt or context.'
   strategies:
-    - 'prompt-injection'
+    - 'jailbreak-templates'
     - 'jailbreak'
 ```
 
@@ -405,12 +405,11 @@ redteam:
     includeInAttack: true
     includeInGrading: true
     spanFilter:
-      - 'llm.'
-      - 'agent.'
-      - 'guardrail.'
-      - 'tool.'
-      - 'command.'
-      - 'search.'
+      - 'chat*'
+      - '*tool*'
+      - '*guardrail*'
+      - '*command*'
+      - '*search*'
   plugins:
     - excessive-agency
     - rbac
@@ -421,7 +420,7 @@ redteam:
     - jailbreak:composite
 ```
 
-For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, Vercel AI SDK `ai.toolCall.name`, `ai.toolCall.args`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; it uses case-insensitive substring matching, not wildcards or regex, so values like `llm.` and `tool.` will match spans such as `llm.chat.completions` or `tool.database_query`. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
+For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, Vercel AI SDK `ai.toolCall.name`, `ai.toolCall.args`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits. Filters are case-insensitive, support `*` and `?` wildcards, and still match plain values as substrings. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
 
 #### How Trace Feedback Improves Attacks
 
@@ -527,8 +526,8 @@ When testing specific agent components, you can customize your red team configur
 redteam:
   # For testing tool selection
   plugins:
-    - 'rbac'  # Tests if the model properly implements Role-Based Access Control
-    - 'bola'  # Checks for Broken Object Level Authorization vulnerabilities
+    - 'rbac' # Tests if the model properly implements Role-Based Access Control
+    - 'bola' # Checks for Broken Object Level Authorization vulnerabilities
 
   # For testing reasoning
   plugins:
@@ -537,7 +536,7 @@ redteam:
 
   # For testing execution
   plugins:
-    - 'ssrf'  # Tests for Server-Side Request Forgery vulnerabilities
+    - 'ssrf' # Tests for Server-Side Request Forgery vulnerabilities
     - 'sql-injection'
 ```
 

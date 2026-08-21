@@ -49,7 +49,7 @@ describe('Tooltip', () => {
     await user.hover(trigger);
 
     const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.parentElement).toHaveClass('custom-tooltip');
+    expect(tooltip.closest('.custom-tooltip')).not.toBeNull();
   });
 
   it('applies correct default styles to content', async () => {
@@ -67,10 +67,11 @@ describe('Tooltip', () => {
     await user.hover(trigger);
 
     const tooltip = await screen.findByRole('tooltip');
+    const content = tooltip.closest('.rounded-md');
     // Verify base styles are applied
-    expect(tooltip.parentElement).toHaveClass('rounded-md', 'bg-foreground', 'text-background');
+    expect(content).toHaveClass('rounded-md', 'bg-foreground', 'text-background');
     // Verify simplified animation (fade only, no zoom/slide)
-    expect(tooltip.parentElement).toHaveClass('animate-in', 'fade-in-0', 'duration-100');
+    expect(content).toHaveClass('animate-in', 'fade-in-0', 'duration-100');
   });
 
   it('supports open state control', async () => {

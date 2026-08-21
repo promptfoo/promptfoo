@@ -1,4 +1,21 @@
-import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
+import {
+  BaseTokenUsageSchema,
+  type CompletionTokenDetails,
+  type NormalizedTokenUsage,
+  type TokenUsage,
+} from '../types/shared';
+
+/**
+ * Safely extract token usage carried by a thrown value.
+ */
+export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
+}
 
 /**
  * Helper to create empty completion details
@@ -30,7 +47,7 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
-export function createEmptyTokenUsage(): Required<TokenUsage> {
+export function createEmptyTokenUsage(): NormalizedTokenUsage {
   return {
     prompt: 0,
     completion: 0,
@@ -139,6 +156,73 @@ export function accumulateTokenUsage(
       );
     }
   }
+
+  if (update.attacker) {
+    target.attacker ??= createEmptyAssertions();
+    accumulateTokenUsage(target.attacker, update.attacker);
+  }
+
+  if (update.generation) {
+    target.generation ??= createEmptyAssertions();
+    accumulateTokenUsage(target.generation, update.generation);
+  }
+}
+
+/** Record attacker-model usage separately without inflating target tokens or probes. */
+export function accumulateAttackerTokenUsage(
+  target: TokenUsage,
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (!response || response.cached) {
+    return;
+  }
+  target.attacker ??= createEmptyAssertions();
+  if (!response.tokenUsage) {
+    accumulateResponseTokenUsage(target.attacker, response);
+    return;
+  }
+
+  const { assertions, ...attackerUsage } = response.tokenUsage;
+  accumulateResponseTokenUsage(target.attacker, { tokenUsage: attackerUsage });
+  if (assertions) {
+    target.assertions ??= createEmptyAssertions();
+    accumulateAssertionTokenUsage(target.assertions, assertions);
+  }
+}
+
+/** Record one strategy grading task while retaining all model usage reported for that task. */
+export function accumulateGradingResponseTokenUsage(
+  target: TokenUsage,
+  response: { cached?: boolean; tokenUsage?: Partial<TokenUsage> } | undefined,
+): void {
+  if (!response) {
+    return;
+  }
+
+  const reportedTotal =
+    response.tokenUsage?.total ??
+    (response.tokenUsage?.prompt ?? 0) + (response.tokenUsage?.completion ?? 0);
+  const cachedTokens = response.tokenUsage?.cached ?? 0;
+  const cachedResponse =
+    response.cached === true ||
+    (response.tokenUsage?.numRequests === 0 && reportedTotal <= cachedTokens);
+
+  target.assertions ??= createEmptyAssertions();
+  if (cachedResponse) {
+    accumulateAssertionTokenUsage(target.assertions, {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: cachedTokens || reportedTotal,
+      numRequests: 0,
+    });
+    return;
+  }
+
+  accumulateAssertionTokenUsage(target.assertions, {
+    ...response.tokenUsage,
+    numRequests: 1,
+  });
 }
 
 /**
@@ -160,8 +244,7 @@ export function accumulateAssertionTokenUsage(
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
-  // Note: We don't accumulate numRequests from the update for assertions
-  // to maintain separation between provider and assertion request counts
+  target.numRequests = addNumbers(target.numRequests, update.numRequests);
 
   // Handle completion details
   if (update.completionDetails) {
@@ -173,19 +256,49 @@ export function accumulateAssertionTokenUsage(
 }
 
 /**
- * Account for a single grading (assertion) request: every grading call counts as one
- * assertion request, and its token usage is folded in when the grader reported any.
+ * Account for reported grading usage, preserving cumulative request counts and cached
+ * responses and deterministic assertions that represent zero new requests. Legacy
+ * usage without a request count and confirmed fresh grading calls each count once.
+ * Explicit cache provenance takes precedence over cached-token heuristics because an
+ * aggregate can contain both avoided cached usage and a smaller fresh grading call.
  * Shared by the live grading path and the EvalResult -> EvaluateResult reconstruction so
  * the two stay in sync. Mutates {@code assertions}.
  */
 export function accumulateGradingRequest(
   assertions: NonNullable<TokenUsage['assertions']>,
   tokensUsed: Partial<TokenUsage> | undefined,
+  options?: { cached?: boolean; fresh?: boolean },
 ): void {
-  assertions.numRequests = (assertions.numRequests ?? 0) + 1;
-  if (tokensUsed) {
-    accumulateAssertionTokenUsage(assertions, tokensUsed);
+  if (!tokensUsed) {
+    if (!options?.cached) {
+      assertions.numRequests = (assertions.numRequests ?? 0) + 1;
+    }
+    return;
   }
+
+  const reportedTotal = tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
+  const cachedTokens = tokensUsed.cached ?? 0;
+  const inferredCachedResponse =
+    options?.cached === undefined &&
+    tokensUsed.numRequests === 0 &&
+    cachedTokens > 0 &&
+    reportedTotal <= cachedTokens;
+  const cachedResponse = options?.cached === true || inferredCachedResponse;
+  const hasFreshUsage = options?.fresh === true || reportedTotal > 0;
+
+  let numRequests: number;
+  if (cachedResponse) {
+    numRequests = 0;
+  } else if (tokensUsed.numRequests === 0) {
+    numRequests = hasFreshUsage ? 1 : 0;
+  } else {
+    numRequests = tokensUsed.numRequests ?? 1;
+  }
+
+  accumulateAssertionTokenUsage(assertions, {
+    ...tokensUsed,
+    numRequests,
+  });
 }
 
 /**
@@ -223,6 +336,33 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
+ * Record generation-time provider tokens separately from target usage and probes.
+ * Returns whether the payload contained observable generation usage.
+ */
+export function accumulateGenerationTokenUsage(target: TokenUsage, update: unknown): boolean {
+  const parsed = BaseTokenUsageSchema.safeParse(update);
+  if (!parsed.success) {
+    return false;
+  }
+
+  const {
+    attacker: _attacker,
+    assertions: _assertions,
+    generation: _generation,
+    ...generationUsage
+  } = parsed.data;
+  const hasUsage =
+    Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
+    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+  if (!hasUsage) {
+    return false;
+  }
+  target.generation ??= createEmptyAssertions();
+  accumulateTokenUsage(target.generation, generationUsage);
+  return true;
+}
+
+/**
  * Normalize token usage from a provider response into a standard TokenUsage object.
  * Provides default values for all fields if not present in the response.
  * @param tokenUsage Token usage from provider response (may be partial or undefined)
@@ -230,7 +370,7 @@ export function accumulateResponseTokenUsage(
  */
 export function normalizeTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
-): Required<TokenUsage> {
+): NormalizedTokenUsage {
   return {
     total: tokenUsage?.total || 0,
     prompt: tokenUsage?.prompt || 0,
@@ -239,5 +379,7 @@ export function normalizeTokenUsage(
     numRequests: tokenUsage?.numRequests || 0,
     completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
+    ...(tokenUsage?.attacker ? { attacker: tokenUsage.attacker } : {}),
+    ...(tokenUsage?.generation ? { generation: tokenUsage.generation } : {}),
   };
 }

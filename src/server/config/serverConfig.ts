@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { loadYaml } from '../../util/yamlLoad';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -62,7 +63,7 @@ export function loadServerConfig(): ServerConfig {
 
   try {
     const content = readFileSync(configPath, 'utf8');
-    const config = yaml.load(content) as ServerConfig;
+    const config = loadYaml(content) as ServerConfig;
 
     // Validate basic structure
     if (config && typeof config !== 'object') {
@@ -120,16 +121,6 @@ export function loadServerConfig(): ServerConfig {
     cachedConfig = {};
     return cachedConfig;
   }
-}
-
-/**
- * Clear the cached config and reload from file
- * Useful for hot-reloading configuration
- * @returns Newly loaded server configuration
- */
-export function reloadServerConfig(): ServerConfig {
-  cachedConfig = null;
-  return loadServerConfig();
 }
 
 /**

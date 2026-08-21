@@ -16,7 +16,7 @@ export function addMischievousUser(
     },
     assert: testCase.assert?.map((assertion) => ({
       ...assertion,
-      metric: `${assertion.metric}/MischievousUser`,
+      metric: assertion.metric ? `${assertion.metric}/MischievousUser` : assertion.metric,
     })),
     metadata: {
       ...testCase.metadata,

@@ -674,8 +674,8 @@ interface Plugins {
 }
 
 // Example plugins
-Plugins['prompt-injection']; // Injection attacks
-Plugins['jailbreak']; // Jailbreak attempts
+Plugins['indirect-prompt-injection']; // Indirect prompt injection
+Plugins['hijacking']; // Hijacking attempts
 Plugins['rbac']; // RBAC bypasses
 Plugins['sql-injection']; // SQL injection
 // ... and many more

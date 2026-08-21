@@ -1,8 +1,9 @@
 import { rm } from 'fs/promises';
 
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../src/logger';
 import {
   createDummyFiles,
   initializeProject,
@@ -256,6 +257,24 @@ describe('createDummyFiles', () => {
     expect(mockConfirm).toHaveBeenCalledTimes(0);
   });
 
+  it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['anthropic:messages:claude-opus-4-6']);
+
+    await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls.find(
+      ([options]) => options.message === 'Which model provider would you like to use?',
+    );
+    const anthropicChoice = providerPrompt?.[0].choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Anthropic]'),
+    );
+
+    expect(anthropicChoice?.value).toContain('anthropic:messages:claude-opus-4-6');
+    expect(anthropicChoice?.value).not.toContain('anthropic:messages:claude-opus-4-1-20250805');
+  });
+
   it('should prompt for confirmation when files exist', async () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 
@@ -282,6 +301,7 @@ describe('initializeProject', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.exitCode = originalExitCode;
   });
 
@@ -299,5 +319,27 @@ describe('initializeProject', () => {
     await expect(initializeProject(null, true)).resolves.toBeUndefined();
 
     expect(process.exitCode).toBe(130);
+  });
+
+  it('should print current-directory next steps for the redteam path', async () => {
+    // `promptfoo init` with no directory arg, choosing "Run a red team evaluation".
+    mockSelect.mockResolvedValueOnce('redteam');
+
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+
+    await initializeProject(null, true);
+
+    const messages = infoSpy.mock.calls.map((call) => String(call[0]));
+
+    // Regression: the redteam branch dropped `outDirectory`, so the "Next steps"
+    // output interpolated `undefined` instead of using the current-directory flow.
+    expect(messages).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Setup complete! Next steps:'),
+        expect.stringContaining('to evaluate your prompts'),
+        expect.stringContaining('to view results in your browser'),
+      ]),
+    );
+    expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
   });
 });

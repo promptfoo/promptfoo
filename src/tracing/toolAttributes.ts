@@ -6,6 +6,19 @@ type ToolAttributeFamily = {
   extraArgKeys?: readonly string[];
 };
 
+export const COMMAND_ATTRIBUTE_KEYS = [
+  'codex.command',
+  'command',
+  'command.name',
+  'command_name',
+] as const;
+
+export const SEARCH_ATTRIBUTE_KEYS = [
+  'codex.search.query',
+  'search.query',
+  'search_query',
+] as const;
+
 const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
   {
     prefix: 'tool',
@@ -58,6 +71,17 @@ export const TOOL_ARGUMENT_ATTRIBUTE_KEYS: readonly string[] = [
   'arguments',
   'input',
 ];
+
+/** Normalize imported tool calls to the attributes used by trace filtering and trajectory grading. */
+export function getNormalizedToolAttributes(name: string, args?: unknown): Record<string, unknown> {
+  return {
+    'gen_ai.tool.name': name,
+    'tool.name': name,
+    ...(args !== undefined && {
+      'tool.arguments': typeof args === 'string' ? args : JSON.stringify(args),
+    }),
+  };
+}
 
 export function getFirstStringAttribute(
   attributes: Record<string, unknown> | undefined,

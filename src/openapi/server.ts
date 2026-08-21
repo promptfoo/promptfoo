@@ -14,7 +14,7 @@ import { ConfigSchemas } from '../types/api/configs';
 import { EvalSchemas } from '../types/api/eval';
 import { MediaSchemas } from '../types/api/media';
 import { ModelAuditSchemas } from '../types/api/modelAudit';
-import { ProviderSchemas } from '../types/api/providers';
+import { JsonProviderOptionsWithIdSchema, ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
 import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
@@ -43,6 +43,9 @@ const OpenApiCreateJobRequestSchema = z
   })
   .passthrough();
 
+// Provider test routes still parse ProviderOptionsWithIdSchema at runtime. Keep
+// their OpenAPI shape intentionally loose instead of advertising preview-only
+// JSON env semantics that those routes do not preserve.
 const OpenApiProviderOptionsWithIdSchema = z
   .object({
     id: z.string().min(1),
@@ -65,6 +68,17 @@ const OpenApiTestSessionRequestSchema = z.object({
   mainInputVariable: z.string().optional(),
 });
 
+// Runtime normalization accepts blank/incomplete provider values as unset. OpenAPI
+// documents only the non-empty values that remain after normalization.
+const OpenApiPreviewGenerationProviderSchema = z.union([
+  z.string().min(1),
+  JsonProviderOptionsWithIdSchema,
+]);
+
+const OpenApiTestCaseGenerationRequestSchema = RedteamSchemas.GenerateTest.Request.extend({
+  provider: OpenApiPreviewGenerationProviderSchema.optional(),
+});
+
 const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.Response,
   EvalSchemas.Table.JsonExportResponse,
@@ -72,7 +86,8 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
 
 export const SERVER_OPENAPI_ROUTE_COUNT = 67;
 
-type OpenApiSchema = ZodMediaTypeObject['schema'];
+type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
+type OpenApiResponse = ResponseConfig & { description: string };
 type RouteRequest = NonNullable<RouteConfig['request']>;
 type RegisteredRouteConfig = RouteConfig & {
   operationId: string;
@@ -114,7 +129,7 @@ export function createServerOpenApiRegistry() {
     name: string,
     zodSchema: z.ZodType,
     description = 'Successful response',
-  ): ResponseConfig {
+  ): OpenApiResponse {
     return {
       description,
       content: {
@@ -125,7 +140,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function evalTableResponse(): ResponseConfig {
+  function evalTableResponse(): OpenApiResponse {
     return {
       description:
         'Evaluation table data. `format=json` returns an exported table object and `format=csv` returns CSV.',
@@ -142,7 +157,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function rawJsonResponse(description: string, openApiSchema: OpenApiSchema): ResponseConfig {
+  function rawJsonResponse(description: string, openApiSchema: OpenApiSchema): OpenApiResponse {
     return {
       description,
       content: {
@@ -153,7 +168,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function errorResponse(description: string): ResponseConfig {
+  function errorResponse(description: string): OpenApiResponse {
     return jsonResponse('ErrorResponse', ErrorResponseSchema, description);
   }
 
@@ -169,11 +184,11 @@ export function createServerOpenApiRegistry() {
     return errorResponse('Server error');
   }
 
-  function noContent(description = 'No content'): ResponseConfig {
+  function noContent(description = 'No content'): OpenApiResponse {
     return { description };
   }
 
-  function binaryResponse(description: string): ResponseConfig {
+  function binaryResponse(description: string): OpenApiResponse {
     return {
       description,
       content: {
@@ -187,7 +202,7 @@ export function createServerOpenApiRegistry() {
     };
   }
 
-  function redirectResponse(description: string): ResponseConfig {
+  function redirectResponse(description: string): OpenApiResponse {
     return {
       description,
       headers: {
@@ -963,7 +978,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Redteam'],
     summary: 'Generate one or more redteam test cases',
     request: {
-      body: jsonBody('TestCaseGenerationRequest', RedteamSchemas.GenerateTest.Request),
+      body: jsonBody('TestCaseGenerationRequest', OpenApiTestCaseGenerationRequestSchema),
     },
     responses: {
       200: jsonResponse('TestCaseGenerationResponse', RedteamSchemas.GenerateTest.Response),

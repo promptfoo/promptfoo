@@ -10,7 +10,7 @@ import {
   vi,
 } from 'vitest';
 import * as envars from '../src/envars';
-import { getUserAuthInfo } from '../src/globalConfig/accounts';
+import { getUserAuthInfo, getUserId } from '../src/globalConfig/accounts';
 import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
@@ -159,6 +159,16 @@ describe('Telemetry', () => {
     const telemetry = new Telemetry();
     telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+  });
+
+  it('should defer identity until explicit initialization when requested', () => {
+    const getUserIdMock = vi.mocked(getUserId);
+    getUserIdMock.mockClear();
+    const telemetry = new Telemetry(false);
+
+    expect(getUserIdMock).not.toHaveBeenCalled();
+    telemetry.initialize();
+    expect(getUserIdMock).toHaveBeenCalledOnce();
   });
 
   it('re-exports telemetry DTO helpers for deep import compatibility', () => {
