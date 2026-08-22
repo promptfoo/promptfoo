@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.122.1](https://github.com/promptfoo/promptfoo/compare/0.122.0...0.122.1) (2026-08-22)
+
+### Features
+
+- **redteam:** account for multi-turn attacker and grading tokens ([#10407](https://github.com/promptfoo/promptfoo/issues/10407)) ([33cc8bc](https://github.com/promptfoo/promptfoo/commit/33cc8bc90e07d6c4ba36c83001cca1b4726b7593))
+- **tracing:** add test-case roots and universal target spans ([#10328](https://github.com/promptfoo/promptfoo/issues/10328)) ([334586e](https://github.com/promptfoo/promptfoo/commit/334586ee4b21e56d16cff63c9b82134614d05486))
+- **tracing:** align spans with OpenTelemetry GenAI conventions ([#10361](https://github.com/promptfoo/promptfoo/issues/10361)) ([e6f44f8](https://github.com/promptfoo/promptfoo/commit/e6f44f8b04cf961d7227ad4062c1c04dcb62c1f0))
+- **tracing:** fetch external spans from Grafana Tempo ([#10327](https://github.com/promptfoo/promptfoo/issues/10327)) ([1b445b0](https://github.com/promptfoo/promptfoo/commit/1b445b0db4cf7e2ef87cfb9a09ab397ecae802e2))
+- **tracing:** fetch external traces from Braintrust ([#10329](https://github.com/promptfoo/promptfoo/issues/10329)) ([f372318](https://github.com/promptfoo/promptfoo/commit/f3723187d94479add2a51c5f36c4f61fb1999e80))
+- **tracing:** fetch external traces from Langfuse ([#10372](https://github.com/promptfoo/promptfoo/issues/10372)) ([f7809f6](https://github.com/promptfoo/promptfoo/commit/f7809f60e44fbb4898f5c2abc31990ac0712b5a8))
+- **tracing:** harden trace span persistence ([#10326](https://github.com/promptfoo/promptfoo/issues/10326)) ([d9d0e82](https://github.com/promptfoo/promptfoo/commit/d9d0e82254f265f8d299a7a9fb3e4ed9e99d7834))
+- **tracing:** instrument grading and red-team execution ([#10362](https://github.com/promptfoo/promptfoo/issues/10362)) ([a53ba32](https://github.com/promptfoo/promptfoo/commit/a53ba328e6af77fce98e67ab2ca69035f9f026ec))
+- **tracing:** integrate OpenAI Agents and Vercel SDK telemetry ([#10364](https://github.com/promptfoo/promptfoo/issues/10364)) ([8f89002](https://github.com/promptfoo/promptfoo/commit/8f890022486aac5884e614fc85d670fd0125d10d))
+- **tracing:** standardize tool execution across providers ([#10363](https://github.com/promptfoo/promptfoo/issues/10363)) ([b54ccbd](https://github.com/promptfoo/promptfoo/commit/b54ccbd7b253d9a4f469766f581e0b3803681b24))
+- **tracing:** support Claude and Codex subprocess telemetry ([#10365](https://github.com/promptfoo/promptfoo/issues/10365)) ([84c518f](https://github.com/promptfoo/promptfoo/commit/84c518f412ac6e08bdb2e17e21b2eb32312fc649))
+
+### Bug Fixes
+
+- **app:** clarify red team grading actions ([#10366](https://github.com/promptfoo/promptfoo/issues/10366)) ([84a5cf2](https://github.com/promptfoo/promptfoo/commit/84a5cf214f3bad068eb5a90bed0803c129a4e44f))
+- **assertions:** avoid regex backtracking in GLEU and SQL parsing ([#10373](https://github.com/promptfoo/promptfoo/issues/10373)) ([57243cf](https://github.com/promptfoo/promptfoo/commit/57243cf84bd9625fa9b4d331806cfb240c75d247))
+- **assertions:** correct inverse JSON failure messages ([#9824](https://github.com/promptfoo/promptfoo/issues/9824)) ([d1d8de3](https://github.com/promptfoo/promptfoo/commit/d1d8de31470b0dc238f67cf2de0a926bc0ed3416))
+- **assertions:** reject out-of-range trace-span-duration percentile ([#10089](https://github.com/promptfoo/promptfoo/issues/10089)) ([49c0f6d](https://github.com/promptfoo/promptfoo/commit/49c0f6d77496c022c6d32e362522993bb0d72d42))
+- **assertions:** score tokenless GLEU inputs as zero ([#9850](https://github.com/promptfoo/promptfoo/issues/9850)) ([cc8c0c6](https://github.com/promptfoo/promptfoo/commit/cc8c0c65f1378d80166b2a209747cd9c1a6302c2))
+- **deps:** align Chevrotain CST generator with parser ([#10360](https://github.com/promptfoo/promptfoo/issues/10360)) ([6ae80cd](https://github.com/promptfoo/promptfoo/commit/6ae80cd9e5bde81f976cfba65fcea5d05661c7f8))
+- **deps:** block install scripts in Docker builds ([#10330](https://github.com/promptfoo/promptfoo/issues/10330)) ([c4454c4](https://github.com/promptfoo/promptfoo/commit/c4454c401c93d77a6a46fe1d883175f47adc1eff))
+- **deps:** bundle the runtime cache dependency ([#10302](https://github.com/promptfoo/promptfoo/issues/10302)) ([b5f8ea3](https://github.com/promptfoo/promptfoo/commit/b5f8ea3b0a307adb91c31ed4e13a3d6896902841))
+- **deps:** enforce npm release age during lockfile maintenance ([#10396](https://github.com/promptfoo/promptfoo/issues/10396)) ([42c1076](https://github.com/promptfoo/promptfoo/commit/42c1076b9ba691f65b5c5cbd5bfedc3cbba8842c))
+- **deps:** hold jsdom below the release our Node floor cannot install ([#10351](https://github.com/promptfoo/promptfoo/issues/10351)) ([2dcb128](https://github.com/promptfoo/promptfoo/commit/2dcb128ce6ced450fd91d036d5695a29c8369681))
+- **deps:** hold tanstack table below incompatible v9 ([#10388](https://github.com/promptfoo/promptfoo/issues/10388)) ([fded938](https://github.com/promptfoo/promptfoo/commit/fded938b65a81e12070a66e90ca4ad2d42a8062e))
+- **deps:** keep Renovate on the supported npm major ([#10393](https://github.com/promptfoo/promptfoo/issues/10393)) ([f5034c1](https://github.com/promptfoo/promptfoo/commit/f5034c1a33a6db26f25dfa77e7e587d8386d6b4a))
+- **deps:** limit pnpm install scripts and new releases ([#10331](https://github.com/promptfoo/promptfoo/issues/10331)) ([0dbf6c8](https://github.com/promptfoo/promptfoo/commit/0dbf6c8e0bbcaa232b2fe4447545080aa0e5bf18))
+- **deps:** patch vulnerable transitive js-yaml releases ([#10356](https://github.com/promptfoo/promptfoo/issues/10356)) ([2626fd0](https://github.com/promptfoo/promptfoo/commit/2626fd0eddf687784f89e7b0aa791953e83b3e72))
+- **deps:** prevent incompatible Chevrotain parser updates ([#10306](https://github.com/promptfoo/promptfoo/issues/10306)) ([77c08d5](https://github.com/promptfoo/promptfoo/commit/77c08d5f0cf7720249648ff064dfdef2a3f23200))
+- **deps:** prevent incompatible chevrotain-allstar upgrades ([#10399](https://github.com/promptfoo/promptfoo/issues/10399)) ([5357d06](https://github.com/promptfoo/promptfoo/commit/5357d067166b3b3a1eed49e2e5717855643a1188))
+- **deps:** restore standard cache dependency resolution ([#10314](https://github.com/promptfoo/promptfoo/issues/10314)) ([ca65846](https://github.com/promptfoo/promptfoo/commit/ca65846615f65a2316c3378adae0607488303e8f))
+- **deps:** update anthropic packages ([#10426](https://github.com/promptfoo/promptfoo/issues/10426)) ([ef4cd6b](https://github.com/promptfoo/promptfoo/commit/ef4cd6bd234cb69f63c5fb6c61d3cd8483ab8f54))
+- **deps:** update dependency @hono/node-server to v2.1.0 ([#10385](https://github.com/promptfoo/promptfoo/issues/10385)) ([af026d0](https://github.com/promptfoo/promptfoo/commit/af026d02115c31dad4bebe0484ab5b6a3a62f6e2))
+- **deps:** update dependency chalk to v6 ([#10309](https://github.com/promptfoo/promptfoo/issues/10309)) ([1c30e18](https://github.com/promptfoo/promptfoo/commit/1c30e183c4a464d953898398399dc6aa69786471))
+- **deps:** update dependency gcp-metadata to v9 ([#10350](https://github.com/promptfoo/promptfoo/issues/10350)) ([16cb1f3](https://github.com/promptfoo/promptfoo/commit/16cb1f3c251d2aa8227ead6fd802ee3b8790f5d2))
+- **deps:** update dependency js-yaml to v5.2.3 ([#10354](https://github.com/promptfoo/promptfoo/issues/10354)) ([fc36f28](https://github.com/promptfoo/promptfoo/commit/fc36f283493e4c23afee1e1ae9a2e7b127cf2ea3))
+- **deps:** update dependency openai to v7 ([#10318](https://github.com/promptfoo/promptfoo/issues/10318)) ([9a5f84b](https://github.com/promptfoo/promptfoo/commit/9a5f84b96976111376a586c48414014ddd8b42fd))
+- **providers:** avoid crash on empty choices in snowflake and openrouter ([#10418](https://github.com/promptfoo/promptfoo/issues/10418)) ([c149fcf](https://github.com/promptfoo/promptfoo/commit/c149fcf36c2aeaac83a215906c2caa659cafecff))
+- **providers:** update GPT model costs ([#10319](https://github.com/promptfoo/promptfoo/issues/10319)) ([9988fcb](https://github.com/promptfoo/promptfoo/commit/9988fcb02b1dc0b6aee11e4c2266b21c54c9a1da))
+- **redteam:** count unmetered generation requests ([#10429](https://github.com/promptfoo/promptfoo/issues/10429)) ([b74d5e0](https://github.com/promptfoo/promptfoo/commit/b74d5e05570b2b4fcc48986503764b1ca8bfe5ed))
+- **redteam:** preserve cumulative grading token usage ([#10406](https://github.com/promptfoo/promptfoo/issues/10406)) ([be75b25](https://github.com/promptfoo/promptfoo/commit/be75b25b13a012d2c60820a244770bf1ef1241e0))
+- **redteam:** prevent cached and duplicate token charges ([#10417](https://github.com/promptfoo/promptfoo/issues/10417)) ([4ba76df](https://github.com/promptfoo/promptfoo/commit/4ba76df943f4488281830f7424f64136b6f419cd))
+- **tracing:** capture effective OpenAI completion request settings ([#10368](https://github.com/promptfoo/promptfoo/issues/10368)) ([176215c](https://github.com/promptfoo/promptfoo/commit/176215c5a809cef59f38b27b682c07eef7a8dbc7))
+- **tracing:** select meaningful model and tool spans for red teaming ([#10358](https://github.com/promptfoo/promptfoo/issues/10358)) ([be44f83](https://github.com/promptfoo/promptfoo/commit/be44f8389bcd234e7144861957f670548ce85326))
+
 ## [0.122.0](https://github.com/promptfoo/promptfoo/compare/0.121.20...0.122.0) (2026-08-04)
 
 ### ⚠ BREAKING CHANGES
