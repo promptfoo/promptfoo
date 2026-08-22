@@ -71,14 +71,17 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const { protectedValue, restore } = protectNunjucksBlocks(value, Object.values(variables));
+      const match = regex.exec(protectedValue);
       if (match) {
         const [placeholder, varName] = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
+          variables[key] = restore(
+            protectedValue.replace(placeholder, variables[varName] as string),
+          );
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -90,6 +93,81 @@ export function resolveVariables(
   } while (!resolved && iterations < 5);
 
   return variables;
+}
+
+/**
+ * Protect Nunjucks constructs whose contents must remain literal while resolving
+ * variable-to-variable mappings. They are rendered later by renderPrompt, where
+ * Nunjucks can correctly distinguish raw blocks and string literal expressions
+ * from actual variable references.
+ */
+function protectNunjucksBlocks(
+  value: string,
+  reservedValues: readonly VarValue[] = [],
+): {
+  protectedValue: string;
+  restore: (value: string) => string;
+} {
+  const protectedBlocks = new Map<string, string>();
+  const patterns = [
+    /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}/g,
+    /\{#[\s\S]*?#\}/g,
+    /\{\{\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')[\s\S]*?\}\}/g,
+  ];
+
+  const ranges = patterns.flatMap((pattern) =>
+    Array.from(value.matchAll(pattern), (match) => ({
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+      block: match[0],
+    })),
+  );
+  ranges.sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const selectedRanges = ranges.filter((range, index) => {
+    const previousRanges = ranges.slice(0, index);
+    return !previousRanges.some(
+      (previous) => range.start < previous.end && range.end > previous.start,
+    );
+  });
+  selectedRanges.sort((a, b) => a.start - b.start);
+
+  const reservedStrings = [value, ...reservedValues]
+    .filter((reserved): reserved is string => typeof reserved === 'string')
+    .join('\n');
+  let protectedValue = '';
+  let cursor = 0;
+
+  for (const range of selectedRanges) {
+    protectedValue += value.slice(cursor, range.start);
+    let suffix = 0;
+    let placeholder: string;
+    do {
+      const suffixText = suffix === 0 ? '' : `-${suffix}`;
+      placeholder = `\u0000promptfoo-nunjucks-block-${protectedBlocks.size}${suffixText}\u0000`;
+      suffix++;
+    } while (reservedStrings.includes(placeholder));
+    protectedBlocks.set(placeholder, range.block);
+    protectedValue += placeholder;
+    cursor = range.end;
+  }
+  protectedValue += value.slice(cursor);
+
+  return {
+    protectedValue,
+    restore: (renderedValue: string) => {
+      let restoredValue = renderedValue;
+      let previousValue;
+      do {
+        previousValue = restoredValue;
+        restoredValue = restoredValue.replace(
+          /\u0000promptfoo-nunjucks-block-\d+(?:-\d+)?\u0000/g,
+          (placeholder) => protectedBlocks.get(placeholder) ?? placeholder,
+        );
+      } while (restoredValue !== previousValue);
+      return restoredValue;
+    },
+  };
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
