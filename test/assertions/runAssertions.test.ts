@@ -214,6 +214,196 @@ describe('runAssertions', () => {
     });
   });
 
+  describe('metricOnly assertions', () => {
+    it('should record the named metric without failing the test when a metricOnly assertion fails', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'contains',
+              value: 'world',
+            },
+            {
+              // Scores 0 → fails on its own, but metricOnly excludes it from pass/fail.
+              type: 'javascript',
+              value: '0',
+              metric: 'fp',
+              metricOnly: true,
+            },
+          ],
+        },
+        providerResponse: { output: 'Hello world' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.namedScores).toMatchObject({ fp: 0 });
+      expect(result.componentResults![1].pass).toBe(false);
+    });
+
+    it('should not inflate the weighted score with a passing metricOnly assertion', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'equals',
+              value: 'Hello world',
+            },
+            {
+              type: 'javascript',
+              value: '1',
+              metric: 'tp',
+              metricOnly: true,
+            },
+          ],
+        },
+        providerResponse: { output: 'Goodbye world' },
+      });
+
+      expect(result.pass).toBe(false);
+      // Without metricOnly the emitter would lift this to (0 + 1) / 2 = 0.5.
+      expect(result.score).toBe(0);
+      expect(result.namedScores).toMatchObject({ tp: 1 });
+    });
+
+    it('should ignore weight on metricOnly assertions so legacy weight: 0 configs record real scores', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'contains',
+              value: 'world',
+            },
+            {
+              // Migration trap: configs that used weight: 0 as a workaround
+              // keep it alongside metricOnly. Weight must not zero the metric.
+              type: 'javascript',
+              value: '1',
+              metric: 'tp',
+              metricOnly: true,
+              weight: 0,
+            },
+          ],
+        },
+        providerResponse: { output: 'Hello world' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.namedScores).toMatchObject({ tp: 1 });
+    });
+
+    it('should keep the real failing outcome in componentResults for metricOnly with weight: 0', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'contains',
+              value: 'world',
+            },
+            {
+              // Migrated configs may carry both. The legacy weight-0
+              // force-pass must not mask the counter's real outcome.
+              type: 'javascript',
+              value: '0',
+              metric: 'fp',
+              metricOnly: true,
+              weight: 0,
+            },
+          ],
+        },
+        providerResponse: { output: 'Hello world' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.namedScores).toMatchObject({ fp: 0 });
+      expect(result.componentResults![1].pass).toBe(false);
+    });
+
+    it('should propagate the metricOnly marker to nested componentResults returned by script assertions', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'contains',
+              value: 'world',
+            },
+            {
+              // A script emitter may return a full GradingResult with its own
+              // componentResults; a failing child must not surface as a failed
+              // assertion in stats when the parent is metricOnly.
+              type: 'javascript',
+              value:
+                '({ pass: true, score: 1, reason: "parent emitter", componentResults: [{ pass: false, score: 0, reason: "child failed", assertion: { type: "javascript", value: "child" } }] })',
+              metric: 'emitter',
+              metricOnly: true,
+            },
+          ],
+        },
+        providerResponse: { output: 'Hello world' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+
+      const child = result.componentResults!.find((r) => r.reason === 'child failed');
+      expect(child).toBeDefined();
+      expect(child!.assertion?.metricOnly).toBe(true);
+    });
+
+    it('should not dilute the test score when an assert-set contains only metricOnly assertions', async () => {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        test: {
+          assert: [
+            {
+              type: 'contains',
+              value: 'world',
+            },
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'javascript',
+                  value: '1',
+                  metric: 'tp',
+                  metricOnly: true,
+                },
+                {
+                  type: 'javascript',
+                  value: '0',
+                  metric: 'fp',
+                  metricOnly: true,
+                },
+              ],
+            },
+          ],
+        },
+        providerResponse: { output: 'Hello world' },
+      });
+
+      expect(result.pass).toBe(true);
+      // The all-metricOnly set is metric-only in effect: without this, its
+      // score of 0 at weight 1 would drag the aggregate down to 0.5.
+      expect(result.score).toBe(1);
+      expect(result.namedScores).toMatchObject({ tp: 1, fp: 0 });
+      // The set-level result carries the marker so assertion pass/fail stats
+      // (evaluator, retry recompute, filtered SQL metrics) can exclude it.
+      expect(result.componentResults![1].assertion?.metricOnly).toBe(true);
+    });
+  });
+
   describe('assert-set', () => {
     const prompt = 'Some prompt';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');

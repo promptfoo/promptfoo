@@ -28,6 +28,8 @@ The select-best checker:
 3. Selects the best output
 4. Returns pass=true for the winning output and pass=false for others
 
+`metricOnly: true` is not supported on `select-best`: comparison assertions decide pass/fail across outputs, so setting it is rejected at validation time rather than silently ignored.
+
 ### Example Configuration
 
 Here's a complete example showing how to use select-best to compare different prompt variations:
