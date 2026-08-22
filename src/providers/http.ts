@@ -50,6 +50,7 @@ import {
   transformToolChoice,
   transformTools,
 } from './shared';
+import { normalizeResponseTransformResult } from './transformResult';
 import { loadTransformModule, parseFileTransformReference } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
@@ -3201,25 +3202,10 @@ export class HttpProvider implements ApiProvider {
       estimatedTokenUsage = await this.estimateTokenUsage(promptText, completionText);
     }
 
-    if (parsedOutput?.output) {
-      const result = {
-        ...ret,
-        ...parsedOutput,
-      };
-      // Add estimated token usage if available and not already present
-      if (!result.tokenUsage) {
-        if (estimatedTokenUsage) {
-          result.tokenUsage = estimatedTokenUsage;
-        } else {
-          result.tokenUsage = { ...createEmptyTokenUsage(), numRequests: 1 };
-        }
-      }
-      return result;
-    }
-
+    const normalizedOutput = normalizeResponseTransformResult(parsedOutput);
     const result = {
       ...ret,
-      output: parsedOutput,
+      ...normalizedOutput,
     };
     // Add estimated token usage if available
     if (!result.tokenUsage) {

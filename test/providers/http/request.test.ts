@@ -604,6 +604,52 @@ describe('response handling', () => {
     expect(result.output).toBe('transformed result');
   });
 
+  it('should preserve an error returned by transformResponse', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ blocked: true }),
+      status: 200,
+      headers: {},
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'GET',
+        transformResponse: () => ({ error: 'Provider guardrail blocked the response' }),
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toBe('Provider guardrail blocked the response');
+    expect(result).not.toHaveProperty('output');
+  });
+
+  it.each(['', false, 0])(
+    'should preserve a falsey output returned by transformResponse: %j',
+    async (output) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ output }),
+        status: 200,
+        headers: {},
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new HttpProvider('http://example.com/api', {
+        config: {
+          method: 'GET',
+          transformResponse: () => ({ output }),
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      expect(result.output).toBe(output);
+    },
+  );
+
   it('should handle non-JSON responses with debug mode and transform without output property', async () => {
     const mockUrl = 'http://example.com/api';
     const mockHeaders = { 'content-type': 'text/plain' };
