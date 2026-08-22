@@ -1,4 +1,3 @@
-import { readFileSync } from 'fs';
 import fs from 'fs/promises';
 import * as path from 'path';
 
@@ -38,6 +37,7 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
+  maybeReadConfig,
   renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
@@ -63,7 +63,6 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
-import { loadYaml } from '../util/yamlLoad';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
@@ -237,28 +236,15 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
 }
 
 /**
- * Read the raw `tests` value from a declarative config file, without executing it.
+ * Whether a config file can be read without executing it.
  *
- * combineConfigs() expands scalar and generator `tests` references into concrete test
- * cases, so watch mode has to go back to the file to learn what they came from. Going
- * through readConfig() would execute a .js/.ts config a second time, so only YAML and
- * JSON are read here, and only for their `tests` field.
- *
- * Returns undefined for executable or unreadable configs; the caller falls back to the
- * coverage it already has.
+ * readConfig() only routes through importModule() for JavaScript and TypeScript. Its
+ * YAML and JSON branch reads the file, dereferences `$ref`, and renders environment
+ * templates, none of which execute user code. Restricting the re-read to those formats
+ * therefore keeps the normalisation while guaranteeing a config is never run twice.
  */
-function readDeclarativeConfigTests(configPath: string): UnifiedConfig['tests'] | undefined {
-  const ext = path.extname(configPath).toLowerCase();
-  if (!['.yaml', '.yml', '.json'].includes(ext)) {
-    return undefined;
-  }
-  try {
-    const raw = readFileSync(configPath, 'utf-8');
-    const parsed = ext === '.json' ? JSON.parse(raw) : (loadYaml(raw) as UnifiedConfig | undefined);
-    return (parsed as UnifiedConfig | undefined)?.tests;
-  } catch {
-    return undefined;
-  }
+function isDeclarativeConfig(configPath: string): boolean {
+  return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
 }
 
 export async function doEval(
@@ -1191,23 +1177,29 @@ export async function doEval(
         varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
         // A scalar reference (`tests: file://cases.yaml`) and a generator object are
         // expanded into concrete test cases by combineConfigs(), so by this point the
-        // reference they came from is gone. Recover it by reading the config file again.
+        // reference they came from is gone. Recover it by reading the config again.
         //
-        // Only declarative formats are re-read. A .js/.ts config is executable, and
-        // going back through readConfig() would run it a second time: importModule()
-        // falls back to vm.runInContext() for CommonJS, which is not cached, so any
-        // side effect in the config would happen twice. Those configs keep the watch
-        // coverage they had before, which is the config file itself.
-        for (const configPathPattern of configPaths) {
-          // --config accepts globs, which combineConfigs() expands, so expand here too
-          // rather than handing a literal wildcard to the reader.
-          const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
-            windowsPathsNoEscape: true,
-          });
-          for (const resolvedConfigPath of resolvedConfigPaths) {
-            const rawTests = readDeclarativeConfigTests(resolvedConfigPath);
-            if (rawTests != null && !Array.isArray(rawTests)) {
-              varPaths.push(...resolveTestsWatchPaths(rawTests, path.dirname(resolvedConfigPath)));
+        // Skipped entirely when tests come from the command line: resolveConfigs() uses
+        // cmdObj.tests in place of the config's own tests, so watching the config's test
+        // sources would rerun the whole evaluation, and any paid provider calls with it,
+        // on an edit to a file that has no bearing on the run.
+        if (!cmdObj.tests) {
+          for (const configPathPattern of configPaths) {
+            // --config accepts globs, which combineConfigs() expands, so expand here too
+            // rather than handing a literal wildcard to the reader.
+            const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
+              windowsPathsNoEscape: true,
+            });
+            for (const resolvedConfigPath of resolvedConfigPaths) {
+              if (!isDeclarativeConfig(resolvedConfigPath)) {
+                continue;
+              }
+              const rawConfig = await maybeReadConfig(resolvedConfigPath);
+              if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
+                varPaths.push(
+                  ...resolveTestsWatchPaths(rawConfig.tests, path.dirname(resolvedConfigPath)),
+                );
+              }
             }
           }
         }

@@ -137,6 +137,21 @@ describe('resolveTestsWatchPaths', () => {
     expect(() => resolve('file://broken.yaml' as TestSuiteConfig['tests'])).not.toThrow();
   });
 
+  it('watches a scalar vars file reference', () => {
+    // `{ vars: 'vars/*.yaml' }` is a supported form: loadTestWithVars() hands the
+    // string to readTestFiles(), so the matched files feed the evaluation. Note it
+    // carries no file:// scheme.
+    fs.mkdirSync(path.join(base, 'varsdir'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'varsdir/one.yaml'), '');
+    const watched = resolve([{ vars: 'varsdir/*.yaml' }] as unknown as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'varsdir/one.yaml'));
+  });
+
+  it('still handles the vars mapping form', () => {
+    const watched = resolve([{ vars: { data: 'file://vars.csv' } }] as TestSuiteConfig['tests']);
+    expect(watched).toEqual([path.join(base, 'vars.csv')]);
+  });
+
   it('ignores remote references', () => {
     expect(
       resolve('https://docs.google.com/spreadsheets/d/abc' as TestSuiteConfig['tests']),

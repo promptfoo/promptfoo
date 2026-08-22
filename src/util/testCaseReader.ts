@@ -847,12 +847,20 @@ export function resolveTestsWatchPaths(
         ...collectConfigFileReferences((entry as { config?: unknown }).config, basePath),
       ];
     }
-    if ('vars' in entry && entry.vars && typeof entry.vars === 'object') {
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+    if ('vars' in entry && entry.vars) {
+      // `vars` may itself be a file reference rather than a mapping, e.g.
+      // `{ vars: 'vars/*.yaml' }`, which loadTestWithVars() passes to readTestFiles().
+      // That form carries no file:// scheme, so it is resolved as written.
+      if (typeof entry.vars === 'string') {
+        return resolveTestsFileReference(entry.vars, basePath);
+      }
+      if (typeof entry.vars === 'object') {
+        return Object.values(entry.vars).flatMap((value) =>
+          typeof value === 'string' && value.startsWith('file://')
+            ? resolveTestsFileReference(value, basePath)
+            : [],
+        );
+      }
     }
     return [];
   });
