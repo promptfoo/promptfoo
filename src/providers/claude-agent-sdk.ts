@@ -1124,6 +1124,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (callOptions?.abortSignal?.aborted) {
+      return { error: 'Claude Agent SDK call aborted before it started' };
+    }
+
     // Merge configs from the provider and the prompt
     const config: ClaudeCodeOptions = {
       ...this.config,
@@ -1421,6 +1425,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
+    if (callOptions?.abortSignal?.aborted) {
+      return { error: 'Claude Agent SDK call aborted before it started' };
+    }
     if (cachedResponse) {
       return cachedResponse;
     }
@@ -1448,6 +1455,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Make sure we didn't already abort
     if (callOptions?.abortSignal?.aborted) {
+      if (isTempDir && workingDir) {
+        await fs.rm(workingDir, { recursive: true, force: true });
+      }
       return { error: 'Claude Agent SDK call aborted before it started' };
     }
 
