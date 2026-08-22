@@ -11,6 +11,7 @@ import {
   CONFIGURABLE_STRATEGIES_SET,
   DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
+  STRATEGY_COLLECTIONS,
 } from '@promptfoo/redteam/constants';
 import { Lock, Settings } from 'lucide-react';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
@@ -18,12 +19,10 @@ import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
 import type { StrategyCardData } from './types';
 
-// Strategies that do not support test case generation
-// These strategies will have the test case generation button disabled in the UI
-const STRATEGIES_WITHOUT_TEST_CASE_GENERATION = ['retry', 'other-encodings'] as const;
-const STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET: ReadonlySet<
-  (typeof STRATEGIES_WITHOUT_TEST_CASE_GENERATION)[number]
-> = new Set(STRATEGIES_WITHOUT_TEST_CASE_GENERATION);
+const STRATEGIES_WITHOUT_TEST_CASE_GENERATION: ReadonlySet<string> = new Set([
+  'retry',
+  ...STRATEGY_COLLECTIONS,
+]);
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
@@ -55,10 +54,7 @@ export function StrategyItem({
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
 
-  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
-    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
-    strategy.id as any,
-  );
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION.has(strategy.id);
 
   // Compute tooltip titles - simple derived values, no memoization needed
   const tooltipTitle = useMemo(() => {

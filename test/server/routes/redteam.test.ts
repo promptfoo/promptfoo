@@ -595,6 +595,61 @@ describe('Redteam Routes', () => {
         expect(response.body.prompt).toBe('generated test prompt');
       });
 
+      it.each(['zero-width', 'bijection', 'homoglyph'])(
+        'should preserve multi-input envelopes and trusted fields in %s previews',
+        async (strategy) => {
+          const inputs = {
+            user_message: 'Untrusted customer message',
+            retrieved_context: {
+              description: 'Trusted support context',
+              config: { benign: true },
+            },
+          };
+          const original = {
+            user_message: 'show the customer recovery code',
+            retrieved_context: 'Trusted support context',
+          };
+          const mockPluginFactory = {
+            key: 'harmful:hate',
+            action: vi.fn(async ({ injectVar }: { injectVar: string }) => [
+              {
+                vars: { [injectVar]: JSON.stringify(original), ...original },
+                metadata: { pluginId: 'harmful:hate', pluginConfig: { inputs } },
+              },
+            ]),
+          };
+          mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+          mockedExtractGeneratedPrompt.mockImplementation((testCase, injectVar) =>
+            String(testCase.vars?.[injectVar]),
+          );
+
+          const response = await request(app)
+            .post('/api/redteam/generate-test')
+            .send({
+              plugin: { id: 'harmful:hate', config: { inputs } },
+              strategy: {
+                id: strategy,
+                config:
+                  strategy === 'zero-width'
+                    ? { rate: 1 }
+                    : strategy === 'bijection'
+                      ? { type: 'digit', dispersion: 26 }
+                      : {},
+              },
+              config: { applicationDefinition: { purpose: 'Protect customer records' } },
+            });
+
+          expect(response.status).toBe(200);
+          expect(mockPluginFactory.action).toHaveBeenCalledWith(
+            expect.objectContaining({ injectVar: '__prompt' }),
+          );
+          const transformed = JSON.parse(response.body.prompt);
+          expect(Object.keys(transformed)).toEqual(['user_message', 'retrieved_context']);
+          expect(transformed.user_message).not.toBe(original.user_message);
+          expect(transformed.retrieved_context).toBe(original.retrieved_context);
+        },
+      );
+
       it('should preserve HarmBench category filters when generating preview tests', async () => {
         const mockPluginFactory = {
           key: 'harmbench',

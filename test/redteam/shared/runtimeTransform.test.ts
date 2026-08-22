@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
 
 import type { Strategy } from '../../../src/redteam/strategies/types';
-import type { TestCaseWithPlugin } from '../../../src/types';
+import type { Inputs, TestCaseWithPlugin } from '../../../src/types';
 
 describe('runtimeTransform', () => {
   const mockBase64Strategy: Strategy = {
@@ -230,6 +230,34 @@ describe('runtimeTransform', () => {
       await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies);
 
       expect(capturedTestCase?.metadata?.pluginId).toBe('runtime-transform');
+    });
+
+    it('should pass multi-input definitions to runtime layer strategies', async () => {
+      let capturedTestCase: TestCaseWithPlugin | undefined;
+      const inputs = {
+        user_message: 'Untrusted user message',
+        retrieved_context: {
+          description: 'Trusted support context',
+          config: { benign: true },
+        },
+      } satisfies Inputs;
+      const inspectingStrategy: Strategy = {
+        id: 'inspect',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) => {
+          capturedTestCase = testCases[0];
+          return testCases;
+        }),
+      };
+
+      await applyRuntimeTransforms(
+        JSON.stringify({ user_message: 'attack', retrieved_context: 'trusted' }),
+        '__prompt',
+        ['inspect'],
+        [inspectingStrategy],
+        { inputs },
+      );
+
+      expect(capturedTestCase?.metadata?.pluginConfig?.inputs).toEqual(inputs);
     });
 
     it('should handle different inject variable names', async () => {

@@ -1,12 +1,64 @@
 import logger from '../../logger';
+import { MULTI_INPUT_VAR } from '../constants/plugins';
+import { TEXT_MUTATION_STRATEGIES } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
+import { resolveBijectionOptions } from './bijection';
+import { mutateText } from './textMutation';
 import { withPersistableGenerationProvider } from './types';
 import { pluginMatchesStrategyTargets } from './util';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Inputs, TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { TextMutationStrategy } from '../constants/strategies';
 import type { LayerConfig } from '../shared/runtimeTransform';
 import type { Strategy, StrategyRuntimeContext } from './types';
+
+const MULTI_INPUT_TEXT_LAYERS = new Set<string>([
+  ...TEXT_MUTATION_STRATEGIES,
+  'homoglyph',
+  'bijection',
+]);
+const MULTI_INPUT_TEXT_LAYER_PROVIDERS = new Set([
+  'promptfoo:redteam:iterative',
+  'promptfoo:redteam:iterative:meta',
+]);
+
+function assertCompatibleMultiInputLayers(
+  testCases: TestCaseWithPlugin[],
+  injectVar: string,
+  steps: LayerConfig[],
+): void {
+  if (
+    injectVar === MULTI_INPUT_VAR &&
+    testCases.some((testCase) => Boolean(testCase.metadata?.pluginConfig?.inputs)) &&
+    steps.some((step) => MULTI_INPUT_TEXT_LAYERS.has(typeof step === 'string' ? step : step.id)) &&
+    steps.some((step) => {
+      const stepId = typeof step === 'string' ? step : step.id;
+      return !MULTI_INPUT_TEXT_LAYERS.has(stepId) && !isAttackProvider(stepId);
+    })
+  ) {
+    throw new Error(
+      'Multi-input text-mutation layers cannot be combined with whole-prompt strategies.',
+    );
+  }
+}
+
+function validatePerTurnMutationLayers(layers: LayerConfig[]): void {
+  for (const layer of layers) {
+    const layerId = typeof layer === 'string' ? layer : layer.id;
+    const layerConfig = typeof layer === 'string' ? {} : (layer.config ?? {});
+
+    if (layerId === 'bijection') {
+      if (resolveBijectionOptions(layerConfig).n > 1) {
+        throw new Error(
+          'The bijection strategy n must be 1 when used as a per-turn layer; use a standalone bijection strategy for multiple variants.',
+        );
+      }
+    } else if (TEXT_MUTATION_STRATEGIES.includes(layerId as TextMutationStrategy)) {
+      mutateText('', layerId as TextMutationStrategy, layerConfig);
+    }
+  }
+}
 
 /**
  * Adds layer test cases by composing strategies in order.
@@ -59,6 +111,8 @@ export async function addLayerTestCases(
     return [];
   }
 
+  assertCompatibleMultiInputLayers(testCases, injectVar, steps);
+
   let current: TestCaseWithPlugin[] = testCases;
 
   for (let i = 0; i < steps.length; i++) {
@@ -79,9 +133,34 @@ export async function addLayerTestCases(
       const perTurnLayers: LayerConfig[] = remainingSteps.map((s) =>
         typeof s === 'string' ? s : { id: s.id, config: s.config },
       );
+      validatePerTurnMutationLayers(perTurnLayers);
+      const applicableTestCases = current.filter((testCase) =>
+        perTurnLayers.every((layer) => {
+          const layerId = typeof layer === 'string' ? layer : layer.id;
+          const targetPlugins =
+            (typeof layer === 'string' ? undefined : layer.config?.plugins) ?? config?.plugins;
+          return pluginMatchesStrategyTargets(
+            testCase,
+            layerId,
+            targetPlugins as string[] | undefined,
+          );
+        }),
+      );
 
       // Get the full provider ID
       const providerId = getAttackProviderFullId(stepObj.id);
+      if (
+        injectVar === MULTI_INPUT_VAR &&
+        !MULTI_INPUT_TEXT_LAYER_PROVIDERS.has(providerId) &&
+        perTurnLayers.some((layer) =>
+          MULTI_INPUT_TEXT_LAYERS.has(typeof layer === 'string' ? layer : layer.id),
+        ) &&
+        applicableTestCases.some((testCase) => Boolean(testCase.metadata?.pluginConfig?.inputs))
+      ) {
+        throw new Error(
+          `${stepObj.id} does not support multi-input text-mutation layers; use jailbreak or jailbreak:meta.`,
+        );
+      }
       const shouldPersistGenerationProvider = [
         'promptfoo:redteam:crescendo',
         'promptfoo:redteam:custom',
@@ -97,13 +176,14 @@ export async function addLayerTestCases(
       logger.debug(`layer strategy: configuring attack provider`, {
         providerId,
         perTurnLayers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
-        testCaseCount: current.length,
+        testCaseCount: applicableTestCases.length,
       });
 
       // Transform current test cases to use the attack provider
       // with per-turn layers configured
-      return current.map((testCase) => {
+      return applicableTestCases.map((testCase) => {
         const originalText = String(testCase.vars?.[injectVar] ?? '');
+        const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
         return {
           ...testCase,
           provider: {
@@ -117,6 +197,7 @@ export async function addLayerTestCases(
               ...remoteGenerationContextPayload(
                 typeof config?.targetId === 'string' ? config.targetId : undefined,
               ),
+              ...(inputs && { inputs }),
               // Pass per-turn layers for runtime application
               ...(perTurnLayers.length > 0 && { _perTurnLayers: perTurnLayers }),
             },

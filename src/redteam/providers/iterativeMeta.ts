@@ -319,6 +319,7 @@ export async function runMetaAgentRedteam({
         testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
         purpose: test?.metadata?.purpose as string | undefined,
         goal: test?.metadata?.goal as string | undefined,
+        inputs,
       };
 
       lastTransformResult = await applyRuntimeTransforms(
@@ -334,6 +335,10 @@ export async function runMetaAgentRedteam({
           iteration: i + 1,
           error: lastTransformResult.error,
         });
+        if (inputs) {
+          failClosedError = lastTransformResult.error;
+          break;
+        }
         continue;
       }
 
@@ -368,7 +373,19 @@ export async function runMetaAgentRedteam({
     if (inputs && shouldGenerateRemote()) {
       assertRemoteMaterializationHandled(agentResp, 'Iterative Meta multi-input generation');
     }
-    const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+    const originalInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+    const transformedInputVars =
+      finalAttackPrompt === attackPrompt
+        ? undefined
+        : extractInputVarsFromPrompt(finalAttackPrompt, inputs);
+    const currentInputVars = transformedInputVars ?? originalInputVars;
+    const changedInputVars = transformedInputVars
+      ? Object.fromEntries(
+          Object.entries(transformedInputVars).filter(
+            ([name, value]) => value !== originalInputVars?.[name],
+          ),
+        )
+      : undefined;
     let materializedInputVars:
       | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
       | undefined;
@@ -390,6 +407,7 @@ export async function runMetaAgentRedteam({
           agentResp,
           currentInputVars ?? {},
           inputs,
+          changedInputVars,
         );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(

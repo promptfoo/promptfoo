@@ -168,6 +168,7 @@ const redTeamSidebar = [
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
+          'red-team/strategies/bijection',
           'red-team/strategies/citation',
           'red-team/strategies/gcg',
           'red-team/strategies/hex',
@@ -178,6 +179,7 @@ const redTeamSidebar = [
           'red-team/strategies/math-prompt',
           'red-team/strategies/other-encodings',
           'red-team/strategies/rot13',
+          'red-team/strategies/text-mutations',
         ],
       },
       {

@@ -70,11 +70,30 @@ export const DATASET_PLUGINS = [
   'xstest',
 ] as const;
 
+export const TEXT_MUTATION_STRATEGIES = [
+  'zero-width',
+  'unicode-noise',
+  'zalgo',
+  'whitespace-obfuscation',
+  'random-case',
+] as const;
+
+export type TextMutationStrategy = (typeof TEXT_MUTATION_STRATEGIES)[number];
+
+export const TEXT_MUTATION_DEFAULT_RATES: Record<TextMutationStrategy, number> = {
+  'zero-width': 0.2,
+  'unicode-noise': 0.15,
+  zalgo: 1,
+  'whitespace-obfuscation': 0.5,
+  'random-case': 0.5,
+};
+
 export const ADDITIONAL_STRATEGIES = [
   'audio',
   'authoritative-markup-injection',
   'base64',
   'best-of-n',
+  'bijection',
   'camelcase',
   'citation',
   'crescendo',
@@ -104,13 +123,15 @@ export const ADDITIONAL_STRATEGIES = [
   'retry',
   'rot13',
   'video',
+  ...TEXT_MUTATION_STRATEGIES,
 ] as const;
 
-export const STRATEGY_COLLECTIONS = ['other-encodings'] as const;
+export const STRATEGY_COLLECTIONS = ['other-encodings', 'text-mutations'] as const;
 export type StrategyCollection = (typeof STRATEGY_COLLECTIONS)[number];
 
 export const STRATEGY_COLLECTION_MAPPINGS: Record<StrategyCollection, string[]> = {
   'other-encodings': ['camelcase', 'morse', 'piglatin', 'emoji'],
+  'text-mutations': [...TEXT_MUTATION_STRATEGIES, 'homoglyph'],
 };
 
 const _ALL_STRATEGIES = [
@@ -124,6 +145,8 @@ export const ALL_STRATEGIES = Array.from(new Set(_ALL_STRATEGIES)).sort();
 export type Strategy = (typeof ALL_STRATEGIES)[number];
 
 export const CONFIGURABLE_STRATEGIES = [
+  'bijection',
+  ...TEXT_MUTATION_STRATEGIES,
   'layer',
   'best-of-n',
   'goat',
@@ -156,9 +179,11 @@ export const ENCODING_STRATEGIES = new Set([
   'piglatin',
   'camelcase',
   'emoji',
+  'bijection',
   'reverse',
   'binary',
   'octal',
+  ...TEXT_MUTATION_STRATEGIES,
   'audio',
   'image',
   'video',
