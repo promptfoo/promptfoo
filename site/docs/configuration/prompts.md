@@ -114,6 +114,16 @@ prompt,label
 "Translate to German: {{text}}","German Translation"
 ```
 
+The `label` column names each row. If you instead set `label` on the prompt entry itself and the file has more than one row, each row is labeled `<label>: <prompt text>` so that rows keep distinct labels and IDs rather than collapsing onto one:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - id: file://prompts.csv
+    label: Translations
+```
+
+Referencing the entry label still selects every row — `prompts: [Translations]` matches `Translations: ...` via the group-prefix rule described in [Model-Specific Prompts](#model-specific-prompts). A `label` column value takes precedence over the entry label, and a single-row file keeps the bare entry label.
+
 ### Multiple Prompts in One File
 
 Separate multiple prompts with `---`:
