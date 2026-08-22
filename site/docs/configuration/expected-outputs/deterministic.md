@@ -41,6 +41,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
+| [ends-with](#ends-with)                                         | output ends with string                                            |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
@@ -1046,6 +1047,18 @@ tests:
 ### Python
 
 See [Python assertions](/docs/configuration/expected-outputs/python).
+
+### Ends-With
+
+The `ends-with` assertion checks if the LLM output ends with the specified string.
+
+This example checks if the output ends with "END":
+
+```yaml
+assert:
+  - type: ends-with
+    value: 'END'
+```
 
 ### Starts-With
 
