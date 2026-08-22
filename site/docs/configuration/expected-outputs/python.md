@@ -89,6 +89,9 @@ class AssertionValueFunctionContext(TypedDict):
     # Configuration passed to the assertion
     config: Optional[Dict[str, Any]]
 
+    # Rendered value from an assertion that uses the script field
+    value: Optional[Union[str, List[Any], float, Dict[str, Any]]]
+
     # The provider that generated the response
     provider: Optional[Any]  # ApiProvider type
 
@@ -116,14 +119,15 @@ tests:
 
 ## External .py
 
-To reference an external file, use the `file://` prefix:
+To reference an external file while keeping `value` available for call-site data, use `script` with a `file://` path:
 
 ```yaml
 assert:
   - type: python
-    value: file://relative/path/to/script.py
+    script: file://relative/path/to/script.py
+    value: 10
     config:
-      outputLengthLimit: 10
+      inclusive: true
 ```
 
 You can specify a particular function to use by appending it after a colon:
@@ -131,8 +135,10 @@ You can specify a particular function to use by appending it after a colon:
 ```yaml
 assert:
   - type: python
-    value: file://relative/path/to/script.py:custom_assert
+    script: file://relative/path/to/script.py:custom_assert
 ```
+
+Promptfoo renders `value` with the test vars and passes it as `context['value']`. The existing `value: file://relative/path/to/script.py` form remains supported when no call-site value is needed.
 
 If no function is specified, it defaults to `get_assert`.
 
@@ -167,7 +173,10 @@ This is an example of an assertion that uses data from a configuration defined i
 from typing import Dict, Union
 
 def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
-    return len(output) <= context.get('config', {}).get('outputLengthLimit', 0)
+    limit = context.get('value', 0)
+    if context.get('config', {}).get('inclusive', False):
+        return len(output) >= limit
+    return len(output) > limit
 ```
 
 You can also return nested metrics and assertions via a `GradingResult` object:

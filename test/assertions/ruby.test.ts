@@ -1,7 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import * as rubyUtils from '../../src/ruby/rubyUtils.js';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
@@ -59,6 +59,162 @@ describe('Ruby assertions', () => {
 
   afterEach(() => {
     resetRubyMocks();
+  });
+
+  it('should run a Windows script field with a namespaced function and call-site value', async () => {
+    const assertion: Assertion = {
+      type: 'ruby',
+      script: 'file://C:\\checks\\assert.rb:Checks::check_value',
+      value: 7,
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('C:\\checks\\assert.rb');
+    vi.mocked(runRuby).mockResolvedValueOnce(true);
+
+    const result = await runAssertion({
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(runRuby).toHaveBeenCalledWith('C:\\checks\\assert.rb', 'Checks.check_value', [
+      'Expected output',
+      expect.objectContaining({ value: 7 }),
+    ]);
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    {
+      family: 'bare method',
+      functionName: 'check_value',
+      wrapperMethod: 'check_value',
+    },
+    {
+      family: 'dot-free namespace',
+      functionName: 'Checks::check_value',
+      wrapperMethod: 'Checks.check_value',
+    },
+    {
+      family: 'dotted nested namespace',
+      functionName: 'Validators::Format.check_length',
+      wrapperMethod: 'Validators::Format.check_length',
+    },
+  ])(
+    'should pass $family Ruby script references to the wrapper as $wrapperMethod',
+    async ({ functionName, wrapperMethod }) => {
+      vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+      vi.mocked(runRuby).mockResolvedValueOnce(true);
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          script: `file://checks/assert.rb:${functionName}`,
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(runRuby).toHaveBeenCalledWith('/base/path/checks/assert.rb', wrapperMethod, [
+        'Expected output',
+        expect.any(Object),
+      ]);
+      expect(result.pass).toBe(true);
+    },
+  );
+
+  it('should report Ruby script field execution errors in the handler result', async () => {
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+    vi.mocked(runRuby).mockRejectedValue(new Error('Ruby script failed'));
+
+    const result = await runAssertion({
+      assertion: { type: 'ruby', script: 'file://checks/assert.rb' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Ruby code execution failed: Ruby script failed',
+    });
+  });
+
+  it('should keep rendered script parameters out of failure reasons', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+    vi.mocked(runRuby).mockResolvedValue(false);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'ruby',
+        script: 'file://checks/assert.rb',
+        value: '{{ fakeSecret }}',
+      },
+      test: { vars: { fakeSecret } } as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.reason).toBe('Ruby code returned false');
+    expect(result.reason).not.toContain(fakeSecret);
+  });
+
+  it('should keep rendered script parameters out of passing and failing aggregate results', async () => {
+    const fakeSecret = 'FAKE-SECRET-SENTINEL';
+    vi.mocked(path.resolve).mockReturnValue('/base/path/checks/assert.rb');
+    const results = [];
+
+    for (const scriptResult of [true, false]) {
+      vi.mocked(runRuby).mockResolvedValueOnce(scriptResult);
+      results.push(
+        await runAssertions({
+          test: {
+            vars: { fakeSecret },
+            assert: [
+              {
+                type: 'ruby',
+                script: 'file://checks/assert.rb',
+                value: '{{ fakeSecret }}',
+              },
+            ],
+          } as AtomicTestCase,
+          providerResponse: { output: 'Expected output' },
+        }),
+      );
+    }
+
+    expect(results.map((result) => result.pass)).toEqual([true, false]);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].metadata?.renderedAssertionValue === undefined,
+      ),
+    ).toBe(true);
+    expect(
+      results.every(
+        (result) => result.componentResults?.[0].assertion?.value === '{{ fakeSecret }}',
+      ),
+    ).toBe(true);
+    expect(results.every((result) => !JSON.stringify(result).includes(fakeSecret))).toBe(true);
+  });
+
+  it('should preserve the detected indentation for multiline inline assertions', async () => {
+    vi.mocked(runRubyCode).mockResolvedValue(true);
+
+    const result = await runAssertion({
+      assertion: {
+        type: 'ruby',
+        value: 'if output\n  return true\nend',
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(runRubyCode).toHaveBeenCalledWith(
+      expect.stringContaining('  if output\n    return true\n  end'),
+      'main',
+      expect.any(Array),
+    );
+    expect(result.pass).toBe(true);
   });
 
   it.each([

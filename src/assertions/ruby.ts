@@ -38,19 +38,27 @@ export const handleRuby = async ({
   inverse,
   output,
 }: AssertionParams): Promise<GradingResult> => {
-  invariant(typeof renderedValue === 'string', 'ruby assertion must have a string value');
   try {
-    const result: ScriptAssertionResult =
-      typeof valueFromScript === 'undefined'
-        ? await runRubyCode(buildRubyScript(renderedValue), 'main', [output, assertionValueContext])
-        : valueFromScript;
+    let result: ScriptAssertionResult;
+    if (assertion.script) {
+      result = valueFromScript;
+    } else {
+      invariant(typeof renderedValue === 'string', 'ruby assertion must have a string value');
+      result =
+        typeof valueFromScript === 'undefined'
+          ? await runRubyCode(buildRubyScript(renderedValue), 'main', [
+              output,
+              assertionValueContext,
+            ])
+          : valueFromScript;
+    }
 
     return normalizeScriptResult(
       assertion,
       result,
       inverse,
       { code: 'Ruby code', language: 'Ruby' },
-      assertion.value,
+      assertion.script ? undefined : assertion.value,
     );
   } catch (err) {
     return {

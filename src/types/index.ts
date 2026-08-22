@@ -713,39 +713,66 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const SCRIPT_FIELD_ASSERTION_TYPES = new Set([
+  'javascript',
+  'not-javascript',
+  'python',
+  'not-python',
+  'ruby',
+  'not-ruby',
+]);
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z.object({
-  // Type of assertion
-  type: AssertionTypeSchema,
+export const AssertionSchema = z
+  .object({
+    // Type of assertion
+    type: AssertionTypeSchema,
 
-  // The expected value, if applicable
-  value: z.custom<AssertionValue>().optional(),
+    // The expected value, if applicable
+    value: z.custom<AssertionValue>().optional(),
 
-  // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom asserts
-  config: z.record(z.string(), z.any()).optional(),
+    // A JavaScript, Python, or Ruby assertion file. When set, value is passed as context.value.
+    script: z
+      .string()
+      .refine((value) => value.startsWith('file://'), {
+        error: 'script must start with file://',
+      })
+      .optional(),
 
-  // The threshold value, only applicable for similarity (cosine distance)
-  threshold: z.number().optional(),
+    // An external mapping of arbitrary strings to values that is passed
+    // to the assertion for custom asserts
+    config: z.record(z.string(), z.any()).optional(),
 
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
+    // The threshold value, only applicable for similarity (cosine distance)
+    threshold: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
-  provider: z.custom<GradingConfig['provider']>().optional(),
+    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+    weight: z.number().optional(),
 
-  // Override the grading rubric
-  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
+    // Some assertions (similarity, llm-rubric, agent-rubric) require a grading provider
+    provider: z.custom<GradingConfig['provider']>().optional(),
 
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
+    // Override the grading rubric
+    rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
-  // Process the output before running the assertion
-  transform: StringOrFunctionSchema.optional(),
+    // Tag this assertion result as a named metric
+    metric: z.string().optional(),
 
-  // Extract context from the output using a transform
-  contextTransform: StringOrFunctionSchema.optional(),
-});
+    // Process the output before running the assertion
+    transform: StringOrFunctionSchema.optional(),
+
+    // Extract context from the output using a transform
+    contextTransform: StringOrFunctionSchema.optional(),
+  })
+  .superRefine((assertion, ctx) => {
+    if (assertion.script && !SCRIPT_FIELD_ASSERTION_TYPES.has(assertion.type)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'script is only supported for javascript, python, and ruby assertions',
+        path: ['script'],
+      });
+    }
+  });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 
@@ -761,6 +788,7 @@ export interface AssertionValueFunctionContext {
   vars: Record<string, VarValue>;
   test: AtomicTestCase;
   logProbs: number[] | undefined;
+  value?: AssertionValue;
   config?: Record<string, any>;
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
@@ -774,7 +802,7 @@ export type AssertionValueFunction = (
   context: AssertionValueFunctionContext,
 ) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
 
-export type AssertionValue = string | string[] | number | object | AssertionValueFunction;
+export type AssertionValue = string | unknown[] | number | object | AssertionValueFunction;
 
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 

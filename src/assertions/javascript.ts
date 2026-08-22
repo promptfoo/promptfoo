@@ -149,6 +149,23 @@ function appendRenderedValueToReason(
     : reason;
 }
 
+export function formatJavascriptAssertionError(
+  assertion: AssertionParams['assertion'],
+  error: Error,
+  renderedValue?: AssertionParams['renderedValue'],
+): GradingResult {
+  return {
+    pass: false,
+    score: 0,
+    reason: appendRenderedValueToReason(
+      `Custom function threw error: ${error.message}
+Stack Trace: ${error.stack}`,
+      renderedValue,
+    ),
+    assertion: normalizeResultAssertion(undefined, assertion),
+  };
+}
+
 function normalizeJavascriptAssertionResult(
   assertion: AssertionParams['assertion'],
   result: boolean | number | GradingResult,
@@ -208,10 +225,16 @@ export const handleJavascript = async ({
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
   try {
+    if (assertion.script) {
+      const result = await validateResult(valueFromScript);
+      return normalizeJavascriptAssertionResult(assertion, result, inverse);
+    }
+
     if (typeof assertion.value === 'function') {
       const result = await validateResult(assertion.value(outputString, assertionValueContext));
       return normalizeJavascriptAssertionResult(assertion, result, inverse);
     }
+
     invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
 
     /**
@@ -249,15 +272,10 @@ export const handleJavascript = async ({
 
     return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
-    return {
-      pass: false,
-      score: 0,
-      reason: appendRenderedValueToReason(
-        `Custom function threw error: ${(err as Error).message}
-Stack Trace: ${(err as Error).stack}`,
-        renderedValue,
-      ),
-      assertion: normalizeResultAssertion(undefined, assertion),
-    };
+    return formatJavascriptAssertionError(
+      assertion,
+      err as Error,
+      assertion.script ? undefined : renderedValue,
+    );
   }
 };

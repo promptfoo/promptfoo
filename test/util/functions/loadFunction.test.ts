@@ -1,11 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
-import {
-  functionCache,
-  loadFunction,
-  parseFileUrl,
-} from '../../../src/util/functions/loadFunction';
+import { functionCache, loadFunction } from '../../../src/util/functions/loadFunction';
+import { parseFileUrl } from '../../../src/util/functions/parseFileUrl';
 
 vi.mock('../../../src/esm', () => ({
   importModule: vi.fn(),
@@ -308,6 +305,14 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should parse JavaScript Windows drive-letter file URLs at the last colon', () => {
+    const result = parseFileUrl('file://C:\\path\\to\\check.mjs:checkValue');
+    expect(result).toEqual({
+      filePath: 'C:\\path\\to\\check.mjs',
+      functionName: 'checkValue',
+    });
+  });
+
   it('should handle standard Windows file URLs on Windows', () => {
     const originalPlatform = process.platform;
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
@@ -357,6 +362,36 @@ describe('parseFileUrl', () => {
     expect(result).toEqual({
       filePath: './path/to/file.py',
       functionName: 'function_name',
+    });
+  });
+
+  it('should preserve multi-colon Python paths without an unambiguous function suffix', () => {
+    const result = parseFileUrl('file://fixtures/check.py:golden:v1');
+    expect(result).toEqual({
+      filePath: 'fixtures/check.py:golden:v1',
+    });
+  });
+
+  it('should parse Ruby file URLs with namespaced function names', () => {
+    const result = parseFileUrl('file://./path/to/check.rb:Checks::check_value');
+    expect(result).toEqual({
+      filePath: './path/to/check.rb',
+      functionName: 'Checks::check_value',
+    });
+  });
+
+  it('should parse Ruby Windows drive-letter file URLs at the last colon', () => {
+    const result = parseFileUrl('file://C:\\path\\to\\check.rb:check_value');
+    expect(result).toEqual({
+      filePath: 'C:\\path\\to\\check.rb',
+      functionName: 'check_value',
+    });
+  });
+
+  it('should preserve colon suffixes for non-executable file URLs', () => {
+    const result = parseFileUrl('file://./path/to/check.txt:checkValue');
+    expect(result).toEqual({
+      filePath: './path/to/check.txt:checkValue',
     });
   });
 
