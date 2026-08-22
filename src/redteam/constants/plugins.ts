@@ -379,6 +379,7 @@ export const ADDITIONAL_PLUGINS = [
   'insurance:phi-disclosure',
   'off-topic',
   'overreliance',
+  'path-traversal',
   'pharmacy:controlled-substance-compliance',
   'pharmacy:dosage-calculation',
   'pharmacy:drug-interaction',
