@@ -1,5 +1,6 @@
 import { matchesAnswerRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -22,7 +23,7 @@ export const handleAnswerRelevance = async ({
     ...(await matchesAnswerRelevance(
       input,
       output,
-      assertion.threshold ?? 0,
+      assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
       test.options,
       providerCallContext,
     )),
