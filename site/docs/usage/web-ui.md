@@ -13,6 +13,25 @@ After [running an eval](/docs/getting-started), view results in your browser:
 npx promptfoo@latest view
 ```
 
+Open a specific stored eval directly:
+
+```sh
+npx promptfoo@latest view --id "eval-pmq-2026-08-07T18:45:13"
+```
+
+Eval IDs equal to `.` or `..`, or containing a literal percent-encoded sequence such as `%2F` or
+`%3F`, cannot be opened with `view --id` because browsers and routers may normalize or decode them
+into different IDs. They can still be exported with `promptfoo export eval` as described below.
+
+Export a stored eval in another supported format without re-running it:
+
+```sh
+npx promptfoo@latest export eval "eval-pmq-2026-08-07T18:45:13" \
+  --output report.html
+```
+
+The output format is inferred from the file extension.
+
 See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 
 ![promptfoo web viewer](/img/docs/web-ui-viewer.png)

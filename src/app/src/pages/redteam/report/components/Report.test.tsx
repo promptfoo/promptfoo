@@ -599,6 +599,24 @@ describe('App component target selection', () => {
     mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
+  it('should encode reserved characters when loading an eval by ID', async () => {
+    mockWindowLocation({ search: '?evalId=imported%2Feval%3F%231' });
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', true),
+    ]);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await screen.findByTestId('overview-total');
+
+    expect(mockCallApi).toHaveBeenCalledWith('/results/imported%2Feval%3F%231', {
+      cache: 'no-store',
+    });
+  });
+
   it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
     const evalData: ResultsFile = {
       version: 4,

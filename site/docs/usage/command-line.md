@@ -237,6 +237,7 @@ Start a browser UI for visualization of results.
 | `-p, --port <number>`          | Port number for the local server          |
 | `-y, --yes`                    | Skip confirmation and auto-open the URL   |
 | `-n, --no`                     | Skip confirmation and do not open the URL |
+| `--id <evalId>`                | Open a specific stored eval               |
 | `--filter-description <regex>` | Deprecated; accepted but ignored          |
 
 If you've used `PROMPTFOO_CONFIG_DIR` to override the promptfoo output directory, run `promptfoo view [directory]`.
