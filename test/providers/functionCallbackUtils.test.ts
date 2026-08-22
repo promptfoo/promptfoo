@@ -686,6 +686,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Result (list_resources): Resource list: [file1.txt, file2.txt]',
         isError: false,
+        toolCall: {
+          name: 'list_resources',
+          arguments: {},
+          result: 'Resource list: [file1.txt, file2.txt]',
+          isError: false,
+          source: 'mcp',
+        },
       });
     });
 
@@ -704,6 +711,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Tool execution failed: Invalid arguments',
         isError: true,
+        toolCall: {
+          name: 'failing_tool',
+          arguments: { invalid: true },
+          result: 'Tool execution failed: Invalid arguments',
+          isError: true,
+          source: 'mcp',
+        },
       });
     });
 
@@ -722,6 +736,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Connection refused',
         isError: true,
+        toolCall: {
+          name: 'failing_tool',
+          arguments: {},
+          result: 'Connection refused',
+          isError: true,
+          source: 'mcp',
+        },
       });
     });
 
@@ -740,6 +761,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Tool returned an error result',
         isError: true,
+        toolCall: {
+          name: 'failing_tool',
+          arguments: {},
+          result: 'Tool returned an error result',
+          isError: true,
+          source: 'mcp',
+        },
       });
     });
 
@@ -755,6 +783,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (error_tool): Connection lost',
         isError: true,
+        toolCall: {
+          name: 'error_tool',
+          arguments: {},
+          result: 'Connection lost',
+          isError: true,
+          source: 'mcp',
+        },
       });
     });
 
@@ -804,6 +839,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Result (shared_name): MCP tool result',
         isError: false,
+        toolCall: {
+          name: 'shared_name',
+          arguments: {},
+          result: 'MCP tool result',
+          isError: false,
+          source: 'mcp',
+        },
       });
     });
 
@@ -836,6 +878,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Result (no_args_tool): success with no args',
         isError: false,
+        toolCall: {
+          name: 'no_args_tool',
+          arguments: {},
+          result: 'success with no args',
+          isError: false,
+          source: 'mcp',
+        },
       });
     });
 
@@ -854,6 +903,13 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Result (missing_args_tool): success with missing args',
         isError: false,
+        toolCall: {
+          name: 'missing_args_tool',
+          arguments: {},
+          result: 'success with missing args',
+          isError: false,
+          source: 'mcp',
+        },
       });
     });
 
@@ -931,6 +987,144 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Result (direct_args_tool): success with direct args',
         isError: false,
+        toolCall: {
+          name: 'direct_args_tool',
+          arguments: { param: 'value' },
+          result: 'success with direct args',
+          isError: false,
+          source: 'mcp',
+        },
+      });
+    });
+
+    describe('structured MCP tool-call metadata', () => {
+      it('preserves name, arguments, result, isError=false, and source="mcp" for a successful call', async () => {
+        mockMCPClient.getAllTools.mockReturnValue([
+          { name: 'get_weather', description: 'Get the weather' },
+        ]);
+        mockMCPClient.callTool.mockResolvedValue({ content: 'Sunny, 72F' });
+
+        const call = { name: 'get_weather', arguments: '{"city":"SF"}' };
+        const result = await handler.processCall(call, {});
+
+        expect(result.toolCall).toEqual({
+          name: 'get_weather',
+          arguments: { city: 'SF' },
+          result: 'Sunny, 72F',
+          isError: false,
+          source: 'mcp',
+        });
+      });
+
+      it('records isError=true for a failed MCP tool call without throwing', async () => {
+        mockMCPClient.getAllTools.mockReturnValue([
+          { name: 'flaky_tool', description: 'A tool that rejects' },
+        ]);
+        mockMCPClient.callTool.mockRejectedValue(new Error('boom'));
+
+        const call = { name: 'flaky_tool', arguments: '{}' };
+
+        await expect(handler.processCall(call, {})).resolves.toEqual({
+          output: 'MCP Tool Error (flaky_tool): boom',
+          isError: true,
+          toolCall: {
+            name: 'flaky_tool',
+            arguments: {},
+            result: 'boom',
+            isError: true,
+            source: 'mcp',
+          },
+        });
+      });
+
+      it('does not set toolCall for calls resolved via a plain function callback', async () => {
+        mockMCPClient.getAllTools.mockReturnValue([{ name: 'mcp_tool', description: 'unrelated' }]);
+        const callbacks: FunctionCallbackConfig = {
+          regular_function: async (_args: string) => 'callback result',
+        };
+
+        const result = await handler.processCall(
+          { name: 'regular_function', arguments: '{}' },
+          callbacks,
+        );
+
+        expect(result.toolCall).toBeUndefined();
+      });
+
+      it('processCalls collects MCP tool calls via onMcpToolCall in call order, independent of resolution timing', async () => {
+        mockMCPClient.getAllTools.mockReturnValue([
+          { name: 'toolA' },
+          { name: 'toolB' },
+          { name: 'toolC' },
+        ]);
+
+        // Deferred promises let us resolve out of call-order (C, then A, then B) to
+        // prove the collected order comes from the input array, not completion timing.
+        const deferred: Record<string, (value: { content: string }) => void> = {};
+        mockMCPClient.callTool.mockImplementation((toolName: string) => {
+          return new Promise((resolve) => {
+            deferred[toolName] = resolve;
+          });
+        });
+
+        const calls = [
+          { name: 'toolA', arguments: '{}' },
+          { name: 'toolB', arguments: '{}' },
+          { name: 'toolC', arguments: '{}' },
+        ];
+
+        const collected: Array<{ name: string }> = [];
+        const resultPromise = handler.processCalls(calls, {}, undefined, {
+          onMcpToolCall: (entry) => collected.push(entry),
+        });
+
+        deferred.toolC({ content: 'C result' });
+        deferred.toolA({ content: 'A result' });
+        deferred.toolB({ content: 'B result' });
+
+        const output = await resultPromise;
+
+        expect(collected.map((entry) => entry.name)).toEqual(['toolA', 'toolB', 'toolC']);
+        // Output shape/content is unaffected by the callback — same as calling
+        // processCalls without options.
+        expect(output).toBe(
+          'MCP Tool Result (toolA): A result\nMCP Tool Result (toolB): B result\nMCP Tool Result (toolC): C result',
+        );
+      });
+
+      it('processCalls returns the exact same output whether or not onMcpToolCall is provided', async () => {
+        mockMCPClient.getAllTools.mockReturnValue([
+          { name: 'toolX', description: 'x' },
+          { name: 'toolY', description: 'y' },
+        ]);
+        mockMCPClient.callTool.mockImplementation((toolName: string) =>
+          Promise.resolve({ content: `${toolName} result` }),
+        );
+
+        const calls = [
+          { name: 'toolX', arguments: '{}' },
+          { name: 'toolY', arguments: '{}' },
+        ];
+
+        const withoutCallback = await handler.processCalls(calls, {});
+        const collected: unknown[] = [];
+        const withCallback = await handler.processCalls(calls, {}, undefined, {
+          onMcpToolCall: (entry) => collected.push(entry),
+        });
+
+        expect(withCallback).toEqual(withoutCallback);
+        expect(collected).toHaveLength(2);
+      });
+
+      it('processCalls behaves exactly as before when called with no options argument at all', async () => {
+        mockMCPClient.getAllTools.mockReturnValue([{ name: 'toolZ', description: 'z' }]);
+        mockMCPClient.callTool.mockResolvedValue({ content: 'Z result' });
+
+        const result = await handler.processCalls({ name: 'toolZ', arguments: '{}' }, {});
+
+        // No options passed at all: return value is a bare string, exactly as
+        // processCalls has always returned for a single successful call.
+        expect(result).toBe('MCP Tool Result (toolZ): Z result');
       });
     });
   });

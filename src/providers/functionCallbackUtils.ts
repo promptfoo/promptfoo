@@ -7,6 +7,7 @@ import { parseFileUrl } from '../util/functions/loadFunction';
 import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 import { withGenAIToolSpan } from './tracing';
 
+import type { McpToolCallEntry } from '../types/providers';
 import type {
   FunctionCall,
   FunctionCallback,
@@ -94,14 +95,21 @@ export class FunctionCallbackHandler {
    * @param calls Array of calls or a single call
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to callbacks
-   * @param options Processing options
+   * @param options Processing options.
+   *   `onMcpToolCall` is an optional, additive side channel: when provided, it is
+   *   invoked once per MCP-resolved call (i.e. once per result that carries a
+   *   `toolCall`), in the same order as `calls` — `Promise.all` resolves into an
+   *   array aligned with the input array's indices regardless of individual call
+   *   resolution timing. It does not affect what this method returns; every
+   *   existing caller (which never passes it) sees byte-identical behavior to
+   *   before this option existed.
    * @returns Processed output in appropriate format
    */
   async processCalls(
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
-    _options?: { returnRawOnError?: boolean },
+    options?: { returnRawOnError?: boolean; onMcpToolCall?: (entry: McpToolCallEntry) => void },
   ): Promise<any> {
     if (!calls) {
       return calls;
@@ -113,6 +121,14 @@ export class FunctionCallbackHandler {
     const results = await Promise.all(
       callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
+
+    if (options?.onMcpToolCall) {
+      for (const result of results) {
+        if (result.toolCall) {
+          options.onMcpToolCall(result.toolCall);
+        }
+      }
+    }
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
@@ -236,20 +252,39 @@ export class FunctionCallbackHandler {
    * Executes an MCP tool
    */
   private async executeMcpTool(toolName: string, args: unknown): Promise<FunctionCallResult> {
+    // Hoisted so the catch block can report the parsed arguments when parsing
+    // succeeded and only the subsequent tool call failed. Stays at the raw
+    // (possibly unparsed) value if JSON.parse itself throws before reassignment.
+    // Typed as Record<string, unknown> to match `MCPClient.callTool`'s signature.
+    // The cast here (not at the callTool() call site) preserves the exact
+    // pre-existing runtime behavior: this was implicitly `any` before, so a
+    // non-object JSON value (array/primitive) was — and still is — passed
+    // through unvalidated rather than intercepted; any resulting failure
+    // surfaces the same way it always has, via the try/catch below.
+    let parsedArgs: Record<string, unknown> = args as Record<string, unknown>;
     try {
       if (!this.mcpClient) {
         throw new Error('MCP client not available');
       }
 
       // Parse arguments: support stringified JSON, object, or empty
-      const parsedArgs =
-        args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
+      parsedArgs = (
+        args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args
+      ) as Record<string, unknown>;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
       if (isMcpErrorResult(result)) {
+        const errorMessage = getMcpErrorMessage(result);
         return {
-          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
+          output: `MCP Tool Error (${toolName}): ${errorMessage}`,
           isError: true,
+          toolCall: {
+            name: toolName,
+            arguments: parsedArgs,
+            result: errorMessage,
+            isError: true,
+            source: 'mcp',
+          },
         };
       }
 
@@ -287,13 +322,32 @@ export class FunctionCallbackHandler {
       };
 
       const content = normalizeContent(result?.content);
-      return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
+      return {
+        output: `MCP Tool Result (${toolName}): ${content}`,
+        isError: false,
+        toolCall: {
+          name: toolName,
+          arguments: parsedArgs,
+          result: content,
+          isError: false,
+          source: 'mcp',
+        },
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {
         output: `MCP Tool Error (${toolName}): ${errorMessage}`,
         isError: true,
+        toolCall: {
+          name: toolName,
+          // Uses the parsed value when JSON.parse succeeded and only the tool call
+          // itself failed; falls back to the raw args if parsing never completed.
+          arguments: parsedArgs,
+          result: errorMessage,
+          isError: true,
+          source: 'mcp',
+        },
       };
     }
   }
