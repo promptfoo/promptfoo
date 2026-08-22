@@ -572,7 +572,11 @@ const createComponentMockResult = (
     tokenUsage: { prompt: 1, completion: 1, total: 2 },
   }) as unknown as EvaluateResult;
 
-const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult[]): ResultsFile =>
+const createComponentMockEvalData = (
+  numPrompts: number,
+  results: EvaluateResult[],
+  numRequests = 10,
+): ResultsFile =>
   ({
     version: 4,
     createdAt: '2025-01-01T00:00:00Z',
@@ -582,7 +586,7 @@ const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult
       raw: '{{prompt}}',
       label: `Prompt ${i}`,
       provider: `Provider ${i}`,
-      metrics: { tokenUsage: { total: 100, numRequests: 10 } },
+      metrics: { tokenUsage: { total: 100, numRequests } },
     })),
     results: {
       version: 3,
@@ -696,6 +700,92 @@ describe('App component target selector rendering', () => {
 
     const dropdown = screen.queryByRole('combobox');
     expect(dropdown).toBeNull();
+  });
+
+  it('shows target probes separately from the token usage breakdown', async () => {
+    const user = userEvent.setup();
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByLabelText('10 target probes')).toHaveTextContent('Depth: 10 probes');
+    const tokenBadge = screen.getByLabelText('100 total tokens');
+    expect(tokenBadge).toHaveTextContent('Total Tokens: 100');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Target Tokens: 100');
+    expect(tooltip).toHaveTextContent('Attacker Tokens: 0');
+    expect(tooltip).toHaveTextContent('Grading Tokens: 0');
+  });
+
+  it('preserves a reported target probe count of zero', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results, 0);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByLabelText('0 target probes')).toHaveTextContent('Depth: 0 probes');
+  });
+
+  it('counts scan-wide generation once across multiple targets', async () => {
+    const user = userEvent.setup();
+    const results = [
+      createComponentMockResult(0, 'plugin1', true),
+      createComponentMockResult(1, 'plugin1', false),
+    ];
+    const evalData = createComponentMockEvalData(2, results);
+    evalData.results.stats = {
+      successes: 1,
+      failures: 1,
+      errors: 0,
+      tokenUsage: {
+        total: 200,
+        prompt: 150,
+        completion: 50,
+        cached: 0,
+        numRequests: 20,
+        completionDetails: {},
+        assertions: {},
+        generation: {
+          total: 40,
+          prompt: 30,
+          completion: 10,
+          cached: 0,
+          numRequests: 1,
+        },
+      },
+    };
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const tokenBadge = await screen.findByLabelText('240 total tokens');
+    expect(tokenBadge).toHaveTextContent('Total Tokens: 240');
+
+    await user.hover(tokenBadge);
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Target Tokens: 100');
+    expect(tooltip).toHaveTextContent('Selected Target Subtotal: 100');
+    expect(tooltip).toHaveTextContent('Generation Tokens (scan-wide): 40');
+    expect(tooltip).toHaveTextContent('Scan Total Tokens: 240');
+
+    await user.unhover(tokenBadge);
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Provider 1' }));
+
+    expect(await screen.findByLabelText('240 total tokens')).toHaveTextContent('Total Tokens: 240');
   });
 
   it('keeps report header actions in normal flow on narrow screens', async () => {
