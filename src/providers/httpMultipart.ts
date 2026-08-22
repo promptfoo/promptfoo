@@ -154,17 +154,47 @@ function createGeneratedFile(
   };
 }
 
-function normalizeFilePath(filePath: string): string {
+export function normalizeFilePath(filePath: string): string {
   if (!filePath.startsWith('file://')) {
     return filePath;
   }
 
+  // Only a file URL with an empty authority (file:///abs/path) names an absolute
+  // local path. Anything else is promptfoo's long-standing shorthand for a
+  // relative path -- file://fixtures/a.pdf, or file://./fixtures/a.pdf once the
+  // var holding it has been rendered. That matches `parseFileUrl`, which every
+  // other `file://` consumer in promptfoo goes through and which strips the
+  // scheme unconditionally.
+  //
+  // The authority has to be checked before handing the URL to fileURLToPath,
+  // because that function disagrees with itself across platforms: POSIX throws
+  // ERR_INVALID_FILE_URL_HOST on a non-empty host, but Windows happily converts
+  // it to a UNC/device path (\\.\fixtures\a.pdf), which is never a valid local
+  // path and reaches the filesystem as an ENOENT.
+  //
+  // A hosted file URL is therefore always read as the shorthand, because
+  // `file://server/share/a.pdf` and `file://fixtures/a.pdf` are syntactically
+  // identical and only the second has a documented meaning. A genuine UNC path
+  // stays reachable through either spelling that is unambiguous -- a plain
+  // `\\server\share\a.pdf` with no scheme, or the empty-authority
+  // `file:////server/share/a.pdf` -- both of which `path.isAbsolute` accepts on
+  // win32 and neither of which collides with a relative path.
+  let hasEmptyAuthority = false;
   try {
-    return fileURLToPath(filePath);
+    hasEmptyAuthority = new URL(filePath).host === '';
   } catch {
-    // Preserve promptfoo's long-standing shorthand: file://relative/path.ext
-    return filePath.slice('file://'.length);
+    hasEmptyAuthority = false;
   }
+
+  if (hasEmptyAuthority) {
+    try {
+      return fileURLToPath(filePath);
+    } catch {
+      // Fall through to the relative shorthand below.
+    }
+  }
+
+  return filePath.slice('file://'.length);
 }
 
 function resolvePath(filePath: string): string {
