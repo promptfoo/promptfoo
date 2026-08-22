@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
@@ -664,4 +665,213 @@ export async function readTests(
   }
 
   return ret;
+}
+
+/**
+ * Strip a trailing `:functionName` suffix from a resolved path.
+ *
+ * Mirrors the last-colon rule used by `getStandaloneTestsFileMetadata` and
+ * `loadTestsFromGlob`, including their Windows drive-letter guard.
+ */
+function stripFunctionSuffix(resolvedPath: string): string {
+  const lastColonIndex = resolvedPath.lastIndexOf(':');
+  const isWindowsDriveColon = lastColonIndex === 1 && /^[A-Za-z]:/.test(resolvedPath);
+  return lastColonIndex > 1 && !isWindowsDriveColon
+    ? resolvedPath.slice(0, lastColonIndex)
+    : resolvedPath;
+}
+
+/**
+ * Strip an Excel `#SheetName` selector from a path.
+ *
+ * Sheet specifiers apply only to xlsx/xls basenames, so this inspects the basename and
+ * preserves `#` characters in parent directories and in non-Excel filenames, matching
+ * `getStandaloneTestsFileMetadata`.
+ */
+function stripSheetSelector(resolvedPath: string): string {
+  const base = path.basename(resolvedPath);
+  const hashIndex = base.indexOf('#');
+  if (hashIndex === -1) {
+    return resolvedPath;
+  }
+  const baseWithoutSheet = base.slice(0, hashIndex);
+  const ext = parsePath(baseWithoutSheet).ext.slice(1).toLowerCase();
+  if (ext !== 'xlsx' && ext !== 'xls') {
+    return resolvedPath;
+  }
+  return path.join(path.dirname(resolvedPath), baseWithoutSheet);
+}
+
+/** References the loader fetches over the network rather than reading from disk. */
+function isRemoteTestsReference(reference: string): boolean {
+  return (
+    reference.startsWith('http://') ||
+    reference.startsWith('https://') ||
+    reference.startsWith('az://') ||
+    reference.startsWith('huggingface://') ||
+    reference.startsWith('hf://')
+  );
+}
+
+/**
+ * Resolve a single `tests` string reference to the file paths the loader will read.
+ *
+ * Globs are expanded with the same `globSync` call `loadTestsFromGlob` uses, because
+ * chokidar v5 does not expand glob patterns itself. When a pattern matches nothing the
+ * literal path is returned so that creating the file later still triggers a rerun.
+ */
+function hasGlobMagic(reference: string): boolean {
+  return /[*?[\]{}]/.test(reference);
+}
+
+/**
+ * The deepest directory of a glob that contains no wildcards.
+ *
+ * Watching it means a file added later that matches the pattern still triggers a rerun,
+ * which resolving the pattern to its current matches alone would miss.
+ */
+function globParentDirectory(resolvedPattern: string): string {
+  const segments = resolvedPattern.split(path.sep);
+  const firstMagic = segments.findIndex((segment) => hasGlobMagic(segment));
+  const stable = firstMagic === -1 ? segments : segments.slice(0, firstMagic);
+  return stable.join(path.sep) || path.sep;
+}
+
+function resolveTestsFileReference(reference: string, basePath: string): string[] {
+  const withoutScheme = reference.replace(/^file:\/\//, '');
+  if (isRemoteTestsReference(withoutScheme)) {
+    return [];
+  }
+
+  const resolved = path.resolve(basePath, withoutScheme);
+  const matches = globSync(resolved, { windowsPathsNoEscape: true });
+  if (matches.length > 0) {
+    const paths = matches.map((match) => stripSheetSelector(match));
+    // Watch the glob's stable parent too, so a file added later that matches the
+    // pattern triggers a rerun rather than being silently excluded until restart.
+    if (hasGlobMagic(withoutScheme)) {
+      paths.push(globParentDirectory(resolved));
+    }
+    return paths;
+  }
+  if (hasGlobMagic(withoutScheme)) {
+    // A pattern matching nothing yet: watch the stable parent so the first matching
+    // file to appear is picked up.
+    return [globParentDirectory(resolved)];
+  }
+
+  // No glob matches: fall back to the concrete path the loader would open. Only strip a
+  // `:functionName` suffix for script references, so that a vars file whose name legally
+  // contains a colon is still watched in full.
+  const withoutSheet = stripSheetSelector(resolved);
+  const withoutFunction = stripFunctionSuffix(withoutSheet);
+  const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
+  return [isScript ? withoutFunction : withoutSheet];
+}
+
+/**
+ * Collect `file://` references nested inside a test generator's `config` object.
+ *
+ * `readStandaloneTestsFile` passes `config` through `maybeLoadConfigFromExternalFile`
+ * before invoking the generator, so those files change the generated cases and need to
+ * be watched alongside the generator script itself.
+ */
+/**
+ * Collect `file://` references contained inside a resolved tests file.
+ *
+ * Only declarative formats are inspected. Reading is best effort: a malformed or
+ * unreadable file is left to the loader to report, since this runs only to decide what
+ * to watch.
+ */
+function collectNestedFileReferences(testsFile: string): string[] {
+  const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
+  if (!['yaml', 'yml', 'json'].includes(ext)) {
+    return [];
+  }
+  try {
+    const raw = fs.readFileSync(testsFile, 'utf-8');
+    const parsed = ext === 'json' ? JSON.parse(raw) : loadYaml(raw);
+    return collectConfigFileReferences(parsed, path.dirname(testsFile));
+  } catch {
+    return [];
+  }
+}
+
+function collectConfigFileReferences(value: unknown, basePath: string): string[] {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') ? resolveTestsFileReference(value, basePath) : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectConfigFileReferences(item, basePath));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).flatMap((item) => collectConfigFileReferences(item, basePath));
+  }
+  return [];
+}
+
+/**
+ * Resolve the filesystem paths that a `tests` config reads, for watch mode.
+ *
+ * `readTests` accepts a bare file reference, a test-generator object, or an array of
+ * either plus inline test cases. This mirrors that resolution so the watcher and the
+ * loader agree on which files feed an evaluation, rather than duplicating the rules.
+ *
+ * Must be called with the raw `tests` value from the config file. `combineConfigs`
+ * expands scalar and generator references into concrete test cases, after which the
+ * original reference is no longer available.
+ */
+export function resolveTestsWatchPaths(
+  tests: TestSuiteConfig['tests'],
+  basePath: string = '',
+): string[] {
+  if (tests == null) {
+    return [];
+  }
+
+  const entries = Array.isArray(tests) ? tests : [tests];
+  const paths = entries.flatMap((entry): string[] => {
+    if (typeof entry === 'string') {
+      const resolved = resolveTestsFileReference(entry, basePath);
+      // A tests file may itself point at more files, e.g. a case with
+      // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
+      // config is built, so collect them here as well.
+      return [...resolved, ...resolved.flatMap((file) => collectNestedFileReferences(file))];
+    }
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+    if ('path' in entry && typeof entry.path === 'string') {
+      return [
+        ...resolveTestsFileReference(entry.path, basePath),
+        ...collectConfigFileReferences((entry as { config?: unknown }).config, basePath),
+      ];
+    }
+    if ('vars' in entry && entry.vars) {
+      // `vars` may itself be a file reference rather than a mapping, e.g.
+      // `{ vars: 'vars/*.yaml' }`, which loadTestWithVars() passes to readTestFiles().
+      // That form carries no file:// scheme, so it is resolved as written.
+      if (typeof entry.vars === 'string') {
+        return resolveTestsFileReference(entry.vars, basePath);
+      }
+      if (Array.isArray(entry.vars)) {
+        // `vars: ['common.yaml', 'case.yaml']` passes every bare path to
+        // readTestFiles(), so array elements are resolved as written, like the
+        // scalar form, rather than requiring a file:// scheme.
+        return entry.vars.flatMap((value) =>
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+        );
+      }
+      if (typeof entry.vars === 'object') {
+        return Object.values(entry.vars).flatMap((value) =>
+          typeof value === 'string' && value.startsWith('file://')
+            ? resolveTestsFileReference(value, basePath)
+            : [],
+        );
+      }
+    }
+    return [];
+  });
+
+  return Array.from(new Set(paths.filter(Boolean)));
 }
