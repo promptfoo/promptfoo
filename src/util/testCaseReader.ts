@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { parse as parsePath } from 'path';
@@ -719,6 +720,23 @@ function isRemoteTestsReference(reference: string): boolean {
  * chokidar v5 does not expand glob patterns itself. When a pattern matches nothing the
  * literal path is returned so that creating the file later still triggers a rerun.
  */
+function hasGlobMagic(reference: string): boolean {
+  return /[*?[\]{}]/.test(reference);
+}
+
+/**
+ * The deepest directory of a glob that contains no wildcards.
+ *
+ * Watching it means a file added later that matches the pattern still triggers a rerun,
+ * which resolving the pattern to its current matches alone would miss.
+ */
+function globParentDirectory(resolvedPattern: string): string {
+  const segments = resolvedPattern.split(path.sep);
+  const firstMagic = segments.findIndex((segment) => hasGlobMagic(segment));
+  const stable = firstMagic === -1 ? segments : segments.slice(0, firstMagic);
+  return stable.join(path.sep) || path.sep;
+}
+
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -728,7 +746,18 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   const resolved = path.resolve(basePath, withoutScheme);
   const matches = globSync(resolved, { windowsPathsNoEscape: true });
   if (matches.length > 0) {
-    return matches.map((match) => stripSheetSelector(match));
+    const paths = matches.map((match) => stripSheetSelector(match));
+    // Watch the glob's stable parent too, so a file added later that matches the
+    // pattern triggers a rerun rather than being silently excluded until restart.
+    if (hasGlobMagic(withoutScheme)) {
+      paths.push(globParentDirectory(resolved));
+    }
+    return paths;
+  }
+  if (hasGlobMagic(withoutScheme)) {
+    // A pattern matching nothing yet: watch the stable parent so the first matching
+    // file to appear is picked up.
+    return [globParentDirectory(resolved)];
   }
 
   // No glob matches: fall back to the concrete path the loader would open. Only strip a
@@ -747,6 +776,27 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
  * before invoking the generator, so those files change the generated cases and need to
  * be watched alongside the generator script itself.
  */
+/**
+ * Collect `file://` references contained inside a resolved tests file.
+ *
+ * Only declarative formats are inspected. Reading is best effort: a malformed or
+ * unreadable file is left to the loader to report, since this runs only to decide what
+ * to watch.
+ */
+function collectNestedFileReferences(testsFile: string): string[] {
+  const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
+  if (!['yaml', 'yml', 'json'].includes(ext)) {
+    return [];
+  }
+  try {
+    const raw = fs.readFileSync(testsFile, 'utf-8');
+    const parsed = ext === 'json' ? JSON.parse(raw) : loadYaml(raw);
+    return collectConfigFileReferences(parsed, path.dirname(testsFile));
+  } catch {
+    return [];
+  }
+}
+
 function collectConfigFileReferences(value: unknown, basePath: string): string[] {
   if (typeof value === 'string') {
     return value.startsWith('file://') ? resolveTestsFileReference(value, basePath) : [];
@@ -782,7 +832,11 @@ export function resolveTestsWatchPaths(
   const entries = Array.isArray(tests) ? tests : [tests];
   const paths = entries.flatMap((entry): string[] => {
     if (typeof entry === 'string') {
-      return resolveTestsFileReference(entry, basePath);
+      const resolved = resolveTestsFileReference(entry, basePath);
+      // A tests file may itself point at more files, e.g. a case with
+      // `vars: {data: file://vars.yaml}`. The loader reads those before the resolved
+      // config is built, so collect them here as well.
+      return [...resolved, ...resolved.flatMap((file) => collectNestedFileReferences(file))];
     }
     if (!entry || typeof entry !== 'object') {
       return [];

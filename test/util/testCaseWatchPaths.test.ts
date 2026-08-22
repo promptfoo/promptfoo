@@ -111,6 +111,32 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
+  it('watches the stable parent of a glob so later additions are seen', () => {
+    // Resolving a glob only to its current matches means a file added afterwards is
+    // never watched, even though the loader would include it on the next run.
+    const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'tests'));
+  });
+
+  it('watches the stable parent when a glob matches nothing yet', () => {
+    const watched = resolve('file://tests/new-*.yaml' as TestSuiteConfig['tests']);
+    expect(watched).toEqual([path.join(base, 'tests')]);
+  });
+
+  it('watches file references nested inside a tests file', () => {
+    // cases.yaml holds a case whose vars point at another file; the loader reads it,
+    // so editing it changes the evaluation and has to trigger a rerun.
+    fs.writeFileSync(path.join(base, 'nested.yaml'), '- vars:\n    data: file://vars.csv\n');
+    const watched = resolve('file://nested.yaml' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'nested.yaml'));
+    expect(watched).toContain(path.join(base, 'vars.csv'));
+  });
+
+  it('tolerates an unreadable or malformed tests file', () => {
+    fs.writeFileSync(path.join(base, 'broken.yaml'), 'this: [unclosed\n');
+    expect(() => resolve('file://broken.yaml' as TestSuiteConfig['tests'])).not.toThrow();
+  });
+
   it('ignores remote references', () => {
     expect(
       resolve('https://docs.google.com/spreadsheets/d/abc' as TestSuiteConfig['tests']),

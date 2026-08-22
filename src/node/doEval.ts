@@ -1,9 +1,11 @@
+import { readFileSync } from 'fs';
 import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
+import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
@@ -36,7 +38,6 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
-  maybeReadConfig,
   renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
@@ -62,6 +63,7 @@ import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
+import { loadYaml } from '../util/yamlLoad';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { Command } from 'commander';
@@ -231,6 +233,31 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
       Provider ID will be used as a fallback if no label is specified.
       `,
     );
+  }
+}
+
+/**
+ * Read the raw `tests` value from a declarative config file, without executing it.
+ *
+ * combineConfigs() expands scalar and generator `tests` references into concrete test
+ * cases, so watch mode has to go back to the file to learn what they came from. Going
+ * through readConfig() would execute a .js/.ts config a second time, so only YAML and
+ * JSON are read here, and only for their `tests` field.
+ *
+ * Returns undefined for executable or unreadable configs; the caller falls back to the
+ * coverage it already has.
+ */
+function readDeclarativeConfigTests(configPath: string): UnifiedConfig['tests'] | undefined {
+  const ext = path.extname(configPath).toLowerCase();
+  if (!['.yaml', '.yml', '.json'].includes(ext)) {
+    return undefined;
+  }
+  try {
+    const raw = readFileSync(configPath, 'utf-8');
+    const parsed = ext === '.json' ? JSON.parse(raw) : (loadYaml(raw) as UnifiedConfig | undefined);
+    return (parsed as UnifiedConfig | undefined)?.tests;
+  } catch {
+    return undefined;
   }
 }
 
@@ -1158,23 +1185,30 @@ export async function doEval(
               )
               .filter(Boolean) as string[])
           : [];
-        // `config.tests` here has already been through combineConfigs(), which expands a
-        // scalar reference (`tests: file://cases.yaml`) and a generator object into
-        // concrete test cases. Re-read each config file to recover the raw `tests` value,
-        // otherwise the source those cases came from is invisible to the watcher and
-        // editing it never triggers a rerun.
         const varPaths: string[] = [];
         // The array form survives combineConfigs() untouched, so inline test cases and
         // their `vars` file references are still readable from the resolved config.
         varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
         // A scalar reference (`tests: file://cases.yaml`) and a generator object are
         // expanded into concrete test cases by combineConfigs(), so by this point the
-        // reference they came from is gone. Re-read each config file to recover it,
-        // otherwise editing the file those cases came from never triggers a rerun.
-        for (const configPath of configPaths) {
-          const rawConfig = await maybeReadConfig(path.resolve(process.cwd(), configPath));
-          if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
-            varPaths.push(...resolveTestsWatchPaths(rawConfig.tests, path.dirname(configPath)));
+        // reference they came from is gone. Recover it by reading the config file again.
+        //
+        // Only declarative formats are re-read. A .js/.ts config is executable, and
+        // going back through readConfig() would run it a second time: importModule()
+        // falls back to vm.runInContext() for CommonJS, which is not cached, so any
+        // side effect in the config would happen twice. Those configs keep the watch
+        // coverage they had before, which is the config file itself.
+        for (const configPathPattern of configPaths) {
+          // --config accepts globs, which combineConfigs() expands, so expand here too
+          // rather than handing a literal wildcard to the reader.
+          const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
+            windowsPathsNoEscape: true,
+          });
+          for (const resolvedConfigPath of resolvedConfigPaths) {
+            const rawTests = readDeclarativeConfigTests(resolvedConfigPath);
+            if (rawTests != null && !Array.isArray(rawTests)) {
+              varPaths.push(...resolveTestsWatchPaths(rawTests, path.dirname(resolvedConfigPath)));
+            }
           }
         }
         // Tests supplied on the command line are loaded with no base path (see
