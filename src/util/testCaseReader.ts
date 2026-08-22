@@ -854,6 +854,14 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string') {
         return resolveTestsFileReference(entry.vars, basePath);
       }
+      if (Array.isArray(entry.vars)) {
+        // `vars: ['common.yaml', 'case.yaml']` passes every bare path to
+        // readTestFiles(), so array elements are resolved as written, like the
+        // scalar form, rather than requiring a file:// scheme.
+        return entry.vars.flatMap((value) =>
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+        );
+      }
       if (typeof entry.vars === 'object') {
         return Object.values(entry.vars).flatMap((value) =>
           typeof value === 'string' && value.startsWith('file://')

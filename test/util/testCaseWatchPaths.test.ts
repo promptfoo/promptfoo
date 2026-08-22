@@ -147,6 +147,17 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'varsdir/one.yaml'));
   });
 
+  it('resolves every entry of a vars-file array', () => {
+    fs.mkdirSync(path.join(base, 'va'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'va/common.yaml'), '');
+    fs.writeFileSync(path.join(base, 'va/case.yaml'), '');
+    const watched = resolve([
+      { vars: ['va/common.yaml', 'va/case.yaml'] },
+    ] as unknown as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'va/common.yaml'));
+    expect(watched).toContain(path.join(base, 'va/case.yaml'));
+  });
+
   it('still handles the vars mapping form', () => {
     const watched = resolve([{ vars: { data: 'file://vars.csv' } }] as TestSuiteConfig['tests']);
     expect(watched).toEqual([path.join(base, 'vars.csv')]);
