@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { Typography } from '@app/components/ui/typography';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
@@ -164,7 +165,9 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
     >
       <div className="flex flex-col gap-6">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Select Red Team Target</h2>
+          <Typography variant="title" as="h2" weight="bold">
+            Select Red Team Target
+          </Typography>
           <LoadExampleButton />
         </div>
 

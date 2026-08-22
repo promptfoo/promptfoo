@@ -5,6 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { ChevronDown } from 'lucide-react';
 
@@ -40,8 +41,10 @@ export function SetupSection({
         <div className="flex items-center gap-2 text-left">
           {typeof title === 'string' ? (
             <div>
-              <h3 className="font-semibold">{title}</h3>
-              {description && <p className="text-sm text-muted-foreground">{description}</p>}
+              <Typography variant="label" as="h3">
+                {title}
+              </Typography>
+              {description && <Typography variant="muted">{description}</Typography>}
             </div>
           ) : (
             title
