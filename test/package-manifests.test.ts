@@ -501,6 +501,26 @@ describe('package manifests', () => {
     ).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps Google Cloud metadata dependencies on the supported Node 22 floor', () => {
+    const packageJson = readPackageJson<
+      PackageManifest & { overrides?: { mongoose?: Record<string, string> } }
+    >('package.json');
+    const packageLock = readPackageJson<{
+      packages: Record<string, PackageManifest & { version?: string }>;
+    }>('package-lock.json');
+    const dependencyName = 'gcp-metadata';
+    const dependencyRange = packageJson.dependencies?.[dependencyName];
+
+    expect(dependencyRange).toBeDefined();
+    expect(minVersion(dependencyRange!)?.compare('9.0.2')).toBeGreaterThanOrEqual(0);
+    expect(packageJson.overrides?.mongoose?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[''].dependencies?.[dependencyName]).toBe(dependencyRange);
+    expect(packageLock.packages[`node_modules/${dependencyName}`].version).toBeDefined();
+    expect(
+      minVersion(packageLock.packages[`node_modules/${dependencyName}`].version!)?.compare('9.0.2'),
+    ).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps the Excel parser aligned with Strict OpenXML and inline-string support', () => {
     const packageJson = readPackageJson<PackageManifest>('package.json');
     const packageLock = readPackageJson<{
