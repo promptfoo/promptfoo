@@ -5,8 +5,30 @@ import { AddressInfo } from 'net';
 import os from 'os';
 import path from 'path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
+
+vi.mock('url', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('url')>();
+
+  return {
+    ...actual,
+    fileURLToPath: (value: string | URL) => {
+      const fileUrl = String(value);
+      if (fileUrl.startsWith('file://./')) {
+        return `\\\\.\\${fileUrl.slice('file://'.length).replaceAll('/', '\\\\')}`;
+      }
+      if (fileUrl === 'file://fileserver/share/sample.pdf') {
+        return path.join(os.tmpdir(), 'promptfoo-unc-fixture.pdf');
+      }
+      if (fileUrl === 'file://fixtures/fallback.pdf') {
+        throw new TypeError('invalid file URL host');
+      }
+      return actual.fileURLToPath(value);
+    },
+  };
+});
 
 interface MockFileSummary {
   filename: string;
@@ -242,6 +264,183 @@ describe('HttpProvider structured multipart requests', () => {
       filename: 'report-a.txt',
       contentType: 'text/plain',
     });
+  });
+
+  it('resolves a relative file URL from the config directory on Windows', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'my file.pdf'), 'sample pdf contents');
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: {
+                  type: 'path',
+                  path: 'file://./fixtures/my%20file.pdf',
+                },
+              },
+              {
+                kind: 'field',
+                name: 'documentQuery',
+                value: '{{prompt}}',
+              },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize local fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'my file.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: Buffer.byteLength('sample pdf contents'),
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('preserves relative file URLs with malformed escape sequences', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(
+      path.join(tempDir, 'fixtures', 'literal%file.pdf'),
+      'literal percent contents',
+    );
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: {
+                  type: 'path',
+                  path: 'file://./fixtures/literal%file.pdf',
+                },
+              },
+              {
+                kind: 'field',
+                name: 'documentQuery',
+                value: '{{prompt}}',
+              },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize literal percent fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'literal%file.pdf',
+        sizeBytes: Buffer.byteLength('literal percent contents'),
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('falls back to config-relative paths when file URL conversion rejects a host', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
+    tempDirs.push(tempDir);
+    fs.mkdirSync(path.join(tempDir, 'fixtures'));
+    fs.writeFileSync(path.join(tempDir, 'fixtures', 'fallback.pdf'), 'fallback contents');
+
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = tempDir;
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: {
+                  type: 'path',
+                  path: 'file://fixtures/fallback.pdf',
+                },
+              },
+              { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize fallback fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'fallback.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: Buffer.byteLength('fallback contents'),
+      });
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('preserves host-based file URLs for UNC paths', async () => {
+    const uncFixture = path.join(os.tmpdir(), 'promptfoo-unc-fixture.pdf');
+    fs.writeFileSync(uncFixture, 'UNC fixture contents');
+
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: 'file://fileserver/share/sample.pdf' },
+              },
+              { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+            ],
+          },
+          transformResponse: 'json.summary',
+        },
+      });
+
+      await provider.callApi('Summarize UNC fixture');
+
+      expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+        filename: 'promptfoo-unc-fixture.pdf',
+        sizeBytes: Buffer.byteLength('UNC fixture contents'),
+      });
+    } finally {
+      fs.rmSync(uncFixture, { force: true });
+    }
   });
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
