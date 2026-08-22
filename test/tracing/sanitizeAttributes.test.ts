@@ -41,6 +41,49 @@ describe('sanitizeTraceAttributes', () => {
     });
   });
 
+  it('preserves numeric token counters from application instrumentation', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'prompt.tokens': 150,
+        'response.tokens': 85,
+        'llm.token_count.prompt': 150,
+        'llm.token_count.total': 235,
+        'ai.usage.promptTokens': 150,
+        'ai.usage.completionTokens': 85,
+      }),
+    ).toEqual({
+      'prompt.tokens': 150,
+      'response.tokens': 85,
+      'llm.token_count.prompt': 150,
+      'llm.token_count.total': 235,
+      'ai.usage.promptTokens': 150,
+      'ai.usage.completionTokens': 85,
+    });
+  });
+
+  it('redacts token attributes that do not hold a count', () => {
+    expect(
+      sanitizeTraceAttributes({
+        'session.tokens': 'sk-live-1234567890',
+        'auth.token_count': ['sk-a', 'sk-b'],
+        refresh_token: 'rt-1234567890',
+      }),
+    ).toEqual({
+      'session.tokens': '<redacted>',
+      'auth.token_count': '<redacted>',
+      refresh_token: '<redacted>',
+    });
+  });
+
+  it('lets explicit redactions override token counters', () => {
+    expect(
+      sanitizeTraceAttributes(
+        { 'prompt.tokens': 150, 'gen_ai.usage.input_tokens': 150 },
+        { redactAttributes: ['tokens'] },
+      ),
+    ).toEqual({ 'prompt.tokens': '[REDACTED]', 'gen_ai.usage.input_tokens': '[REDACTED]' });
+  });
+
   it('applies explicit evaluation redactions even when generic sanitization is disabled', () => {
     expect(
       sanitizeTraceAttributes(

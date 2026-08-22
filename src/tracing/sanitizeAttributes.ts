@@ -45,9 +45,22 @@ const SAFE_TOKEN_ATTRIBUTE_KEYS = new Set([
   'gen_ai.usage.cache_creation_input_tokens',
 ]);
 
-function isSensitiveAttributeKey(key: string): boolean {
+/**
+ * Matches keys that count tokens rather than carry one, so counters from any
+ * instrumentation stay readable: `prompt.tokens` and `response.tokens` from the tracing
+ * docs, `ai.usage.promptTokens` (Vercel AI SDK) and `llm.token_count.prompt`
+ * (OpenInference).
+ */
+const TOKEN_COUNT_KEY_PATTERN = /tokens$|(?:^|[^a-z0-9])token_?counts?(?:[^a-z0-9]|$)/;
+
+function isTokenCountAttribute(lowerKey: string, value: unknown): boolean {
+  // A count is a number. Anything else under the same key could be a credential.
+  return typeof value === 'number' && TOKEN_COUNT_KEY_PATTERN.test(lowerKey);
+}
+
+function isSensitiveAttributeKey(key: string, value: unknown): boolean {
   const lowerKey = key.toLowerCase();
-  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey)) {
+  if (SAFE_TOKEN_ATTRIBUTE_KEYS.has(lowerKey) || isTokenCountAttribute(lowerKey, value)) {
     return false;
   }
 
@@ -101,7 +114,7 @@ export function sanitizeTraceAttributes(
       sanitized[key] = '[REDACTED]';
       continue;
     }
-    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key)) {
+    if (sanitizeSensitiveAttributes && isSensitiveAttributeKey(key, value)) {
       sanitized[key] = '<redacted>';
       continue;
     }
