@@ -1787,13 +1787,46 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             });
           }
           const raw = JSON.stringify(finalMsg);
+          // result.usage excludes subagents; modelUsage covers every model call in the query.
+          const modelUsages = Object.values(finalMsg.modelUsage ?? {});
+          const usage =
+            modelUsages.length > 0
+              ? modelUsages.reduce(
+                  (total, modelUsage) => ({
+                    inputTokens: total.inputTokens + (modelUsage.inputTokens ?? 0),
+                    outputTokens: total.outputTokens + (modelUsage.outputTokens ?? 0),
+                    cacheReadInputTokens:
+                      total.cacheReadInputTokens + (modelUsage.cacheReadInputTokens ?? 0),
+                    cacheCreationInputTokens:
+                      total.cacheCreationInputTokens + (modelUsage.cacheCreationInputTokens ?? 0),
+                  }),
+                  {
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    cacheReadInputTokens: 0,
+                    cacheCreationInputTokens: 0,
+                  },
+                )
+              : {
+                  inputTokens: finalMsg.usage?.input_tokens ?? 0,
+                  outputTokens: finalMsg.usage?.output_tokens ?? 0,
+                  cacheReadInputTokens: finalMsg.usage?.cache_read_input_tokens ?? 0,
+                  cacheCreationInputTokens: finalMsg.usage?.cache_creation_input_tokens ?? 0,
+                };
+          const promptTokens =
+            usage.inputTokens + usage.cacheReadInputTokens + usage.cacheCreationInputTokens;
           const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: finalMsg.usage?.input_tokens,
-            completion: finalMsg.usage?.output_tokens,
-            total:
-              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
-                : undefined,
+            prompt: promptTokens,
+            completion: usage.outputTokens,
+            total: promptTokens + usage.outputTokens,
+            ...(usage.cacheReadInputTokens > 0 || usage.cacheCreationInputTokens > 0
+              ? {
+                  completionDetails: {
+                    cacheReadInputTokens: usage.cacheReadInputTokens,
+                    cacheCreationInputTokens: usage.cacheCreationInputTokens,
+                  },
+                }
+              : {}),
           };
           const cost = finalMsg.total_cost_usd ?? 0;
           const sessionId = finalMsg.session_id;
