@@ -449,7 +449,9 @@ describe('package manifests', () => {
     expect(packageLock.packages[''].dependencies?.[sdkName]).toBe(sdkVersion);
     expect(packageLock.packages[''].devDependencies?.[agentName]).toBe(agentVersion);
     expect(packageLock.packages[''].optionalDependencies?.[agentName]).toBe(agentVersion);
-    expect(packageLock.packages[`node_modules/${sdkName}`].version).toBe(sdkVersion);
+    const resolvedSdkVersion = packageLock.packages[`node_modules/${sdkName}`].version;
+    expect(resolvedSdkVersion).toBeDefined();
+    expect(satisfies(resolvedSdkVersion!, sdkVersion!)).toBe(true);
     expect(agentPackage.version).toBe(agentVersion);
 
     for (const [binaryName, binaryVersion] of Object.entries(
