@@ -48,7 +48,7 @@ providers:
       working_dir: ./my-project # Agent's working directory
       timeout: 300 # Per-session timeout (seconds)
       model: claude-sonnet-4-5 # Model (if agent supports it)
-      permission_mode: auto_approve # auto_approve (default) or deny
+      permission_mode: auto_approve # deny (default) or auto_approve
       env: # Custom environment variables
         CUSTOM_VAR: value
 ```

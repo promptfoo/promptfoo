@@ -1,5 +1,8 @@
 ---
 sidebar_label: ACP (Agent Client Protocol)
+sidebar_position: 5
+title: ACP (Agent Client Protocol)
+description: 'Evaluate any ACP-compatible coding agent with configurable permissions, tool tracking, and OTEL tracing'
 ---
 
 # ACP (Agent Client Protocol)
