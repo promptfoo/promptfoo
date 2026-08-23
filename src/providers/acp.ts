@@ -1,10 +1,7 @@
-import { z } from 'zod';
-
 import { SpanStatusCode } from '@opentelemetry/api';
-
+import { z } from 'zod';
 import cliState from '../cliState';
 import logger from '../logger';
-import { providerRegistry } from './providerRegistry';
 import {
   emitTurnMarkerSpan,
   getGenAITracer,
@@ -17,6 +14,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { providerRegistry } from './providerRegistry';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -278,11 +276,7 @@ export class AcpProvider implements ApiProvider {
       const clientBuilder = acpSdk.client({ name: 'promptfoo-acp' });
 
       // Permission handler
-      if (this.config.permission_mode === 'deny') {
-        clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, () => ({
-          outcome: { outcome: 'cancelled' },
-        }));
-      } else {
+      if (this.config.permission_mode === 'auto_approve') {
         clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, (ctx: any) => {
           const opts = ctx.params.options || [];
           const first =
@@ -291,6 +285,10 @@ export class AcpProvider implements ApiProvider {
             outcome: { outcome: 'selected', optionId: first?.optionId || '' },
           };
         });
+      } else {
+        clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, () => ({
+          outcome: { outcome: 'cancelled' },
+        }));
       }
 
       // Session update notification handler

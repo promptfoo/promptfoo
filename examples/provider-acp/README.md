@@ -5,6 +5,7 @@ These examples demonstrate how to use the ACP (Agent Client Protocol) provider t
 ## Prerequisites
 
 1. Install the ACP SDK:
+
    ```bash
    npm install @agentclientprotocol/sdk
    ```
@@ -43,23 +44,23 @@ The ACP provider spawns any binary that implements the Agent Client Protocol ove
 providers:
   - id: acp
     config:
-      command: ['kiro-cli', 'acp']   # The binary + args to spawn
-      working_dir: ./my-project      # Agent's working directory
-      timeout: 300                   # Per-session timeout (seconds)
-      model: claude-sonnet-4-5       # Model (if agent supports it)
-      permission_mode: auto_approve  # auto_approve (default) or deny
-      env:                           # Custom environment variables
+      command: ['kiro-cli', 'acp'] # The binary + args to spawn
+      working_dir: ./my-project # Agent's working directory
+      timeout: 300 # Per-session timeout (seconds)
+      model: claude-sonnet-4-5 # Model (if agent supports it)
+      permission_mode: auto_approve # auto_approve (default) or deny
+      env: # Custom environment variables
         CUSTOM_VAR: value
 ```
 
 ## Agent Commands
 
-| Agent | `config.command` | Notes |
-|-------|-----------------|-------|
-| Kiro | `["kiro-cli", "acp"]` | Built-in ACP support |
+| Agent       | `config.command`             | Notes                                                     |
+| ----------- | ---------------------------- | --------------------------------------------------------- |
+| Kiro        | `["kiro-cli", "acp"]`        | Built-in ACP support                                      |
 | Claude Code | `["npx", "claude-code-acp"]` | Community bridge (Claude CLI does not speak ACP natively) |
-| Codex | `codex-acp` | Official ACP adapter |
-| Cursor | `cursor-agent-acp` | Community ACP adapter |
+| Codex       | `codex-acp`                  | Official ACP adapter                                      |
+| Cursor      | `cursor-agent-acp`           | Community ACP adapter                                     |
 
 ## Assertions
 

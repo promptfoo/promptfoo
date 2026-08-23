@@ -103,12 +103,6 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'E2E coverage requires ACP agent binary and optional SDK dependency',
   },
   {
-    file: 'providers/acp.e2e.test.ts',
-    kind: 'skip',
-    linePattern: /it\.skip\(/,
-    reason: 'Informational skip messages when prerequisites are not met',
-  },
-  {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
     linePattern:

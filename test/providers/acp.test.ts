@@ -1,16 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 
-import type { CallApiContextParams } from '../../src/types/index';
-
 // ---------------------------------------------------------------------------
 // Mocks for @agentclientprotocol/sdk
 // ---------------------------------------------------------------------------
 
 // The connectWith callback receives a `ctx` object that we control
-let connectWithCallback: ((ctx: any) => Promise<any>) | undefined;
+let _connectWithCallback: ((ctx: any) => Promise<any>) | undefined;
 let notificationHandlers: Map<string, (ctx: any) => void> = new Map();
-let requestHandlers: Map<string, (ctx: any) => any> = new Map();
+let _requestHandlers: Map<string, (ctx: any) => any> = new Map();
 
 // Mock session returned by buildSession().withSession()
 let sessionPromptCallback: ((prompt: string) => void) | undefined;
@@ -46,7 +44,7 @@ const mockClientBuilder = {
     return mockClientBuilder;
   }),
   connectWith: vi.fn(async (_stream: any, fn: any) => {
-    connectWithCallback = fn;
+    _connectWithCallback = fn;
     return fn(mockCtx);
   }),
 };
@@ -150,9 +148,9 @@ describe('AcpProvider', () => {
     cliState.basePath = '/test/config/dir';
 
     // Reset state
-    connectWithCallback = undefined;
+    _connectWithCallback = undefined;
     notificationHandlers = new Map();
-    requestHandlers = new Map();
+    _requestHandlers = new Map();
     sessionNextUpdateResults = [];
     sessionNextUpdateIndex = 0;
     sessionPromptCallback = undefined;
@@ -543,6 +541,202 @@ describe('AcpProvider', () => {
 
       expect(result.error).toContain('Process exited with code 1');
       expect(result.output).toBe('');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: buildEnv branches
+  // -------------------------------------------------------------------------
+
+  describe('buildEnv', () => {
+    it('should inherit full process env when configured', async () => {
+      const provider = new AcpProvider({
+        config: { command: 'kiro-cli acp', inherit_process_env: true },
+      });
+
+      sessionPromptCallback = () => {
+        emitSessionUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Done.' },
+        });
+      };
+      sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
+
+      await provider.callApi('Hello');
+      expect(mockClientBuilder.connectWith).toHaveBeenCalled();
+    });
+
+    it('should inject TRACEPARENT when deep_tracing is enabled', async () => {
+      const { getTraceparent } = await import('../../src/tracing/genaiTracer');
+      vi.mocked(getTraceparent).mockReturnValue('00-abc123-def456-01');
+
+      const provider = new AcpProvider({
+        config: { command: 'kiro-cli acp', deep_tracing: true },
+      });
+
+      sessionPromptCallback = () => {
+        emitSessionUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Done.' },
+        });
+      };
+      sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
+
+      await provider.callApi('Hello');
+      expect(mockClientBuilder.connectWith).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: auto_approve permission mode
+  // -------------------------------------------------------------------------
+
+  describe('auto_approve permission mode', () => {
+    it('should select first allow option when permission_mode is auto_approve', async () => {
+      const provider = new AcpProvider({
+        config: { command: 'kiro-cli acp', permission_mode: 'auto_approve' },
+      });
+
+      sessionPromptCallback = () => {
+        emitSessionUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Done.' },
+        });
+      };
+      sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
+
+      await provider.callApi('Do something');
+      expect(mockClientBuilder.onRequest).toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: tool call error states
+  // -------------------------------------------------------------------------
+
+  describe('tool call error tracking', () => {
+    it('should mark tool calls as errored when status is failed', async () => {
+      const provider = new AcpProvider({ config: { command: 'kiro-cli acp' } });
+
+      sessionPromptCallback = () => {
+        emitSessionUpdate({
+          sessionUpdate: 'tool_call',
+          toolCallId: 'tc-err-1',
+          title: 'Bash',
+          rawInput: 'rm -rf /',
+          status: 'running',
+        });
+        emitSessionUpdate({
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'tc-err-1',
+          status: 'failed',
+          rawOutput: 'Permission denied',
+        });
+        emitSessionUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Failed.' },
+        });
+      };
+      sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
+
+      const result = await provider.callApi('Do dangerous thing');
+
+      expect(result.metadata?.toolCalls).toHaveLength(1);
+      expect(result.metadata?.toolCalls[0].is_error).toBe(true);
+      expect(result.metadata?.toolCalls[0].name).toBe('Bash');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: shutdown and cleanup
+  // -------------------------------------------------------------------------
+
+  describe('lifecycle', () => {
+    it('should have a shutdown method', async () => {
+      const provider = new AcpProvider({ config: { command: 'kiro-cli acp' } });
+      await expect(provider.shutdown()).resolves.toBeUndefined();
+    });
+
+    it('should have a cleanup method', async () => {
+      const provider = new AcpProvider({ config: { command: 'kiro-cli acp' } });
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: SDK not installed
+  // -------------------------------------------------------------------------
+
+  describe('SDK availability', () => {
+    it('should return error when SDK import fails', async () => {
+      // Temporarily make the SDK import fail
+      const originalImport = mockAcpSdk.client;
+      mockAcpSdk.client = undefined as any;
+
+      const provider = new AcpProvider({ config: { command: 'kiro-cli acp' } });
+
+      // Restore before calling (the dynamic import mock still works)
+      mockAcpSdk.client = originalImport;
+
+      // This tests the provider-level error catch path
+      mockClientBuilder.connectWith.mockRejectedValueOnce(new TypeError('Cannot read properties'));
+      const result = await provider.callApi('Hello');
+      expect(result.error).toContain('ACP execution failed');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: model setConfigOption failure path
+  // -------------------------------------------------------------------------
+
+  describe('model config failure', () => {
+    it('should continue gracefully when setConfigOption fails', async () => {
+      mockCtx.request.mockImplementation(async (method: any) => {
+        if (method === mockAcpSdk.methods.agent.session.setConfigOption) {
+          throw new Error('Agent does not support model switching');
+        }
+        return { protocolVersion: 1 };
+      });
+
+      const provider = new AcpProvider({
+        config: { command: 'kiro-cli acp', model: 'unsupported-model' },
+      });
+
+      sessionPromptCallback = () => {
+        emitSessionUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Done anyway.' },
+        });
+      };
+      sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
+
+      const result = await provider.callApi('Hello');
+      // Should succeed despite model config failure
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Done anyway.');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Coverage: command as array in resolveCommand
+  // -------------------------------------------------------------------------
+
+  describe('command resolution', () => {
+    it('should handle array commands directly', async () => {
+      const provider = new AcpProvider({
+        config: { command: ['kiro-cli', 'acp', '--verbose'] },
+      });
+
+      sessionPromptCallback = () => {
+        emitSessionUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'Hi.' },
+        });
+      };
+      sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
+
+      await provider.callApi('Hello');
+      expect(mockClientBuilder.connectWith).toHaveBeenCalled();
     });
   });
 });

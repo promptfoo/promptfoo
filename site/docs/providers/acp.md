@@ -101,16 +101,16 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter | Type | Description | Default |
-|-----------|------|-------------|---------|
-| `command` | string \| string[] | Agent binary to spawn (**required**) | - |
-| `working_dir` | string | Working directory for the agent | Current directory |
-| `timeout` | number | Per-session timeout in seconds | `300` |
-| `model` | string | Model to use (passed via ACP config) | Agent default |
-| `permission_mode` | `'auto_approve'` \| `'deny'` | How to handle permission requests | `'auto_approve'` |
-| `env` | object | Custom environment variables | Minimal shell env |
-| `inherit_process_env` | boolean | Forward full process environment | `false` |
-| `deep_tracing` | boolean | Propagate OTEL TRACEPARENT to subprocess | `false` |
+| Parameter             | Type                         | Description                              | Default           |
+| --------------------- | ---------------------------- | ---------------------------------------- | ----------------- |
+| `command`             | string \| string[]           | Agent binary to spawn (**required**)     | -                 |
+| `working_dir`         | string                       | Working directory for the agent          | Current directory |
+| `timeout`             | number                       | Per-session timeout in seconds           | `300`             |
+| `model`               | string                       | Model to use (passed via ACP config)     | Agent default     |
+| `permission_mode`     | `'auto_approve'` \| `'deny'` | How to handle permission requests        | `'deny'`          |
+| `env`                 | object                       | Custom environment variables             | Minimal shell env |
+| `inherit_process_env` | boolean                      | Forward full process environment         | `false`           |
+| `deep_tracing`        | boolean                      | Propagate OTEL TRACEPARENT to subprocess | `false`           |
 
 ## Models
 
@@ -128,20 +128,20 @@ Model support depends on the agent. Not all agents expose a `model` config optio
 
 ## Permission Handling
 
-By default, the provider auto-approves all permission requests (tools, file writes, shell commands). This allows agents to operate without blocking during evaluations.
+By default, the provider denies all permission requests (tools, file writes, shell commands). Set `permission_mode: auto_approve` to allow agents to use tools freely during evaluations.
 
 ```yaml
 providers:
   - id: acp
     config:
       command: ['kiro-cli', 'acp']
-      permission_mode: deny  # Deny all permission requests
+      permission_mode: deny # Deny all permission requests
 ```
 
-| Mode | Behavior |
-|------|----------|
-| `auto_approve` | Select the first `allow_once` or `allow_always` option (default) |
-| `deny` | Return `cancelled` for all permission requests |
+| Mode          | Behavior                                                 |
+| ------------- | -------------------------------------------------------- |
+| `auto_approve | Select the first `allow_once` or `allow_always` option   |
+| `deny`        | Return `cancelled` for all permission requests (default) |
 
 ## Tool Call Tracking
 
@@ -158,13 +158,13 @@ tests:
 
 Each tool call entry contains:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique tool call ID |
-| `name` | string | Tool name (e.g., `Read`, `Bash`, `Grep`) |
-| `input` | unknown | Arguments passed to the tool |
-| `output` | unknown | Tool result |
-| `is_error` | boolean | Whether the tool call errored |
+| Field      | Type    | Description                              |
+| ---------- | ------- | ---------------------------------------- |
+| `id`       | string  | Unique tool call ID                      |
+| `name`     | string  | Tool name (e.g., `Read`, `Bash`, `Grep`) |
+| `input`    | unknown | Arguments passed to the tool             |
+| `output`   | unknown | Tool result                              |
+| `is_error` | boolean | Whether the tool call errored            |
 
 ## Caching
 
@@ -186,21 +186,21 @@ export PROMPTFOO_CACHE_ENABLED=false
 
 See the [ACP Agent Registry](https://agentclientprotocol.com/get-started/registry) for a full list of compatible agents.
 
-| Agent | `config.command` | Notes |
-|-------|-----------------|-------|
-| Kiro | `["kiro-cli", "acp"]` | Built-in ACP support |
+| Agent       | `config.command`             | Notes                                          |
+| ----------- | ---------------------------- | ---------------------------------------------- |
+| Kiro        | `["kiro-cli", "acp"]`        | Built-in ACP support                           |
 | Claude Code | `["npx", "claude-code-acp"]` | Community bridge (does not speak ACP natively) |
-| Codex | `codex-acp` | Official ACP adapter |
-| Cursor | `cursor-agent-acp` | Community ACP adapter |
+| Codex       | `codex-acp`                  | Official ACP adapter                           |
+| Cursor      | `cursor-agent-acp`           | Community ACP adapter                          |
 
 ## Comparison with Other Agentic Providers
 
-| Feature | ACP | Claude Agent SDK | Codex SDK |
-|---------|-----|-----------------|-----------|
-| Protocol | ACP (open standard) | Proprietary SDK | Proprietary SDK |
-| Agents | Any ACP agent | Claude only | Codex only |
-| MCP tools | Via agent config | Native `mcp_servers` | N/A |
-| Sandbox | Via agent | Built-in | Built-in |
+| Feature   | ACP                 | Claude Agent SDK     | Codex SDK       |
+| --------- | ------------------- | -------------------- | --------------- |
+| Protocol  | ACP (open standard) | Proprietary SDK      | Proprietary SDK |
+| Agents    | Any ACP agent       | Claude only          | Codex only      |
+| MCP tools | Via agent config    | Native `mcp_servers` | N/A             |
+| Sandbox   | Via agent           | Built-in             | Built-in        |
 
 **Choose ACP when:**
 

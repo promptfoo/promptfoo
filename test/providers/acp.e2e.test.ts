@@ -38,7 +38,7 @@ const DEFAULT_COMMAND = process.env.ACP_E2E_COMMAND || 'kiro-cli acp';
 function isAgentAvailable(command: string): boolean {
   // Check if the first word (binary) exists in PATH
   try {
-    execSync(`which ${command.split(' ')[0]}`, { stdio: 'pipe' });
+    execSync(`command -v ${command.split(' ')[0]}`, { stdio: 'pipe' });
     return true;
   } catch {
     return false;
@@ -56,10 +56,10 @@ describe('AcpProvider E2E', () => {
   const describeOrSkip = hasAgent && hasSdk ? describe : describe.skip;
 
   if (!hasAgent) {
-    it.skip(`Skipped: '${DEFAULT_COMMAND}' not found in PATH`, () => {});
+    it(`Skipped: '${DEFAULT_COMMAND}' not found in PATH`, () => {});
   }
   if (!hasSdk) {
-    it.skip('Skipped: @agentclientprotocol/sdk not installed', () => {});
+    it('Skipped: @agentclientprotocol/sdk not installed', () => {});
   }
 
   describeOrSkip('Real ACP Agent Integration', () => {

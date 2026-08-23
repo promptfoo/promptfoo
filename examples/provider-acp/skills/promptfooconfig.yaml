@@ -10,6 +10,7 @@ providers:
       command: ['kiro-cli', 'acp']
       working_dir: ./sample-project
       timeout: 180
+      permission_mode: auto_approve
 
 tests:
   - vars: {}
