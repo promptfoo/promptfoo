@@ -114,12 +114,12 @@
     "uri-js": "npm:uri-js-replace",
     "chokidar": "5.0.0",
     "whatwg-url": "16.0.1",
-    "esbuild": "0.28.1",
+    "esbuild": "0.28.2",
     "jsdom": {
       "@asamuzakjp/css-color": "5.1.11"
     },
     "storybook": {
-      "esbuild": "0.28.1"
+      "esbuild": "0.28.2"
     },
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -130,7 +130,7 @@
     "*": {
       "whatwg-url": "16.0.1",
       "chokidar": "5.0.0",
-      "esbuild": "0.28.1",
+      "esbuild": "0.28.2",
       "react": "^19.2.4",
       "react-dom": "^19.2.4"
     },
@@ -161,9 +161,9 @@
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^7.1.4",
     "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.4.0",
+    "ip-address": "10.5.0",
     "mongoose": {
-      "gcp-metadata": "^9.0.1"
+      "gcp-metadata": "^9.0.2"
     },
     "webpack-dev-server": {
       "express": "^4.22.2"
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.226",
+    "@anthropic-ai/claude-agent-sdk": "0.3.228",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -260,13 +260,13 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.143.0",
+    "oxc-parser": "^0.144.0",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "read-excel-file": "^9.3.8",
+    "read-excel-file": "^9.3.9",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.2.2",
@@ -278,7 +278,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.226",
+    "@anthropic-ai/claude-agent-sdk": "0.3.228",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -308,7 +308,7 @@
     "@swc/core-linux-x64-gnu": "^1.15.46",
     "@swc/core-linux-x64-musl": "^1.15.46",
     "@swc/core-win32-x64-msvc": "^1.15.46",
-    "google-auth-library": "^11.0.0",
+    "google-auth-library": "^11.0.1",
     "hono": "^4.12.34",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
@@ -318,7 +318,7 @@
     "pem": "~1.14.8",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
-    "read-excel-file": "^9.3.8",
+    "read-excel-file": "^9.3.9",
     "sharp": "^0.35.3"
   },
   "dependencies": {
@@ -367,7 +367,7 @@
     "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.7.1",
     "fastest-levenshtein": "^1.0.16",
-    "gcp-metadata": "^9.0.1",
+    "gcp-metadata": "^9.0.2",
     "glob": "^13.0.6",
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
