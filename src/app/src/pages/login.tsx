@@ -25,6 +25,14 @@ interface LoginState {
   email?: string;
 }
 
+function decodeRedirect(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
   const apiKey = formData.get('apiKey') as string;
   const customUrl = formData.get('customUrl') as string;
@@ -85,7 +93,7 @@ export default function LoginPage() {
     let redirect = null;
 
     if (redirectMatch) {
-      redirect = decodeURIComponent(redirectMatch[1]);
+      redirect = decodeRedirect(redirectMatch[1]);
     } else {
       const params = new URLSearchParams(searchStr);
       redirect = params.get('redirect');
