@@ -8,7 +8,7 @@ import cliState from '../../src/cliState';
 // The connectWith callback receives a `ctx` object that we control
 let _connectWithCallback: ((ctx: any) => Promise<any>) | undefined;
 let notificationHandlers: Map<string, (ctx: any) => void> = new Map();
-let _requestHandlers: Map<string, (ctx: any) => any> = new Map();
+let requestHandlers: Map<string, (ctx: any) => any> = new Map();
 
 // Mock session returned by buildSession().withSession()
 let sessionPromptCallback: ((prompt: string) => void) | undefined;
@@ -38,7 +38,10 @@ const mockCtx = {
 };
 
 const mockClientBuilder = {
-  onRequest: vi.fn().mockReturnThis(),
+  onRequest: vi.fn((method: any, handler: any) => {
+    requestHandlers.set(method?.method || String(method), handler);
+    return mockClientBuilder;
+  }),
   onNotification: vi.fn((method: any, handler: any) => {
     notificationHandlers.set(method?.method || String(method), handler);
     return mockClientBuilder;
@@ -150,13 +153,16 @@ describe('AcpProvider', () => {
     // Reset state
     _connectWithCallback = undefined;
     notificationHandlers = new Map();
-    _requestHandlers = new Map();
+    requestHandlers = new Map();
     sessionNextUpdateResults = [];
     sessionNextUpdateIndex = 0;
     sessionPromptCallback = undefined;
 
     // Re-set mock implementations after reset
-    mockClientBuilder.onRequest.mockReturnThis();
+    mockClientBuilder.onRequest.mockImplementation((method: any, handler: any) => {
+      requestHandlers.set(method?.method || String(method), handler);
+      return mockClientBuilder;
+    });
     mockClientBuilder.onNotification.mockImplementation((method: any, handler: any) => {
       notificationHandlers.set(method?.method || String(method), handler);
       return mockClientBuilder;
@@ -487,7 +493,13 @@ describe('AcpProvider', () => {
 
       await provider.callApi('Do something');
 
-      expect(mockClientBuilder.onRequest).toHaveBeenCalled();
+      // Invoke the registered permission handler and verify it denies
+      const handler = requestHandlers.get('client/session/requestPermission');
+      expect(handler).toBeDefined();
+      const result = handler!({ params: { options: [{ optionId: 'opt-1', kind: 'allow_once' }] } });
+      expect(result).toEqual({
+        outcome: { outcome: 'cancelled' },
+      });
     });
   });
 
@@ -606,7 +618,21 @@ describe('AcpProvider', () => {
       sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
 
       await provider.callApi('Do something');
-      expect(mockClientBuilder.onRequest).toHaveBeenCalled();
+
+      // Invoke the registered permission handler and verify it approves
+      const handler = requestHandlers.get('client/session/requestPermission');
+      expect(handler).toBeDefined();
+      const result = handler!({
+        params: {
+          options: [
+            { optionId: 'opt-1', kind: 'allow_once' },
+            { optionId: 'opt-2', kind: 'deny' },
+          ],
+        },
+      });
+      expect(result).toEqual({
+        outcome: { outcome: 'selected', optionId: 'opt-1' },
+      });
     });
   });
 
